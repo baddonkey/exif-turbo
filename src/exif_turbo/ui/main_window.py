@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import List
 
-from PySide6.QtCore import QModelIndex, QPoint, Qt, QUrl, QSize
+from PySide6.QtCore import QModelIndex, QPoint, Qt, QUrl, QSize, QEvent, QTimer
 from PySide6.QtGui import (
     QAction,
     QDesktopServices,
@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
+    QToolButton,
 )
 
 from ..data.image_index_repository import ImageIndexRepository
@@ -64,6 +65,8 @@ class MainWindow(QMainWindow):
         self.query_input = QLineEdit()
         self.query_input.setPlaceholderText("Full-text search (e.g. camera:Canon lens:50mm)")
         self.query_input.setClearButtonEnabled(True)
+
+        self._clear_button_connected = False
 
         self.query_input.setMinimumHeight(42)
 
@@ -208,6 +211,7 @@ class MainWindow(QMainWindow):
 
         self.search_button.clicked.connect(self.search)
         self.query_input.returnPressed.connect(self.search)
+        self.query_input.textChanged.connect(self.on_query_changed)
         self.index_button.clicked.connect(self.index_folders)
         self.cancel_index_button.clicked.connect(self.cancel_index)
         self.build_thumbs_button.clicked.connect(self.build_thumbnails)
@@ -228,6 +232,8 @@ class MainWindow(QMainWindow):
         self.shortcut_find_prev = QShortcut(QKeySequence.FindPrevious, self)
         self.shortcut_find_prev.activated.connect(self.find_prev)
 
+        self.query_input.installEventFilter(self)
+        self._hook_clear_button()
         self.search()
 
     def _make_arrow_icon(self, direction: str) -> QIcon:
@@ -362,6 +368,31 @@ class MainWindow(QMainWindow):
         self._loading = False
         self.update_details()
         self.update_details_highlight()
+
+    def on_query_changed(self, text: str) -> None:
+        if not text.strip():
+            if getattr(self, "_clear_triggered", False):
+                self._clear_triggered = False
+                return
+            self.search()
+
+    def eventFilter(self, obj, event) -> bool:
+        if obj is self.query_input and event.type() == QEvent.ChildAdded:
+            self._hook_clear_button()
+        return super().eventFilter(obj, event)
+
+    def _hook_clear_button(self) -> None:
+        if self._clear_button_connected:
+            return
+        button = self.query_input.findChild(QToolButton, "qt_clear_button")
+        if button is not None:
+            button.clicked.connect(self.on_clear_clicked)
+            self._clear_button_connected = True
+
+    def on_clear_clicked(self) -> None:
+        if self.query_input.text().strip():
+            self._clear_triggered = True
+        QTimer.singleShot(0, self.search)
 
     def on_scroll(self) -> None:
         if getattr(self, "_loading", False):
