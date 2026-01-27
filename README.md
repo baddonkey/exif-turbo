@@ -1,6 +1,6 @@
 # Exif Turbo
 
-Fast EXIF full-text search with a PySide6 desktop UI.
+Fast EXIF full-text search with a PySide6 desktop UI. Fully generated using VSCode Co-Pilot and GPT-5.2-Codex.
 
 ## Setup
 
