@@ -1,0 +1,38 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#1E3A8A"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(320 300) rotate(90) scale(140)">
+      <stop offset="0%" stop-color="#E0F2FE" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#93C5FD" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Rounded app tile -->
+  <rect x="36" y="36" width="440" height="440" rx="96" fill="url(#bg)"/>
+
+  <!-- Subtle glow behind lens -->
+  <circle cx="320" cy="300" r="140" fill="url(#glow)"/>
+
+  <!-- Photo card -->
+  <rect x="92" y="134" width="220" height="150" rx="18" fill="#FFFFFF" opacity="0.95"/>
+  <rect x="112" y="154" width="180" height="110" rx="12" fill="#E2E8F0"/>
+  <circle cx="150" cy="188" r="14" fill="#FDE68A"/>
+  <path d="M118 260L168 210L204 244L228 224L274 268H118Z" fill="#93C5FD"/>
+
+  <!-- Aperture-style lens -->
+  <circle cx="330" cy="320" r="88" fill="#0B1225" stroke="#E2E8F0" stroke-width="10"/>
+  <g fill="#1F2937">
+    <path d="M330 244L368 270L350 320L310 320Z"/>
+    <path d="M404 320L376 358L330 352L330 312Z"/>
+    <path d="M330 396L292 370L310 320L350 320Z"/>
+    <path d="M256 320L284 282L330 288L330 328Z"/>
+  </g>
+  <circle cx="330" cy="320" r="28" fill="#60A5FA" opacity="0.85"/>
+  <circle cx="330" cy="320" r="14" fill="#E0F2FE"/>
+
+  <!-- Short handle (iconic, not glass) -->
+  <rect x="368" y="372" width="88" height="18" rx="9" transform="rotate(40 368 372)" fill="#E2E8F0"/>
+</svg>

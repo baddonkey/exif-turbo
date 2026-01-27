@@ -205,3 +205,7 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+data/index.db
+data/index.db-shm
+data/index.db-wal
+data/index.db
