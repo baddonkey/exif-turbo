@@ -209,3 +209,4 @@ data/index.db
 data/index.db-shm
 data/index.db-wal
 data/index.db
+data/**

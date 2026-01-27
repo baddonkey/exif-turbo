@@ -9,16 +9,20 @@ import subprocess
 import tempfile
 import shutil
 import ctypes
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QThread, Signal, QPoint
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QThread, Signal, QPoint, QSize
 from PySide6.QtGui import (
     QAction,
     QDesktopServices,
     QFont,
     QIcon,
+    QImage,
+    QImageReader,
     QKeySequence,
     QPainter,
     QPolygon,
@@ -56,6 +60,16 @@ class SearchResult:
     path: str
     filename: str
     metadata_json: str
+
+
+def thumb_cache_path(path: str, cache_dir: Path) -> Path:
+    try:
+        stat = os.stat(path)
+        key = f"{path}|{stat.st_mtime}|{stat.st_size}"
+    except OSError:
+        key = path
+    digest = hashlib.sha1(key.encode("utf-8", errors="ignore")).hexdigest()
+    return cache_dir / f"{digest}.png"
 
 
 class ExifTableModel(QAbstractTableModel):
@@ -97,13 +111,7 @@ class SearchModel(QAbstractTableModel):
         self._max_thumb_bytes = 200 * 1024 * 1024
 
     def _thumb_cache_path(self, path: str) -> Path:
-        try:
-            stat = os.stat(path)
-            key = f"{path}|{stat.st_mtime}|{stat.st_size}"
-        except OSError:
-            key = path
-        digest = hashlib.sha1(key.encode("utf-8", errors="ignore")).hexdigest()
-        return self._cache_dir / f"{digest}.png"
+        return thumb_cache_path(path, self._cache_dir)
 
     def set_rows(self, rows: List[SearchResult]) -> None:
         self.beginResetModel()
@@ -182,15 +190,106 @@ class SearchModel(QAbstractTableModel):
         return None
 
 
+class ThumbWorker(QThread):
+    finished = Signal(int, int)
+    failed = Signal(str)
+    progress = Signal(int, int, str)
+    canceled = Signal(int, int)
+
+    def __init__(
+        self,
+        paths: List[str],
+        cache_dir: Path,
+        max_thumb_bytes: int,
+        workers: int = 1,
+    ) -> None:
+        super().__init__()
+        self.paths = paths
+        self.cache_dir = cache_dir
+        self.max_thumb_bytes = max_thumb_bytes
+        self.workers = max(1, workers)
+        self._cancel_event = threading.Event()
+
+    def cancel(self) -> None:
+        self._cancel_event.set()
+
+    def run(self) -> None:
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            total = len(self.paths)
+            cached = 0
+
+            def build_thumb(path: str) -> bool:
+                if not path:
+                    return False
+                cache_path = thumb_cache_path(path, self.cache_dir)
+                if cache_path.exists():
+                    return True
+                try:
+                    if os.path.getsize(path) > self.max_thumb_bytes:
+                        return False
+                except OSError:
+                    return False
+                image = QImage(path)
+                if image.isNull():
+                    return False
+                scaled = image.scaled(
+                    144,
+                    144,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
+                if scaled.isNull():
+                    return False
+                return scaled.save(str(cache_path), "PNG")
+
+            if self.workers > 1 and total > 0:
+                executor = ThreadPoolExecutor(max_workers=self.workers)
+                futures = {executor.submit(build_thumb, path): path for path in self.paths}
+                completed = 0
+                try:
+                    for future in as_completed(futures):
+                        if self._cancel_event.is_set():
+                            self.canceled.emit(cached, total)
+                            return
+                        path = futures[future]
+                        completed += 1
+                        self.progress.emit(completed, total, path)
+                        if future.result():
+                            cached += 1
+                finally:
+                    executor.shutdown(wait=not self._cancel_event.is_set(), cancel_futures=True)
+            else:
+                for idx, path in enumerate(self.paths, start=1):
+                    if self._cancel_event.is_set():
+                        self.canceled.emit(cached, total)
+                        return
+                    self.progress.emit(idx, total, path)
+                    if build_thumb(path):
+                        cached += 1
+
+            if self._cancel_event.is_set():
+                self.canceled.emit(cached, total)
+            else:
+                self.finished.emit(cached, total)
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+
 class IndexWorker(QThread):
     finished = Signal(int)
     failed = Signal(str)
     progress = Signal(int, int, str)
+    canceled = Signal(int)
 
     def __init__(self, db_path: Path, folders: List[Path]) -> None:
         super().__init__()
         self.db_path = db_path
         self.folders = folders
+        self._cancel_event = threading.Event()
+
+    def cancel(self) -> None:
+        self._cancel_event.set()
 
     def run(self) -> None:
         try:
@@ -204,9 +303,14 @@ class IndexWorker(QThread):
                     total,
                     str(p),
                 ),
+                workers=12,
+                cancel_check=self._cancel_event.is_set,
             )
             repo.close()
-            self.finished.emit(count)
+            if self._cancel_event.is_set():
+                self.canceled.emit(count)
+            else:
+                self.finished.emit(count)
         except Exception as exc:
             self.failed.emit(str(exc))
 
@@ -231,13 +335,25 @@ class MainWindow(QMainWindow):
 
         self.query_input.setMinimumHeight(42)
 
-        self.search_button = QPushButton("🔍")
+        self.search_button = QPushButton("")
         self.search_button.setObjectName("searchButton")
         self.index_button = QPushButton("Index folders")
+        self.cancel_index_button = QPushButton("Cancel index")
+        self.build_thumbs_button = QPushButton("Build thumbs")
+        self.cancel_thumbs_button = QPushButton("Cancel thumbs")
         self.search_button.setMinimumHeight(44)
         self.index_button.setMinimumHeight(44)
         self.search_button.setMinimumWidth(60)
         self.search_button.setToolTip("Search")
+        lense_icon_path = Path(__file__).resolve().parent / "assets" / "lense.svg"
+        if lense_icon_path.exists():
+            self.search_button.setIcon(QIcon(str(lense_icon_path)))
+            self.search_button.setIconSize(QSize(22, 22))
+        self.cancel_index_button.setMinimumHeight(44)
+        self.cancel_index_button.setVisible(False)
+        self.build_thumbs_button.setMinimumHeight(44)
+        self.cancel_thumbs_button.setMinimumHeight(44)
+        self.cancel_thumbs_button.setVisible(False)
 
         self.page_size = 100
 
@@ -304,7 +420,10 @@ class MainWindow(QMainWindow):
         top_layout.addWidget(self.query_input, 1)
         top_layout.addWidget(self.search_button)
         top_layout.addWidget(self.index_button)
+        top_layout.addWidget(self.cancel_index_button)
         top_layout.addSpacing(6)
+        top_layout.addWidget(self.build_thumbs_button)
+        top_layout.addWidget(self.cancel_thumbs_button)
         top_layout.addWidget(self.export_csv_button)
 
         details_container = QWidget()
@@ -357,6 +476,9 @@ class MainWindow(QMainWindow):
         self.search_button.clicked.connect(self.search)
         self.query_input.returnPressed.connect(self.search)
         self.index_button.clicked.connect(self.index_folders)
+        self.cancel_index_button.clicked.connect(self.cancel_index)
+        self.build_thumbs_button.clicked.connect(self.build_thumbnails)
+        self.cancel_thumbs_button.clicked.connect(self.cancel_thumbnails)
         self.export_csv_button.clicked.connect(self.export_csv)
         self.table.verticalScrollBar().valueChanged.connect(self.on_scroll)
         self.table.selectionModel().selectionChanged.connect(self.update_details)
@@ -656,27 +778,89 @@ class MainWindow(QMainWindow):
         self.clear_thumbnail_cache()
         self.status_label.setText("Indexing...")
         self.index_button.setEnabled(False)
+        self.cancel_index_button.setVisible(True)
+        self.cancel_index_button.setEnabled(True)
         self.worker = IndexWorker(self.db_path, [Path(folder)])
         self.worker.finished.connect(self.on_index_done)
         self.worker.failed.connect(self.on_index_failed)
         self.worker.progress.connect(self.on_index_progress)
+        self.worker.canceled.connect(self.on_index_canceled)
         self.worker.start()
 
     def on_index_done(self, count: int) -> None:
         self.index_button.setEnabled(True)
+        self.cancel_index_button.setVisible(False)
         self.status_label.setText(f"Indexed {count} images")
         self.search()
 
     def on_index_failed(self, error: str) -> None:
         self.index_button.setEnabled(True)
+        self.cancel_index_button.setVisible(False)
         QMessageBox.critical(self, "Index error", error)
         self.status_label.setText("Index failed")
+
+    def on_index_canceled(self, count: int) -> None:
+        self.index_button.setEnabled(True)
+        self.cancel_index_button.setVisible(False)
+        self.status_label.setText("Index canceled")
+        self.search()
+
+    def cancel_index(self) -> None:
+        if getattr(self, "worker", None) and self.worker.isRunning():
+            self.cancel_index_button.setEnabled(False)
+            self.status_label.setText("Canceling...")
+            self.worker.cancel()
 
     def clear_thumbnail_cache(self) -> None:
         cache_dir = Path(tempfile.gettempdir()) / "exif_turbo_thumbs"
         if cache_dir.exists():
             shutil.rmtree(cache_dir, ignore_errors=True)
         cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def build_thumbnails(self) -> None:
+        rows = self.repo.all_images()
+        paths = [r[0] for r in rows]
+        if not paths:
+            QMessageBox.information(self, "Build thumbs", "No images indexed.")
+            return
+        self.build_thumbs_button.setEnabled(False)
+        self.cancel_thumbs_button.setVisible(True)
+        self.cancel_thumbs_button.setEnabled(True)
+        self.status_label.setText("Building thumbnails...")
+        cache_dir = self.model._cache_dir
+        max_bytes = self.model._max_thumb_bytes
+        self.thumb_worker = ThumbWorker(paths, cache_dir, max_bytes, workers=12)
+        self.thumb_worker.progress.connect(self.on_thumb_progress)
+        self.thumb_worker.finished.connect(self.on_thumb_done)
+        self.thumb_worker.failed.connect(self.on_thumb_failed)
+        self.thumb_worker.canceled.connect(self.on_thumb_canceled)
+        self.thumb_worker.start()
+
+    def on_thumb_progress(self, current: int, total: int, path: str) -> None:
+        self.status_label.setText(f"Building thumbnails... {current} / {total}")
+
+    def on_thumb_done(self, cached: int, total: int) -> None:
+        self.build_thumbs_button.setEnabled(True)
+        self.cancel_thumbs_button.setVisible(False)
+        self.status_label.setText(f"Thumbnails cached: {cached} / {total}")
+        self._render_preview_pixmap()
+
+    def on_thumb_failed(self, error: str) -> None:
+        self.build_thumbs_button.setEnabled(True)
+        self.cancel_thumbs_button.setVisible(False)
+        QMessageBox.critical(self, "Build thumbs", error)
+        self.status_label.setText("Build thumbs failed")
+
+    def on_thumb_canceled(self, cached: int, total: int) -> None:
+        self.build_thumbs_button.setEnabled(True)
+        self.cancel_thumbs_button.setVisible(False)
+        self.status_label.setText("Build thumbs canceled")
+
+    def cancel_thumbnails(self) -> None:
+        if getattr(self, "thumb_worker", None) and self.thumb_worker.isRunning():
+            self.cancel_thumbs_button.setEnabled(False)
+            self.status_label.setText("Canceling thumbs...")
+            self.thumb_worker.cancel()
 
     def on_index_progress(self, current: int, total: int, path: str) -> None:
         self.status_label.setText(f"Indexing... {current} / {total}")
@@ -778,6 +962,10 @@ def main() -> None:
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("exif-turbo")
         except Exception:
             pass
+    try:
+        QImageReader.setAllocationLimit(1024)
+    except Exception:
+        pass
     app = QApplication([])
     app.setApplicationName("Exif-Turbo")
     icon_path = Path(__file__).resolve().parent / "assets" / "app_icon.svg"
