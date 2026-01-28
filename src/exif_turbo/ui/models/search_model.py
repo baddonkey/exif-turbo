@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QImageReader, QPixmap
 
 from ...models.search_result import SearchResult
 from ...utils.thumb_cache import thumb_cache_path
@@ -71,7 +71,12 @@ class SearchModel(QAbstractTableModel):
                             return None
                     except OSError:
                         return None
-                    pix = QPixmap(item.path)
+                    reader = QImageReader(item.path)
+                    reader.setAutoTransform(True)
+                    image = reader.read()
+                    if image.isNull():
+                        return None
+                    pix = QPixmap.fromImage(image)
                     if not pix.isNull():
                         pix = pix.scaled(
                             144,

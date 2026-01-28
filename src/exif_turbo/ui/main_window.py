@@ -16,6 +16,7 @@ from PySide6.QtGui import (
     QFont,
     QIcon,
     QKeySequence,
+    QImageReader,
     QPainter,
     QPolygon,
     QPixmap,
@@ -542,12 +543,14 @@ class MainWindow(QMainWindow):
             self.preview_label.clear()
             self._preview_pixmap = None
             return
-        pixmap = QPixmap(path)
-        if pixmap.isNull():
+        reader = QImageReader(path)
+        reader.setAutoTransform(True)
+        image = reader.read()
+        if image.isNull():
             self.preview_label.clear()
             self._preview_pixmap = None
             return
-        self._preview_pixmap = pixmap
+        self._preview_pixmap = QPixmap.fromImage(image)
         self._render_preview_pixmap()
 
     def _render_preview_pixmap(self) -> None:

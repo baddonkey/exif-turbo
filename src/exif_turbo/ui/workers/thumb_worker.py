@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List
 
 from PySide6.QtCore import QThread, Signal, Qt
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QImageReader
 
 from ...utils.thumb_cache import thumb_cache_path
 
@@ -52,7 +52,9 @@ class ThumbWorker(QThread):
                         return False
                 except OSError:
                     return False
-                image = QImage(path)
+                reader = QImageReader(path)
+                reader.setAutoTransform(True)
+                image = reader.read()
                 if image.isNull():
                     return False
                 scaled = image.scaled(
