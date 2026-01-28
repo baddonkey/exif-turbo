@@ -25,6 +25,9 @@ from PySide6.QtGui import (
     QColor,
 )
 from PySide6.QtWidgets import (
+    QStyledItemDelegate,
+    QStyle,
+    QStyleOptionViewItem,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -47,6 +50,25 @@ from .models.exif_table_model import ExifTableModel
 from .models.search_model import SearchModel
 from .workers.index_worker import IndexWorker
 from .workers.thumb_worker import ThumbWorker
+
+
+class ThumbCenterDelegate(QStyledItemDelegate):
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
+        if index.column() == 0:
+            pixmap = index.data(Qt.DecorationRole)
+            if isinstance(pixmap, QPixmap):
+                opt = QStyleOptionViewItem(option)
+                self.initStyleOption(opt, index)
+                style = opt.widget.style() if opt.widget else None
+                if style:
+                    style.drawPrimitive(QStyle.PE_PanelItemViewItem, opt, painter, opt.widget)
+
+                rect = opt.rect
+                x = rect.x() + max(0, (rect.width() - pixmap.width()) // 2)
+                y = rect.y() + max(0, (rect.height() - pixmap.height()) // 2)
+                painter.drawPixmap(x, y, pixmap)
+                return
+        super().paint(painter, option, index)
 
 
 class MainWindow(QMainWindow):
@@ -127,6 +149,7 @@ class MainWindow(QMainWindow):
         self.table = QTableView()
         self.model = SearchModel()
         self.table.setModel(self.model)
+        self.table.setItemDelegateForColumn(0, ThumbCenterDelegate(self.table))
         self.table.setSelectionBehavior(QTableView.SelectRows)
         self.table.setSelectionMode(QTableView.SingleSelection)
         self.table.verticalHeader().setDefaultSectionSize(150)
