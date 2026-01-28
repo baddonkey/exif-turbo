@@ -12,6 +12,22 @@ from ..data.image_index_repository import ImageIndexRepository
 from .main_window import MainWindow
 
 
+def _ensure_pyside6_dll_search_path() -> None:
+    # On Windows, Qt plugins (e.g. imageformats/qsvg.dll, iconengines/qsvgicon.dll) are loaded from
+    # subfolders, but depend on Qt6*.dll living in the PySide6 package directory. If that directory
+    # isn't in the DLL search path, SVG support appears "installed" but silently fails to load.
+    if os.name != "nt":
+        return
+    try:
+        import PySide6
+
+        pyside_dir = Path(PySide6.__file__).resolve().parent
+        os.add_dll_directory(str(pyside_dir))
+    except Exception:
+        # Best-effort; if this fails, icon loading may still fall back to default behavior.
+        pass
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Exif Turbo UI")
     parser.add_argument("--db", required=True, help="SQLite database path")
@@ -20,6 +36,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    _ensure_pyside6_dll_search_path()
     if os.name == "nt":
         try:
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("exif-turbo")
