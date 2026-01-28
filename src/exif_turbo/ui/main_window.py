@@ -383,6 +383,12 @@ class MainWindow(QMainWindow):
         rows = self.repo.search_images(query, page_size, 0)
         results = [SearchResult(path=r[1], filename=r[2], metadata_json=r[3]) for r in rows]
         self.model.set_rows(results)
+        if results:
+            self.table.selectRow(0)
+            self.table.scrollToTop()
+        else:
+            self.table.clearSelection()
+            self.table.scrollToTop()
 
         total = self.repo.count_images(query)
         self.status_label.setText(f"{len(results)} of {total} results")
