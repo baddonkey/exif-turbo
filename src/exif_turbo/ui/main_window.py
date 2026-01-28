@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QStyle,
     QStyleOptionViewItem,
     QFileDialog,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -169,8 +170,11 @@ class MainWindow(QMainWindow):
         self.exif_model = ExifTableModel()
         self.exif_table.setModel(self.exif_model)
         self.exif_table.horizontalHeader().setStretchLastSection(True)
+        self.exif_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Interactive)
+        self.exif_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.exif_table.verticalHeader().setDefaultSectionSize(32)
         self.exif_table.horizontalHeader().setMinimumHeight(32)
+        self.exif_table.installEventFilter(self)
 
         self.preview_label = QLabel()
         self.preview_label.setObjectName("previewLabel")
@@ -203,14 +207,14 @@ class MainWindow(QMainWindow):
         details_label.setFixedHeight(20)
 
         find_shortcut_text = QKeySequence(QKeySequence.Find).toString(QKeySequence.NativeText)
-        details_hint_label = QLabel(f"({find_shortcut_text})")
+        details_hint_label = QLabel(f"{find_shortcut_text} to find")
         details_hint_label.setFixedHeight(20)
         details_hint_label.setToolTip(f"Find in details ({find_shortcut_text})")
         details_hint_label.setStyleSheet("color: #888; font-size: 12px;")
 
         details_header_layout.addWidget(details_label)
-        details_header_layout.addStretch(1)
         details_header_layout.addWidget(details_hint_label)
+        details_header_layout.addStretch(1)
 
         details_layout.addLayout(details_header_layout)
         details_layout.addWidget(self.find_bar)
@@ -279,6 +283,7 @@ class MainWindow(QMainWindow):
         self.query_input.installEventFilter(self)
         self._hook_clear_button()
         self.search()
+        self._sync_exif_columns()
 
     def _make_arrow_icon(self, direction: str) -> QIcon:
         size = 14
@@ -429,7 +434,18 @@ class MainWindow(QMainWindow):
     def eventFilter(self, obj, event) -> bool:
         if obj is self.query_input and event.type() == QEvent.ChildAdded:
             self._hook_clear_button()
+        if obj is self.exif_table and event.type() == QEvent.Resize:
+            self._sync_exif_columns()
         return super().eventFilter(obj, event)
+
+    def _sync_exif_columns(self) -> None:
+        if not getattr(self, "exif_table", None):
+            return
+        total_width = self.exif_table.viewport().width()
+        if total_width <= 0:
+            return
+        tag_width = int(total_width * 0.4)
+        self.exif_table.setColumnWidth(0, tag_width)
 
     def _hook_clear_button(self) -> None:
         if self._clear_button_connected:
