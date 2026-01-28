@@ -2,6 +2,17 @@
 
 Fast EXIF full-text search with a PySide6 desktop UI. Fully generated using VSCode Co-Pilot and GPT-5.2-Codex.
 
+## Prerequisite: ExifTool
+
+This application requires **ExifTool** to be installed on the system. ExifTool is used to read and modify metadata (EXIF, IPTC, XMP, etc.) from files.  Please install ExifTool before using the application: Official website: https://exiftool.org/
+
+### Installation
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install exiftool
+```
+
 ## Setup
 
 1. Create and activate a virtual environment.
