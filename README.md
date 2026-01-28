@@ -23,3 +23,24 @@ python -m exif_turbo.index --folders "C:\\Photos" --db data\\index.db --json dat
 ```
 python -m exif_turbo.app --db data\\index.db
 ```
+
+## FTS5 Query Syntax
+
+```
+term
+"exact phrase"
+term1 AND term2
+term1 OR term2
+term1 NOT term2
+col:term
+col:"exact phrase"
+prefix*
+```
+
+Examples:
+
+```
+camera:Canon lens:50mm
+"red car" AND mexico
+path:*.jpg
+```
