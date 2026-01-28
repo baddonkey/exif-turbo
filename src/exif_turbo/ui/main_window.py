@@ -14,6 +14,7 @@ from PySide6.QtGui import (
     QAction,
     QDesktopServices,
     QFont,
+    QFontDatabase,
     QIcon,
     QKeySequence,
     QImageReader,
@@ -125,6 +126,10 @@ class MainWindow(QMainWindow):
         self.details.setReadOnly(True)
         self.details.setPlaceholderText("Select an image to see metadata")
 
+        fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+        fixed_font.setPointSize(12)
+        self.details.setFont(fixed_font)
+
         self.find_input = QLineEdit()
         self.find_input.setPlaceholderText("Find in details")
         find_height = 36
@@ -190,9 +195,24 @@ class MainWindow(QMainWindow):
         details_layout = QVBoxLayout()
         details_layout.setSpacing(8)
         details_layout.setContentsMargins(0, 0, 0, 0)
+        details_header_layout = QHBoxLayout()
+        details_header_layout.setContentsMargins(0, 0, 0, 0)
+        details_header_layout.setSpacing(8)
+
         details_label = QLabel("Details")
         details_label.setFixedHeight(20)
-        details_layout.addWidget(details_label)
+
+        find_shortcut_text = QKeySequence(QKeySequence.Find).toString(QKeySequence.NativeText)
+        details_hint_label = QLabel(f"({find_shortcut_text})")
+        details_hint_label.setFixedHeight(20)
+        details_hint_label.setToolTip(f"Find in details ({find_shortcut_text})")
+        details_hint_label.setStyleSheet("color: #888; font-size: 12px;")
+
+        details_header_layout.addWidget(details_label)
+        details_header_layout.addStretch(1)
+        details_header_layout.addWidget(details_hint_label)
+
+        details_layout.addLayout(details_header_layout)
         details_layout.addWidget(self.find_bar)
         details_splitter = QSplitter(Qt.Horizontal)
         details_splitter.addWidget(self.details)
@@ -285,7 +305,7 @@ class MainWindow(QMainWindow):
         return QIcon(pixmap)
 
     def apply_styles(self) -> None:
-        base_font = QFont("Segoe UI", 11)
+        base_font = QFont("Segoe UI", 12)
         self.setFont(base_font)
         self.setStyleSheet(
             """
@@ -300,21 +320,21 @@ class MainWindow(QMainWindow):
                 border: 1px solid #d6dde8;
                 border-radius: 8px;
                 padding: 8px 12px;
-                font-size: 12pt;
+                font-size: 13pt;
             }
             QTextEdit {
                 background: #ffffff;
                 border: 1px solid #d6dde8;
                 border-radius: 8px;
                 padding: 10px;
-                font-size: 11pt;
+                font-size: 12pt;
             }
             QTableView {
                 background: #ffffff;
                 border: 1px solid #d6dde8;
                 border-radius: 8px;
                 gridline-color: #e6ecf5;
-                font-size: 11pt;
+                font-size: 12pt;
                 selection-background-color: #dbeafe;
                 selection-color: #1f2a44;
             }
@@ -336,7 +356,7 @@ class MainWindow(QMainWindow):
                 color: #5a6b86;
                 border: none;
                 padding: 6px 10px;
-                font-size: 10.5pt;
+                font-size: 11.5pt;
             }
             QPushButton {
                 background: #1976d2;
@@ -345,11 +365,11 @@ class MainWindow(QMainWindow):
                 border-radius: 8px;
                 padding: 10px 18px;
                 font-weight: 600;
-                font-size: 11pt;
+                font-size: 12pt;
                 min-height: 42px;
             }
             QPushButton#searchButton {
-                font-size: 18pt;
+                font-size: 19pt;
                 padding: 4px 10px;
                 min-width: 64px;
                 min-height: 48px;
