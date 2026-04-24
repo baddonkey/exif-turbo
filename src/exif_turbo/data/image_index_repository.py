@@ -1,19 +1,25 @@
 from __future__ import annotations
 
+import binascii
 import json
-import sqlite3
 from pathlib import Path
 from typing import Iterable, List, Tuple
 
+import sqlcipher3
+
 
 class ImageIndexRepository:
-    def __init__(self, db_path: Path) -> None:
+    def __init__(self, db_path: Path, key: str = "") -> None:
         self.db_path = db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(self.db_path))
+        self.conn = sqlcipher3.connect(str(self.db_path))
+        if key:
+            hex_key = binascii.hexlify(key.encode("utf-8")).decode("ascii")
+            self.conn.execute(f"PRAGMA key=\"x'{hex_key}'\"")
         self.conn.execute("PRAGMA journal_mode=WAL;")
         self.conn.execute("PRAGMA synchronous=NORMAL;")
         self.conn.execute("PRAGMA temp_store=MEMORY;")
+        self.conn.execute("PRAGMA cache_size=-4000;")
         self.conn.execute("PRAGMA foreign_keys=ON;")
         self.init_db()
 
@@ -114,6 +120,11 @@ class ImageIndexRepository:
             "SELECT path, filename, mtime, size, metadata_json FROM images"
         )
         return cur.fetchall()
+
+    def get_all_stamps(self) -> dict[str, tuple[float, int]]:
+        """Return {path: (mtime, size)} for every indexed image."""
+        cur = self.conn.execute("SELECT path, mtime, size FROM images")
+        return {row[0]: (row[1], row[2]) for row in cur.fetchall()}
 
     def commit(self) -> None:
         self.conn.commit()

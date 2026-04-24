@@ -6,10 +6,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List
 
-from PySide6.QtCore import QThread, Signal, Qt
-from PySide6.QtGui import QImageReader
+from PIL import Image, UnidentifiedImageError
+from PySide6.QtCore import QThread, Signal
 
 from ...utils.thumb_cache import thumb_cache_path
+
+_THUMB_SIZE = (144, 144)
 
 
 class ThumbWorker(QThread):
@@ -52,20 +54,13 @@ class ThumbWorker(QThread):
                         return False
                 except OSError:
                     return False
-                reader = QImageReader(path)
-                reader.setAutoTransform(True)
-                image = reader.read()
-                if image.isNull():
+                try:
+                    with Image.open(path) as img:
+                        img.thumbnail(_THUMB_SIZE, Image.LANCZOS)
+                        img.save(str(cache_path), "PNG")
+                    return True
+                except (UnidentifiedImageError, OSError, Exception):
                     return False
-                scaled = image.scaled(
-                    144,
-                    144,
-                    Qt.KeepAspectRatio,
-                    Qt.SmoothTransformation,
-                )
-                if scaled.isNull():
-                    return False
-                return scaled.save(str(cache_path), "PNG")
 
             if self.workers > 1 and total > 0:
                 executor = ThreadPoolExecutor(max_workers=self.workers)

@@ -2,19 +2,35 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import logging
 import os
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QUrl, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QGuiApplication, QIcon, QImageReader
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 
-from ..data.image_index_repository import ImageIndexRepository
+from ..config import default_db_path, thumb_cache_dir
 from .models.exif_list_model import ExifListModel
 from .models.search_list_model import SearchListModel
 from .view_models.app_controller import AppController
+
+
+_qt_log = logging.getLogger("qt")
+
+_QT_MSG_LEVEL = {
+    QtMsgType.QtDebugMsg: logging.DEBUG,
+    QtMsgType.QtInfoMsg: logging.INFO,
+    QtMsgType.QtWarningMsg: logging.WARNING,
+    QtMsgType.QtCriticalMsg: logging.ERROR,
+    QtMsgType.QtFatalMsg: logging.CRITICAL,
+}
+
+
+def _qt_message_handler(msg_type: QtMsgType, _context: object, message: str) -> None:
+    _qt_log.log(_QT_MSG_LEVEL.get(msg_type, logging.WARNING), message)
 
 
 def _ensure_pyside6_dll_search_path() -> None:
@@ -35,12 +51,18 @@ def _ensure_pyside6_dll_search_path() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Exif Turbo UI")
-    parser.add_argument("--db", required=True, help="SQLite database path")
+    parser.add_argument(
+        "--db",
+        default=None,
+        help=f"Database path (default: {default_db_path()})",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    logging.basicConfig(level=logging.WARNING)
+    qInstallMessageHandler(_qt_message_handler)
     _ensure_pyside6_dll_search_path()
     if os.name == "nt":
         try:
@@ -59,11 +81,10 @@ def main() -> None:
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 
-    repo = ImageIndexRepository(Path(args.db))
-    search_model = SearchListModel()
+    db_path = Path(args.db) if args.db else default_db_path()
+    search_model = SearchListModel(cache_dir=thumb_cache_dir(db_path))
     exif_model = ExifListModel()
-    controller = AppController(repo, search_model, exif_model)
-
+    controller = AppController(db_path, search_model, exif_model)
     engine = QQmlApplicationEngine()
     ctx = engine.rootContext()
     ctx.setContextProperty("controller", controller)

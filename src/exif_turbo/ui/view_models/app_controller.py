@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import csv
 import html as html_lib
 import json
 import os
-import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 from typing import List, Tuple
 
@@ -17,6 +14,7 @@ from ...data.image_index_repository import ImageIndexRepository
 from ...models.search_result import SearchResult
 from ..models.exif_list_model import ExifListModel
 from ..models.search_list_model import SearchListModel
+from ..workers.csv_export_worker import CsvExportWorker
 from ..workers.index_worker import IndexWorker
 from ..workers.thumb_worker import ThumbWorker
 
@@ -32,20 +30,38 @@ class AppController(QObject):
     selectedImageSourceChanged = Signal()
     totalResultsChanged = Signal()
     loadedResultsChanged = Signal()
+    isLockedChanged = Signal()
+    unlockErrorChanged = Signal()
+    indexCurrentChanged = Signal()
+    indexTotalChanged = Signal()
+    indexCurrentFileChanged = Signal()
+    thumbCurrentChanged = Signal()
+    thumbTotalChanged = Signal()
+    thumbCurrentFileChanged = Signal()
 
     def __init__(
         self,
-        repo: ImageIndexRepository,
+        db_path: Path,
         search_model: SearchListModel,
         exif_model: ExifListModel,
     ) -> None:
         super().__init__()
-        self._repo = repo
+        self._db_path = db_path
+        self._repo: ImageIndexRepository | None = None
+        self._key = ""
         self._search_model = search_model
         self._exif_model = exif_model
-        self._status_text = "Ready"
+        self._status_text = "Enter the database password to continue"
+        self._is_locked = True
+        self._unlock_error = ""
         self._is_indexing = False
         self._is_building_thumbs = False
+        self._index_current = 0
+        self._index_total = 0
+        self._index_current_file = ""
+        self._thumb_current = 0
+        self._thumb_total = 0
+        self._thumb_current_file = ""
         self._details_html = ""
         self._find_scroll_fraction = 0.0
         self._selected_image_source = ""
@@ -59,8 +75,17 @@ class AppController(QObject):
         self._find_index = -1
         self._index_worker: IndexWorker | None = None
         self._thumb_worker: ThumbWorker | None = None
+        self._csv_worker: CsvExportWorker | None = None
 
     # ── Properties ───────────────────────────────────────────────────────────
+
+    @Property(bool, notify=isLockedChanged)
+    def isLocked(self) -> bool:
+        return self._is_locked
+
+    @Property(str, notify=unlockErrorChanged)
+    def unlockError(self) -> str:
+        return self._unlock_error
 
     @Property(str, notify=statusTextChanged)
     def statusText(self) -> str:
@@ -94,10 +119,57 @@ class AppController(QObject):
     def loadedResults(self) -> int:
         return self._loaded_results
 
+    @Property(int, notify=indexCurrentChanged)
+    def indexCurrent(self) -> int:
+        return self._index_current
+
+    @Property(int, notify=indexTotalChanged)
+    def indexTotal(self) -> int:
+        return self._index_total
+
+    @Property(str, notify=indexCurrentFileChanged)
+    def indexCurrentFile(self) -> str:
+        return self._index_current_file
+
+    @Property(int, notify=thumbCurrentChanged)
+    def thumbCurrent(self) -> int:
+        return self._thumb_current
+
+    @Property(int, notify=thumbTotalChanged)
+    def thumbTotal(self) -> int:
+        return self._thumb_total
+
+    @Property(str, notify=thumbCurrentFileChanged)
+    def thumbCurrentFile(self) -> str:
+        return self._thumb_current_file
+
     # ── Slots ─────────────────────────────────────────────────────────────────
 
     @Slot(str)
+    def unlock(self, password: str) -> None:
+        try:
+            repo = ImageIndexRepository(self._db_path, key=password)
+            repo.count_images("")  # verify key — raises DatabaseError on wrong key
+            self._repo = repo
+            self._key = password
+            self._unlock_error = ""
+            self._is_locked = False
+            self.isLockedChanged.emit()
+            self.unlockErrorChanged.emit()
+            self.search("")
+        except Exception as exc:
+            self._unlock_error = "Wrong password — please try again."
+            self.unlockErrorChanged.emit()
+            # Close the failed connection to avoid resource leak
+            try:
+                repo.conn.close()
+            except Exception:
+                pass
+
+    @Slot(str)
     def search(self, query: str) -> None:
+        if self._repo is None:
+            return
         self._query_text = query.strip()
         rows = self._repo.search_images(self._query_text, _PAGE_SIZE, 0)
         results = [SearchResult(path=r[1], filename=r[2], metadata_json=r[3]) for r in rows]
@@ -116,7 +188,7 @@ class AppController(QObject):
 
     @Slot()
     def loadMore(self) -> None:
-        if self._loading or self._loaded_results >= self._total_results:
+        if self._repo is None or self._loading or self._loaded_results >= self._total_results:
             return
         self._loading = True
         rows = self._repo.search_images(self._query_text, _PAGE_SIZE, self._loaded_results)
@@ -177,14 +249,32 @@ class AppController(QObject):
 
     @Slot(str)
     def startIndexing(self, folder_url: str) -> None:
+        self._start_indexing_impl(folder_url, force=False)
+
+    @Slot(str)
+    def startFullReindex(self, folder_url: str) -> None:
+        self._start_indexing_impl(folder_url, force=True)
+
+    def _start_indexing_impl(self, folder_url: str, *, force: bool) -> None:
+        if self._repo is None:
+            return
         folder = Path(QUrl(folder_url).toLocalFile())
         if not folder.is_dir():
             return
-        self._clear_thumbnail_cache()
         self._is_indexing = True
+        self._index_current = 0
+        self._index_total = 0
+        self._index_current_file = ""
         self.isIndexingChanged.emit()
-        self._set_status("Indexing...")
-        self._index_worker = IndexWorker(self._repo.db_path, [folder], workers=12)
+        self.indexCurrentChanged.emit()
+        self.indexTotalChanged.emit()
+        self.indexCurrentFileChanged.emit()
+        label = "Full re-index…" if force else "Indexing…"
+        self._set_status(label)
+        self._index_worker = IndexWorker(
+            self._db_path, [folder], workers=12, key=self._key, force=force,
+            clear_cache_dir=self._search_model.cache_dir if force else None,
+        )
         self._index_worker.finished.connect(self._on_index_done)
         self._index_worker.failed.connect(self._on_index_failed)
         self._index_worker.progress.connect(self._on_index_progress)
@@ -199,13 +289,22 @@ class AppController(QObject):
 
     @Slot()
     def buildThumbnails(self) -> None:
+        if self._repo is None:
+            return
         rows = self._repo.all_images()
         paths = [r[0] for r in rows]
         if not paths:
+            self._set_status("No images indexed yet.")
             return
         self._is_building_thumbs = True
+        self._thumb_current = 0
+        self._thumb_total = len(paths)
+        self._thumb_current_file = ""
         self.isBuildingThumbsChanged.emit()
-        self._set_status("Building thumbnails...")
+        self.thumbCurrentChanged.emit()
+        self.thumbTotalChanged.emit()
+        self.thumbCurrentFileChanged.emit()
+        self._set_status("Building thumbnails\u2026")
         self._thumb_worker = ThumbWorker(
             paths,
             self._search_model.cache_dir,
@@ -226,35 +325,16 @@ class AppController(QObject):
 
     @Slot(str)
     def exportCsv(self, file_url: str) -> None:
-        file_path = Path(QUrl(file_url).toLocalFile())
-        query = self._query_text
-        total = self._repo.count_images(query)
-        if total == 0:
+        if self._repo is None:
             return
-        batch_size = 500
-        offset = 0
-        records: list[dict] = []
-        all_keys: set[str] = set()
-        while offset < total:
-            rows = self._repo.search_images(query, batch_size, offset)
-            for r in rows:
-                meta: dict = {}
-                try:
-                    parsed = json.loads(r[3])
-                    if isinstance(parsed, dict):
-                        meta = self._flatten(parsed)
-                except Exception:
-                    pass
-                all_keys.update(meta.keys())
-                records.append({"path": r[1], "filename": r[2], **meta})
-            offset += batch_size
-        headers = ["path", "filename"] + sorted(all_keys)
-        with open(file_path, "w", newline="", encoding="utf-8") as fh:
-            writer = csv.DictWriter(fh, fieldnames=headers, extrasaction="ignore")
-            writer.writeheader()
-            for record in records:
-                writer.writerow(record)
-        self._set_status("CSV export completed.")
+        file_path = Path(QUrl(file_url).toLocalFile())
+        self._set_status("Exporting CSV\u2026")
+        self._csv_worker = CsvExportWorker(
+            self._db_path, file_path, self._query_text, self._key
+        )
+        self._csv_worker.finished.connect(lambda _: self._set_status("CSV export completed."))
+        self._csv_worker.failed.connect(lambda e: self._set_status(f"CSV export failed: {e}"))
+        self._csv_worker.start()
 
     @Slot(str)
     def openImage(self, path: str) -> None:
@@ -337,10 +417,22 @@ class AppController(QObject):
         self.search(self._query_text)
 
     def _on_index_progress(self, current: int, total: int, path: str) -> None:
-        self._set_status(f"Indexing... {current} / {total}")
+        self._index_current = current
+        self._index_total = total
+        self._index_current_file = Path(path).name if path else ""
+        self.indexCurrentChanged.emit()
+        self.indexTotalChanged.emit()
+        self.indexCurrentFileChanged.emit()
+        self._set_status(f"Indexing\u2026 {current} / {total}")
 
     def _on_thumb_progress(self, current: int, total: int, path: str) -> None:
-        self._set_status(f"Building thumbnails... {current} / {total}")
+        self._thumb_current = current
+        self._thumb_total = total
+        self._thumb_current_file = Path(path).name if path else ""
+        self.thumbCurrentChanged.emit()
+        self.thumbTotalChanged.emit()
+        self.thumbCurrentFileChanged.emit()
+        self._set_status(f"Building thumbnails… {current} / {total}")
 
     def _on_thumb_done(self, cached: int, total: int) -> None:
         self._is_building_thumbs = False
@@ -356,13 +448,9 @@ class AppController(QObject):
     def _on_thumb_canceled(self, cached: int, total: int) -> None:
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
-        self._set_status("Build thumbs canceled")
+        self._set_status(f"Build thumbs canceled — {cached} cached")
+        self._search_model.refresh_thumbnails()
 
-    def _clear_thumbnail_cache(self) -> None:
-        cache_dir = Path(tempfile.gettempdir()) / "exif_turbo_thumbs"
-        if cache_dir.exists():
-            shutil.rmtree(cache_dir, ignore_errors=True)
-        cache_dir.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def _find_all(text: str, query: str) -> List[Tuple[int, int]]:
@@ -400,14 +488,3 @@ class AppController(QObject):
         parts.append(html_lib.escape(text[last:]))
         parts.append("</pre>")
         return "".join(parts)
-
-    @staticmethod
-    def _flatten(metadata: dict) -> dict:
-        flat: dict = {}
-        for key, value in metadata.items():
-            if isinstance(value, dict):
-                for sub_key, sub_value in value.items():
-                    flat[f"{key}:{sub_key}"] = str(sub_value)
-            else:
-                flat[str(key)] = str(value)
-        return flat

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from ..config import default_db_path
 from ..data.image_index_repository import ImageIndexRepository
 from .image_finder import ImageFinder
 from .indexer_service import IndexerService
@@ -11,7 +12,11 @@ from .indexer_service import IndexerService
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build EXIF search index")
     parser.add_argument("--folders", nargs="+", required=True, help="Folders to scan")
-    parser.add_argument("--db", required=True, help="SQLite database path")
+    parser.add_argument(
+        "--db",
+        default=None,
+        help=f"Database path (default: {default_db_path()})",
+    )
     parser.add_argument("--json", help="Optional JSON output path")
     parser.add_argument(
         "--workers",
@@ -38,7 +43,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     folders = [Path(p) for p in args.folders]
-    db_path = Path(args.db)
+    db_path = Path(args.db) if args.db else default_db_path()
     json_path = Path(args.json) if args.json else None
     repo = ImageIndexRepository(db_path)
     service = IndexerService(repo, finder=ImageFinder(skip_dotfiles=args.skip_dotfiles))

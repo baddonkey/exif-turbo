@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 from typing import List
 
@@ -16,10 +15,10 @@ class SearchListModel(QAbstractListModel):
     MetadataJsonRole = Qt.UserRole + 3
     ThumbnailSourceRole = Qt.UserRole + 4
 
-    def __init__(self) -> None:
+    def __init__(self, cache_dir: Path) -> None:
         super().__init__()
         self._rows: List[SearchResult] = []
-        self._cache_dir = Path(tempfile.gettempdir()) / "exif_turbo_thumbs"
+        self._cache_dir = cache_dir
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._max_thumb_bytes = 200 * 1024 * 1024
 

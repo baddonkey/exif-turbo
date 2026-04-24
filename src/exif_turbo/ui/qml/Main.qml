@@ -16,12 +16,11 @@ ApplicationWindow {
 
     Component.onCompleted: {
         showMaximized()
-        controller.search("")
     }
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────
     Shortcut {
-        sequence: StandardKey.Find
+        sequences: [ StandardKey.Find ]
         onActivated: {
             findBarVisible = !findBarVisible
             if (findBarVisible) {
@@ -31,21 +30,46 @@ ApplicationWindow {
         }
     }
     Shortcut {
-        sequence: StandardKey.FindNext
+        sequences: [ StandardKey.FindNext ]
         onActivated: controller.findNext(findField.text)
     }
     Shortcut {
-        sequence: StandardKey.FindPrevious
+        sequences: [ StandardKey.FindPrevious ]
         onActivated: controller.findPrev(findField.text)
     }
 
     property bool findBarVisible: false
+    property bool _pendingFullReindex: false
 
-    // ── Dialogs ───────────────────────────────────────────────────────────
+    // Null-safe proxies — shield child bindings from the transient null window
+    // that occurs while the QML engine resolves context properties on startup.
+    readonly property bool _isLocked:           controller ? controller.isLocked           : true
+    readonly property bool _isIndexing:         controller ? controller.isIndexing         : false
+    readonly property bool _isBuildingThumbs:   controller ? controller.isBuildingThumbs   : false
+    readonly property string _unlockError:      controller ? controller.unlockError        : ""
+    readonly property string _statusText:       controller ? controller.statusText         : ""
+    readonly property int    _indexCurrent:     controller ? controller.indexCurrent       : 0
+    readonly property int    _indexTotal:       controller ? controller.indexTotal         : 0
+    readonly property string _indexCurrentFile: controller ? controller.indexCurrentFile   : ""
+    readonly property int    _thumbCurrent:     controller ? controller.thumbCurrent       : 0
+    readonly property int    _thumbTotal:       controller ? controller.thumbTotal         : 0
+    readonly property string _thumbCurrentFile: controller ? controller.thumbCurrentFile   : ""
+    readonly property string _selectedImageSource: controller ? controller.selectedImageSource : ""
+    readonly property string _detailsHtml:      controller ? controller.detailsHtml        : ""
+
+    // ── Dialogs ─────────────────────────────────────────────────────
     FolderDialog {
         id: folderDialog
-        title: "Select folder to index"
-        onAccepted: controller.startIndexing(selectedFolder.toString())
+        title: _pendingFullReindex ? "Select folder — Full Re-index" : "Select folder to index"
+        onAccepted: {
+            if (_pendingFullReindex) {
+                _pendingFullReindex = false
+                controller.startFullReindex(selectedFolder.toString())
+            } else {
+                controller.startIndexing(selectedFolder.toString())
+            }
+        }
+        onRejected: _pendingFullReindex = false
     }
 
     FileDialog {
@@ -57,10 +81,11 @@ ApplicationWindow {
         onAccepted: controller.exportCsv(selectedFile.toString())
     }
 
-    // ── Header toolbar ────────────────────────────────────────────────────
+    // ── Header toolbar (hidden when locked) ───────────────────────────────
     header: ToolBar {
         Material.background: "#1565c0"
-        height: 56
+        implicitHeight: _isLocked ? 0 : 64
+        visible: !_isLocked
 
         RowLayout {
             anchors {
@@ -70,22 +95,38 @@ ApplicationWindow {
                 margins: 10
             }
             spacing: 8
+            enabled: !_isIndexing && !_isBuildingThumbs
 
-            TextField {
-                id: searchField
+            Rectangle {
                 Layout.fillWidth: true
-                placeholderText: "Full-text search  (e.g. camera:Canon lens:50mm)"
-                font.pointSize: 12
-                Material.accent: Material.White
-                color: "#1f2a44"
-                background: Rectangle {
-                    radius: 8
-                    color: "#ffffff"
-                    border.color: "#d6dde8"
+                implicitHeight: 44
+                radius: 8
+                color: "#ffffff"
+                border.color: searchField.activeFocus ? "#90caf9" : "#d6dde8"
+                border.width: searchField.activeFocus ? 2 : 1
+
+                Label {
+                    anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+                    visible: searchField.text.length === 0
+                    text: "Full-text search  (e.g. camera:Canon lens:50mm)"
+                    color: "#9aaab8"
+                    font.pointSize: 12
                 }
-                leftPadding: 12
-                rightPadding: 12
-                Keys.onReturnPressed: controller.search(text)
+
+                TextInput {
+                    id: searchField
+                    anchors {
+                        left: parent.left; right: parent.right
+                        leftMargin: 12; rightMargin: 12
+                        verticalCenter: parent.verticalCenter
+                    }
+                    font.pointSize: 12
+                    color: "#1f2a44"
+                    selectedTextColor: "#ffffff"
+                    selectionColor: "#1976d2"
+                    clip: true
+                    Keys.onReturnPressed: controller.search(text)
+                }
             }
 
             Button {
@@ -104,25 +145,31 @@ ApplicationWindow {
 
             Button {
                 text: "Index Folders"
-                visible: !controller.isIndexing
                 Material.background: "#1976d2"
                 Material.foreground: "#ffffff"
                 implicitHeight: 44
-                onClicked: folderDialog.open()
+                onClicked: {
+                    _pendingFullReindex = false
+                    folderDialog.open()
+                }
             }
 
             Button {
-                text: "Cancel Index"
-                visible: controller.isIndexing
-                Material.background: "#e53935"
+                text: "Full Re-index"
+                Material.background: "#6a1b9a"
                 Material.foreground: "#ffffff"
                 implicitHeight: 44
-                onClicked: controller.cancelIndex()
+                ToolTip.text: "Re-extract EXIF for every file, ignoring the existing index"
+                ToolTip.visible: hovered
+                onClicked: {
+                    _pendingFullReindex = true
+                    folderDialog.open()
+                }
             }
 
             Button {
                 text: "Build Thumbs"
-                visible: !controller.isBuildingThumbs
+                visible: !_isBuildingThumbs
                 Material.background: "#1976d2"
                 Material.foreground: "#ffffff"
                 implicitHeight: 44
@@ -131,7 +178,7 @@ ApplicationWindow {
 
             Button {
                 text: "Cancel Thumbs"
-                visible: controller.isBuildingThumbs
+                visible: _isBuildingThumbs
                 Material.background: "#e53935"
                 Material.foreground: "#ffffff"
                 implicitHeight: 44
@@ -148,10 +195,201 @@ ApplicationWindow {
         }
     }
 
+    // ── Password / lock screen ────────────────────────────────────────────
+    Rectangle {
+        anchors.fill: parent
+        color: "#f5f7fb"
+        visible: _isLocked
+        z: 100
+
+        Column {
+            anchors.centerIn: parent
+            spacing: 18
+            width: 360
+
+            Label {
+                text: "Exif-Turbo"
+                font.pointSize: 26
+                font.weight: Font.Bold
+                color: "#1565c0"
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+
+            Label {
+                text: "Enter the database password"
+                font.pointSize: 13
+                color: "#4b5b78"
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+
+            TextField {
+                id: passwordField
+                width: parent.width
+                placeholderText: "Password"
+                echoMode: TextInput.Password
+                font.pointSize: 13
+                Keys.onReturnPressed: controller.unlock(text)
+                Component.onCompleted: forceActiveFocus()
+            }
+
+            Label {
+                text: _unlockError
+                color: "#c62828"
+                font.pointSize: 11
+                visible: _unlockError !== ""
+                wrapMode: Text.WordWrap
+                width: parent.width
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+
+            Button {
+                text: "Unlock"
+                width: parent.width
+                implicitHeight: 44
+                Material.background: "#1976d2"
+                Material.foreground: "#ffffff"
+                font.pointSize: 13
+                anchors.horizontalCenter: parent.horizontalCenter
+                onClicked: controller.unlock(passwordField.text)
+            }
+        }
+    }
+    // ── Indexing progress overlay ─────────────────────────────────────────────
+    Rectangle {
+        anchors.fill: parent
+        color: "#aa000000"
+        visible: _isIndexing
+        z: 50
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 480
+            height: 250
+            radius: 14
+            color: "#ffffff"
+
+            ColumnLayout {
+                anchors { fill: parent; margins: 28 }
+                spacing: 14
+
+                Label {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "Indexing Images"
+                    font.pointSize: 16
+                    font.weight: Font.Medium
+                    color: "#1f2a44"
+                }
+
+                ProgressBar {
+                    Layout.fillWidth: true
+                    from: 0
+                    to: _indexTotal > 0 ? _indexTotal : 1
+                    value: _indexCurrent
+                    indeterminate: _indexTotal === 0
+                }
+
+                Label {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: _indexTotal > 0
+                          ? _indexCurrent + " / " + _indexTotal + " files"
+                          : "Scanning for images…"
+                    font.pointSize: 12
+                    color: "#4b5b78"
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    text: _indexCurrentFile
+                    font.pointSize: 10
+                    color: "#8a9ab8"
+                    elide: Text.ElideMiddle
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                Button {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: _statusText.indexOf("Cancel") >= 0 ? "Canceling…" : "Cancel"
+                    enabled: _statusText.indexOf("Cancel") < 0
+                    Material.background: "#e53935"
+                    Material.foreground: "#ffffff"
+                    implicitHeight: 40
+                    implicitWidth: 140
+                    onClicked: controller.cancelIndex()
+                }
+            }
+        }
+    }
+    // ── Thumbnail progress overlay ───────────────────────────────────────
+    Rectangle {
+        anchors.fill: parent
+        color: "#aa000000"
+        visible: _isBuildingThumbs
+        z: 50
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 480
+            height: 250
+            radius: 14
+            color: "#ffffff"
+
+            ColumnLayout {
+                anchors { fill: parent; margins: 28 }
+                spacing: 14
+
+                Label {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "Building Thumbnails"
+                    font.pointSize: 16
+                    font.weight: Font.Medium
+                    color: "#1f2a44"
+                }
+
+                ProgressBar {
+                    Layout.fillWidth: true
+                    from: 0
+                    to: _thumbTotal > 0 ? _thumbTotal : 1
+                    value: _thumbCurrent
+                    indeterminate: _thumbTotal === 0
+                }
+
+                Label {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: _thumbTotal > 0
+                          ? _thumbCurrent + " / " + _thumbTotal + " images"
+                          : "Preparing…"
+                    font.pointSize: 12
+                    color: "#4b5b78"
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    text: _thumbCurrentFile
+                    font.pointSize: 10
+                    color: "#8a9ab8"
+                    elide: Text.ElideMiddle
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                Button {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: _statusText.indexOf("Cancel") >= 0 ? "Canceling…" : "Cancel"
+                    enabled: _statusText.indexOf("Cancel") < 0
+                    Material.background: "#e53935"
+                    Material.foreground: "#ffffff"
+                    implicitHeight: 40
+                    implicitWidth: 140
+                    onClicked: controller.cancelThumbnails()
+                }
+            }
+        }
+    }
+
     // ── Main content ──────────────────────────────────────────────────────
     SplitView {
         id: mainSplit
         anchors.fill: parent
+        visible: !_isLocked
         orientation: Qt.Vertical
         handle: Rectangle {
             implicitHeight: 6
@@ -305,7 +543,7 @@ ApplicationWindow {
 
                 Image {
                     anchors { fill: parent; margins: 8 }
-                    source: controller.selectedImageSource
+                    source: _selectedImageSource
                     fillMode: Image.PreserveAspectFit
                     smooth: true
                     asynchronous: true
@@ -393,7 +631,7 @@ ApplicationWindow {
                             id: detailsArea
                             readOnly: true
                             textFormat: TextEdit.RichText
-                            text: controller.detailsHtml
+                            text: _detailsHtml
                             wrapMode: TextEdit.Wrap
                             font.family: "Consolas"
                             font.pointSize: 11
@@ -475,22 +713,26 @@ ApplicationWindow {
                                 spacing: 8
 
                                 Label {
+                                    id: tagLabel
                                     text: model.tag
                                     Layout.preferredWidth: exifList.width * 0.42 - 16
                                     font.pointSize: 10
                                     elide: Text.ElideRight
                                     color: "#1f2a44"
                                     ToolTip.text: model.tag
-                                    ToolTip.visible: hovered && truncated
+                                    ToolTip.visible: (tagHover ? tagHover.hovered : false) && truncated
+                                    HoverHandler { id: tagHover }
                                 }
                                 Label {
+                                    id: valueLabel
                                     text: model.value
                                     Layout.fillWidth: true
                                     font.pointSize: 10
                                     elide: Text.ElideRight
                                     color: "#4b5b78"
                                     ToolTip.text: model.value
-                                    ToolTip.visible: hovered && truncated
+                                    ToolTip.visible: (valueHover ? valueHover.hovered : false) && truncated
+                                    HoverHandler { id: valueHover }
                                 }
                             }
                         }
@@ -502,13 +744,14 @@ ApplicationWindow {
 
     // ── Status bar ────────────────────────────────────────────────────────
     footer: Rectangle {
-        height: 28
+        height: _isLocked ? 0 : 28
+        visible: !_isLocked
         color: "#f0f4fa"
         border.color: "#d6dde8"
 
         Label {
             anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: 12 }
-            text: controller.statusText
+            text: _statusText
             font.pointSize: 10
             color: "#5a6b86"
         }

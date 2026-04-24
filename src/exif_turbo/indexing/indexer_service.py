@@ -39,18 +39,30 @@ class IndexerService:
         on_progress: Callable[[int, int, Path], None] | None = None,
         workers: int = 1,
         cancel_check: Callable[[], bool] | None = None,
+        force: bool = False,
     ) -> int:
-        self.repo.clear_all()
         existing_paths: List[str] = []
         count = 0
         canceled = False
 
+        if force:
+            self.repo.clear_all()
+
         paths = list(self.finder.iter_images(folders))
         total = len(paths)
 
-        def build_item(path: Path) -> IndexedImage | None:
+        # Snapshot of DB stamps — used to skip unchanged files without re-reading EXIF.
+        # Empty when force=True so every file is re-extracted.
+        known_stamps = {} if force else self.repo.get_all_stamps()
+
+        _UNCHANGED = object()  # sentinel: file is up-to-date in the index
+
+        def build_item(path: Path) -> IndexedImage | None | object:
             try:
                 stat = path.stat()
+                stamp = known_stamps.get(str(path))
+                if stamp and stamp[0] == stat.st_mtime and stamp[1] == stat.st_size:
+                    return _UNCHANGED
                 metadata = self.extractor.extract(path)
                 metadata_text = metadata_to_text(metadata)
                 return IndexedImage(
@@ -81,6 +93,10 @@ class IndexerService:
                     if on_progress:
                         on_progress(completed, total, path)
                     item = future.result()
+                    if item is _UNCHANGED:
+                        existing_paths.append(str(path))
+                        count += 1
+                        continue
                     if not item:
                         continue
                     self.repo.upsert_image(
@@ -103,6 +119,10 @@ class IndexerService:
                 if on_progress:
                     on_progress(idx, total, path)
                 item = build_item(path)
+                if item is _UNCHANGED:
+                    existing_paths.append(str(path))
+                    count += 1
+                    continue
                 if not item:
                     continue
                 self.repo.upsert_image(
