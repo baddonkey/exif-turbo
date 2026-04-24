@@ -95,3 +95,8 @@ the pattern used in hash-turbo. When working on any UI code:
 | Type | Name | Purpose |
 |------|------|---------|
 | Instruction | `testing-conventions` | Auto-applied to `tests/**` — naming, AAA structure, fixture patterns |
+
+## Agent Behaviour Rules
+
+- **Only commit or push when the user explicitly asks for it in the prompt.**
+  Do not commit, stage, or push as a side-effect of any other task.
