@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from ..data.image_index_repository import ImageIndexRepository
+from .image_finder import ImageFinder
 from .indexer_service import IndexerService
 
 
@@ -18,6 +19,19 @@ def parse_args() -> argparse.Namespace:
         default=12,
         help="Number of parallel workers (default: 12)",
     )
+    parser.add_argument(
+        "--skip-dotfiles",
+        dest="skip_dotfiles",
+        action="store_true",
+        default=True,
+        help="Skip files whose name starts with '.' (default)",
+    )
+    parser.add_argument(
+        "--include-dotfiles",
+        dest="skip_dotfiles",
+        action="store_false",
+        help="Include files whose name starts with '.'",
+    )
     return parser.parse_args()
 
 
@@ -27,7 +41,7 @@ def main() -> None:
     db_path = Path(args.db)
     json_path = Path(args.json) if args.json else None
     repo = ImageIndexRepository(db_path)
-    service = IndexerService(repo)
+    service = IndexerService(repo, finder=ImageFinder(skip_dotfiles=args.skip_dotfiles))
     count = service.build_index(folders, json_path, workers=args.workers)
     repo.close()
     print(f"Indexed {count} images")

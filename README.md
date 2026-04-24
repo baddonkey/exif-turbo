@@ -35,6 +35,20 @@ python -m exif_turbo.index --folders "C:\\Photos" --db data\\index.db --json dat
 python -m exif_turbo.app --db data\\index.db
 ```
 
+## Configuration
+
+You can control whether dotfiles (filenames starting with ".") are indexed.
+
+Environment variable:
+
+- `EXIF_TURBO_SKIP_DOTFILES` = `true|false` (default: `true`)
+
+CLI flags:
+
+```
+python -m exif_turbo.index --folders "C:\\Photos" --db data\\index.db --include-dotfiles
+```
+
 ## FTS5 Query Syntax
 
 ```
