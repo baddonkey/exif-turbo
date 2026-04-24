@@ -4,12 +4,12 @@ import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import List
+from typing import Dict, List, Optional, Tuple
 
 from PIL import Image, UnidentifiedImageError
 from PySide6.QtCore import QThread, Signal
 
-from ...utils.thumb_cache import thumb_cache_path
+from ...utils.thumb_cache import thumb_cache_name_from_stamp, thumb_cache_path
 
 _THUMB_SIZE = (144, 144)
 
@@ -26,12 +26,14 @@ class ThumbWorker(QThread):
         cache_dir: Path,
         max_thumb_bytes: int,
         workers: int = 1,
+        stamps: Optional[Dict[str, Tuple[float, int]]] = None,
     ) -> None:
         super().__init__()
         self.paths = paths
         self.cache_dir = cache_dir
         self.max_thumb_bytes = max_thumb_bytes
         self.workers = max(1, workers)
+        self._stamps = stamps or {}
         self._cancel_event = threading.Event()
 
     def cancel(self) -> None:
@@ -43,12 +45,30 @@ class ThumbWorker(QThread):
             total = len(self.paths)
             cached = 0
 
+            # Pre-scan cache dir once — O(1) set lookup replaces per-file exists()
+            existing: set[str] = set()
+            try:
+                with os.scandir(self.cache_dir) as it:
+                    for entry in it:
+                        if entry.name.endswith(".png"):
+                            existing.add(entry.name)
+            except OSError:
+                pass
+
             def build_thumb(path: str) -> bool:
                 if not path:
                     return False
-                cache_path = thumb_cache_path(path, self.cache_dir)
-                if cache_path.exists():
-                    return True
+                # Compute cache filename — use DB stamp to avoid network stat
+                stamp = self._stamps.get(path)
+                if stamp is not None:
+                    cache_name = thumb_cache_name_from_stamp(path, stamp[0], stamp[1])
+                    if cache_name in existing:
+                        return True
+                    cache_path_obj = self.cache_dir / cache_name
+                else:
+                    cache_path_obj = thumb_cache_path(path, self.cache_dir)
+                    if cache_path_obj.name in existing:
+                        return True
                 try:
                     if os.path.getsize(path) > self.max_thumb_bytes:
                         return False
@@ -57,7 +77,8 @@ class ThumbWorker(QThread):
                 try:
                     with Image.open(path) as img:
                         img.thumbnail(_THUMB_SIZE, Image.LANCZOS)
-                        img.save(str(cache_path), "PNG")
+                        img.save(str(cache_path_obj), "PNG")
+                    existing.add(cache_path_obj.name)
                     return True
                 except (UnidentifiedImageError, OSError, Exception):
                     return False
@@ -93,3 +114,4 @@ class ThumbWorker(QThread):
                 self.finished.emit(cached, total)
         except Exception as exc:
             self.failed.emit(str(exc))
+

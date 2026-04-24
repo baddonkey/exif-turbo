@@ -8,3 +8,4 @@ class SearchResult:
     path: str
     filename: str
     metadata_json: str
+    size: int = 0

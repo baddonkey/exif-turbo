@@ -14,7 +14,6 @@ from ...data.image_index_repository import ImageIndexRepository
 from ...models.search_result import SearchResult
 from ..models.exif_list_model import ExifListModel
 from ..models.search_list_model import SearchListModel
-from ..workers.csv_export_worker import CsvExportWorker
 from ..workers.index_worker import IndexWorker
 from ..workers.thumb_worker import ThumbWorker
 
@@ -38,6 +37,11 @@ class AppController(QObject):
     thumbCurrentChanged = Signal()
     thumbTotalChanged = Signal()
     thumbCurrentFileChanged = Signal()
+    sortByChanged = Signal()
+    extFilterChanged = Signal()
+    availableFormatsChanged = Signal()
+    folderTreeChanged = Signal()
+    folderFilterChanged = Signal()
 
     def __init__(
         self,
@@ -73,9 +77,13 @@ class AppController(QObject):
         self._find_text = ""
         self._find_positions: List[Tuple[int, int]] = []
         self._find_index = -1
+        self._sort_by = ""
+        self._ext_filter = ""
+        self._available_formats: str = "[]"
+        self._folder_filter: str = ""
+        self._folder_tree: str = "[]"
         self._index_worker: IndexWorker | None = None
         self._thumb_worker: ThumbWorker | None = None
-        self._csv_worker: CsvExportWorker | None = None
 
     # ── Properties ───────────────────────────────────────────────────────────
 
@@ -143,6 +151,26 @@ class AppController(QObject):
     def thumbCurrentFile(self) -> str:
         return self._thumb_current_file
 
+    @Property(str, notify=sortByChanged)
+    def sortBy(self) -> str:
+        return self._sort_by
+
+    @Property(str, notify=extFilterChanged)
+    def extFilter(self) -> str:
+        return self._ext_filter
+
+    @Property(str, notify=availableFormatsChanged)
+    def availableFormats(self) -> str:
+        return self._available_formats
+
+    @Property(str, notify=folderFilterChanged)
+    def folderFilter(self) -> str:
+        return self._folder_filter
+
+    @Property(str, notify=folderTreeChanged)
+    def folderTree(self) -> str:
+        return self._folder_tree
+
     # ── Slots ─────────────────────────────────────────────────────────────────
 
     @Slot(str)
@@ -154,8 +182,13 @@ class AppController(QObject):
             self._key = password
             self._unlock_error = ""
             self._is_locked = False
+            self._ext_filter = ""
+            self._sort_by = ""
+            self._folder_filter = ""
             self.isLockedChanged.emit()
             self.unlockErrorChanged.emit()
+            self._load_formats()
+            self._load_folder_tree()
             self.search("")
         except Exception as exc:
             self._unlock_error = "Wrong password — please try again."
@@ -171,10 +204,60 @@ class AppController(QObject):
         if self._repo is None:
             return
         self._query_text = query.strip()
-        rows = self._repo.search_images(self._query_text, _PAGE_SIZE, 0)
-        results = [SearchResult(path=r[1], filename=r[2], metadata_json=r[3]) for r in rows]
+        self._run_search()
+
+    @Slot(str)
+    def setSortBy(self, sort: str) -> None:
+        if self._sort_by == sort:
+            return
+        self._sort_by = sort
+        self.sortByChanged.emit()
+        self._run_search()
+
+    @Slot(str)
+    def setExtFilter(self, ext: str) -> None:
+        if self._ext_filter == ext:
+            return
+        self._ext_filter = ext
+        self.extFilterChanged.emit()
+        self._run_search()
+
+    @Slot(str)
+    def setFolderFilter(self, path: str) -> None:
+        if self._folder_filter == path:
+            return
+        self._folder_filter = path
+        self.folderFilterChanged.emit()
+        self._run_search()
+
+    @Slot(str)
+    def browseFolder(self, path: str) -> None:
+        """Navigate to a folder in the Browse tab.
+
+        Clears any active search query so the full folder contents are shown.
+        Clicking the already-selected folder clears the filter.
+        """
+        if self._folder_filter == path:
+            self._folder_filter = ""
+        else:
+            self._query_text = ""
+            self._folder_filter = path
+        self.folderFilterChanged.emit()
+        self._run_search()
+
+    def _run_search(self) -> None:
+        assert self._repo is not None
+        rows = self._repo.search_images(
+            self._query_text, _PAGE_SIZE, 0,
+            sort_by=self._sort_by, ext_filter=self._ext_filter,
+            path_filter=self._folder_filter,
+        )
+        results = [SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4]) for r in rows]
         self._search_model.set_rows(results)
-        total = self._repo.count_images(self._query_text)
+        total = self._repo.count_images(
+            self._query_text, ext_filter=self._ext_filter,
+            path_filter=self._folder_filter,
+        )
         self._total_results = total
         self._loaded_results = len(results)
         self._loading = False
@@ -186,13 +269,34 @@ class AppController(QObject):
         else:
             self._clear_details()
 
+    def _load_formats(self) -> None:
+        if self._repo is None:
+            return
+        import json as _json
+        counts = self._repo.get_format_counts()
+        self._available_formats = _json.dumps(
+            [{"ext": ext, "count": cnt} for ext, cnt in counts]
+        )
+        self.availableFormatsChanged.emit()
+
+    def _load_folder_tree(self) -> None:
+        if self._repo is None:
+            return
+        nodes = self._repo.get_folder_tree()
+        self._folder_tree = json.dumps(nodes)
+        self.folderTreeChanged.emit()
+
     @Slot()
     def loadMore(self) -> None:
         if self._repo is None or self._loading or self._loaded_results >= self._total_results:
             return
         self._loading = True
-        rows = self._repo.search_images(self._query_text, _PAGE_SIZE, self._loaded_results)
-        results = [SearchResult(path=r[1], filename=r[2], metadata_json=r[3]) for r in rows]
+        rows = self._repo.search_images(
+            self._query_text, _PAGE_SIZE, self._loaded_results,
+            sort_by=self._sort_by, ext_filter=self._ext_filter,
+            path_filter=self._folder_filter,
+        )
+        results = [SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4]) for r in rows]
         self._search_model.append_rows(results)
         self._loaded_results += len(results)
         self.loadedResultsChanged.emit()
@@ -296,6 +400,7 @@ class AppController(QObject):
         if not paths:
             self._set_status("No images indexed yet.")
             return
+        stamps = self._repo.get_all_stamps()
         self._is_building_thumbs = True
         self._thumb_current = 0
         self._thumb_total = len(paths)
@@ -310,6 +415,7 @@ class AppController(QObject):
             self._search_model.cache_dir,
             self._search_model.max_thumb_bytes,
             workers=12,
+            stamps=stamps,
         )
         self._thumb_worker.progress.connect(self._on_thumb_progress)
         self._thumb_worker.finished.connect(self._on_thumb_done)
@@ -322,19 +428,6 @@ class AppController(QObject):
         if self._thumb_worker and self._thumb_worker.isRunning():
             self._set_status("Canceling thumbs...")
             self._thumb_worker.cancel()
-
-    @Slot(str)
-    def exportCsv(self, file_url: str) -> None:
-        if self._repo is None:
-            return
-        file_path = Path(QUrl(file_url).toLocalFile())
-        self._set_status("Exporting CSV\u2026")
-        self._csv_worker = CsvExportWorker(
-            self._db_path, file_path, self._query_text, self._key
-        )
-        self._csv_worker.finished.connect(lambda _: self._set_status("CSV export completed."))
-        self._csv_worker.failed.connect(lambda e: self._set_status(f"CSV export failed: {e}"))
-        self._csv_worker.start()
 
     @Slot(str)
     def openImage(self, path: str) -> None:
@@ -403,6 +496,8 @@ class AppController(QObject):
         self._is_indexing = False
         self.isIndexingChanged.emit()
         self._set_status(f"Indexed {count} images")
+        self._load_formats()
+        self._load_folder_tree()
         self.search(self._query_text)
 
     def _on_index_failed(self, error: str) -> None:

@@ -14,6 +14,7 @@ class SearchListModel(QAbstractListModel):
     FilenameRole = Qt.UserRole + 2
     MetadataJsonRole = Qt.UserRole + 3
     ThumbnailSourceRole = Qt.UserRole + 4
+    FileSizeRole = Qt.UserRole + 5
 
     def __init__(self, cache_dir: Path) -> None:
         super().__init__()
@@ -36,6 +37,7 @@ class SearchListModel(QAbstractListModel):
             self.FilenameRole: b"filename",
             self.MetadataJsonRole: b"metadataJson",
             self.ThumbnailSourceRole: b"thumbnailSource",
+            self.FileSizeRole: b"fileSize",
         }
 
     def set_rows(self, rows: List[SearchResult]) -> None:
@@ -72,6 +74,8 @@ class SearchListModel(QAbstractListModel):
             if cache_path.exists():
                 return cache_path.as_uri()
             return ""
+        if role == self.FileSizeRole:
+            return item.size
         return None
 
     def refresh_thumbnails(self) -> None:

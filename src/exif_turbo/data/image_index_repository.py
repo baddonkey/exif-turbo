@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import binascii
 import json
+import os
+from os.path import commonpath
 from pathlib import Path
-from typing import Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
 import sqlcipher3
 
@@ -82,38 +84,179 @@ class ImageIndexRepository:
         self.conn.execute("DELETE FROM images_fts")
         self.conn.execute("DELETE FROM images")
 
-    def search_images(self, query: str, limit: int, offset: int) -> List[Tuple[int, str, str, str]]:
+    _SORT_MAP: Dict[str, str] = {
+        "filename_asc":  "images.filename COLLATE NOCASE ASC",
+        "filename_desc": "images.filename COLLATE NOCASE DESC",
+        "path_asc":      "images.path COLLATE NOCASE ASC",
+        "path_desc":     "images.path COLLATE NOCASE DESC",
+        "date_desc":     "images.mtime DESC",
+        "date_asc":      "images.mtime ASC",
+        "size_desc":     "images.size DESC",
+    }
+
+    def search_images(
+        self,
+        query: str,
+        limit: int,
+        offset: int,
+        sort_by: str = "",
+        ext_filter: str = "",
+        path_filter: str = "",
+    ) -> List[Tuple[int, str, str, str]]:
+        order = self._SORT_MAP.get(sort_by, "images.filename COLLATE NOCASE ASC")
+        ext_clause = ""
+        ext_args: tuple = ()
+        if ext_filter:
+            canonical = ext_filter.lower().lstrip(".")
+            # Collect all extensions that map to this canonical key
+            aliases = [
+                raw for raw, mapped in self._EXT_ALIASES.items() if mapped == canonical
+            ]
+            exts = [canonical] + aliases  # e.g. ["jpg", "jpeg"]
+            placeholders = " OR ".join("LOWER(images.filename) LIKE ?" for _ in exts)
+            ext_clause = f"AND ({placeholders})"
+            ext_args = tuple(f"%.{e}" for e in exts)
+
+        path_clause = ""
+        path_args: tuple = ()
+        if path_filter:
+            prefix = os.path.normpath(path_filter) + os.sep
+            path_clause = "AND images.path LIKE ?"
+            path_args = (prefix + "%",)
+
         if query.strip():
+            # When user picks an explicit sort keep it; otherwise use relevance.
+            order_expr = f"ORDER BY {order}" if sort_by else "ORDER BY bm25(images_fts)"
             sql = (
-                "SELECT images.id, images.path, images.filename, images.metadata_json "
+                "SELECT images.id, images.path, images.filename, images.metadata_json, images.size "
                 "FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                "WHERE images_fts MATCH ? "
-                "ORDER BY bm25(images_fts) "
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} "
+                f"{order_expr} "
                 "LIMIT ? OFFSET ?"
             )
-            args = (query, limit, offset)
+            args = (query,) + ext_args + path_args + (limit, offset)
         else:
             sql = (
-                "SELECT id, path, filename, metadata_json "
+                "SELECT id, path, filename, metadata_json, size "
                 "FROM images "
-                "ORDER BY filename "
+                f"WHERE 1=1 {ext_clause} {path_clause} "
+                f"ORDER BY {order} "
                 "LIMIT ? OFFSET ?"
             )
-            args = (limit, offset)
+            args = ext_args + path_args + (limit, offset)
 
         cur = self.conn.execute(sql, args)
         return cur.fetchall()
 
-    def count_images(self, query: str) -> int:
+    def count_images(self, query: str, ext_filter: str = "", path_filter: str = "") -> int:
+        ext_clause = ""
+        ext_args: tuple = ()
+        if ext_filter:
+            canonical = ext_filter.lower().lstrip(".")
+            aliases = [
+                raw for raw, mapped in self._EXT_ALIASES.items() if mapped == canonical
+            ]
+            exts = [canonical] + aliases
+            placeholders = " OR ".join("LOWER(images.filename) LIKE ?" for _ in exts)
+            ext_clause = f"AND ({placeholders})"
+            ext_args = tuple(f"%.{e}" for e in exts)
+
+        path_clause = ""
+        path_args: tuple = ()
+        if path_filter:
+            prefix = os.path.normpath(path_filter) + os.sep
+            path_clause = "AND images.path LIKE ?"
+            path_args = (prefix + "%",)
+
         if query.strip():
-            cur = self.conn.execute(
-                "SELECT COUNT(*) FROM images_fts WHERE images_fts MATCH ?",
-                (query,),
+            sql = (
+                "SELECT COUNT(*) FROM images_fts "
+                "JOIN images ON images_fts.rowid = images.id "
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause}"
             )
+            args = (query,) + ext_args + path_args
         else:
-            cur = self.conn.execute("SELECT COUNT(*) FROM images")
+            sql = f"SELECT COUNT(*) FROM images WHERE 1=1 {ext_clause} {path_clause}"
+            args = ext_args + path_args
+
+        cur = self.conn.execute(sql, args)
         return int(cur.fetchone()[0])
+
+    # Extensions that should be merged into a single facet key.
+    _EXT_ALIASES: Dict[str, str] = {"jpeg": "jpg"}
+
+    def get_format_counts(self) -> List[Tuple[str, int]]:
+        """Return [(extension, count)] sorted by count descending.
+
+        Aliased extensions (e.g. jpeg → jpg) are merged into one bucket.
+        """
+        cur = self.conn.execute("SELECT filename FROM images")
+        counts: Dict[str, int] = {}
+        for (fname,) in cur.fetchall():
+            ext = Path(fname).suffix.lower().lstrip(".")
+            ext = self._EXT_ALIASES.get(ext, ext)
+            if ext:
+                counts[ext] = counts.get(ext, 0) + 1
+        return sorted(counts.items(), key=lambda x: -x[1])
+
+    def get_folder_tree(self) -> List[Dict[str, Any]]:
+        """Return folder nodes for the tree browser, sorted by path.
+
+        Each node: {"path": str, "name": str, "depth": int, "count": int}
+        where count is the number of images directly inside that folder.
+        Depth is relative to the deepest common ancestor of all indexed folders.
+        """
+        cur = self.conn.execute("SELECT path FROM images")
+        rows = cur.fetchall()
+        if not rows:
+            return []
+
+        # Count images per direct parent folder
+        folder_counts: Dict[str, int] = {}
+        unique_parents: set[str] = set()
+        for (img_path,) in rows:
+            parent = str(Path(img_path).parent)
+            folder_counts[parent] = folder_counts.get(parent, 0) + 1
+            unique_parents.add(parent)
+
+        if not unique_parents:
+            return []
+
+        # Find deepest common ancestor of all parent folders
+        try:
+            common: str = commonpath(list(unique_parents))
+        except ValueError:
+            common = ""  # different drives on Windows
+
+        # Build full folder set: each parent + its ancestors down to common
+        all_folders: set[str] = set()
+        for fp in unique_parents:
+            p = Path(fp)
+            while True:
+                s = str(p)
+                all_folders.add(s)
+                if (common and s == common) or p.parent == p:
+                    break
+                p = p.parent
+        if common:
+            all_folders.add(common)
+
+        # Depth relative to common (or minimum depth when drives differ)
+        if common:
+            base_depth = len(Path(common).parts)
+        else:
+            base_depth = min(len(Path(f).parts) for f in all_folders)
+
+        nodes: List[Dict[str, Any]] = []
+        for folder in sorted(all_folders):
+            p = Path(folder)
+            depth = len(p.parts) - base_depth
+            name = p.name or str(p)  # drive roots have empty .name on Windows
+            count = folder_counts.get(folder, 0)
+            nodes.append({"path": folder, "name": name, "depth": depth, "count": count})
+
+        return nodes
 
     def all_images(self) -> List[Tuple[str, str, float, int, str]]:
         cur = self.conn.execute(
