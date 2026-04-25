@@ -37,11 +37,22 @@ The user has provided (or will confirm) the new version: **$ARGUMENTS**
    - On **macOS**: run `bash scripts/build_macos.sh`
    - Report the output artifacts from `dist\`.
 
-7. **Summary**
-   - List all artifacts produced (`.msi`, `.dmg`, onedir folder).
-   - Remind the user to push the tag and commit:
+7. **Push the tag and commit**
+   - Run: `git push origin main`
+   - Run: `git push origin v<version>`
+
+8. **Publish a GitHub Release with the binaries**
+   - Use the `gh` CLI to create the release and upload the installer.
+   - On **Windows**:
      ```
-     git push origin main
-     git push origin v<version>
+     gh release create v<version> --title "exif-turbo v<version>" --notes "Release v<version>" dist\exif-turbo-<version>-windows.msi
      ```
-   - Optionally link the GitHub Releases page to upload the artifacts manually.
+   - On **macOS**, also attach the DMG:
+     ```
+     gh release create v<version> --title "exif-turbo v<version>" --notes "Release v<version>" dist/exif-turbo-<version>-macos.dmg
+     ```
+   - If `gh` is not available, print the direct URL to the GitHub Releases page:
+     `https://github.com/baddonkey/exif-turbo/releases/new?tag=v<version>`
+
+9. **Summary**
+   - Confirm the tag was pushed, the GitHub Release was created, and list all uploaded artifacts.

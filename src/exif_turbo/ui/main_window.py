@@ -5,7 +5,6 @@ import json
 import os
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 from typing import List
 
@@ -48,11 +47,14 @@ from PySide6.QtWidgets import (
 )
 
 from ..data.image_index_repository import ImageIndexRepository
+from ..config import thumb_cache_dir
 from ..models.search_result import SearchResult
 from .models.exif_table_model import ExifTableModel
 from .models.search_model import SearchModel
 from .workers.index_worker import IndexWorker
 from .workers.thumb_worker import ThumbWorker
+
+_DEFAULT_WORKERS = min(os.cpu_count() or 1, 12)
 
 
 class ThumbCenterDelegate(QStyledItemDelegate):
@@ -154,7 +156,7 @@ class MainWindow(QMainWindow):
         self.find_bar.setMaximumHeight(36)
 
         self.table = QTableView()
-        self.model = SearchModel()
+        self.model = SearchModel(cache_dir=thumb_cache_dir(self.db_path))
         self.table.setModel(self.model)
         self.table.setItemDelegateForColumn(0, ThumbCenterDelegate(self.table))
         self.table.setSelectionBehavior(QTableView.SelectRows)
@@ -407,7 +409,10 @@ class MainWindow(QMainWindow):
         query = self.query_input.text().strip()
         page_size = self.page_size
         rows = self.repo.search_images(query, page_size, 0)
-        results = [SearchResult(path=r[1], filename=r[2], metadata_json=r[3]) for r in rows]
+        results = [
+            SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
+            for r in rows
+        ]
         self.model.set_rows(results)
         if results:
             self.table.selectRow(0)
@@ -476,7 +481,10 @@ class MainWindow(QMainWindow):
         page_size = self.page_size
         offset = getattr(self, "_loaded", 0)
         rows = self.repo.search_images(query, page_size, offset)
-        results = [SearchResult(path=r[1], filename=r[2], metadata_json=r[3]) for r in rows]
+        results = [
+            SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
+            for r in rows
+        ]
         self.model.append_rows(results)
         self._loaded = offset + len(results)
         self.status_label.setText(f"{self._loaded} of {self._total} results")
@@ -624,7 +632,7 @@ class MainWindow(QMainWindow):
         self.index_button.setEnabled(False)
         self.cancel_index_button.setVisible(True)
         self.cancel_index_button.setEnabled(True)
-        self.worker = IndexWorker(self.db_path, [Path(folder)], workers=12)
+        self.worker = IndexWorker(self.db_path, [Path(folder)], workers=_DEFAULT_WORKERS)
         self.worker.finished.connect(self.on_index_done)
         self.worker.failed.connect(self.on_index_failed)
         self.worker.progress.connect(self.on_index_progress)
@@ -656,7 +664,7 @@ class MainWindow(QMainWindow):
             self.worker.cancel()
 
     def clear_thumbnail_cache(self) -> None:
-        cache_dir = Path(tempfile.gettempdir()) / "exif_turbo_thumbs"
+        cache_dir = self.model.cache_dir
         if cache_dir.exists():
             shutil.rmtree(cache_dir, ignore_errors=True)
         cache_dir.mkdir(parents=True, exist_ok=True)
@@ -671,9 +679,9 @@ class MainWindow(QMainWindow):
         self.cancel_thumbs_button.setVisible(True)
         self.cancel_thumbs_button.setEnabled(True)
         self.status_label.setText("Building thumbnails...")
-        cache_dir = self.model._cache_dir
-        max_bytes = self.model._max_thumb_bytes
-        self.thumb_worker = ThumbWorker(paths, cache_dir, max_bytes, workers=12)
+        cache_dir = self.model.cache_dir
+        max_bytes = self.model.max_thumb_bytes
+        self.thumb_worker = ThumbWorker(paths, cache_dir, max_bytes, workers=_DEFAULT_WORKERS)
         self.thumb_worker.progress.connect(self.on_thumb_progress)
         self.thumb_worker.finished.connect(self.on_thumb_done)
         self.thumb_worker.failed.connect(self.on_thumb_failed)
@@ -756,30 +764,41 @@ class MainWindow(QMainWindow):
             return
 
         batch_size = 500
-        offset = 0
-        records: List[dict] = []
-        all_keys: set[str] = set()
 
+        # Pass 1: collect all metadata keys (no records held in memory)
+        all_keys: set[str] = set()
+        offset = 0
         while offset < total:
             rows = self.repo.search_images(query, batch_size, offset)
             for r in rows:
-                meta = {}
                 try:
                     parsed = json.loads(r[3])
                     if isinstance(parsed, dict):
-                        meta = self.flatten_metadata(parsed)
+                        all_keys.update(self.flatten_metadata(parsed).keys())
                 except Exception:
-                    meta = {}
-                all_keys.update(meta.keys())
-                records.append({"path": r[1], "filename": r[2], **meta})
+                    pass
             offset += batch_size
 
         headers = ["path", "filename"] + sorted(all_keys)
+
+        # Pass 2: stream rows directly to CSV writer
         with open(file_path, "w", newline="", encoding="utf-8") as fh:
             writer = csv.DictWriter(fh, fieldnames=headers, extrasaction="ignore")
             writer.writeheader()
-            for record in records:
-                writer.writerow(record)
+            offset = 0
+            while offset < total:
+                rows = self.repo.search_images(query, batch_size, offset)
+                for r in rows:
+                    meta: dict = {}
+                    try:
+                        parsed = json.loads(r[3])
+                        if isinstance(parsed, dict):
+                            meta = self.flatten_metadata(parsed)
+                    except Exception:
+                        pass
+                    writer.writerow({"path": r[1], "filename": r[2], **meta})
+                offset += batch_size
+
         QMessageBox.information(self, "Export CSV", "CSV export completed.")
 
     def flatten_metadata(self, metadata: dict) -> dict:

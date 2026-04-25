@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 from pathlib import Path
 from typing import Dict
 
 from PIL import Image
+
+_log = logging.getLogger(__name__)
 
 
 class ExifMetadataExtractor:
@@ -35,8 +38,8 @@ class ExifMetadataExtractor:
                                 metadata[f"{key}:{sub_key}"] = str(sub_value)
                         else:
                             metadata[str(key)] = str(value)
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.warning("exiftool extraction failed for %s: %s", path, exc)
 
         if path.suffix.lower() in {".png", ".gif", ".bmp", ".webp"}:
             try:
@@ -44,7 +47,7 @@ class ExifMetadataExtractor:
                     info = getattr(im, "info", {}) or {}
                     for key, value in info.items():
                         metadata[f"PIL:{key}"] = str(value)
-            except Exception:
-                pass
+            except Exception as exc:
+                _log.warning("Pillow metadata extraction failed for %s: %s", path, exc)
 
         return metadata

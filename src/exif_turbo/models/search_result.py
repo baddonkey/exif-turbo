@@ -9,3 +9,4 @@ class SearchResult:
     filename: str
     metadata_json: str
     size: int = 0
+    mtime: float = 0.0

@@ -8,10 +8,12 @@ import urllib.parse
 from pathlib import Path
 from typing import List, Tuple
 
+import sqlcipher3
 from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
 
 from ...data.image_index_repository import ImageIndexRepository
+from ...indexing.image_utils import RAW_EXTENSIONS
 from ...models.search_result import SearchResult
 from ..models.exif_list_model import ExifListModel
 from ..models.search_list_model import SearchListModel
@@ -19,15 +21,7 @@ from ..workers.index_worker import IndexWorker
 from ..workers.thumb_worker import ThumbWorker
 
 _PAGE_SIZE = 100
-
-# RAW formats Qt cannot display natively — use thumbnail cache for preview
-_RAW_EXTENSIONS = {
-    ".cr2", ".cr3",
-    ".nef", ".nrw",
-    ".arw", ".srf", ".sr2",
-    ".dng",
-    ".orf", ".rw2", ".pef", ".raf", ".rwl", ".srw",
-}
+_DEFAULT_WORKERS = min(os.cpu_count() or 1, 12)
 
 
 class AppController(QObject):
@@ -185,6 +179,7 @@ class AppController(QObject):
 
     @Slot(str)
     def unlock(self, password: str) -> None:
+        repo: ImageIndexRepository | None = None
         try:
             repo = ImageIndexRepository(self._db_path, key=password)
             repo.count_images("")  # verify key — raises DatabaseError on wrong key
@@ -200,14 +195,16 @@ class AppController(QObject):
             self._load_formats()
             self._load_folder_tree()
             self.search("")
-        except Exception as exc:
+        except sqlcipher3.DatabaseError:
             self._unlock_error = "Wrong password — please try again."
             self.unlockErrorChanged.emit()
-            # Close the failed connection to avoid resource leak
-            try:
-                repo.conn.close()
-            except Exception:
-                pass
+            if repo is not None:
+                repo.close()
+        except Exception as exc:
+            self._unlock_error = f"Failed to open database: {exc}"
+            self.unlockErrorChanged.emit()
+            if repo is not None:
+                repo.close()
 
     @Slot(str)
     def search(self, query: str) -> None:
@@ -256,13 +253,17 @@ class AppController(QObject):
         self._run_search()
 
     def _run_search(self) -> None:
-        assert self._repo is not None
+        if self._repo is None:
+            return
         rows = self._repo.search_images(
             self._query_text, _PAGE_SIZE, 0,
             sort_by=self._sort_by, ext_filter=self._ext_filter,
             path_filter=self._folder_filter,
         )
-        results = [SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4]) for r in rows]
+        results = [
+            SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
+            for r in rows
+        ]
         self._search_model.set_rows(results)
         total = self._repo.count_images(
             self._query_text, ext_filter=self._ext_filter,
@@ -306,7 +307,10 @@ class AppController(QObject):
             sort_by=self._sort_by, ext_filter=self._ext_filter,
             path_filter=self._folder_filter,
         )
-        results = [SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4]) for r in rows]
+        results = [
+            SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
+            for r in rows
+        ]
         self._search_model.append_rows(results)
         self._loaded_results += len(results)
         self.loadedResultsChanged.emit()
@@ -333,7 +337,7 @@ class AppController(QObject):
         self._update_exif_table(meta_json)
         if path and os.path.exists(path):
             ext = Path(path).suffix.lower()
-            if ext in _RAW_EXTENSIONS:
+            if ext in RAW_EXTENSIONS:
                 # Use the async QQuickImageProvider — no file size limit for preview
                 encoded = urllib.parse.quote(path, safe="")
                 self._selected_image_source = f"image://raw/{encoded}"
@@ -392,7 +396,7 @@ class AppController(QObject):
         label = "Full re-index…" if force else "Indexing…"
         self._set_status(label)
         self._index_worker = IndexWorker(
-            self._db_path, [folder], workers=12, key=self._key, force=force,
+            self._db_path, [folder], workers=_DEFAULT_WORKERS, key=self._key, force=force,
             clear_cache_dir=self._search_model.cache_dir if force else None,
         )
         self._index_worker.finished.connect(self._on_index_done)
@@ -430,7 +434,7 @@ class AppController(QObject):
             paths,
             self._search_model.cache_dir,
             self._search_model.max_thumb_bytes,
-            workers=12,
+            workers=_DEFAULT_WORKERS,
             stamps=stamps,
         )
         self._thumb_worker.progress.connect(self._on_thumb_progress)

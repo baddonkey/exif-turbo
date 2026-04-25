@@ -16,23 +16,13 @@ except ImportError:
 from PIL import Image, ImageOps, UnidentifiedImageError
 from PySide6.QtCore import QThread, Signal
 
+from ...indexing.image_utils import RAW_EXTENSIONS
 from ...utils.thumb_cache import thumb_cache_name_from_stamp, thumb_cache_path
 
 _THUMB_SIZE = (144, 144)
 
-# RAW extensions handled via rawpy (libraw)
-_RAW_EXTENSIONS = {
-    ".cr2", ".cr3",          # Canon
-    ".nef", ".nrw",          # Nikon
-    ".arw", ".srf", ".sr2",  # Sony
-    ".dng",                   # Adobe DNG
-    ".orf",                   # Olympus
-    ".rw2",                   # Panasonic
-    ".pef",                   # Pentax
-    ".raf",                   # Fujifilm
-    ".rwl",                   # Leica
-    ".srw",                   # Samsung
-}
+# Alias for readability within this module
+_RAW_EXTENSIONS = RAW_EXTENSIONS
 
 
 def _open_image(path: str) -> Image.Image:

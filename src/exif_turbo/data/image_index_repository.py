@@ -52,33 +52,47 @@ class ImageIndexRepository:
         metadata_text: str,
     ) -> None:
         metadata_json = json.dumps(metadata, ensure_ascii=False)
-        self.conn.execute(
-            """
-            INSERT INTO images (path, filename, mtime, size, metadata_json)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(path) DO UPDATE SET
-                filename=excluded.filename,
-                mtime=excluded.mtime,
-                size=excluded.size,
-                metadata_json=excluded.metadata_json
-            """,
-            (path, filename, mtime, size, metadata_json),
-        )
-        self.conn.execute(
-            """
-            INSERT OR REPLACE INTO images_fts (rowid, path, filename, metadata_text)
-            VALUES ((SELECT id FROM images WHERE path = ?), ?, ?, ?)
-            """,
-            (path, path, filename, metadata_text),
-        )
+        with self.conn:
+            self.conn.execute(
+                """
+                INSERT INTO images (path, filename, mtime, size, metadata_json)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(path) DO UPDATE SET
+                    filename=excluded.filename,
+                    mtime=excluded.mtime,
+                    size=excluded.size,
+                    metadata_json=excluded.metadata_json
+                """,
+                (path, filename, mtime, size, metadata_json),
+            )
+            self.conn.execute(
+                """
+                INSERT OR REPLACE INTO images_fts (rowid, path, filename, metadata_text)
+                VALUES ((SELECT id FROM images WHERE path = ?), ?, ?, ?)
+                """,
+                (path, path, filename, metadata_text),
+            )
 
     def delete_missing(self, existing_paths: Iterable[str]) -> None:
-        existing = set(existing_paths)
-        cur = self.conn.execute("SELECT path FROM images")
-        to_delete = [row[0] for row in cur.fetchall() if row[0] not in existing]
-        for path in to_delete:
-            self.conn.execute("DELETE FROM images WHERE path = ?", (path,))
-            self.conn.execute("DELETE FROM images_fts WHERE path = ?", (path,))
+        # Load the keep-set into a temporary table so the DELETE can be a
+        # single set-difference operation instead of O(N) individual statements.
+        with self.conn:
+            self.conn.execute(
+                "CREATE TEMPORARY TABLE IF NOT EXISTS _keep_paths (path TEXT PRIMARY KEY)"
+            )
+            self.conn.execute("DELETE FROM _keep_paths")
+            self.conn.executemany(
+                "INSERT OR IGNORE INTO _keep_paths (path) VALUES (?)",
+                ((p,) for p in existing_paths),
+            )
+            self.conn.execute(
+                "DELETE FROM images_fts WHERE path IN "
+                "(SELECT path FROM images WHERE path NOT IN (SELECT path FROM _keep_paths))"
+            )
+            self.conn.execute(
+                "DELETE FROM images WHERE path NOT IN (SELECT path FROM _keep_paths)"
+            )
+            self.conn.execute("DROP TABLE IF EXISTS _keep_paths")
 
     def clear_all(self) -> None:
         self.conn.execute("DELETE FROM images_fts")
@@ -102,7 +116,7 @@ class ImageIndexRepository:
         sort_by: str = "",
         ext_filter: str = "",
         path_filter: str = "",
-    ) -> List[Tuple[int, str, str, str]]:
+    ) -> List[Tuple[int, str, str, str, int, float]]:
         order = self._SORT_MAP.get(sort_by, "images.filename COLLATE NOCASE ASC")
         ext_clause = ""
         ext_args: tuple = ()
@@ -128,7 +142,7 @@ class ImageIndexRepository:
             # When user picks an explicit sort keep it; otherwise use relevance.
             order_expr = f"ORDER BY {order}" if sort_by else "ORDER BY bm25(images_fts)"
             sql = (
-                "SELECT images.id, images.path, images.filename, images.metadata_json, images.size "
+                "SELECT images.id, images.path, images.filename, images.metadata_json, images.size, images.mtime "
                 "FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
                 f"WHERE images_fts MATCH ? {ext_clause} {path_clause} "
@@ -138,7 +152,7 @@ class ImageIndexRepository:
             args = (query,) + ext_args + path_args + (limit, offset)
         else:
             sql = (
-                "SELECT id, path, filename, metadata_json, size "
+                "SELECT id, path, filename, metadata_json, size, mtime "
                 "FROM images "
                 f"WHERE 1=1 {ext_clause} {path_clause} "
                 f"ORDER BY {order} "

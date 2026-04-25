@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import tempfile
 from pathlib import Path
 from typing import List
 
@@ -13,13 +12,21 @@ from ...utils.thumb_cache import thumb_cache_path
 
 
 class SearchModel(QAbstractTableModel):
-    def __init__(self) -> None:
+    def __init__(self, cache_dir: Path) -> None:
         super().__init__()
         self._rows: List[SearchResult] = []
         self._pixmaps: List[QPixmap | None] = []
-        self._cache_dir = Path(tempfile.gettempdir()) / "exif_turbo_thumbs"
+        self._cache_dir = cache_dir
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._max_thumb_bytes = 200 * 1024 * 1024
+
+    @property
+    def cache_dir(self) -> Path:
+        return self._cache_dir
+
+    @property
+    def max_thumb_bytes(self) -> int:
+        return self._max_thumb_bytes
 
     def _thumb_cache_path(self, path: str) -> Path:
         return thumb_cache_path(path, self._cache_dir)

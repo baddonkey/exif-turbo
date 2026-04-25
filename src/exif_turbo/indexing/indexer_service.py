@@ -12,6 +12,13 @@ from .image_finder import ImageFinder
 from .metadata_extractor import MetadataExtractor
 
 
+class _UnchangedType:
+    """Sentinel: the file's mtime/size match the DB — no re-extraction needed."""
+
+
+_UNCHANGED = _UnchangedType()
+
+
 def metadata_to_text(metadata: Dict[str, str]) -> str:
     parts: List[str] = []
     for key, value in metadata.items():
@@ -55,9 +62,7 @@ class IndexerService:
         # Empty when force=True so every file is re-extracted.
         known_stamps = {} if force else self.repo.get_all_stamps()
 
-        _UNCHANGED = object()  # sentinel: file is up-to-date in the index
-
-        def build_item(path: Path) -> IndexedImage | None | object:
+        def build_item(path: Path) -> IndexedImage | None | _UnchangedType:
             try:
                 stat = path.stat()
                 stamp = known_stamps.get(str(path))
@@ -79,6 +84,25 @@ class IndexerService:
         def should_cancel() -> bool:
             return bool(cancel_check and cancel_check())
 
+        def record(item: IndexedImage | None | _UnchangedType, path: Path) -> None:
+            nonlocal count
+            if isinstance(item, _UnchangedType):
+                existing_paths.append(str(path))
+                count += 1
+                return
+            if not item:
+                return
+            self.repo.upsert_image(
+                item.path,
+                item.filename,
+                item.mtime,
+                item.size,
+                item.metadata,
+                item.metadata_text,
+            )
+            existing_paths.append(item.path)
+            count += 1
+
         if workers > 1 and total > 0:
             executor = ThreadPoolExecutor(max_workers=workers)
             futures = {executor.submit(build_item, path): path for path in paths}
@@ -92,23 +116,7 @@ class IndexerService:
                     completed += 1
                     if on_progress:
                         on_progress(completed, total, path)
-                    item = future.result()
-                    if item is _UNCHANGED:
-                        existing_paths.append(str(path))
-                        count += 1
-                        continue
-                    if not item:
-                        continue
-                    self.repo.upsert_image(
-                        item.path,
-                        item.filename,
-                        item.mtime,
-                        item.size,
-                        item.metadata,
-                        item.metadata_text,
-                    )
-                    existing_paths.append(item.path)
-                    count += 1
+                    record(future.result(), path)
             finally:
                 executor.shutdown(wait=not canceled, cancel_futures=True)
         else:
@@ -118,23 +126,7 @@ class IndexerService:
                     break
                 if on_progress:
                     on_progress(idx, total, path)
-                item = build_item(path)
-                if item is _UNCHANGED:
-                    existing_paths.append(str(path))
-                    count += 1
-                    continue
-                if not item:
-                    continue
-                self.repo.upsert_image(
-                    item.path,
-                    item.filename,
-                    item.mtime,
-                    item.size,
-                    item.metadata,
-                    item.metadata_text,
-                )
-                existing_paths.append(item.path)
-                count += 1
+                record(build_item(path), path)
 
         self.repo.delete_missing(existing_paths)
         self.repo.commit()
