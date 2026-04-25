@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import threading
+import time
 from pathlib import Path
 from typing import List
 
@@ -50,14 +51,21 @@ class IndexWorker(QThread):
             repo = ImageIndexRepository(self.db_path, key=self._key)
             finder = ImageFinder(blacklist=self._blacklist)
             indexer = IndexerService(repo, finder=finder)
+            _last_emit: list[float] = [0.0]  # mutable cell for the closure
+
+            def _on_progress(current: int, total: int, p: Path) -> None:
+                now = time.monotonic()
+                # Emit at most ~20 Hz; always emit the final update.
+                # This prevents flooding Qt's cross-thread signal queue and
+                # keeps the GUI event loop free to handle user input.
+                if now - _last_emit[0] >= 0.05 or current == total:
+                    _last_emit[0] = now
+                    self.progress.emit(current, total, str(p))
+
             count = indexer.build_index(
                 self.folders,
                 None,
-                on_progress=lambda current, total, p: self.progress.emit(
-                    current,
-                    total,
-                    str(p),
-                ),
+                on_progress=_on_progress,
                 workers=self.workers,
                 cancel_check=self._cancel_event.is_set,
                 force=self._force,
