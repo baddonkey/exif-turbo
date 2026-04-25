@@ -5,7 +5,7 @@ import logging
 import os
 import subprocess
 from pathlib import Path
-from typing import Dict
+from typing import Any, Dict
 
 from PIL import Image
 
@@ -16,8 +16,11 @@ class ExifMetadataExtractor:
     def extract(self, path: Path) -> Dict[str, str]:
         metadata: Dict[str, str] = {}
         try:
-            # CREATE_NO_WINDOW prevents a console flash on Windows for each image.
-            _no_window = 0x08000000 if os.name == "nt" else 0
+            # On Windows, CREATE_NO_WINDOW prevents a console flash per subprocess.
+            # On POSIX, start_new_session detaches the child from the controlling terminal.
+            _platform_kwargs: dict[str, Any] = (
+                {"creationflags": 0x08000000} if os.name == "nt" else {"start_new_session": True}
+            )
             result = subprocess.run(
                 [
                     "exiftool",
@@ -31,7 +34,7 @@ class ExifMetadataExtractor:
                 encoding="utf-8",
                 errors="replace",
                 check=False,
-                creationflags=_no_window,
+                **_platform_kwargs,
             )
             if result.stdout:
                 items = json.loads(result.stdout)
