@@ -4,6 +4,7 @@ import html as html_lib
 import json
 import os
 import subprocess
+import time
 import urllib.parse
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
@@ -110,10 +111,15 @@ class AppController(QObject):
         self._index_queue_position = 0
         self._index_queue_total = 0
         self._app_closing = False
-        # Timer: kick off a batch thumb build every 30 s while indexing runs
+        # Timer: kick off a batch thumb build every 8 s while indexing runs
         self._thumb_batch_timer = QTimer(self)
-        self._thumb_batch_timer.setInterval(30_000)
+        self._thumb_batch_timer.setInterval(8_000)
         self._thumb_batch_timer.timeout.connect(self._start_auto_thumbs)
+        # Timer: refresh search results every 5 s during indexing so new images appear live
+        self._search_refresh_timer = QTimer(self)
+        self._search_refresh_timer.setInterval(5_000)
+        self._search_refresh_timer.timeout.connect(self._run_search)
+        self._last_progress_update: float = 0.0
 
     # ── Properties ───────────────────────────────────────────────────────────
 
@@ -610,9 +616,11 @@ class AppController(QObject):
         self._index_worker.canceled.connect(self._on_managed_folder_index_canceled)
         self._index_worker.start()
         self._thumb_batch_timer.start()
+        self._search_refresh_timer.start()
 
     def _on_managed_folder_index_done(self, count: int) -> None:
         self._thumb_batch_timer.stop()
+        self._search_refresh_timer.stop()
         self._is_indexing = False
         self.isIndexingChanged.emit()
         if self._folder_repo and self._scanning_folder_id is not None:
@@ -640,6 +648,7 @@ class AppController(QObject):
 
     def _on_managed_folder_index_failed(self, error: str) -> None:
         self._thumb_batch_timer.stop()
+        self._search_refresh_timer.stop()
         self._is_indexing = False
         self.isIndexingChanged.emit()
         if self._folder_repo and self._scanning_folder_id is not None:
@@ -662,6 +671,7 @@ class AppController(QObject):
 
     def _on_managed_folder_index_canceled(self, count: int) -> None:
         self._thumb_batch_timer.stop()
+        self._search_refresh_timer.stop()
         self._is_indexing = False
         self.isIndexingChanged.emit()
         if not self._app_closing:
@@ -789,6 +799,12 @@ class AppController(QObject):
         self.findScrollFractionChanged.emit()
 
     def _on_index_progress(self, current: int, total: int, path: str) -> None:
+        # Throttle UI updates to at most ~10 Hz — prevents flooding the event loop
+        # on large folders with thousands of files.
+        now = time.monotonic()
+        if now - self._last_progress_update < 0.1 and current != total:
+            return
+        self._last_progress_update = now
         self._index_current = current
         self._index_total = total
         self._index_current_file = Path(path).name if path else ""
