@@ -55,7 +55,9 @@ class IndexerService:
         if force:
             self.repo.clear_all()
 
-        paths = list(self.finder.iter_images(folders))
+        paths = list(self.finder.iter_images(folders, cancel_check=cancel_check))
+        if cancel_check and cancel_check():
+            return 0
         total = len(paths)
 
         # Snapshot of DB stamps — used to skip unchanged files without re-reading EXIF.

@@ -24,6 +24,7 @@ class IndexedFolderRepository:
         self.conn.execute("PRAGMA temp_store=MEMORY;")
         self.conn.execute("PRAGMA cache_size=-4000;")
         self.conn.execute("PRAGMA foreign_keys=ON;")
+        self.conn.execute("PRAGMA busy_timeout=5000;")
         self._init_schema()
 
     def _init_schema(self) -> None:

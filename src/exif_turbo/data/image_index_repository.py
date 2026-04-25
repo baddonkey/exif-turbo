@@ -23,6 +23,7 @@ class ImageIndexRepository:
         self.conn.execute("PRAGMA temp_store=MEMORY;")
         self.conn.execute("PRAGMA cache_size=-4000;")
         self.conn.execute("PRAGMA foreign_keys=ON;")
+        self.conn.execute("PRAGMA busy_timeout=5000;")
         self.init_db()
 
     def init_db(self) -> None:
@@ -320,9 +321,20 @@ class ImageIndexRepository:
         return cur.fetchall()
 
     def get_all_stamps(self) -> dict[str, tuple[float, int]]:
-        """Return {path: (mtime, size)} for every indexed image."""
+        """Return {path: (mtime, size)} for every indexed image.
+
+        Fetches in 2 000-row batches so the GIL is released between chunks,
+        keeping the GUI event loop responsive on large collections.
+        """
+        result: dict[str, tuple[float, int]] = {}
         cur = self.conn.execute("SELECT path, mtime, size FROM images")
-        return {row[0]: (row[1], row[2]) for row in cur.fetchall()}
+        while True:
+            rows = cur.fetchmany(2000)
+            if not rows:
+                break
+            for row in rows:
+                result[row[0]] = (row[1], row[2])
+        return result
 
     def commit(self) -> None:
         self.conn.commit()

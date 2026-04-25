@@ -3,7 +3,7 @@ from __future__ import annotations
 import fnmatch
 import os
 from pathlib import Path
-from typing import Iterable, List
+from typing import Callable, Iterable, List, Optional
 
 from ..config import load_config
 from .image_utils import is_image_file
@@ -33,11 +33,17 @@ class ImageFinder:
                     return True
         return False
 
-    def iter_images(self, folders: Iterable[Path]) -> Iterable[Path]:
+    def iter_images(
+        self,
+        folders: Iterable[Path],
+        cancel_check: Optional[Callable[[], bool]] = None,
+    ) -> Iterable[Path]:
         for folder in folders:
             if not folder.exists():
                 continue
             for root, dirs, files in os.walk(folder):
+                if cancel_check and cancel_check():
+                    return
                 root_path = Path(root)
                 # Prune blacklisted directories in-place so os.walk skips them
                 dirs[:] = [

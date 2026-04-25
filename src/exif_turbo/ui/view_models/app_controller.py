@@ -620,7 +620,7 @@ class AppController(QObject):
         self._index_worker.progress.connect(self._on_index_progress)
         self._index_worker.canceled.connect(self._on_managed_folder_index_canceled)
         # Run below normal priority so the GUI and preview thread get preference.
-        self._index_worker.start(QThread.Priority.BelowNormalPriority)
+        self._index_worker.start(QThread.Priority.LowPriority)
         self._thumb_batch_timer.start()
 
     def _on_managed_folder_index_done(self, count: int) -> None:
@@ -859,7 +859,7 @@ class AppController(QObject):
         self._thumb_worker.canceled.connect(self._on_thumb_canceled)
         # Run at low priority — thumbnail building is background work and must not
         # compete with the GUI thread or the async preview image provider.
-        self._thumb_worker.start(QThread.Priority.LowPriority)
+        self._thumb_worker.start(QThread.Priority.LowestPriority)
 
     def _on_thumb_done(self, cached: int, total: int) -> None:
         self._is_building_thumbs = False
