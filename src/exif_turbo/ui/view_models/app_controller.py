@@ -424,6 +424,17 @@ class AppController(QObject):
         self._thumb_worker.start()
 
     @Slot()
+    def recreateThumbnails(self) -> None:
+        """Delete all cached thumbnails, then rebuild from scratch."""
+        cache_dir = self._search_model.cache_dir
+        try:
+            import shutil
+            shutil.rmtree(cache_dir, ignore_errors=True)
+        except Exception:
+            pass
+        self.buildThumbnails()
+
+    @Slot()
     def cancelThumbnails(self) -> None:
         if self._thumb_worker and self._thumb_worker.isRunning():
             self._set_status("Canceling thumbs...")

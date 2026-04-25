@@ -184,14 +184,26 @@ ApplicationWindow {
 
             Button {
                 flat: true
-                text: _isBuildingThumbs ? qsTr("Cancel Thumbs") : qsTr("Thumbnails")
+                text: _isBuildingThumbs ? qsTr("Cancel Thumbs") : qsTr("Create Thumbs")
                 Material.foreground: "white"
                 implicitHeight: 38
+                enabled: !_isIndexing
                 ToolTip.text: _isBuildingThumbs
                     ? qsTr("Cancel thumbnail generation")
-                    : qsTr("Generate thumbnails for all indexed images")
+                    : qsTr("Generate thumbnails for all indexed images (skip existing)")
                 ToolTip.visible: hovered
                 onClicked: _isBuildingThumbs ? controller.cancelThumbnails() : controller.buildThumbnails()
+            }
+
+            Button {
+                flat: true
+                text: qsTr("Recreate Thumbs")
+                Material.foreground: "white"
+                implicitHeight: 38
+                enabled: !_isIndexing && !_isBuildingThumbs
+                ToolTip.text: qsTr("Delete all cached thumbnails and regenerate from scratch")
+                ToolTip.visible: hovered
+                onClicked: controller.recreateThumbnails()
             }
         }
     }
@@ -425,7 +437,7 @@ ApplicationWindow {
                     verticalAlignment: Text.AlignVCenter
                     font.pixelSize: 13
                     font.weight: TabBar.tabBar && TabBar.tabBar.currentIndex === index
-                                 ? Font.SemiBold : Font.Normal
+                                 ? Font.DemiBold : Font.Normal
                     color: TabBar.tabBar && TabBar.tabBar.currentIndex === index
                            ? root._accentColor : Material.foreground
                     opacity: TabBar.tabBar && TabBar.tabBar.currentIndex === index ? 1.0 : 0.6
@@ -695,7 +707,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                         text: model.filename
                                         font.pixelSize: 13
-                                        font.weight: Font.SemiBold
+                                        font.weight: Font.DemiBold
                                         elide: Text.ElideRight
                                     }
 
@@ -1088,7 +1100,7 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 text: modelData.name
                                 font.pixelSize: 12
-                                font.weight: root._folderFilter === modelData.path ? Font.SemiBold : Font.Normal
+                                font.weight: root._folderFilter === modelData.path ? Font.DemiBold : Font.Normal
                                 color: root._folderFilter === modelData.path ? root._accentColor : Material.foreground
                                 elide: Text.ElideRight
                             }
@@ -1182,25 +1194,74 @@ ApplicationWindow {
                         ScrollBar.vertical: ScrollBar {}
 
                         delegate: Rectangle {
+                            id: browseCardDelegate
                             width: browseImageList.width
-                            height: 72
-                            color: ListView.isCurrentItem
-                                   ? Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.12)
-                                   : (index % 2 === 0 ? Material.background : Qt.darker(Material.background, 1.03))
+                            height: 210
+                            color: "transparent"
+
+                            readonly property bool _isSelected: ListView.isCurrentItem
+
+                            readonly property var _exif: {
+                                try { return JSON.parse(model.metadataJson) } catch(e) { return {} }
+                            }
+                            readonly property string _camera: {
+                                var make   = _exif["EXIF:Make"]  || _exif["IFD0:Make"]  || _exif["XMP:Make"]  || ""
+                                var model2 = _exif["EXIF:Model"] || _exif["IFD0:Model"] || _exif["XMP:Model"] || ""
+                                if (make && model2)
+                                    return model2.startsWith(make) ? model2.trim() : (make + " " + model2).trim()
+                                return (make || model2).trim()
+                            }
+                            readonly property string _date: {
+                                var d = _exif["EXIF:DateTimeOriginal"] || _exif["EXIF:DateTime"] || _exif["IFD0:ModifyDate"] || ""
+                                return d ? d.replace("T", " ").split(".")[0] : ""
+                            }
+                            readonly property string _dims: {
+                                var w = _exif["EXIF:ExifImageWidth"]  || _exif["File:ImageWidth"]  || _exif["PNG:ImageWidth"]  || ""
+                                var h = _exif["EXIF:ExifImageHeight"] || _exif["File:ImageHeight"] || _exif["PNG:ImageHeight"] || ""
+                                return (w && h) ? (w + " × " + h) : ""
+                            }
+                            readonly property string _lens: {
+                                var fl  = _exif["EXIF:FocalLength"] || ""
+                                var fn  = _exif["EXIF:FNumber"]     || _exif["EXIF:ApertureValue"] || ""
+                                var iso = _exif["EXIF:ISO"]         || _exif["EXIF:ISOSpeedRatings"] || ""
+                                var parts = []
+                                if (fl)  parts.push(fl + " mm")
+                                if (fn)  parts.push("ƒ/" + fn)
+                                if (iso) parts.push("ISO " + iso)
+                                return parts.join("  ")
+                            }
+                            readonly property string _sizeText: {
+                                var bytes = model.fileSize || 0
+                                if (bytes <= 0)  return ""
+                                if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + " GB"
+                                if (bytes >= 1048576)    return (bytes / 1048576).toFixed(1) + " MB"
+                                return Math.round(bytes / 1024) + " KB"
+                            }
 
                             Rectangle {
-                                visible: ListView.isCurrentItem
-                                x: 0; y: 4; width: 3; height: parent.height - 8; radius: 2
-                                color: root._accentColor
+                                anchors { fill: parent; leftMargin: 6; rightMargin: 6; topMargin: 3; bottomMargin: 3 }
+                                radius: 7
+                                color: _isSelected
+                                       ? Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.12)
+                                       : Material.background
+                                border.color: _isSelected
+                                              ? Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.45)
+                                              : Material.dividerColor
+                                border.width: 1
+                            }
+
+                            Rectangle {
+                                x: 6; y: 12; width: 3; height: parent.height - 24; radius: 2
+                                color: _isSelected ? root._accentColor : "transparent"
                             }
 
                             RowLayout {
-                                anchors { fill: parent; leftMargin: 10; rightMargin: 10; topMargin: 4; bottomMargin: 4 }
-                                spacing: 10
+                                anchors { fill: parent; leftMargin: 16; rightMargin: 14; topMargin: 10; bottomMargin: 10 }
+                                spacing: 14
 
                                 Image {
-                                    Layout.preferredWidth: 60
-                                    Layout.preferredHeight: 60
+                                    Layout.preferredWidth: 182
+                                    Layout.preferredHeight: 182
                                     source: model.thumbnailSource
                                     fillMode: Image.PreserveAspectFit
                                     smooth: true; asynchronous: true
@@ -1208,25 +1269,67 @@ ApplicationWindow {
 
                                 ColumnLayout {
                                     Layout.fillWidth: true
-                                    spacing: 2
+                                    Layout.fillHeight: true
+                                    spacing: 0
 
                                     Label {
                                         Layout.fillWidth: true
                                         text: model.filename
-                                        font.pixelSize: 12; font.weight: Font.Medium
+                                        font.pixelSize: 13; font.weight: Font.DemiBold
                                         elide: Text.ElideRight
                                     }
+
+                                    Item { height: 2 }
+
                                     Label {
                                         Layout.fillWidth: true
                                         text: model.path
                                         font.pixelSize: 10; font.family: root.monoFont
-                                        opacity: 0.4; elide: Text.ElideMiddle
+                                        opacity: 0.45; elide: Text.ElideMiddle
                                     }
+
+                                    Item { height: 8 }
+
+                                    Rectangle {
+                                        Layout.fillWidth: true; height: 1
+                                        color: Material.dividerColor
+                                    }
+
+                                    Item { height: 6 }
+
+                                    Repeater {
+                                        model: [
+                                            { label: qsTr("Camera"),     value: _camera  },
+                                            { label: qsTr("Date"),       value: _date    },
+                                            { label: qsTr("Dimensions"), value: _dims    },
+                                            { label: qsTr("Exposure"),   value: _lens    },
+                                            { label: qsTr("File size"),  value: _sizeText },
+                                        ]
+                                        delegate: RowLayout {
+                                            visible: modelData.value !== ""
+                                            Layout.fillWidth: true
+                                            spacing: 8
+                                            Label {
+                                                text: modelData.label
+                                                font.pixelSize: 10; opacity: 0.45
+                                                Layout.preferredWidth: 68
+                                            }
+                                            Label {
+                                                text: modelData.value
+                                                font.pixelSize: 11
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+                                    }
+
+                                    Item { Layout.fillHeight: true }
                                 }
                             }
 
                             MouseArea {
                                 anchors.fill: parent
+                                acceptedButtons: Qt.LeftButton
                                 onClicked: {
                                     browseImageList.currentIndex = index
                                     controller.selectResult(index)

@@ -1,17 +1,59 @@
 from __future__ import annotations
 
+import io
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from PIL import Image, UnidentifiedImageError
+try:
+    import rawpy
+    _RAWPY_AVAILABLE = True
+except ImportError:
+    _RAWPY_AVAILABLE = False
+
+from PIL import Image, ImageOps, UnidentifiedImageError
 from PySide6.QtCore import QThread, Signal
 
 from ...utils.thumb_cache import thumb_cache_name_from_stamp, thumb_cache_path
 
 _THUMB_SIZE = (144, 144)
+
+# RAW extensions handled via rawpy (libraw)
+_RAW_EXTENSIONS = {
+    ".cr2", ".cr3",          # Canon
+    ".nef", ".nrw",          # Nikon
+    ".arw", ".srf", ".sr2",  # Sony
+    ".dng",                   # Adobe DNG
+    ".orf",                   # Olympus
+    ".rw2",                   # Panasonic
+    ".pef",                   # Pentax
+    ".raf",                   # Fujifilm
+    ".rwl",                   # Leica
+    ".srw",                   # Samsung
+}
+
+
+def _open_image(path: str) -> Image.Image:
+    """Open any image as a Pillow Image, using rawpy for RAW files."""
+    ext = Path(path).suffix.lower()
+    if ext in _RAW_EXTENSIONS and _RAWPY_AVAILABLE:
+        with rawpy.imread(path) as raw:
+            try:
+                thumb = raw.extract_thumb()
+                if thumb.format == rawpy.ThumbFormat.JPEG:
+                    img = Image.open(io.BytesIO(thumb.data))
+                    img.load()   # detach from BytesIO before context exits
+                    return img
+                else:
+                    return Image.fromarray(thumb.data)
+            except rawpy.LibRawNoThumbnailError:
+                # Fall back to full demosaic
+                rgb = raw.postprocess(use_camera_wb=True, half_size=True)
+                return Image.fromarray(rgb)
+    img = Image.open(path)
+    return ImageOps.exif_transpose(img)
 
 
 class ThumbWorker(QThread):
@@ -75,9 +117,9 @@ class ThumbWorker(QThread):
                 except OSError:
                     return False
                 try:
-                    with Image.open(path) as img:
-                        img.thumbnail(_THUMB_SIZE, Image.LANCZOS)
-                        img.save(str(cache_path_obj), "PNG")
+                    img = _open_image(path)
+                    img.thumbnail(_THUMB_SIZE, Image.LANCZOS)
+                    img.save(str(cache_path_obj), "PNG")
                     existing.add(cache_path_obj.name)
                     return True
                 except (UnidentifiedImageError, OSError, Exception):
