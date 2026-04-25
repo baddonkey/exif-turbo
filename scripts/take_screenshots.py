@@ -55,6 +55,7 @@ from exif_turbo.indexing.indexer_service import IndexerService  # noqa: E402
 from exif_turbo.ui.models.exif_list_model import ExifListModel  # noqa: E402
 from exif_turbo.ui.models.folder_list_model import FolderListModel  # noqa: E402
 from exif_turbo.ui.models.search_list_model import SearchListModel  # noqa: E402
+from exif_turbo.ui.models.settings_model import SettingsModel  # noqa: E402
 from exif_turbo.ui.providers.raw_image_provider import RawImageProvider  # noqa: E402
 from exif_turbo.ui.view_models.app_controller import AppController  # noqa: E402
 
@@ -140,7 +141,8 @@ def _run_gui() -> None:
     search_model = SearchListModel(cache_dir=THUMB_CACHE)
     exif_model = ExifListModel()
     folder_model = FolderListModel()
-    ctrl = AppController(DB_PATH, search_model, exif_model, folder_model)
+    settings = SettingsModel(DB_PATH.parent / "settings.json")
+    ctrl = AppController(DB_PATH, search_model, exif_model, folder_model, settings)
 
     engine = QQmlApplicationEngine()
     engine.addImageProvider("raw", RawImageProvider())
@@ -149,6 +151,7 @@ def _run_gui() -> None:
     ctx.setContextProperty("searchModel", search_model)
     ctx.setContextProperty("exifModel", exif_model)
     ctx.setContextProperty("folderListModel", folder_model)
+    ctx.setContextProperty("settingsModel", settings)
 
     qml_path = _SRC / "exif_turbo" / "ui" / "qml" / "Main.qml"
     engine.load(QUrl.fromLocalFile(str(qml_path)))
