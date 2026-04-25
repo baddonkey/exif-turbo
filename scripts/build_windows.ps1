@@ -41,6 +41,15 @@ pyinstaller exif-turbo.spec --noconfirm --clean
 if ($LASTEXITCODE -ne 0) { Write-Error "PyInstaller failed"; exit 1 }
 Write-Host "  PyInstaller build complete."
 
+# ── Commit auto-generated version_info.py ─────────────────────────────────────
+# The spec regenerates version_info.py at build time; stage it so it stays in sync.
+$gitStatus = git status --short version_info.py 2>&1
+if ($gitStatus) {
+    git add version_info.py
+    git commit -m "chore: update version_info.py to $VERSION"
+    Write-Host "  Committed version_info.py ($VERSION)."
+}
+
 # ── Build MSI with WiX ────────────────────────────────────────────────────────
 $AppDir  = (Resolve-Path "dist\exif-turbo").Path
 $MsiOut  = "dist\exif-turbo-$VERSION-windows.msi"
