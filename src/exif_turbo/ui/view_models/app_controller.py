@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 import sqlcipher3
-from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
+from PySide6.QtCore import Property, QObject, QThread, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
 
 from ...data.image_index_repository import ImageIndexRepository
@@ -115,11 +115,8 @@ class AppController(QObject):
         self._thumb_batch_timer = QTimer(self)
         self._thumb_batch_timer.setInterval(8_000)
         self._thumb_batch_timer.timeout.connect(self._start_auto_thumbs)
-        # Timer: refresh search results every 5 s during indexing so new images appear live
-        self._search_refresh_timer = QTimer(self)
-        self._search_refresh_timer.setInterval(5_000)
-        self._search_refresh_timer.timeout.connect(self._run_search)
         self._last_progress_update: float = 0.0
+        self._last_thumb_progress_update: float = 0.0
 
     # ── Properties ───────────────────────────────────────────────────────────
 
@@ -277,6 +274,10 @@ class AppController(QObject):
                 repo.close()
             if folder_repo is not None:
                 folder_repo.close()
+            # Ensure self refs never point to closed connections
+            self._repo = None
+            self._folder_repo = None
+            self._is_locked = True
         except Exception as exc:
             self._unlock_error = f"Failed to open database: {exc}"
             self.unlockErrorChanged.emit()
@@ -284,6 +285,10 @@ class AppController(QObject):
                 repo.close()
             if folder_repo is not None:
                 folder_repo.close()
+            # Ensure self refs never point to closed connections
+            self._repo = None
+            self._folder_repo = None
+            self._is_locked = True
 
     @Slot(str)
     def search(self, query: str) -> None:
@@ -614,13 +619,12 @@ class AppController(QObject):
         self._index_worker.failed.connect(self._on_managed_folder_index_failed)
         self._index_worker.progress.connect(self._on_index_progress)
         self._index_worker.canceled.connect(self._on_managed_folder_index_canceled)
-        self._index_worker.start()
+        # Run below normal priority so the GUI and preview thread get preference.
+        self._index_worker.start(QThread.Priority.BelowNormalPriority)
         self._thumb_batch_timer.start()
-        self._search_refresh_timer.start()
 
     def _on_managed_folder_index_done(self, count: int) -> None:
         self._thumb_batch_timer.stop()
-        self._search_refresh_timer.stop()
         self._is_indexing = False
         self.isIndexingChanged.emit()
         if self._folder_repo and self._scanning_folder_id is not None:
@@ -648,7 +652,6 @@ class AppController(QObject):
 
     def _on_managed_folder_index_failed(self, error: str) -> None:
         self._thumb_batch_timer.stop()
-        self._search_refresh_timer.stop()
         self._is_indexing = False
         self.isIndexingChanged.emit()
         if self._folder_repo and self._scanning_folder_id is not None:
@@ -671,7 +674,6 @@ class AppController(QObject):
 
     def _on_managed_folder_index_canceled(self, count: int) -> None:
         self._thumb_batch_timer.stop()
-        self._search_refresh_timer.stop()
         self._is_indexing = False
         self.isIndexingChanged.emit()
         if not self._app_closing:
@@ -814,6 +816,12 @@ class AppController(QObject):
         self._set_status(_("Indexing\u2026 {} / {}").format(current, total))
 
     def _on_thumb_progress(self, current: int, total: int, path: str) -> None:
+        # Throttle to ~5 Hz — ThumbWorker can fire thousands of signals per second
+        # with multi-threaded workers, which floods the GUI event loop.
+        now = time.monotonic()
+        if now - self._last_thumb_progress_update < 0.2 and current != total:
+            return
+        self._last_thumb_progress_update = now
         self._thumb_current = current
         self._thumb_total = total
         self._thumb_current_file = Path(path).name if path else ""
@@ -849,7 +857,9 @@ class AppController(QObject):
         self._thumb_worker.finished.connect(self._on_thumb_done)
         self._thumb_worker.failed.connect(self._on_thumb_failed)
         self._thumb_worker.canceled.connect(self._on_thumb_canceled)
-        self._thumb_worker.start()
+        # Run at low priority — thumbnail building is background work and must not
+        # compete with the GUI thread or the async preview image provider.
+        self._thumb_worker.start(QThread.Priority.LowPriority)
 
     def _on_thumb_done(self, cached: int, total: int) -> None:
         self._is_building_thumbs = False
