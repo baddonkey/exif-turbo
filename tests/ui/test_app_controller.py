@@ -102,7 +102,8 @@ def window(
     ctx.setContextProperty("exifModel", exif_model)
     ctx.setContextProperty("folderListModel", folder_model)
     ctx.setContextProperty("settingsModel", settings_model)
-    ctx.setContextProperty("thirdPartyLicensesText", "")
+    ctx.setContextProperty("thirdPartyLicensesHtml", "")
+    ctx.setContextProperty("userManualUrl", "")
     engine.load(QUrl.fromLocalFile(str(_QML_PATH)))
 
     qtbot.waitUntil(lambda: bool(engine.rootObjects()), timeout=5000)

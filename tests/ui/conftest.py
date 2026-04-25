@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtQuickControls2 import QQuickStyle
+from PySide6.QtWebEngineQuick import QtWebEngineQuick
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _set_material_style() -> None:
-    """Configure Material style once before any QML engine is created."""
+def pytest_configure(config: pytest.Config) -> None:
+    """Called before QApplication is created — required for WebEngine init."""
     QQuickStyle.setStyle("Material")
+    QtWebEngineQuick.initialize()

@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
 import QtQuick.Dialogs
+import QtWebEngine
 
 ApplicationWindow {
     id: root
@@ -23,6 +24,16 @@ ApplicationWindow {
     // Resolved accent colour — safe to use from bare Rectangle children.
     readonly property color _accentColor: Material.accentColor
     readonly property string monoFont: Qt.platform.os === "osx" ? "Menlo" : "Consolas"
+    // Colours for the third-party licenses WebEngineView HTML template.
+    // Use rgb() to avoid Qt's #AARRGGBB string format being misread by CSS as #RRGGBBAA.
+    readonly property string _licenseLinkColor: settingsModel?.theme === "dark" ? "#64B5F6" : "#1565C0"
+    function _toRgb(c) {
+        return "rgb(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + ")"
+    }
+    readonly property string _licenseBgColor: _toRgb(Material.background)
+    readonly property string _licenseTextColor: _toRgb(Material.foreground)
+    readonly property string _licenseBorderColor: _toRgb(Qt.darker(Material.background, 1.4))
+    readonly property string _licenseHeaderBg: _toRgb(Qt.darker(Material.background, 1.1))
 
     Component.onCompleted: showMaximized()
 
@@ -102,17 +113,35 @@ ApplicationWindow {
         height: Math.min(root.height * 0.85, 640)
 
         ScrollView {
+            id: licensesScroll
             anchors.fill: parent
             clip: true
+            contentWidth: availableWidth
 
-            TextArea {
-                text: thirdPartyLicensesText
-                readOnly: true
-                font.family: root.monoFont
-                font.pixelSize: 12
-                wrapMode: TextArea.Wrap
-                selectByMouse: true
-                background: null
+            WebEngineView {
+                width: licensesScroll.availableWidth
+                height: Math.max(licensesScroll.height, implicitHeight)
+                settings.showScrollBars: false
+
+                property string licenseHtml: thirdPartyLicensesHtml
+                    .split("TEXTCOLOR").join(root._licenseTextColor)
+                    .split("BGCOLOR").join(root._licenseBgColor)
+                    .split("LINKCOLOR").join(root._licenseLinkColor)
+                    .split("BORDERCOLOR").join(root._licenseBorderColor)
+                    .split("HEADERBG").join(root._licenseHeaderBg)
+                    .split("CODEBG").join(root._licenseBorderColor)
+
+                onLicenseHtmlChanged: loadHtml(licenseHtml)
+                Component.onCompleted: loadHtml(licenseHtml)
+
+                onNavigationRequested: (request) => {
+                    // navigationType 0 = LinkClickedNavigation
+                    if (request.navigationType === 0) {
+                        Qt.openUrlExternally(request.url)
+                        request.reject()
+                    }
+                    // all other types (OtherNavigation = loadHtml) are allowed
+                }
             }
         }
     }
@@ -129,6 +158,11 @@ ApplicationWindow {
         }
         Menu {
             title: qsTr("&Help")
+            Action {
+                text: qsTr("&User Manual")
+                enabled: typeof userManualUrl !== "undefined" && userManualUrl !== ""
+                onTriggered: Qt.openUrlExternally(userManualUrl)
+            }
             Action {
                 text: qsTr("Third-Party &Licenses")
                 onTriggered: thirdPartyDialog.open()
@@ -168,6 +202,15 @@ ApplicationWindow {
                     font.pixelSize: 28
                     font.weight: Font.Bold
                     color: Material.accent
+                }
+
+                Label {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: _appVersion ? "v" + _appVersion : ""
+                    font.pixelSize: 12
+                    opacity: 0.45
+                    visible: _appVersion !== ""
+                    Layout.topMargin: -10
                 }
 
                 Label {

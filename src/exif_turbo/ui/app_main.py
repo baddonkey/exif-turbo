@@ -11,6 +11,7 @@ from PySide6.QtCore import QUrl, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QGuiApplication, QIcon, QImageReader
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
+from PySide6.QtWebEngineQuick import QtWebEngineQuick
 
 from ..config import db_path_for_name, default_db_path, settings_path, thumb_cache_dir
 from .gettext_translator import GettextTranslator
@@ -84,6 +85,7 @@ def main() -> None:
         pass
 
     QQuickStyle.setStyle("Material")
+    QtWebEngineQuick.initialize()  # must be called before QGuiApplication
     app = QGuiApplication(sys.argv)
     app.setApplicationName("Exif-Turbo")
     icon_path = Path(__file__).resolve().parent.parent / "assets" / "app_icon.svg"
@@ -109,19 +111,65 @@ def main() -> None:
     ctx.setContextProperty("folderListModel", folder_model)
     ctx.setContextProperty("settingsModel", settings)
 
-    # Third-party licenses text — bundled beside assets in frozen builds,
+    # Third-party licenses — bundled beside assets in frozen builds,
     # or read from the project root in dev mode.
+    # Converted to HTML so Qt renders it with proper link colours instead of
+    # baking the system-palette navy into QTextCharFormat at markdown-parse time.
     assets_dir = Path(__file__).resolve().parent.parent / "assets"
     _licenses_candidates = [
         assets_dir / "THIRD-PARTY-LICENSES.md",
-        Path(__file__).resolve().parents[4] / "THIRD-PARTY-LICENSES.md",
+        Path(__file__).resolve().parents[3] / "THIRD-PARTY-LICENSES.md",
     ]
     _licenses_text = ""
     for _p in _licenses_candidates:
         if _p.exists():
             _licenses_text = _p.read_text(encoding="utf-8")
             break
-    ctx.setContextProperty("thirdPartyLicensesText", _licenses_text)
+
+    _licenses_html = ""  # will be set below
+    try:
+        import re as _re
+
+        import markdown as _md_lib
+
+        _body = _md_lib.markdown(_licenses_text, extensions=["tables"])
+        # Auto-link bare URLs that ended up as plain text inside <td> cells.
+        _body = _re.sub(
+            r'(?<=>)(https?://[^\s<"]+)(?=\s*</td>)',
+            r'<a href="\1">\1</a>',
+            _body,
+        )
+        _licenses_html = (
+            "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+            "<style>"
+            "body{font-family:sans-serif;font-size:13px;color:TEXTCOLOR;background:BGCOLOR;margin:12px 16px;}"
+            "h1,h2,h3{color:TEXTCOLOR;}"
+            "a{color:LINKCOLOR;}"
+            "table{border-collapse:collapse;width:100%;}"
+            "th,td{border:1px solid BORDERCOLOR;padding:4px 8px;text-align:left;}"
+            "th{background:HEADERBG;}"
+            "code{background:CODEBG;padding:1px 4px;border-radius:3px;font-size:12px;}"
+            "</style></head><body>"
+            + _body
+            + "</body></html>"
+        )
+    except Exception:
+        _licenses_html = "<pre>" + _licenses_text + "</pre>"
+
+    ctx.setContextProperty("thirdPartyLicensesHtml", _licenses_html)
+
+    # User manual PDF — bundled beside assets in frozen builds,
+    # or looked up in docs/ in dev mode.
+    _manual_candidates = [
+        assets_dir / "user-manual.pdf",
+        Path(__file__).resolve().parents[3] / "docs" / "user-manual.pdf",
+    ]
+    _manual_url = ""
+    for _p in _manual_candidates:
+        if _p.exists():
+            _manual_url = QUrl.fromLocalFile(str(_p)).toString()
+            break
+    ctx.setContextProperty("userManualUrl", _manual_url)
 
     qml_path = Path(__file__).resolve().parent / "qml" / "Main.qml"
     engine.load(QUrl.fromLocalFile(str(qml_path)))
