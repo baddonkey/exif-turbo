@@ -16,8 +16,9 @@ other tag — across thousands of images.
 6. [Searching](#6-searching)
 7. [Browsing by Folder](#7-browsing-by-folder)
 8. [Viewing Metadata and EXIF Tags](#8-viewing-metadata-and-exif-tags)
-9. [Keyboard Shortcuts](#9-keyboard-shortcuts)
-10. [FAQ](#10-faq)
+9. [Settings](#9-settings)
+10. [Keyboard Shortcuts](#10-keyboard-shortcuts)
+11. [FAQ](#11-faq)
 
 ---
 
@@ -49,6 +50,18 @@ The installer adds an entry to **Start Menu** and puts `exif-turbo` on your `PAT
 pip install -e .
 ```
 
+### Command-line options
+
+```
+exif-turbo [--db NAME]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--db NAME` | Open (or create) a named database instead of the default one. The database is always stored in `~/.exif-turbo/data/<NAME>.db`. Useful for keeping separate libraries — e.g. `exif-turbo --db work` and `exif-turbo --db holidays`. |
+
+If `--db` is omitted, the default database `~/.exif-turbo/data/index/index.db` is used.
+
 ---
 
 ## 3. First Launch — Unlocking the Database
@@ -57,12 +70,18 @@ When you start exif-turbo you are greeted by the **lock screen**:
 
 ![Lock screen](screenshots/01_lock_screen.png)
 
-Enter a password to protect the index database and click **Unlock** (or press
-Enter). The same password is required every time you open the app.
+### First-time setup — creating a new database
 
-> **Tip:** If you have no sensitive data and don't need encryption, leave the
-> password field blank and click Unlock — the database will be created with no
-> password.
+If this is the first time you have launched exif-turbo (or you are using a new
+named database), the lock screen shows a **New passphrase** field, a
+**Confirm passphrase** field, and a **Create Database** button. Choose a strong
+passphrase — it encrypts your entire image index and **cannot be recovered if
+lost**.
+
+### Opening an existing database
+
+Enter your password in the **Password** field and click **Unlock** (or press
+**Enter**). The same password is required every time you open the app.
 
 Once unlocked, the **Search** tab opens and any previously indexed images are
 immediately available.
@@ -138,9 +157,9 @@ building** progress ("Building Thumbnails"). Thumbnails are generated in a
 background pass and cached to disk so subsequent launches are fast.
 
 Across **all tabs** the **status bar** at the very bottom of the window shows a
-pulsing blue dot and the text **Indexing…** whenever a scan is in progress, so
+pulsing blue dot and the text **Indexing…** during the file-indexing phase, so
 you always know the indexer is running even when you are working in Search or
-Browse.
+Browse. The dot is not shown during the separate thumbnail-building phase.
 
 ### Pause and resume
 
@@ -191,6 +210,18 @@ Use the **Sort** dropdown at the top-right of the results panel:
 | Oldest first | Date taken, oldest first |
 | Largest | File size, largest first |
 
+### Opening images from results
+
+**Single-click** a result card to select it and load the preview and metadata
+panels.
+
+**Double-click** a result card to open the file or folder in your system's
+default application:
+- Double-clicking the **thumbnail** (left side of the card) opens the image
+  in your default image viewer.
+- Double-clicking the **info area** (right side of the card) opens the
+  containing folder in the system file manager (Explorer on Windows).
+
 ### Search examples
 
 | Query | What it finds |
@@ -213,9 +244,10 @@ The left panel shows all indexed folders as an indented list — sub-folders are
 indented under their parent. Each entry shows the folder name and a count of
 images inside it. Click any folder to show only its images in the centre panel.
 
-The same thumbnail list and preview pane appear as in Search. The Metadata and
-EXIF Tags panels are not shown in the Browse tab — switch to the **Search** tab
-to access the full metadata view for a selected image.
+The same thumbnail list and preview pane appear as in Search. **Double-click**
+an image to open it in your system's default viewer. The Metadata and EXIF Tags
+panels are not shown in the Browse tab — switch to the **Search** tab to access
+the full metadata view for a selected image.
 
 Switching back to the **Search** tab clears the folder filter and restores your
 previous search results.
@@ -236,10 +268,11 @@ embedded preview JPEG is used.
 
 ### Metadata panel (bottom-left)
 
-Shows the raw JSON metadata for the selected image as formatted text. Click the
-**Find** button in the panel header (or press **Ctrl+F**) to open an inline
+Displays the metadata for the selected image as formatted, indented JSON. Click
+the **Find** button in the panel header (or press **Ctrl+F**) to open an inline
 search bar and find any tag value. Press **F3** (or click the ▼ / ▲ arrows) to
-jump through all matches.
+jump through all matches. Search terms from the main search bar are highlighted
+automatically.
 
 ### EXIF Tags panel (bottom-right)
 
@@ -252,7 +285,40 @@ By default they start at **50 % / 50 %**.
 
 ---
 
-## 9. Keyboard Shortcuts
+## 9. Settings
+
+Click the **Settings** tab to configure application behaviour.
+
+### Worker Threads
+
+Controls the number of parallel threads used for indexing and thumbnail
+generation. Higher values speed up processing on multi-core machines but use
+more CPU and memory. The default is half the number of detected CPU threads.
+
+### Indexing Blacklist
+
+A list of file and folder name patterns to skip during indexing. Supports
+wildcards: `*` matches any sequence of characters, `?` matches a single
+character. Patterns are matched against individual file or folder names, not
+full paths.
+
+Examples: `@eaDir`, `*.tmp`, `Thumbs.db`
+
+Changes to the blacklist take effect on the next rescan.
+
+### Theme
+
+Choose between **system** (follows OS dark/light mode), **light**, or **dark**.
+The theme changes immediately.
+
+### Language
+
+Select the display language from the dropdown. A restart is required for the
+language change to take full effect.
+
+---
+
+## 10. Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
@@ -264,7 +330,7 @@ By default they start at **50 % / 50 %**.
 
 ---
 
-## 10. FAQ
+## 11. FAQ
 
 **Q: Why does the status bar say "Indexing…" even after I switch tabs?**  
 A: The indexer runs in the background across all tabs. The pulsing blue dot in
@@ -287,7 +353,7 @@ A: JPEG, PNG, TIFF, HEIC, BMP, GIF, and RAW formats: CR2, CR3, NEF, ARW, DNG,
 ORF, RW2, PEF, RAF, RWL, SRW (and any other format that ExifTool can read).
 
 **Q: Where is the database stored?**  
-A: By default at `~/.exif-turbo/data/index.db` on all platforms.
+A: By default at `~/.exif-turbo/data/index/index.db` on all platforms.
 
 **Q: How do I change the database password?**  
 A: There is no in-app password change yet. Re-create the database by deleting

@@ -152,6 +152,8 @@ def _run_gui() -> None:
     ctx.setContextProperty("exifModel", exif_model)
     ctx.setContextProperty("folderListModel", folder_model)
     ctx.setContextProperty("settingsModel", settings)
+    ctx.setContextProperty("thirdPartyLicensesHtml", "")
+    ctx.setContextProperty("userManualUrl", "")
 
     qml_path = _SRC / "exif_turbo" / "ui" / "qml" / "Main.qml"
     engine.load(QUrl.fromLocalFile(str(qml_path)))
