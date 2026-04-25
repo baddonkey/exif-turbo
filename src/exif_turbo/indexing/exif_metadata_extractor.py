@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import subprocess
 from pathlib import Path
 from typing import Dict
@@ -15,6 +16,8 @@ class ExifMetadataExtractor:
     def extract(self, path: Path) -> Dict[str, str]:
         metadata: Dict[str, str] = {}
         try:
+            # CREATE_NO_WINDOW prevents a console flash on Windows for each image.
+            _no_window = 0x08000000 if os.name == "nt" else 0
             result = subprocess.run(
                 [
                     "exiftool",
@@ -28,6 +31,7 @@ class ExifMetadataExtractor:
                 encoding="utf-8",
                 errors="replace",
                 check=False,
+                creationflags=_no_window,
             )
             if result.stdout:
                 items = json.loads(result.stdout)
