@@ -14,6 +14,7 @@ from PySide6.QtQuickControls2 import QQuickStyle
 
 from ..config import default_db_path, thumb_cache_dir
 from .models.exif_list_model import ExifListModel
+from .models.folder_list_model import FolderListModel
 from .models.search_list_model import SearchListModel
 from .providers.raw_image_provider import RawImageProvider
 from .view_models.app_controller import AppController
@@ -85,13 +86,15 @@ def main() -> None:
     db_path = Path(args.db) if args.db else default_db_path()
     search_model = SearchListModel(cache_dir=thumb_cache_dir(db_path))
     exif_model = ExifListModel()
-    controller = AppController(db_path, search_model, exif_model)
+    folder_model = FolderListModel()
+    controller = AppController(db_path, search_model, exif_model, folder_model)
     engine = QQmlApplicationEngine()
     engine.addImageProvider("raw", RawImageProvider())
     ctx = engine.rootContext()
     ctx.setContextProperty("controller", controller)
     ctx.setContextProperty("searchModel", search_model)
     ctx.setContextProperty("exifModel", exif_model)
+    ctx.setContextProperty("folderListModel", folder_model)
 
     qml_path = Path(__file__).resolve().parent / "qml" / "Main.qml"
     engine.load(QUrl.fromLocalFile(str(qml_path)))

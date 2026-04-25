@@ -20,6 +20,7 @@ from pytestqt.qtbot import QtBot
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.ui.models.exif_list_model import ExifListModel
+from exif_turbo.ui.models.folder_list_model import FolderListModel
 from exif_turbo.ui.models.search_list_model import SearchListModel
 from exif_turbo.ui.view_models.app_controller import AppController
 
@@ -89,13 +90,15 @@ def window(
 
     search_model = SearchListModel(cache_dir=base / "thumbs")
     exif_model = ExifListModel()
-    controller = AppController(db_path, search_model, exif_model)
+    folder_model = FolderListModel()
+    controller = AppController(db_path, search_model, exif_model, folder_model)
 
     engine = QQmlApplicationEngine()
     ctx = engine.rootContext()
     ctx.setContextProperty("controller", controller)
     ctx.setContextProperty("searchModel", search_model)
     ctx.setContextProperty("exifModel", exif_model)
+    ctx.setContextProperty("folderListModel", folder_model)
     engine.load(QUrl.fromLocalFile(str(_QML_PATH)))
 
     qtbot.waitUntil(lambda: bool(engine.rootObjects()), timeout=5000)

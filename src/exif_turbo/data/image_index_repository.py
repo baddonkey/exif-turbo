@@ -116,6 +116,7 @@ class ImageIndexRepository:
         sort_by: str = "",
         ext_filter: str = "",
         path_filter: str = "",
+        excluded_paths: List[str] | None = None,
     ) -> List[Tuple[int, str, str, str, int, float]]:
         order = self._SORT_MAP.get(sort_by, "images.filename COLLATE NOCASE ASC")
         ext_clause = ""
@@ -138,6 +139,15 @@ class ImageIndexRepository:
             path_clause = "AND images.path LIKE ?"
             path_args = (prefix + "%",)
 
+        exclude_clause = ""
+        exclude_args: tuple = ()
+        if excluded_paths:
+            parts = " AND ".join("images.path NOT LIKE ?" for _ in excluded_paths)
+            exclude_clause = f"AND ({parts})"
+            exclude_args = tuple(
+                os.path.normpath(p) + os.sep + "%" for p in excluded_paths
+            )
+
         if query.strip():
             # When user picks an explicit sort keep it; otherwise use relevance.
             order_expr = f"ORDER BY {order}" if sort_by else "ORDER BY bm25(images_fts)"
@@ -145,25 +155,31 @@ class ImageIndexRepository:
                 "SELECT images.id, images.path, images.filename, images.metadata_json, images.size, images.mtime "
                 "FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} "
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {exclude_clause} "
                 f"{order_expr} "
                 "LIMIT ? OFFSET ?"
             )
-            args = (query,) + ext_args + path_args + (limit, offset)
+            args = (query,) + ext_args + path_args + exclude_args + (limit, offset)
         else:
             sql = (
                 "SELECT id, path, filename, metadata_json, size, mtime "
                 "FROM images "
-                f"WHERE 1=1 {ext_clause} {path_clause} "
+                f"WHERE 1=1 {ext_clause} {path_clause} {exclude_clause} "
                 f"ORDER BY {order} "
                 "LIMIT ? OFFSET ?"
             )
-            args = ext_args + path_args + (limit, offset)
+            args = ext_args + path_args + exclude_args + (limit, offset)
 
         cur = self.conn.execute(sql, args)
         return cur.fetchall()
 
-    def count_images(self, query: str, ext_filter: str = "", path_filter: str = "") -> int:
+    def count_images(
+        self,
+        query: str,
+        ext_filter: str = "",
+        path_filter: str = "",
+        excluded_paths: List[str] | None = None,
+    ) -> int:
         ext_clause = ""
         ext_args: tuple = ()
         if ext_filter:
@@ -183,16 +199,28 @@ class ImageIndexRepository:
             path_clause = "AND images.path LIKE ?"
             path_args = (prefix + "%",)
 
+        exclude_clause = ""
+        exclude_args: tuple = ()
+        if excluded_paths:
+            parts = " AND ".join("images.path NOT LIKE ?" for _ in excluded_paths)
+            exclude_clause = f"AND ({parts})"
+            exclude_args = tuple(
+                os.path.normpath(p) + os.sep + "%" for p in excluded_paths
+            )
+
         if query.strip():
             sql = (
                 "SELECT COUNT(*) FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                f"WHERE images_fts MATCH ? {ext_clause} {path_clause}"
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {exclude_clause}"
             )
-            args = (query,) + ext_args + path_args
+            args = (query,) + ext_args + path_args + exclude_args
         else:
-            sql = f"SELECT COUNT(*) FROM images WHERE 1=1 {ext_clause} {path_clause}"
-            args = ext_args + path_args
+            sql = (
+                f"SELECT COUNT(*) FROM images "
+                f"WHERE 1=1 {ext_clause} {path_clause} {exclude_clause}"
+            )
+            args = ext_args + path_args + exclude_args
 
         cur = self.conn.execute(sql, args)
         return int(cur.fetchone()[0])
@@ -271,6 +299,19 @@ class ImageIndexRepository:
             nodes.append({"path": folder, "name": name, "depth": depth, "count": count})
 
         return nodes
+
+    def delete_by_path_prefix(self, folder_path: str) -> None:
+        """Remove all images whose path starts with folder_path."""
+        prefix = os.path.normpath(folder_path) + os.sep + "%"
+        with self.conn:
+            self.conn.execute(
+                "DELETE FROM images_fts WHERE path IN "
+                "(SELECT path FROM images WHERE path LIKE ?)",
+                (prefix,),
+            )
+            self.conn.execute(
+                "DELETE FROM images WHERE path LIKE ?", (prefix,)
+            )
 
     def all_images(self) -> List[Tuple[str, str, float, int, str]]:
         cur = self.conn.execute(

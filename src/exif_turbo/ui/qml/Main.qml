@@ -22,6 +22,8 @@ ApplicationWindow {
 
     Component.onCompleted: showMaximized()
 
+    onClosing: (close) => { if (controller) controller.onAppClosing() }
+
     // ── Keyboard shortcuts ────────────────────────────────────────────────
     Shortcut {
         sequences: [ StandardKey.Find ]
@@ -34,7 +36,6 @@ ApplicationWindow {
     Shortcut { sequences: [ StandardKey.FindPrevious ]; onActivated: controller.findPrev(findField.text) }
 
     property bool findBarVisible: false
-    property bool _pendingFullReindex: false
 
     // ── Null-safe proxies ─────────────────────────────────────────────────
     readonly property bool   _isLocked:            controller ? controller.isLocked           : true
@@ -49,12 +50,16 @@ ApplicationWindow {
     readonly property int    _thumbTotal:          controller ? controller.thumbTotal         : 0
     readonly property string _thumbCurrentFile:    controller ? controller.thumbCurrentFile   : ""
     readonly property string _selectedImageSource: controller ? controller.selectedImageSource : ""
+    readonly property int    _indexQueuePosition:  controller ? controller.indexQueuePosition  : 0
+    readonly property int    _indexQueueTotal:     controller ? controller.indexQueueTotal     : 0
     readonly property string _detailsHtml:         controller ? controller.detailsHtml        : ""
     readonly property string _sortBy:             controller ? controller.sortBy             : ""
     readonly property string _extFilter:          controller ? controller.extFilter          : ""
     readonly property string _availableFormats:   controller ? controller.availableFormats   : "[]"
     readonly property string _folderTreeJson:     controller ? controller.folderTree         : "[]"
     readonly property string _folderFilter:       controller ? controller.folderFilter       : ""
+    readonly property int    _totalResults:       controller ? controller.totalResults        : 0
+    readonly property string _appVersion:         controller ? controller.appVersion          : ""
 
     // Parsed format list — updated reactively when _availableFormats changes
     readonly property var _formats: {
@@ -67,20 +72,6 @@ ApplicationWindow {
     }
 
     // ── Dialogs ───────────────────────────────────────────────────────────
-    FolderDialog {
-        id: folderDialog
-        title: _pendingFullReindex ? qsTr("Select Folder — Full Re-index") : qsTr("Select Folder to Index")
-        onAccepted: {
-            if (_pendingFullReindex) {
-                _pendingFullReindex = false
-                controller.startFullReindex(selectedFolder.toString())
-            } else {
-                controller.startIndexing(selectedFolder.toString())
-            }
-        }
-        onRejected: _pendingFullReindex = false
-    }
-
     Dialog {
         id: aboutDialog
         title: qsTr("About exif-turbo")
@@ -88,7 +79,7 @@ ApplicationWindow {
         anchors.centerIn: Overlay.overlay
 
         Label {
-            text: "exif-turbo\n\nCross-platform image EXIF metadata\nsearch and indexing tool.\n\nLicense: MIT"
+            text: "exif-turbo" + (_appVersion ? " v" + _appVersion : "") + "\n\nCross-platform image EXIF metadata\nsearch and indexing tool.\n\nLicense: MIT"
         }
     }
 
@@ -111,101 +102,10 @@ ApplicationWindow {
         }
     }
 
-    // ── Toolbar (hidden when locked) ──────────────────────────────────────
+    // ── Toolbar (hidden — search moved into Search tab) ─────────────────
     header: ToolBar {
-        implicitHeight: _isLocked ? 0 : 56
-        visible: !_isLocked
-
-        RowLayout {
-            anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-            spacing: 6
-            enabled: !_isIndexing && !_isBuildingThumbs
-
-            // Search field
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 38
-                radius: 4
-                color: Qt.rgba(1, 1, 1, 0.15)
-                border.color: searchField.activeFocus ? Qt.rgba(1, 1, 1, 0.85) : Qt.rgba(1, 1, 1, 0.3)
-                border.width: 1
-
-                Label {
-                    anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                    visible: searchField.text.length === 0
-                    text: qsTr("Search EXIF metadata\u2026")
-                    color: Qt.rgba(1, 1, 1, 0.5)
-                    font.pixelSize: 13
-                }
-
-                TextInput {
-                    id: searchField
-                    anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: 10; verticalCenter: parent.verticalCenter }
-                    font.pixelSize: 13
-                    color: "white"
-                    selectedTextColor: "#0d47a1"
-                    selectionColor: Qt.rgba(1, 1, 1, 0.85)
-                    clip: true
-                    Keys.onReturnPressed: controller.search(text)
-                }
-            }
-
-            Button {
-                flat: true
-                text: qsTr("Search")
-                Material.foreground: "white"
-                implicitHeight: 38
-                onClicked: controller.search(searchField.text)
-            }
-
-            ToolSeparator {}
-
-            Button {
-                flat: true
-                text: qsTr("Index")
-                Material.foreground: "white"
-                implicitHeight: 38
-                ToolTip.text: qsTr("Index a folder (incremental)")
-                ToolTip.visible: hovered
-                onClicked: { _pendingFullReindex = false; folderDialog.open() }
-            }
-
-            Button {
-                flat: true
-                text: qsTr("Re-index")
-                Material.foreground: "white"
-                implicitHeight: 38
-                ToolTip.text: qsTr("Re-extract EXIF for every file, ignoring the existing index")
-                ToolTip.visible: hovered
-                onClicked: { _pendingFullReindex = true; folderDialog.open() }
-            }
-
-            ToolSeparator {}
-
-            Button {
-                flat: true
-                text: _isBuildingThumbs ? qsTr("Cancel Thumbs") : qsTr("Create Thumbs")
-                Material.foreground: "white"
-                implicitHeight: 38
-                enabled: !_isIndexing
-                ToolTip.text: _isBuildingThumbs
-                    ? qsTr("Cancel thumbnail generation")
-                    : qsTr("Generate thumbnails for all indexed images (skip existing)")
-                ToolTip.visible: hovered
-                onClicked: _isBuildingThumbs ? controller.cancelThumbnails() : controller.buildThumbnails()
-            }
-
-            Button {
-                flat: true
-                text: qsTr("Recreate Thumbs")
-                Material.foreground: "white"
-                implicitHeight: 38
-                enabled: !_isIndexing && !_isBuildingThumbs
-                ToolTip.text: qsTr("Delete all cached thumbnails and regenerate from scratch")
-                ToolTip.visible: hovered
-                onClicked: controller.recreateThumbnails()
-            }
-        }
+        implicitHeight: 0
+        visible: false
     }
 
     // ── Lock screen ───────────────────────────────────────────────────────
@@ -270,130 +170,87 @@ ApplicationWindow {
         }
     }
 
-    // ── Indexing progress overlay ─────────────────────────────────────────
-    Rectangle {
-        anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.55)
-        visible: _isIndexing
-        z: 50
+    // ── Progress panel (non-blocking, bottom-right corner) ───────────────
+    Pane {
+        id: progressPanel
+        anchors { right: parent.right; bottom: parent.bottom; margins: 16 }
+        width: 380
+        visible: !_isLocked && (_isIndexing || _isBuildingThumbs) && mainTabBar.currentIndex === 2
+        z: 20
+        Material.elevation: 6
+        padding: 16
 
-        Pane {
-            anchors.centerIn: parent
-            width: 480
-            padding: 24
-            Material.elevation: 8
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
 
-            ColumnLayout {
-                anchors.fill: parent
-                spacing: 14
-
-                Label {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: qsTr("Indexing Images")
-                    font.pixelSize: 18
-                    font.weight: Font.Medium
+            // Title row
+            Label {
+                Layout.fillWidth: true
+                text: {
+                    if (_isIndexing) {
+                        return _indexQueueTotal > 1
+                            ? qsTr("Indexing folder %1 of %2").arg(_indexQueuePosition).arg(_indexQueueTotal)
+                            : qsTr("Indexing")
+                    }
+                    return qsTr("Building Thumbnails")
                 }
-
-                ProgressBar {
-                    Layout.fillWidth: true
-                    from: 0
-                    to: _indexTotal > 0 ? _indexTotal : 1
-                    value: _indexCurrent
-                    indeterminate: _indexTotal === 0
-                }
-
-                Label {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: _indexTotal > 0
-                          ? _indexCurrent + " / " + _indexTotal + " files"
-                          : qsTr("Scanning for images\u2026")
-                    font.pixelSize: 13
-                    opacity: 0.7
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    text: _indexCurrentFile
-                    font.pixelSize: 11
-                    opacity: 0.5
-                    elide: Text.ElideMiddle
-                    horizontalAlignment: Text.AlignHCenter
-                }
-
-                Button {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: _statusText.indexOf("Cancel") >= 0 ? qsTr("Canceling\u2026") : qsTr("Cancel")
-                    enabled: _statusText.indexOf("Cancel") < 0
-                    highlighted: true
-                    Material.accent: Material.Red
-                    implicitHeight: 40
-                    implicitWidth: 140
-                    onClicked: controller.cancelIndex()
-                }
+                font.pixelSize: 14
+                font.weight: Font.Medium
             }
-        }
-    }
 
-    // ── Thumbnail progress overlay ────────────────────────────────────────
-    Rectangle {
-        anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.55)
-        visible: _isBuildingThumbs
-        z: 50
-
-        Pane {
-            anchors.centerIn: parent
-            width: 480
-            padding: 24
-            Material.elevation: 8
-
-            ColumnLayout {
-                anchors.fill: parent
-                spacing: 14
-
-                Label {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: qsTr("Building Thumbnails")
-                    font.pixelSize: 18
-                    font.weight: Font.Medium
+            // Progress bar
+            ProgressBar {
+                Layout.fillWidth: true
+                from: 0
+                to: {
+                    if (_isIndexing) return _indexTotal > 0 ? _indexTotal : 1
+                    return _thumbTotal > 0 ? _thumbTotal : 1
                 }
+                value: _isIndexing ? _indexCurrent : _thumbCurrent
+                indeterminate: _isIndexing ? _indexTotal === 0 : _thumbTotal === 0
+            }
 
-                ProgressBar {
-                    Layout.fillWidth: true
-                    from: 0
-                    to: _thumbTotal > 0 ? _thumbTotal : 1
-                    value: _thumbCurrent
-                    indeterminate: _thumbTotal === 0
+            // Count label
+            Label {
+                Layout.alignment: Qt.AlignHCenter
+                text: {
+                    if (_isIndexing)
+                        return _indexTotal > 0
+                            ? _indexCurrent + " / " + _indexTotal + " " + qsTr("files")
+                            : qsTr("Scanning for images\u2026")
+                    return _thumbTotal > 0
+                        ? _thumbCurrent + " / " + _thumbTotal + " " + qsTr("images")
+                        : qsTr("Preparing\u2026")
                 }
+                font.pixelSize: 12
+                opacity: 0.7
+            }
 
-                Label {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: _thumbTotal > 0
-                          ? _thumbCurrent + " / " + _thumbTotal + " images"
-                          : qsTr("Preparing\u2026")
-                    font.pixelSize: 13
-                    opacity: 0.7
-                }
+            // Current file path
+            Label {
+                Layout.fillWidth: true
+                text: _isIndexing ? _indexCurrentFile : _thumbCurrentFile
+                font.pixelSize: 10
+                opacity: 0.5
+                elide: Text.ElideMiddle
+                horizontalAlignment: Text.AlignHCenter
+            }
 
-                Label {
-                    Layout.fillWidth: true
-                    text: _thumbCurrentFile
-                    font.pixelSize: 11
-                    opacity: 0.5
-                    elide: Text.ElideMiddle
-                    horizontalAlignment: Text.AlignHCenter
+            // Cancel button
+            Button {
+                Layout.alignment: Qt.AlignHCenter
+                text: {
+                    var canceling = _statusText.indexOf("Cancel") >= 0
+                    if (_isIndexing) return canceling ? qsTr("Canceling\u2026") : qsTr("Cancel Indexing")
+                    return canceling ? qsTr("Canceling\u2026") : qsTr("Cancel Thumbnails")
                 }
-
-                Button {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: _statusText.indexOf("Cancel") >= 0 ? qsTr("Canceling\u2026") : qsTr("Cancel")
-                    enabled: _statusText.indexOf("Cancel") < 0
-                    highlighted: true
-                    Material.accent: Material.Red
-                    implicitHeight: 40
-                    implicitWidth: 140
-                    onClicked: controller.cancelThumbnails()
-                }
+                enabled: _statusText.indexOf("Cancel") < 0
+                highlighted: true
+                Material.accent: Material.Red
+                implicitHeight: 36
+                implicitWidth: 160
+                onClicked: _isIndexing ? controller.cancelIndex() : controller.cancelThumbnails()
             }
         }
     }
@@ -411,17 +268,17 @@ ApplicationWindow {
     TabBar {
         id: mainTabBar
         anchors { top: parent.top; left: parent.left }
-        width: 240   // 2 × 120 px — left-aligned, not stretched
+        width: 420   // 3 × 140 px — left-aligned, not stretched
         implicitHeight: 40
         visible: !_isLocked
         z: 10
         background: Item {}  // transparent; background rect above covers the row
 
         Repeater {
-            model: [ qsTr("Search"), qsTr("Browse") ]
+            model: [ qsTr("Search"), qsTr("Browse"), qsTr("Indexed Folders") ]
             TabButton {
                 text: modelData
-                implicitWidth: 120
+                implicitWidth: 140
                 implicitHeight: 40
 
                 background: Rectangle {
@@ -487,6 +344,54 @@ ApplicationWindow {
                     anchors.fill: parent
                     spacing: 0
 
+                    // Search bar
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 52
+                        color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.07)
+
+                        RowLayout {
+                            anchors { fill: parent; leftMargin: 10; rightMargin: 10; topMargin: 8; bottomMargin: 8 }
+                            spacing: 6
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                implicitHeight: 36
+                                radius: 4
+                                color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.07)
+                                border.color: searchField.activeFocus ? root._accentColor : Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.2)
+                                border.width: 1
+
+                                Label {
+                                    anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
+                                    visible: searchField.text.length === 0
+                                    text: qsTr("Search EXIF metadata\u2026")
+                                    font.pixelSize: 13
+                                    opacity: 0.4
+                                }
+
+                                TextInput {
+                                    id: searchField
+                                    anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                                    font.pixelSize: 13
+                                    color: Material.foreground
+                                    selectedTextColor: "white"
+                                    selectionColor: root._accentColor
+                                    clip: true
+                                    Keys.onReturnPressed: controller.search(text)
+                                }
+                            }
+
+                            Button {
+                                text: qsTr("Search")
+                                highlighted: true
+                                implicitHeight: 36
+                                font.pixelSize: 13
+                                onClicked: controller.search(searchField.text)
+                            }
+                        }
+                    }
+
                     // Panel header
                     Rectangle {
                         Layout.fillWidth: true
@@ -498,6 +403,13 @@ ApplicationWindow {
                             spacing: 6
 
                             FloatingBadge { text: qsTr("RESULTS") }
+
+                            Label {
+                                text: _totalResults > 0 ? _totalResults.toString() : ""
+                                font.pixelSize: 11
+                                opacity: 0.55
+                                visible: _totalResults > 0
+                            }
 
                             Item { Layout.fillWidth: true }
 
@@ -843,7 +755,7 @@ ApplicationWindow {
 
             // ── Details ───────────────────────────────────────────────────
             Rectangle {
-                SplitView.fillWidth: true
+                SplitView.preferredWidth: bottomSplit.width / 2
                 SplitView.minimumWidth: 200
                 color: Material.background
                 clip: true
@@ -952,7 +864,7 @@ ApplicationWindow {
 
             // ── EXIF tags ─────────────────────────────────────────────────
             Rectangle {
-                SplitView.preferredWidth: 380
+                SplitView.fillWidth: true
                 SplitView.minimumWidth: 180
                 color: Material.background
                 clip: true
@@ -1386,14 +1298,50 @@ ApplicationWindow {
         }
     }
 
+    // ── Folders tab ──────────────────────────────────────────────────────
+    FoldersPanel {
+        anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; bottom: parent.bottom }
+        visible: !_isLocked && mainTabBar.currentIndex === 2
+    }
+
     // ── Status bar ────────────────────────────────────────────────────────
     footer: Rectangle {
         implicitHeight: _isLocked ? 0 : 26
         visible: !_isLocked
         color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.06)
 
+        // Pulsing blue dot — visible only while indexing
+        Rectangle {
+            id: indexingDot
+            anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
+            width: 8; height: 8
+            radius: 4
+            color: root._accentColor
+            visible: _isIndexing
+
+            SequentialAnimation on opacity {
+                running: indexingDot.visible
+                loops: Animation.Infinite
+                NumberAnimation { to: 0.25; duration: 800; easing.type: Easing.InOutSine }
+                NumberAnimation { to: 1.0;  duration: 800; easing.type: Easing.InOutSine }
+            }
+        }
+
         Label {
-            anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter }
+            id: indexingLabel
+            anchors { left: indexingDot.right; leftMargin: 5; verticalCenter: parent.verticalCenter }
+            text: qsTr("Indexing…")
+            visible: _isIndexing
+            font.pixelSize: 11
+            color: root._accentColor
+        }
+
+        Label {
+            anchors {
+                left: _isIndexing ? indexingLabel.right : parent.left
+                leftMargin: _isIndexing ? 10 : 12
+                verticalCenter: parent.verticalCenter
+            }
             text: _statusText
             font.pixelSize: 11
             opacity: 0.7

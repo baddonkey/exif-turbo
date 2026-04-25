@@ -5,17 +5,20 @@ import json
 import os
 import subprocess
 import urllib.parse
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import List, Tuple
 
 import sqlcipher3
-from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
+from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
 
 from ...data.image_index_repository import ImageIndexRepository
+from ...data.indexed_folder_repository import IndexedFolderRepository
 from ...indexing.image_utils import RAW_EXTENSIONS
 from ...models.search_result import SearchResult
 from ..models.exif_list_model import ExifListModel
+from ..models.folder_list_model import FolderListModel
 from ..models.search_list_model import SearchListModel
 from ..workers.index_worker import IndexWorker
 from ..workers.thumb_worker import ThumbWorker
@@ -46,19 +49,25 @@ class AppController(QObject):
     availableFormatsChanged = Signal()
     folderTreeChanged = Signal()
     folderFilterChanged = Signal()
+    indexedFoldersChanged = Signal()
+    indexQueuePositionChanged = Signal()
+    indexQueueTotalChanged = Signal()
 
     def __init__(
         self,
         db_path: Path,
         search_model: SearchListModel,
         exif_model: ExifListModel,
+        folder_model: FolderListModel,
     ) -> None:
         super().__init__()
         self._db_path = db_path
         self._repo: ImageIndexRepository | None = None
+        self._folder_repo: IndexedFolderRepository | None = None
         self._key = ""
         self._search_model = search_model
         self._exif_model = exif_model
+        self._folder_model = folder_model
         self._status_text = "Enter the database password to continue"
         self._is_locked = True
         self._unlock_error = ""
@@ -88,6 +97,15 @@ class AppController(QObject):
         self._folder_tree: str = "[]"
         self._index_worker: IndexWorker | None = None
         self._thumb_worker: ThumbWorker | None = None
+        self._scanning_folder_id: int | None = None
+        self._scan_queue: list[tuple[int, bool]] = []
+        self._index_queue_position = 0
+        self._index_queue_total = 0
+        self._app_closing = False
+        # Timer: kick off a batch thumb build every 30 s while indexing runs
+        self._thumb_batch_timer = QTimer(self)
+        self._thumb_batch_timer.setInterval(30_000)
+        self._thumb_batch_timer.timeout.connect(self._start_auto_thumbs)
 
     # ── Properties ───────────────────────────────────────────────────────────
 
@@ -98,6 +116,13 @@ class AppController(QObject):
     @Property(str, notify=unlockErrorChanged)
     def unlockError(self) -> str:
         return self._unlock_error
+
+    @Property(str, constant=True)
+    def appVersion(self) -> str:
+        try:
+            return _pkg_version("exif-turbo")
+        except Exception:
+            return "unknown"
 
     @Property(str, notify=statusTextChanged)
     def statusText(self) -> str:
@@ -175,15 +200,26 @@ class AppController(QObject):
     def folderTree(self) -> str:
         return self._folder_tree
 
+    @Property(int, notify=indexQueuePositionChanged)
+    def indexQueuePosition(self) -> int:
+        return self._index_queue_position
+
+    @Property(int, notify=indexQueueTotalChanged)
+    def indexQueueTotal(self) -> int:
+        return self._index_queue_total
+
     # ── Slots ─────────────────────────────────────────────────────────────────
 
     @Slot(str)
     def unlock(self, password: str) -> None:
         repo: ImageIndexRepository | None = None
+        folder_repo: IndexedFolderRepository | None = None
         try:
             repo = ImageIndexRepository(self._db_path, key=password)
             repo.count_images("")  # verify key — raises DatabaseError on wrong key
+            folder_repo = IndexedFolderRepository(self._db_path, key=password)
             self._repo = repo
+            self._folder_repo = folder_repo
             self._key = password
             self._unlock_error = ""
             self._is_locked = False
@@ -194,17 +230,36 @@ class AppController(QObject):
             self.unlockErrorChanged.emit()
             self._load_formats()
             self._load_folder_tree()
+            # Resume any folders interrupted from the previous session
+            pending = self._folder_repo.get_pending_folders()
+            for folder in pending:
+                if folder.status == "scanning":
+                    # Normalise interrupted scans → queued (not running yet)
+                    self._folder_repo.update_status(folder.id, "queued")
+                entry = (folder.id, False)
+                if entry not in self._scan_queue:
+                    self._scan_queue.append(entry)
+                    self._index_queue_total += 1
+            if pending:
+                self.indexQueueTotalChanged.emit()
+            self._load_indexed_folders()
             self.search("")
+            if self._scan_queue:
+                self._process_next_in_queue()
         except sqlcipher3.DatabaseError:
             self._unlock_error = "Wrong password — please try again."
             self.unlockErrorChanged.emit()
             if repo is not None:
                 repo.close()
+            if folder_repo is not None:
+                folder_repo.close()
         except Exception as exc:
             self._unlock_error = f"Failed to open database: {exc}"
             self.unlockErrorChanged.emit()
             if repo is not None:
                 repo.close()
+            if folder_repo is not None:
+                folder_repo.close()
 
     @Slot(str)
     def search(self, query: str) -> None:
@@ -255,10 +310,14 @@ class AppController(QObject):
     def _run_search(self) -> None:
         if self._repo is None:
             return
+        excluded = (
+            self._folder_repo.get_disabled_paths() if self._folder_repo else None
+        )
         rows = self._repo.search_images(
             self._query_text, _PAGE_SIZE, 0,
             sort_by=self._sort_by, ext_filter=self._ext_filter,
             path_filter=self._folder_filter,
+            excluded_paths=excluded or None,
         )
         results = [
             SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
@@ -268,13 +327,13 @@ class AppController(QObject):
         total = self._repo.count_images(
             self._query_text, ext_filter=self._ext_filter,
             path_filter=self._folder_filter,
+            excluded_paths=excluded or None,
         )
         self._total_results = total
         self._loaded_results = len(results)
         self._loading = False
         self.totalResultsChanged.emit()
         self.loadedResultsChanged.emit()
-        self._set_status(f"{len(results)} of {total} results")
         if results:
             self.selectResult(0)
         else:
@@ -302,10 +361,14 @@ class AppController(QObject):
         if self._repo is None or self._loading or self._loaded_results >= self._total_results:
             return
         self._loading = True
+        excluded = (
+            self._folder_repo.get_disabled_paths() if self._folder_repo else None
+        )
         rows = self._repo.search_images(
             self._query_text, _PAGE_SIZE, self._loaded_results,
             sort_by=self._sort_by, ext_filter=self._ext_filter,
             path_filter=self._folder_filter,
+            excluded_paths=excluded or None,
         )
         results = [
             SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
@@ -314,7 +377,6 @@ class AppController(QObject):
         self._search_model.append_rows(results)
         self._loaded_results += len(results)
         self.loadedResultsChanged.emit()
-        self._set_status(f"{self._loaded_results} of {self._total_results} results")
         self._loading = False
 
     @Slot(int)
@@ -371,20 +433,141 @@ class AppController(QObject):
         self._update_find_scroll()
         self._update_details_html()
 
-    @Slot(str)
-    def startIndexing(self, folder_url: str) -> None:
-        self._start_indexing_impl(folder_url, force=False)
+    # ── Indexed-folder management slots ──────────────────────────────────
 
     @Slot(str)
-    def startFullReindex(self, folder_url: str) -> None:
-        self._start_indexing_impl(folder_url, force=True)
-
-    def _start_indexing_impl(self, folder_url: str, *, force: bool) -> None:
-        if self._repo is None:
+    def addIndexedFolder(self, folder_url: str) -> None:
+        if self._repo is None or self._folder_repo is None:
             return
         folder = Path(QUrl(folder_url).toLocalFile())
         if not folder.is_dir():
             return
+        path_str = str(folder)
+        if self._folder_repo.exists(path_str):
+            self._set_status(f"Folder already tracked: {folder.name}")
+            return
+        folder_obj = self._folder_repo.add(path_str)
+        self._folder_model.add_folder(folder_obj)
+        self.indexedFoldersChanged.emit()
+        self._start_managed_folder_indexing(folder_obj, force=False)
+
+    @Slot(int)
+    def removeIndexedFolder(self, folder_id: int) -> None:
+        if self._repo is None or self._folder_repo is None:
+            return
+        folder = self._folder_repo.get_by_id(folder_id)
+        if folder is None:
+            return
+        # Remove from pending queue before deleting
+        self._scan_queue = [(fid, f) for fid, f in self._scan_queue if fid != folder_id]
+        if self._scanning_folder_id == folder_id and self._index_worker:
+            self._index_worker.cancel()
+        self._folder_repo.remove(folder_id)
+        self._folder_model.remove_folder(folder_id)
+        self._repo.delete_by_path_prefix(folder.path)
+        self.indexedFoldersChanged.emit()
+        self._load_folder_tree()
+        self._load_formats()
+        self._run_search()
+
+    @Slot(int, bool)
+    def setFolderEnabled(self, folder_id: int, enabled: bool) -> None:
+        if self._folder_repo is None:
+            return
+        if not enabled:
+            # Remove from scan queue when disabling
+            self._scan_queue = [(fid, f) for fid, f in self._scan_queue if fid != folder_id]
+            if self._scanning_folder_id == folder_id and self._index_worker:
+                self._index_worker.cancel()
+        self._folder_repo.set_enabled(folder_id, enabled)
+        updated = self._folder_repo.get_by_id(folder_id)
+        if updated:
+            self._folder_model.update_folder(updated)
+        self.indexedFoldersChanged.emit()
+        self._run_search()
+
+    @Slot(int)
+    def rescanFolder(self, folder_id: int) -> None:
+        if self._folder_repo is None:
+            return
+        folder = self._folder_repo.get_by_id(folder_id)
+        if folder is None:
+            return
+        self._start_managed_folder_indexing(folder, force=False)
+
+    @Slot(int)
+    def fullRescanFolder(self, folder_id: int) -> None:
+        if self._folder_repo is None:
+            return
+        folder = self._folder_repo.get_by_id(folder_id)
+        if folder is None:
+            return
+        self._start_managed_folder_indexing(folder, force=True)
+
+    @Slot()
+    def rescanAllFolders(self) -> None:
+        if self._folder_repo is None:
+            return
+        folders = self._folder_repo.get_enabled_folders()
+        for folder in folders:
+            self._start_managed_folder_indexing(folder, force=False)
+
+    @Slot()
+    def fullRescanAllFolders(self) -> None:
+        if self._folder_repo is None:
+            return
+        folders = self._folder_repo.get_enabled_folders()
+        for folder in folders:
+            self._start_managed_folder_indexing(folder, force=True)
+
+    def _load_indexed_folders(self) -> None:
+        if self._folder_repo is None:
+            return
+        folders = self._folder_repo.get_all()
+        self._folder_model.set_rows(folders)
+        self.indexedFoldersChanged.emit()
+
+    def _start_managed_folder_indexing(self, folder_obj, *, force: bool = False) -> None:
+        """Enqueue a folder for indexing and start the queue if idle."""
+        if self._repo is None or self._folder_repo is None:
+            return
+        entry = (folder_obj.id, force)
+        if entry not in self._scan_queue:
+            self._scan_queue.append(entry)
+            self._index_queue_total += 1
+            self.indexQueueTotalChanged.emit()
+            # Mark as queued in DB/model unless it is already being scanned
+            if folder_obj.status not in ("scanning",):
+                self._folder_repo.update_status(folder_obj.id, "queued")
+                updated = self._folder_repo.get_by_id(folder_obj.id)
+                if updated:
+                    self._folder_model.update_folder(updated)
+        self._process_next_in_queue()
+
+    def _process_next_in_queue(self) -> None:
+        """Start the next folder in the scan queue if not already indexing."""
+        if self._is_indexing or not self._scan_queue:
+            return
+        folder_id, force = self._scan_queue.pop(0)
+        self._index_queue_position += 1
+        self.indexQueuePositionChanged.emit()
+        folder_obj = self._folder_repo.get_by_id(folder_id) if self._folder_repo else None
+        if folder_obj is None:
+            # Folder was removed while queued — skip and try the next one
+            self._process_next_in_queue()
+            return
+        self._actually_start_indexing(folder_obj, force=force)
+
+    def _actually_start_indexing(self, folder_obj, *, force: bool) -> None:
+        """Immediately start an IndexWorker for the given folder."""
+        if self._repo is None:
+            return
+        self._scanning_folder_id = folder_obj.id
+        if self._folder_repo:
+            self._folder_repo.update_status(folder_obj.id, "scanning")
+            updated = self._folder_repo.get_by_id(folder_obj.id)
+            if updated:
+                self._folder_model.update_folder(updated)
         self._is_indexing = True
         self._index_current = 0
         self._index_total = 0
@@ -393,71 +576,130 @@ class AppController(QObject):
         self.indexCurrentChanged.emit()
         self.indexTotalChanged.emit()
         self.indexCurrentFileChanged.emit()
-        label = "Full re-index…" if force else "Indexing…"
-        self._set_status(label)
+        self._set_status(f"Indexing {folder_obj.display_name}…")
         self._index_worker = IndexWorker(
-            self._db_path, [folder], workers=_DEFAULT_WORKERS, key=self._key, force=force,
+            self._db_path,
+            [Path(folder_obj.path)],
+            workers=_DEFAULT_WORKERS,
+            key=self._key,
+            force=force,
             clear_cache_dir=self._search_model.cache_dir if force else None,
         )
-        self._index_worker.finished.connect(self._on_index_done)
-        self._index_worker.failed.connect(self._on_index_failed)
+        self._index_worker.finished.connect(self._on_managed_folder_index_done)
+        self._index_worker.failed.connect(self._on_managed_folder_index_failed)
         self._index_worker.progress.connect(self._on_index_progress)
-        self._index_worker.canceled.connect(self._on_index_canceled)
+        self._index_worker.canceled.connect(self._on_managed_folder_index_canceled)
         self._index_worker.start()
+        self._thumb_batch_timer.start()
+
+    def _on_managed_folder_index_done(self, count: int) -> None:
+        self._thumb_batch_timer.stop()
+        self._is_indexing = False
+        self.isIndexingChanged.emit()
+        if self._folder_repo and self._scanning_folder_id is not None:
+            self._folder_repo.update_status(
+                self._scanning_folder_id, "indexed", image_count=count
+            )
+            updated = self._folder_repo.get_by_id(self._scanning_folder_id)
+            if updated:
+                self._folder_model.update_folder(updated)
+        self._scanning_folder_id = None
+        self._set_status(f"Indexed {count} images")
+        self._load_formats()
+        self._load_folder_tree()
+        self.search(self._query_text)
+        if self._scan_queue:
+            # More folders waiting — keep going before building thumbs
+            self._process_next_in_queue()
+        else:
+            # Entire queue drained — reset counters and build thumbnails
+            self._index_queue_position = 0
+            self._index_queue_total = 0
+            self.indexQueuePositionChanged.emit()
+            self.indexQueueTotalChanged.emit()
+            self._start_auto_thumbs()
+
+    def _on_managed_folder_index_failed(self, error: str) -> None:
+        self._thumb_batch_timer.stop()
+        self._is_indexing = False
+        self.isIndexingChanged.emit()
+        if self._folder_repo and self._scanning_folder_id is not None:
+            self._folder_repo.update_status(
+                self._scanning_folder_id, "error", error_message=error
+            )
+            updated = self._folder_repo.get_by_id(self._scanning_folder_id)
+            if updated:
+                self._folder_model.update_folder(updated)
+        self._scanning_folder_id = None
+        self._set_status(f"Index failed: {error}")
+        if self._scan_queue:
+            self._process_next_in_queue()
+        else:
+            self._index_queue_position = 0
+            self._index_queue_total = 0
+            self.indexQueuePositionChanged.emit()
+            self.indexQueueTotalChanged.emit()
+
+
+    def _on_managed_folder_index_canceled(self, count: int) -> None:
+        self._thumb_batch_timer.stop()
+        self._is_indexing = False
+        self.isIndexingChanged.emit()
+        if not self._app_closing:
+            # User-initiated cancel: reset folder to new
+            if self._folder_repo and self._scanning_folder_id is not None:
+                self._folder_repo.update_status(
+                    self._scanning_folder_id, "new", image_count=count
+                )
+                updated = self._folder_repo.get_by_id(self._scanning_folder_id)
+                if updated:
+                    self._folder_model.update_folder(updated)
+        self._scanning_folder_id = None
+        # Reset queue counters (cancel stops the whole queue)
+        self._index_queue_position = 0
+        self._index_queue_total = 0
+        self.indexQueuePositionChanged.emit()
+        self.indexQueueTotalChanged.emit()
+        if not self._app_closing:
+            self._set_status("Index canceled")
+            self.search(self._query_text)
 
     @Slot()
     def cancelIndex(self) -> None:
+        # Reset all queued (not yet started) folders back to "new"
+        if self._folder_repo:
+            for folder_id, _ in self._scan_queue:
+                self._folder_repo.update_status(folder_id, "new")
+                updated = self._folder_repo.get_by_id(folder_id)
+                if updated:
+                    self._folder_model.update_folder(updated)
+        self._scan_queue.clear()
+        if self._thumb_worker and self._thumb_worker.isRunning():
+            self._thumb_batch_timer.stop()
+            self._thumb_worker.cancel()
         if self._index_worker and self._index_worker.isRunning():
             self._set_status("Canceling...")
             self._index_worker.cancel()
 
     @Slot()
-    def buildThumbnails(self) -> None:
-        if self._repo is None:
-            return
-        rows = self._repo.all_images()
-        paths = [r[0] for r in rows]
-        if not paths:
-            self._set_status("No images indexed yet.")
-            return
-        stamps = self._repo.get_all_stamps()
-        self._is_building_thumbs = True
-        self._thumb_current = 0
-        self._thumb_total = len(paths)
-        self._thumb_current_file = ""
-        self.isBuildingThumbsChanged.emit()
-        self.thumbCurrentChanged.emit()
-        self.thumbTotalChanged.emit()
-        self.thumbCurrentFileChanged.emit()
-        self._set_status("Building thumbnails\u2026")
-        self._thumb_worker = ThumbWorker(
-            paths,
-            self._search_model.cache_dir,
-            self._search_model.max_thumb_bytes,
-            workers=_DEFAULT_WORKERS,
-            stamps=stamps,
-        )
-        self._thumb_worker.progress.connect(self._on_thumb_progress)
-        self._thumb_worker.finished.connect(self._on_thumb_done)
-        self._thumb_worker.failed.connect(self._on_thumb_failed)
-        self._thumb_worker.canceled.connect(self._on_thumb_canceled)
-        self._thumb_worker.start()
+    def onAppClosing(self) -> None:
+        """Called when the application window is about to close.
 
-    @Slot()
-    def recreateThumbnails(self) -> None:
-        """Delete all cached thumbnails, then rebuild from scratch."""
-        cache_dir = self._search_model.cache_dir
-        try:
-            import shutil
-            shutil.rmtree(cache_dir, ignore_errors=True)
-        except Exception:
-            pass
-        self.buildThumbnails()
+        Persists the currently-scanning folder as 'queued' so that it resumes
+        on the next launch, then cancels any running workers.
+        """
+        self._app_closing = True
+        if self._folder_repo and self._scanning_folder_id is not None:
+            self._folder_repo.update_status(self._scanning_folder_id, "queued")
+        if self._index_worker and self._index_worker.isRunning():
+            self._index_worker.cancel()
+        if self._thumb_worker and self._thumb_worker.isRunning():
+            self._thumb_worker.cancel()
+        self._scan_queue.clear()
 
     @Slot()
     def cancelThumbnails(self) -> None:
         if self._thumb_worker and self._thumb_worker.isRunning():
-            self._set_status("Canceling thumbs...")
             self._thumb_worker.cancel()
 
     @Slot(str)
@@ -523,25 +765,6 @@ class AppController(QObject):
         self._find_scroll_fraction = char_pos / text_len if text_len else 0.0
         self.findScrollFractionChanged.emit()
 
-    def _on_index_done(self, count: int) -> None:
-        self._is_indexing = False
-        self.isIndexingChanged.emit()
-        self._set_status(f"Indexed {count} images")
-        self._load_formats()
-        self._load_folder_tree()
-        self.search(self._query_text)
-
-    def _on_index_failed(self, error: str) -> None:
-        self._is_indexing = False
-        self.isIndexingChanged.emit()
-        self._set_status(f"Index failed: {error}")
-
-    def _on_index_canceled(self, count: int) -> None:
-        self._is_indexing = False
-        self.isIndexingChanged.emit()
-        self._set_status("Index canceled")
-        self.search(self._query_text)
-
     def _on_index_progress(self, current: int, total: int, path: str) -> None:
         self._index_current = current
         self._index_total = total
@@ -558,24 +781,58 @@ class AppController(QObject):
         self.thumbCurrentChanged.emit()
         self.thumbTotalChanged.emit()
         self.thumbCurrentFileChanged.emit()
-        self._set_status(f"Building thumbnails… {current} / {total}")
+
+    def _start_auto_thumbs(self) -> None:
+        """Queue thumbnail generation for all images not yet cached."""
+        if self._repo is None or self._is_building_thumbs:
+            return
+        rows = self._repo.all_images()
+        paths = [r[0] for r in rows]
+        if not paths:
+            return
+        stamps = self._repo.get_all_stamps()
+        self._is_building_thumbs = True
+        self._thumb_current = 0
+        self._thumb_total = len(paths)
+        self._thumb_current_file = ""
+        self.isBuildingThumbsChanged.emit()
+        self.thumbCurrentChanged.emit()
+        self.thumbTotalChanged.emit()
+        self.thumbCurrentFileChanged.emit()
+        self._thumb_worker = ThumbWorker(
+            paths,
+            self._search_model.cache_dir,
+            self._search_model.max_thumb_bytes,
+            workers=_DEFAULT_WORKERS,
+            stamps=stamps,
+        )
+        self._thumb_worker.progress.connect(self._on_thumb_progress)
+        self._thumb_worker.finished.connect(self._on_thumb_done)
+        self._thumb_worker.failed.connect(self._on_thumb_failed)
+        self._thumb_worker.canceled.connect(self._on_thumb_canceled)
+        self._thumb_worker.start()
 
     def _on_thumb_done(self, cached: int, total: int) -> None:
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
-        self._set_status(f"Thumbnails cached: {cached} / {total}")
         self._search_model.refresh_thumbnails()
 
     def _on_thumb_failed(self, error: str) -> None:
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
-        self._set_status(f"Build thumbs failed: {error}")
 
     def _on_thumb_canceled(self, cached: int, total: int) -> None:
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
-        self._set_status(f"Build thumbs canceled — {cached} cached")
         self._search_model.refresh_thumbnails()
+
+    def close(self) -> None:
+        if self._repo is not None:
+            self._repo.close()
+            self._repo = None
+        if self._folder_repo is not None:
+            self._folder_repo.close()
+            self._folder_repo = None
 
 
     @staticmethod
