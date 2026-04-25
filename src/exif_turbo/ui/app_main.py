@@ -12,10 +12,11 @@ from PySide6.QtGui import QGuiApplication, QIcon, QImageReader
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 
-from ..config import default_db_path, thumb_cache_dir
+from ..config import db_path_for_name, default_db_path, settings_path, thumb_cache_dir
 from .models.exif_list_model import ExifListModel
 from .models.folder_list_model import FolderListModel
 from .models.search_list_model import SearchListModel
+from .models.settings_model import SettingsModel
 from .providers.raw_image_provider import RawImageProvider
 from .view_models.app_controller import AppController
 
@@ -56,7 +57,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--db",
         default=None,
-        help=f"Database path (default: {default_db_path()})",
+        metavar="NAME",
+        help=(
+            "Database name, e.g. 'work' or 'holidays'. "
+            "The database is always stored in ~/.exif-turbo/data/<NAME>.db. "
+            f"Default: index (i.e. {default_db_path()})"
+        ),
     )
     return parser.parse_args()
 
@@ -83,11 +89,12 @@ def main() -> None:
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 
-    db_path = Path(args.db) if args.db else default_db_path()
+    db_path = db_path_for_name(args.db) if args.db else default_db_path()
+    settings = SettingsModel(settings_path(db_path))
     search_model = SearchListModel(cache_dir=thumb_cache_dir(db_path))
     exif_model = ExifListModel()
     folder_model = FolderListModel()
-    controller = AppController(db_path, search_model, exif_model, folder_model)
+    controller = AppController(db_path, search_model, exif_model, folder_model, settings)
     engine = QQmlApplicationEngine()
     engine.addImageProvider("raw", RawImageProvider())
     ctx = engine.rootContext()
@@ -95,6 +102,7 @@ def main() -> None:
     ctx.setContextProperty("searchModel", search_model)
     ctx.setContextProperty("exifModel", exif_model)
     ctx.setContextProperty("folderListModel", folder_model)
+    ctx.setContextProperty("settingsModel", settings)
 
     qml_path = Path(__file__).resolve().parent / "qml" / "Main.qml"
     engine.load(QUrl.fromLocalFile(str(qml_path)))

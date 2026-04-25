@@ -15,7 +15,6 @@ dependencies = [
 ]
 
 [project.scripts]
-exif-turbo-index = "exif_turbo.index:main"
 exif-turbo = "exif_turbo.app:main"
 
 [tool.setuptools]

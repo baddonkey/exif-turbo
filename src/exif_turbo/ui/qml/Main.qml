@@ -61,6 +61,11 @@ ApplicationWindow {
     readonly property int    _totalResults:       controller ? controller.totalResults        : 0
     readonly property string _appVersion:         controller ? controller.appVersion          : ""
 
+    // Settings model null-safe proxies
+    readonly property int    _workerCount:         settingsModel ? settingsModel.workerCount   : 4
+    readonly property int    _minWorkers:          settingsModel ? settingsModel.minWorkers    : 1
+    readonly property int    _maxWorkers:          settingsModel ? settingsModel.maxWorkers    : 32
+
     // Parsed format list — updated reactively when _availableFormats changes
     readonly property var _formats: {
         try { return JSON.parse(_availableFormats) } catch(e) { return [] }
@@ -267,15 +272,16 @@ ApplicationWindow {
     // ── Tab bar ───────────────────────────────────────────────────────────
     TabBar {
         id: mainTabBar
+        objectName: "mainTabBar"
         anchors { top: parent.top; left: parent.left }
-        width: 420   // 3 × 140 px — left-aligned, not stretched
+        width: 560   // 4 × 140 px — left-aligned, not stretched
         implicitHeight: 40
         visible: !_isLocked
         z: 10
         background: Item {}  // transparent; background rect above covers the row
 
         Repeater {
-            model: [ qsTr("Search"), qsTr("Browse"), qsTr("Indexed Folders") ]
+            model: [ qsTr("Search"), qsTr("Browse"), qsTr("Indexed Folders"), qsTr("Settings") ]
             TabButton {
                 text: modelData
                 implicitWidth: 140
@@ -1302,6 +1308,202 @@ ApplicationWindow {
     FoldersPanel {
         anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; bottom: parent.bottom }
         visible: !_isLocked && mainTabBar.currentIndex === 2
+    }
+
+    // ── Settings tab ─────────────────────────────────────────────────────
+    Item {
+        anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; bottom: parent.bottom }
+        visible: !_isLocked && mainTabBar.currentIndex === 3
+
+        ScrollView {
+            anchors.fill: parent
+            contentWidth: parent.width
+            clip: true
+
+            ColumnLayout {
+                width: parent.width
+                anchors.leftMargin: 0
+                spacing: 0
+
+                // ── Page heading ─────────────────────────────────────────
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 48
+                    color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.07)
+
+                    FloatingBadge {
+                        anchors { left: parent.left; leftMargin: 40; verticalCenter: parent.verticalCenter }
+                        text: qsTr("SETTINGS")
+                    }
+                }
+
+                // ── Content area ─────────────────────────────────────────
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 40
+                    Layout.rightMargin: 40
+                    Layout.topMargin: 28
+                    spacing: 0
+
+                    // ── Worker threads ───────────────────────────────────
+                    Label {
+                        text: qsTr("Worker Threads")
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                        Layout.bottomMargin: 6
+                    }
+                    Label {
+                        text: qsTr("Number of parallel threads used for indexing and thumbnail generation. Higher values speed up processing but use more CPU and memory.")
+                        font.pixelSize: 12
+                        opacity: 0.6
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 12
+                    }
+
+                    RowLayout {
+                        spacing: 12
+                        Layout.bottomMargin: 4
+
+                        SpinBox {
+                            id: workerSpinBox
+                            from: _minWorkers
+                            to: _maxWorkers
+                            value: _workerCount
+                            implicitWidth: 120
+                            onValueModified: settingsModel.setWorkerCount(value)
+                        }
+
+                        Label {
+                            text: workerSpinBox.value === 1 ? qsTr("thread") : qsTr("threads")
+                            font.pixelSize: 12
+                            opacity: 0.7
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    Label {
+                        text: qsTr("Default: %1 (half of %2 detected CPU threads)").arg(_workerCount).arg(_maxWorkers)
+                        font.pixelSize: 11
+                        opacity: 0.45
+                        Layout.bottomMargin: 28
+                    }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
+
+                    // ── Indexing blacklist ────────────────────────────────
+                    Label {
+                        text: qsTr("Indexing Blacklist")
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                        Layout.bottomMargin: 6
+                    }
+                    Label {
+                        text: qsTr("File and folder name patterns to skip during indexing. Supports wildcards (e.g. *, ?).\nChanges take effect on the next rescan.")
+                        font.pixelSize: 12
+                        opacity: 0.6
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 14
+                    }
+
+                    // Pattern list
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: blacklistView.contentHeight + 2
+                        color: Material.background
+                        border.color: Material.dividerColor
+                        border.width: 1
+                        radius: 4
+                        clip: true
+                        Layout.bottomMargin: 10
+
+                        ListView {
+                            id: blacklistView
+                            anchors { top: parent.top; left: parent.left; right: parent.right }
+                            height: contentHeight
+                            interactive: false
+                            model: settingsModel ? settingsModel.blacklist : []
+
+                            delegate: Rectangle {
+                                width: blacklistView.width
+                                height: 34
+                                color: index % 2 === 0 ? Material.background : Qt.darker(Material.background, 1.03)
+
+                                RowLayout {
+                                    anchors { fill: parent; leftMargin: 12; rightMargin: 6 }
+                                    spacing: 8
+
+                                    Label {
+                                        text: "\uD83D\uDEAB"
+                                        font.pixelSize: 12
+                                        opacity: 0.5
+                                    }
+
+                                    Label {
+                                        Layout.fillWidth: true
+                                        text: modelData
+                                        font.pixelSize: 12
+                                        font.family: root.monoFont
+                                        elide: Text.ElideRight
+                                    }
+
+                                    ToolButton {
+                                        icon.name: "window-close"
+                                        text: "✕"
+                                        implicitWidth: 28; implicitHeight: 28
+                                        font.pixelSize: 11
+                                        opacity: 0.6
+                                        onClicked: settingsModel.removeBlacklistEntry(index)
+                                        ToolTip.text: qsTr("Remove")
+                                        ToolTip.visible: hovered
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Add new pattern row
+                    RowLayout {
+                        spacing: 8
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 8
+
+                        TextField {
+                            id: newPatternField
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("New pattern, e.g.  @eaDir  or  *.tmp")
+                            font.pixelSize: 12
+                            font.family: root.monoFont
+                            onAccepted: {
+                                if (text.trim() !== "") {
+                                    settingsModel.addBlacklistEntry(text.trim())
+                                    text = ""
+                                }
+                            }
+                        }
+
+                        Button {
+                            text: qsTr("Add")
+                            enabled: newPatternField.text.trim() !== ""
+                            onClicked: {
+                                settingsModel.addBlacklistEntry(newPatternField.text.trim())
+                                newPatternField.text = ""
+                            }
+                        }
+                    }
+
+                    Label {
+                        text: qsTr("Patterns are matched against individual file or folder names (not full paths). Wildcards: * matches any characters, ? matches one character.")
+                        font.pixelSize: 11
+                        opacity: 0.45
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 40
+                    }
+                }
+            }
+        }
     }
 
     // ── Status bar ────────────────────────────────────────────────────────

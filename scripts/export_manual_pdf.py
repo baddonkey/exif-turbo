@@ -36,11 +36,6 @@ _HTML_TEMPLATE = """\
   @page {{
     size: A4;
     margin: 2cm 2.2cm;
-    @bottom-center {{
-      content: counter(page) " / " counter(pages);
-      font-size: 9pt;
-      color: #888;
-    }}
   }}
   body {{
     font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
@@ -143,12 +138,17 @@ def _md_to_html(md_text: str, base_dir: Path) -> str:
         print("ERROR: 'markdown' is not installed.  Run: pip install markdown pygments")
         sys.exit(1)
 
-    # Rewrite relative image paths to absolute file:// URIs so WeasyPrint can
-    # locate screenshots placed in docs/screenshots/.
+    # Inline screenshots as base64 data URIs so both WeasyPrint and xhtml2pdf
+    # can render them without needing to resolve file:// paths.
     def _abs_img(match: re.Match) -> str:
+        import base64
         alt = match.group(1)
         src = match.group(2)
         img_path = (base_dir / src).resolve()
+        if img_path.exists():
+            data = base64.b64encode(img_path.read_bytes()).decode("ascii")
+            mime = "image/png" if img_path.suffix.lower() == ".png" else "image/jpeg"
+            return f"![{alt}](data:{mime};base64,{data})"
         return f"![{alt}]({img_path.as_uri()})"
 
     md_text = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', _abs_img, md_text)
@@ -167,15 +167,36 @@ def _md_to_html(md_text: str, base_dir: Path) -> str:
 
 # ── PDF render ─────────────────────────────────────────────────────────────────
 
-def _render_pdf(html: str, output: Path) -> None:
-    try:
-        from weasyprint import HTML
-    except ImportError:
-        print("ERROR: 'weasyprint' is not installed.  Run: pip install weasyprint")
+def _render_pdf_weasyprint(html: str, output: Path) -> None:
+    from weasyprint import HTML
+    print("Rendering PDF with WeasyPrint …")
+    HTML(string=html).write_pdf(str(output))
+
+
+def _render_pdf_xhtml2pdf(html: str, output: Path) -> None:
+    from xhtml2pdf import pisa
+    print("Rendering PDF with xhtml2pdf …")
+    with output.open("wb") as fh:
+        result = pisa.CreatePDF(html, dest=fh)
+    if result.err:
+        print(f"ERROR: xhtml2pdf reported {result.err} error(s)")
         sys.exit(1)
 
-    print(f"Rendering PDF …")
-    HTML(string=html).write_pdf(str(output))
+
+def _render_pdf(html: str, output: Path) -> None:
+    try:
+        _render_pdf_weasyprint(html, output)
+    except Exception as weasy_err:
+        print(f"WeasyPrint unavailable ({weasy_err}), falling back to xhtml2pdf …")
+        try:
+            _render_pdf_xhtml2pdf(html, output)
+        except ImportError:
+            print(
+                "ERROR: neither 'weasyprint' nor 'xhtml2pdf' could be loaded.\n"
+                "       Run: pip install xhtml2pdf"
+            )
+            sys.exit(1)
+
     size_kb = output.stat().st_size // 1024
     print(f"  Saved: {output.relative_to(_REPO_ROOT)}  ({size_kb} KB)")
 

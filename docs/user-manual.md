@@ -17,8 +17,7 @@ other tag — across thousands of images.
 7. [Browsing by Folder](#7-browsing-by-folder)
 8. [Viewing Metadata and EXIF Tags](#8-viewing-metadata-and-exif-tags)
 9. [Keyboard Shortcuts](#9-keyboard-shortcuts)
-10. [CLI Indexer](#10-cli-indexer)
-11. [FAQ](#11-faq)
+10. [FAQ](#10-faq)
 
 ---
 
@@ -80,27 +79,33 @@ Click the **Indexed Folders** tab to manage which directories are scanned.
 
 1. Click **Add Folder** (top-right of the Indexed Folders tab).
 2. Pick the directory in the file browser dialog.
-3. The folder appears in the list with status **new**.
+3. The folder is immediately queued for scanning — its status changes to **QUEUED**
+   then **SCANNING** once the worker starts.
 
 ### Starting an index scan
 
-Click **Rescan** next to a folder (or **Rescan All** to queue all folders).
-The folder status changes to **scanning** and the progress panel appears in the
+Click **Rescan** next to a folder (or **Rescan All** to queue all enabled folders).
+The folder status changes to **SCANNING** and the progress panel appears in the
 bottom-right corner of the tab.
 
-Use **Full Rescan** to force every file to be re-processed even if its
-modification time has not changed.
+Use **Full Rescan** (or **Full Rescan All**) to force every file to be
+re-processed even if its modification time has not changed. This is useful after
+updating ExifTool or if you suspect the index is out of date.
 
 ### Folder statuses
 
+Each folder row shows a coloured status badge and an image count badge
+(e.g. "42 images") once it has been indexed.
+
 | Status | Meaning |
 |--------|---------|
-| **new** | Added but never scanned |
-| **queued** | Waiting in the scan queue |
-| **scanning** | Currently being indexed |
-| **ok** | Last scan completed successfully |
-| **error** | Last scan ended with an error |
-| **disabled** | Excluded from search results |
+| **NEW** | Added but never scanned |
+| **QUEUED** | Waiting in the scan queue |
+| **SCANNING** | Currently being indexed |
+| **INDEXED** | Last scan completed successfully |
+| **MISSING** | Folder path no longer exists on disk |
+| **ERROR** | Last scan ended with an error |
+| **DISABLED** | Excluded from search results |
 
 ### Disabling / enabling a folder
 
@@ -109,8 +114,9 @@ deleting it or its index data.
 
 ### Removing a folder
 
-Click **Remove**. The folder and all its indexed images are deleted from the
-database. The original files on disk are not touched.
+Click **Remove**. A confirmation dialog asks you to confirm before the folder
+and all its indexed images are deleted from the database. The original files
+on disk are not touched.
 
 ---
 
@@ -120,11 +126,16 @@ While scanning, a non-blocking progress panel appears in the bottom-right corner
 of the **Indexed Folders** tab:
 
 - **Queue indicator** — shows which folder in the queue is currently being scanned
-  (e.g. "2 of 5").
+  (e.g. "Indexing folder 2 of 5").
 - **Progress bar** — percentage of files processed in the current folder.
 - **File counter** — `n / total` files scanned.
 - **Current file** — name of the file being processed.
-- **Cancel** button — stops indexing immediately.
+- **Cancel Indexing** button — stops indexing immediately. During the
+  thumbnail-build phase the same button shows **Cancel Thumbnails**.
+
+The same progress panel is reused after indexing finishes to show **thumbnail
+building** progress ("Building Thumbnails"). Thumbnails are generated in a
+background pass and cached to disk so subsequent launches are fast.
 
 Across **all tabs** the **status bar** at the very bottom of the window shows a
 pulsing blue dot and the text **Indexing…** whenever a scan is in progress, so
@@ -134,7 +145,7 @@ Browse.
 ### Pause and resume
 
 If you close the application while indexing is in progress, the current folder
-is saved as **queued**. The next time you open exif-turbo and unlock the
+is saved as **QUEUED**. The next time you open exif-turbo and unlock the
 database the scan queue is automatically restored and indexing resumes where
 it left off.
 
@@ -194,13 +205,20 @@ Use the **Sort** dropdown at the top-right of the results panel:
 
 ## 7. Browsing by Folder
 
-The **Browse** tab gives you a folder-tree view of all indexed images:
+The **Browse** tab lets you navigate your library by folder hierarchy:
 
 ![Browse tab](screenshots/05_browse_tab.png)
 
-Expand the folder tree on the left to navigate your library hierarchy. Click
-any folder to show only the images inside it. The same thumbnail list, preview
-pane, and metadata panels appear as in Search.
+The left panel shows all indexed folders as an indented list — sub-folders are
+indented under their parent. Each entry shows the folder name and a count of
+images inside it. Click any folder to show only its images in the centre panel.
+
+The same thumbnail list and preview pane appear as in Search. The Metadata and
+EXIF Tags panels are not shown in the Browse tab — switch to the **Search** tab
+to access the full metadata view for a selected image.
+
+Switching back to the **Search** tab clears the folder filter and restores your
+previous search results.
 
 ---
 
@@ -218,14 +236,16 @@ embedded preview JPEG is used.
 
 ### Metadata panel (bottom-left)
 
-Shows the raw JSON metadata for the selected image as formatted text. Use
-**Ctrl+F** to open an inline search bar and find any tag value. Press **F3**
-(or click the arrows) to jump through all matches.
+Shows the raw JSON metadata for the selected image as formatted text. Click the
+**Find** button in the panel header (or press **Ctrl+F**) to open an inline
+search bar and find any tag value. Press **F3** (or click the ▼ / ▲ arrows) to
+jump through all matches.
 
 ### EXIF Tags panel (bottom-right)
 
 Displays the same metadata as a clean two-column table — **Tag** and **Value**
-— sorted alphabetically.
+— sorted alphabetically. Hover over a truncated tag or value to see the full
+text in a tooltip.
 
 You can drag the divider between the two bottom panels to adjust the split.
 By default they start at **50 % / 50 %**.
@@ -244,38 +264,7 @@ By default they start at **50 % / 50 %**.
 
 ---
 
-## 10. CLI Indexer
-
-exif-turbo ships a headless CLI indexer for scripted or server use:
-
-```bash
-exif-turbo-index --folders "Z:\Photos\2024" --db "C:\Data\index.db"
-```
-
-### Options
-
-| Flag | Description |
-|------|-------------|
-| `--folders` | One or more space-separated folder paths to index |
-| `--db` | Path to the database file (created if it does not exist) |
-| `--key` | Database encryption password (default: empty) |
-| `--workers` | Number of parallel extraction threads (default: CPU count, max 12) |
-| `--force` | Re-index all files, even if unchanged |
-| `--include-dotfiles` | Index files whose names start with `.` (default: skipped) |
-
-### Example — index multiple folders
-
-```bash
-exif-turbo-index \
-  --folders "Z:\Photos\2024" "Z:\Photos\2025" \
-  --db "C:\Data\photos.db" \
-  --key "my-secret" \
-  --workers 8
-```
-
----
-
-## 11. FAQ
+## 10. FAQ
 
 **Q: Why does the status bar say "Indexing…" even after I switch tabs?**  
 A: The indexer runs in the background across all tabs. The pulsing blue dot in
@@ -298,8 +287,7 @@ A: JPEG, PNG, TIFF, HEIC, BMP, GIF, and RAW formats: CR2, CR3, NEF, ARW, DNG,
 ORF, RW2, PEF, RAF, RWL, SRW (and any other format that ExifTool can read).
 
 **Q: Where is the database stored?**  
-A: By default at `~/.exif-turbo/data/index.db` on all platforms. You can
-specify a custom path with `--db` when launching the app or the CLI indexer.
+A: By default at `~/.exif-turbo/data/index.db` on all platforms.
 
 **Q: How do I change the database password?**  
 A: There is no in-app password change yet. Re-create the database by deleting

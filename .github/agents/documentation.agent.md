@@ -43,7 +43,7 @@ exif-turbo is a cross-platform desktop application and CLI tool that:
 - Filter results by file format (JPEG, PNG, RAW…)
 - Filter results by indexed folder
 - Find-in-metadata (Ctrl+F) with highlight and prev/next navigation
-- CLI indexer: `exif-turbo-index --folders <dir> --db <path.db>`
+- GUI launch: `exif-turbo` or `exif-turbo --db <name>`
 
 ## Documentation Location
 

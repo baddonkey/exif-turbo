@@ -48,8 +48,8 @@ tests/                             # Mirrors src/ structure
 
 ```bash
 pip install -e .                                        # Install in dev mode
-exif-turbo-index --folders <dir> --db <path.db>        # CLI — build index
 exif-turbo                                              # Launch GUI
+exif-turbo --db animals                                 # Launch with named database
 ```
 
 ## Testing

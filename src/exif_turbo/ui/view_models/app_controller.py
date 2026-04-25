@@ -20,11 +20,12 @@ from ...models.search_result import SearchResult
 from ..models.exif_list_model import ExifListModel
 from ..models.folder_list_model import FolderListModel
 from ..models.search_list_model import SearchListModel
+from ..models.settings_model import SettingsModel
 from ..workers.index_worker import IndexWorker
 from ..workers.thumb_worker import ThumbWorker
 
 _PAGE_SIZE = 100
-_DEFAULT_WORKERS = min(os.cpu_count() or 1, 12)
+_DEFAULT_WORKERS = max(1, (os.cpu_count() or 2) // 2)
 
 
 class AppController(QObject):
@@ -59,9 +60,11 @@ class AppController(QObject):
         search_model: SearchListModel,
         exif_model: ExifListModel,
         folder_model: FolderListModel,
+        settings: SettingsModel | None = None,
     ) -> None:
         super().__init__()
         self._db_path = db_path
+        self._settings = settings
         self._repo: ImageIndexRepository | None = None
         self._folder_repo: IndexedFolderRepository | None = None
         self._key = ""
@@ -580,10 +583,11 @@ class AppController(QObject):
         self._index_worker = IndexWorker(
             self._db_path,
             [Path(folder_obj.path)],
-            workers=_DEFAULT_WORKERS,
+            workers=self._settings.workerCount if self._settings else _DEFAULT_WORKERS,
             key=self._key,
             force=force,
             clear_cache_dir=self._search_model.cache_dir if force else None,
+            blacklist=self._settings.blacklist_patterns if self._settings else [],
         )
         self._index_worker.finished.connect(self._on_managed_folder_index_done)
         self._index_worker.failed.connect(self._on_managed_folder_index_failed)
@@ -803,7 +807,7 @@ class AppController(QObject):
             paths,
             self._search_model.cache_dir,
             self._search_model.max_thumb_bytes,
-            workers=_DEFAULT_WORKERS,
+            workers=self._settings.workerCount if self._settings else _DEFAULT_WORKERS,
             stamps=stamps,
         )
         self._thumb_worker.progress.connect(self._on_thumb_progress)

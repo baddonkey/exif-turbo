@@ -8,6 +8,7 @@ from typing import List
 from PySide6.QtCore import QThread, Signal
 
 from ...data.image_index_repository import ImageIndexRepository
+from ...indexing.image_finder import ImageFinder
 from ...indexing.indexer_service import IndexerService
 
 
@@ -25,6 +26,7 @@ class IndexWorker(QThread):
         key: str = "",
         force: bool = False,
         clear_cache_dir: Path | None = None,
+        blacklist: List[str] | None = None,
     ) -> None:
         super().__init__()
         self.db_path = db_path
@@ -33,6 +35,7 @@ class IndexWorker(QThread):
         self._key = key
         self._force = force
         self._clear_cache_dir = clear_cache_dir
+        self._blacklist: List[str] = list(blacklist) if blacklist else []
         self._cancel_event = threading.Event()
 
     def cancel(self) -> None:
@@ -45,7 +48,8 @@ class IndexWorker(QThread):
                     shutil.rmtree(self._clear_cache_dir, ignore_errors=True)
                 self._clear_cache_dir.mkdir(parents=True, exist_ok=True)
             repo = ImageIndexRepository(self.db_path, key=self._key)
-            indexer = IndexerService(repo)
+            finder = ImageFinder(blacklist=self._blacklist)
+            indexer = IndexerService(repo, finder=finder)
             count = indexer.build_index(
                 self.folders,
                 None,
@@ -65,3 +69,4 @@ class IndexWorker(QThread):
                 self.finished.emit(count)
         except Exception as exc:
             self.failed.emit(str(exc))
+
