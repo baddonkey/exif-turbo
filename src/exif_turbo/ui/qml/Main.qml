@@ -246,11 +246,11 @@ ApplicationWindow {
             Button {
                 Layout.alignment: Qt.AlignHCenter
                 text: {
-                    var canceling = _statusText.indexOf("Cancel") >= 0
+                    var canceling = controller ? controller.isCanceling : false
                     if (_isIndexing) return canceling ? qsTr("Canceling\u2026") : qsTr("Cancel Indexing")
                     return canceling ? qsTr("Canceling\u2026") : qsTr("Cancel Thumbnails")
                 }
-                enabled: _statusText.indexOf("Cancel") < 0
+                enabled: !(controller ? controller.isCanceling : false)
                 highlighted: true
                 Material.accent: Material.Red
                 implicitHeight: 36
@@ -1497,6 +1497,52 @@ ApplicationWindow {
                         text: qsTr("Patterns are matched against individual file or folder names (not full paths). Wildcards: * matches any characters, ? matches one character.")
                         font.pixelSize: 11
                         opacity: 0.45
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 40
+                    }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
+
+                    // ── Language ──────────────────────────────────────────
+                    Label {
+                        text: qsTr("Language")
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                        Layout.bottomMargin: 12
+                    }
+
+                    RowLayout {
+                        spacing: 12
+                        Layout.bottomMargin: 4
+
+                        ComboBox {
+                            id: langCombo
+                            Layout.preferredHeight: 38
+                            Layout.preferredWidth: 200
+                            model: settingsModel ? settingsModel.languageNames : []
+                            property bool ready: false
+                            Component.onCompleted: {
+                                if (!settingsModel) return
+                                var codes = settingsModel.languageCodes
+                                var idx = codes.indexOf(settingsModel.language)
+                                if (idx >= 0) currentIndex = idx
+                                ready = true
+                            }
+                            onCurrentIndexChanged: {
+                                if (!ready || !settingsModel) return
+                                var codes = settingsModel.languageCodes
+                                if (currentIndex >= 0 && currentIndex < codes.length)
+                                    settingsModel.language = codes[currentIndex]
+                            }
+                        }
+                    }
+
+                    Label {
+                        text: qsTr("Restart the application for language changes to take full effect.")
+                        font.pixelSize: 11
+                        font.italic: true
+                        opacity: 0.55
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                         Layout.bottomMargin: 40

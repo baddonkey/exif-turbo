@@ -7,6 +7,8 @@ from typing import List
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
+from exif_turbo.i18n import available_languages, current_language, set_language
+
 
 _CPU_COUNT = os.cpu_count() or 2
 _DEFAULT_WORKERS = max(1, _CPU_COUNT // 2)
@@ -29,16 +31,20 @@ class SettingsModel(QObject):
     Exposes:
     - ``workerCount``  — parallel threads for indexing / thumbnail generation
     - ``blacklist``    — list of glob patterns; matching paths are skipped
+    - ``language``     — UI language code (persisted globally, not per-DB)
     """
 
     workerCountChanged = Signal()
     blacklistChanged = Signal()
+    languageChanged = Signal()
+    retranslateRequested = Signal()
 
     def __init__(self, settings_path: Path, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._path = settings_path
         self._worker_count: int = _DEFAULT_WORKERS
         self._blacklist: List[str] = list(_DEFAULT_BLACKLIST)
+        self._language: str = current_language()
         self._load()
 
     # ── Properties ───────────────────────────────────────────────────────────
@@ -58,6 +64,29 @@ class SettingsModel(QObject):
     @Property("QVariantList", notify=blacklistChanged)
     def blacklist(self) -> List[str]:
         return list(self._blacklist)
+
+    # ── Language ──────────────────────────────────────────────────────────────
+
+    def _get_language(self) -> str:
+        return self._language
+
+    def _set_language(self, value: str) -> None:
+        if self._language != value:
+            self._language = value
+            set_language(value)
+            self.languageChanged.emit()
+            self.retranslateRequested.emit()
+
+    language = Property(str, _get_language, _set_language, notify=languageChanged)
+
+    def _get_language_names(self) -> List[str]:
+        return [name for _, name in available_languages()]
+
+    def _get_language_codes(self) -> List[str]:
+        return [code for code, _ in available_languages()]
+
+    languageNames = Property("QVariantList", _get_language_names, constant=True)  # noqa: N815
+    languageCodes = Property("QVariantList", _get_language_codes, constant=True)  # noqa: N815
 
     # ── Slots ─────────────────────────────────────────────────────────────────
 

@@ -1,0 +1,426 @@
+# Romansh translations for PROJECT.
+# Copyright (C) 2026 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2026-04-25 17:34+0200\n"
+"PO-Revision-Date: 2026-04-25 17:34+0200\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: rm\n"
+"Language-Team: rm <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:76
+msgid "Enter the database password to continue"
+msgstr "Endatar la pled-clav da la banca da datas per cuntinuar"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:457
+#, python-brace-format
+msgid "Folder already tracked: {}"
+msgstr "Cartella gia trackata: {}"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:589
+#, python-brace-format
+msgid "Indexing {}…"
+msgstr "Indexaziun {}…"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:618
+#, python-brace-format
+msgid "Indexed {} images"
+msgstr "{} maletgs indexads"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:645
+#, python-brace-format
+msgid "Index failed: {}"
+msgstr "Indexaziun buca reussida: {}"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:677
+msgid "Index canceled"
+msgstr "Indexaziun interrutta"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:696
+msgid "Canceling…"
+msgstr "Interruziun…"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:790
+#, python-brace-format
+msgid "Indexing… {} / {}"
+msgstr "Indexaziun… {} / {}"
+
+#: QML
+msgid " images"
+msgstr " maletgs"
+
+#: QML
+msgid "&About"
+msgstr "&Davart"
+
+#: QML
+msgid "&File"
+msgstr "&Datoteca"
+
+#: QML
+msgid "&Help"
+msgstr "&Agid"
+
+#: QML
+msgid "About exif-turbo"
+msgstr "Davart exif-turbo"
+
+#: QML
+msgid "Add"
+msgstr "Agiuntar"
+
+#: QML
+msgid "Add Folder"
+msgstr "Agiuntar cartella"
+
+#: QML
+msgid "All"
+msgstr "Tuts"
+
+#: QML
+msgid "Browse"
+msgstr "Navigar"
+
+#: QML
+msgid "Building Thumbnails"
+msgstr "Creaziun da miniatures"
+
+#: QML
+msgid "Camera"
+msgstr "Camera"
+
+#: QML
+msgid "Cancel Indexing"
+msgstr "Interrumper indexaziun"
+
+#: QML
+msgid "Cancel Thumbnails"
+msgstr "Interrumper miniatures"
+
+#: QML
+msgid "Canceling\\u2026"
+msgstr ""
+
+#: QML
+msgid "Date"
+msgstr "Data"
+
+#: QML
+msgid "Default: %1 (half of %2 detected CPU threads)"
+msgstr "Standard: %1 (mesadad da %2 threads CPU detektads)"
+
+#: QML
+msgid "Dimensions"
+msgstr "Dimensiuns"
+
+#: QML
+msgid "E&xit"
+msgstr "&Serrar"
+
+#: QML
+msgid "EXIF TAGS"
+msgstr "TAGS EXIF"
+
+#: QML
+msgid "Enter the database password"
+msgstr "Endatar la pled-clav da la banca da datas"
+
+#: QML
+msgid "Exposure"
+msgstr "Exposiziun"
+
+#: QML
+msgid "FOLDERS"
+msgstr "CARTELLAS"
+
+#: QML
+msgid ""
+"File and folder name patterns to skip during indexing. Supports wildcards"
+" (e.g. *, ?).\n"
+"Changes take effect on the next rescan."
+msgstr ""
+"Schemes da nums da datotecas e cartellas da sursiglir durant "
+"l’indexaziun. Supporta caratters jolly (p.ex. *, ?).\n"
+"Mutaziuns vegnan activas en la proxima re-indexaziun."
+
+#: QML
+msgid "File size"
+msgstr "Grondezza da datoteca"
+
+#: QML
+msgid "Find"
+msgstr "Tschertgar"
+
+#: QML
+msgid "Find in metadata (Ctrl+F)"
+msgstr "Tschertgar en metadata (Ctrl+F)"
+
+#: QML
+msgid "Find in metadata\\u2026"
+msgstr ""
+
+#: QML
+msgid "Folder is excluded from search results"
+msgstr "La cartella è exclusa dals resultats da tschertga"
+
+#: QML
+msgid "Folder is included in search results"
+msgstr "La cartella è inclusa en ils resultats da tschertga"
+
+#: QML
+msgid "Force re-extract EXIF for every file in all enabled folders"
+msgstr ""
+"Forczar l’extracziun EXIF per mintga datoteca en tut las cartellas "
+"activadas"
+
+#: QML
+msgid "Force re-extract EXIF for every file in this folder"
+msgstr "Forczar l’extracziun EXIF per mintga datoteca en questa cartella"
+
+#: QML
+msgid "Full Rescan"
+msgstr "Re-indexaziun cumplaina"
+
+#: QML
+msgid "Full Rescan All"
+msgstr "Re-indexaziun cumplaina da tut"
+
+#: QML
+msgid "IMAGES"
+msgstr "MALETGS"
+
+#: QML
+msgid "Incrementally re-index all enabled folders"
+msgstr "Re-indexar incrementalmain tut las cartellas activadas"
+
+#: QML
+msgid "Indexed Folders"
+msgstr "Cartellas indexadas"
+
+#: QML
+msgid "Indexing"
+msgstr "Indexaziun"
+
+#: QML
+msgid "Indexing Blacklist"
+msgstr "Glista naira d’indexaziun"
+
+#: QML
+msgid "Indexing folder %1 of %2"
+msgstr "Indexaziun da la cartella %1 da %2"
+
+#: QML
+msgid "Indexing…"
+msgstr "Indexaziun…"
+
+#: QML
+msgid "Language"
+msgstr "Lingua"
+
+#: QML
+msgid "Largest"
+msgstr "Pli gronds"
+
+#: QML
+msgid "METADATA"
+msgstr "METADATA"
+
+#: QML
+msgid "Managed Folders"
+msgstr "Cartellas manasgiadas"
+
+#: QML
+msgid "Name A→Z"
+msgstr "Num A→Z"
+
+#: QML
+msgid "Name Z→A"
+msgstr "Num Z→A"
+
+#: QML
+msgid "New pattern, e.g.  @eaDir  or  *.tmp"
+msgstr "Nov schema, p.ex.  @eaDir  u  *.tmp"
+
+#: QML
+msgid "Newest first"
+msgstr "Pli novas emprim"
+
+#: QML
+msgid "Next match"
+msgstr "Proxim resultaten"
+
+#: QML
+msgid "No folders indexed yet"
+msgstr "Anc naginas cartellas indexadas"
+
+#: QML
+msgid ""
+"No folders managed yet.\n"
+"Click \"Add Folder\" to start tracking a folder."
+msgstr ""
+"Anc naginas cartellas manasgiadas.\n"
+"Clicchai sin „Agiuntar cartella“ per cumenzar a trackar ina cartella."
+
+#: QML
+msgid ""
+"Number of parallel threads used for indexing and thumbnail generation. "
+"Higher values speed up processing but use more CPU and memory."
+msgstr ""
+"Dumber da threads parallels per indexaziun e creaziun da miniatures. "
+"Valurs pli autas acceleran la tractaziun ma duvran dapli CPU e memoria."
+
+#: QML
+msgid "Oldest first"
+msgstr "Pli vegl emprim"
+
+#: QML
+msgid "PREVIEW"
+msgstr "PREVISTA"
+
+#: QML
+msgid "Password"
+msgstr "Pled-clav"
+
+#: QML
+msgid "Path A→Z"
+msgstr "Traject A→Z"
+
+#: QML
+msgid "Path Z→A"
+msgstr "Traject Z→A"
+
+#: QML
+msgid ""
+"Patterns are matched against individual file or folder names (not full "
+"paths). Wildcards: * matches any characters, ? matches one character."
+msgstr ""
+"Ils schemes vegnan comparads cun nums singuls da datotecas u cartella "
+"(betg trajects cumplains). Caratters jolly: * correspunda a insaquants "
+"caratters, ? correspunda ad in caracter."
+
+#: QML
+msgid "Preparing\\u2026"
+msgstr ""
+
+#: QML
+msgid "Previous match"
+msgstr "Resultaten precedent"
+
+#: QML
+msgid "RESULTS"
+msgstr "RESULTATS"
+
+#: QML
+msgid "Re-index this folder (incremental)"
+msgstr "Re-indexar questa cartella (incremental)"
+
+#: QML
+msgid "Remove"
+msgstr "Stizzar"
+
+#: QML
+msgid "Remove \"%1\" and delete all its indexed images from the database?"
+msgstr "Stizzar „%1“ e tuts ses maletgs indexads da la banca da datas?"
+
+#: QML
+msgid "Remove Folder"
+msgstr "Stizzar cartella"
+
+#: QML
+msgid "Remove this folder and delete its indexed images"
+msgstr "Stizzar questa cartella e ses maletgs indexads"
+
+#: QML
+msgid "Rescan"
+msgstr "Re-indexar"
+
+#: QML
+msgid "Rescan All"
+msgstr "Re-indexar tut"
+
+#: QML
+msgid "Restart the application for language changes to take full effect."
+msgstr "Restartad l’applicaziun per che la midada da lingua saja daditg activa."
+
+#: QML
+msgid "SETTINGS"
+msgstr "PARAMETERS"
+
+#: QML
+msgid "Scanning for images\\u2026"
+msgstr ""
+
+#: QML
+msgid "Search"
+msgstr "Tschertgar"
+
+#: QML
+msgid "Search EXIF metadata\\u2026"
+msgstr ""
+
+#: QML
+msgid "Select Folder to Manage"
+msgstr "Tscherner cartella per manaschar"
+
+#: QML
+msgid "Select a folder"
+msgstr "Tscherner ina cartella"
+
+#: QML
+msgid "Select an image to see metadata"
+msgstr "Tscherner in maletg per vesair metadata"
+
+#: QML
+msgid "Settings"
+msgstr "Parameters"
+
+#: QML
+msgid "Sort"
+msgstr "Sortir"
+
+#: QML
+msgid "Tag"
+msgstr "Tag"
+
+#: QML
+msgid "Unlock"
+msgstr "Avrir"
+
+#: QML
+msgid "Value"
+msgstr "Valur"
+
+#: QML
+msgid "Worker Threads"
+msgstr "Threads da lavur"
+
+#: QML
+msgid "\\u2190 Select a folder to browse images"
+msgstr ""
+
+#: QML
+msgid "files"
+msgstr "datotecas"
+
+#: QML
+msgid "images"
+msgstr "maletgs"
+
+#: QML
+msgid "thread"
+msgstr "thread"
+
+#: QML
+msgid "threads"
+msgstr "threads"
+

@@ -15,6 +15,7 @@ from PySide6.QtGui import QDesktopServices
 
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
+from ...i18n import _
 from ...indexing.image_utils import RAW_EXTENSIONS
 from ...models.search_result import SearchResult
 from ..models.exif_list_model import ExifListModel
@@ -32,6 +33,7 @@ class AppController(QObject):
     statusTextChanged = Signal()
     isIndexingChanged = Signal()
     isBuildingThumbsChanged = Signal()
+    isCancelingChanged = Signal()
     detailsHtmlChanged = Signal()
     findScrollFractionChanged = Signal()
     selectedImageSourceChanged = Signal()
@@ -71,11 +73,12 @@ class AppController(QObject):
         self._search_model = search_model
         self._exif_model = exif_model
         self._folder_model = folder_model
-        self._status_text = "Enter the database password to continue"
+        self._status_text = _("Enter the database password to continue")
         self._is_locked = True
         self._unlock_error = ""
         self._is_indexing = False
         self._is_building_thumbs = False
+        self._is_canceling = False
         self._index_current = 0
         self._index_total = 0
         self._index_current_file = ""
@@ -138,6 +141,10 @@ class AppController(QObject):
     @Property(bool, notify=isBuildingThumbsChanged)
     def isBuildingThumbs(self) -> bool:
         return self._is_building_thumbs
+
+    @Property(bool, notify=isCancelingChanged)
+    def isCanceling(self) -> bool:
+        return self._is_canceling
 
     @Property(str, notify=detailsHtmlChanged)
     def detailsHtml(self) -> str:
@@ -447,7 +454,7 @@ class AppController(QObject):
             return
         path_str = str(folder)
         if self._folder_repo.exists(path_str):
-            self._set_status(f"Folder already tracked: {folder.name}")
+            self._set_status(_("Folder already tracked: {}").format(folder.name))
             return
         folder_obj = self._folder_repo.add(path_str)
         self._folder_model.add_folder(folder_obj)
@@ -579,7 +586,7 @@ class AppController(QObject):
         self.indexCurrentChanged.emit()
         self.indexTotalChanged.emit()
         self.indexCurrentFileChanged.emit()
-        self._set_status(f"Indexing {folder_obj.display_name}…")
+        self._set_status(_("Indexing {}\u2026").format(folder_obj.display_name))
         self._index_worker = IndexWorker(
             self._db_path,
             [Path(folder_obj.path)],
@@ -608,7 +615,7 @@ class AppController(QObject):
             if updated:
                 self._folder_model.update_folder(updated)
         self._scanning_folder_id = None
-        self._set_status(f"Indexed {count} images")
+        self._set_status(_("Indexed {} images").format(count))
         self._load_formats()
         self._load_folder_tree()
         self.search(self._query_text)
@@ -635,7 +642,7 @@ class AppController(QObject):
             if updated:
                 self._folder_model.update_folder(updated)
         self._scanning_folder_id = None
-        self._set_status(f"Index failed: {error}")
+        self._set_status(_("Index failed: {}").format(error))
         if self._scan_queue:
             self._process_next_in_queue()
         else:
@@ -665,7 +672,9 @@ class AppController(QObject):
         self.indexQueuePositionChanged.emit()
         self.indexQueueTotalChanged.emit()
         if not self._app_closing:
-            self._set_status("Index canceled")
+            self._is_canceling = False
+            self.isCancelingChanged.emit()
+            self._set_status(_("Index canceled"))
             self.search(self._query_text)
 
     @Slot()
@@ -682,7 +691,9 @@ class AppController(QObject):
             self._thumb_batch_timer.stop()
             self._thumb_worker.cancel()
         if self._index_worker and self._index_worker.isRunning():
-            self._set_status("Canceling...")
+            self._is_canceling = True
+            self.isCancelingChanged.emit()
+            self._set_status(_("Canceling\u2026"))
             self._index_worker.cancel()
 
     @Slot()
@@ -776,7 +787,7 @@ class AppController(QObject):
         self.indexCurrentChanged.emit()
         self.indexTotalChanged.emit()
         self.indexCurrentFileChanged.emit()
-        self._set_status(f"Indexing\u2026 {current} / {total}")
+        self._set_status(_("Indexing\u2026 {} / {}").format(current, total))
 
     def _on_thumb_progress(self, current: int, total: int, path: str) -> None:
         self._thumb_current = current

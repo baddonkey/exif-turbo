@@ -13,6 +13,7 @@ from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 
 from ..config import db_path_for_name, default_db_path, settings_path, thumb_cache_dir
+from .gettext_translator import GettextTranslator
 from .models.exif_list_model import ExifListModel
 from .models.folder_list_model import FolderListModel
 from .models.search_list_model import SearchListModel
@@ -89,6 +90,10 @@ def main() -> None:
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 
+    # Install gettext-backed translator so QML qsTr() resolves via gettext.
+    translator = GettextTranslator(app)
+    app.installTranslator(translator)
+
     db_path = db_path_for_name(args.db) if args.db else default_db_path()
     settings = SettingsModel(settings_path(db_path))
     search_model = SearchListModel(cache_dir=thumb_cache_dir(db_path))
@@ -109,6 +114,9 @@ def main() -> None:
 
     if not engine.rootObjects():
         sys.exit(1)
+
+    # Re-evaluate all qsTr() bindings in live QML objects when language changes.
+    settings.retranslateRequested.connect(engine.retranslate)
 
     sys.exit(app.exec())
 
