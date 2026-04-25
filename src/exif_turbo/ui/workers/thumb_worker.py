@@ -45,13 +45,13 @@ def _open_image(path: str) -> Image.Image:
                 if thumb.format == rawpy.ThumbFormat.JPEG:
                     img = Image.open(io.BytesIO(thumb.data))
                     img.load()   # detach from BytesIO before context exits
-                    return img
                 else:
-                    return Image.fromarray(thumb.data)
+                    img = Image.fromarray(thumb.data)
             except rawpy.LibRawNoThumbnailError:
                 # Fall back to full demosaic
                 rgb = raw.postprocess(use_camera_wb=True, half_size=True)
-                return Image.fromarray(rgb)
+                img = Image.fromarray(rgb)
+        return ImageOps.exif_transpose(img)
     img = Image.open(path)
     return ImageOps.exif_transpose(img)
 

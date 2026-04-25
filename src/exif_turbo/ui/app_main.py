@@ -15,6 +15,7 @@ from PySide6.QtQuickControls2 import QQuickStyle
 from ..config import default_db_path, thumb_cache_dir
 from .models.exif_list_model import ExifListModel
 from .models.search_list_model import SearchListModel
+from .providers.raw_image_provider import RawImageProvider
 from .view_models.app_controller import AppController
 
 
@@ -86,6 +87,7 @@ def main() -> None:
     exif_model = ExifListModel()
     controller = AppController(db_path, search_model, exif_model)
     engine = QQmlApplicationEngine()
+    engine.addImageProvider("raw", RawImageProvider())
     ctx = engine.rootContext()
     ctx.setContextProperty("controller", controller)
     ctx.setContextProperty("searchModel", search_model)

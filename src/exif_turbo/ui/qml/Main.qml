@@ -526,6 +526,13 @@ ApplicationWindow {
                                 model: _opts
                                 textRole: "text"
                                 valueRole: "value"
+                                currentIndex: {
+                                    var sv = root._sortBy
+                                    for (var i = 0; i < _opts.length; i++) {
+                                        if (_opts[i].value === sv) return i
+                                    }
+                                    return 2  // fallback: Path A→Z
+                                }
                                 onActivated: controller.setSortBy(sortCombo._opts[currentIndex].value)
                             }
                         }

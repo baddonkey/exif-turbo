@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  exif-turbo.wxs — WiX v4 installer descriptor
+
+  Build with:
+    wix build installer\exif-turbo.wxs
+         -d Version=<version>
+         -d AppDir=<abs-path-to-dist\exif-turbo>
+         -d IconFile=<abs-path-to-assets\icon.ico>
+         -out dist\exif-turbo-<version>-windows.msi
+
+  Or run: scripts\build_windows.ps1
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="exif-turbo"
+      Manufacturer="exif-turbo"
+      Version="$(var.Version)"
+      UpgradeCode="A7B3C1D5-E9F2-4A6B-8C3D-1E5F7A2B4C8D"
+      Scope="perMachine">
+
+    <!-- Remove any older version before installing -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of exif-turbo is already installed." />
+
+    <!-- Embed all files in a single .cab inside the MSI -->
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- App icon shown in Add/Remove Programs -->
+    <Icon Id="ExifTurboIcon" SourceFile="$(var.IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="ExifTurboIcon" />
+
+    <!-- Installation directory: %ProgramFiles%\exif-turbo\ -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="exif-turbo">
+        <!-- Unified onedir bundle — all files and subdirectories -->
+        <Files Include="$(var.AppDir)\**" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Start Menu shortcut -->
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AppStartMenuFolder" Name="exif-turbo">
+        <Component Id="AppShortcut" Guid="*">
+          <Shortcut
+              Id="GUIShortcut"
+              Name="exif-turbo"
+              Description="Image EXIF metadata search and indexing tool"
+              Target="[INSTALLFOLDER]exif-turbo.exe"
+              WorkingDirectory="INSTALLFOLDER"
+              Icon="ExifTurboIcon"
+              IconIndex="0" />
+          <!-- Clean up the Start Menu folder on uninstall -->
+          <RemoveFolder Id="RemoveAppStartMenuFolder" Directory="AppStartMenuFolder" On="uninstall" />
+          <!-- Registry key is the KeyPath for this component -->
+          <RegistryValue
+              Root="HKCU"
+              Key="Software\exif-turbo"
+              Name="installed"
+              Type="integer"
+              Value="1"
+              KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+  </Package>
+</Wix>

@@ -4,6 +4,7 @@ import html as html_lib
 import json
 import os
 import subprocess
+import urllib.parse
 from pathlib import Path
 from typing import List, Tuple
 
@@ -18,6 +19,15 @@ from ..workers.index_worker import IndexWorker
 from ..workers.thumb_worker import ThumbWorker
 
 _PAGE_SIZE = 100
+
+# RAW formats Qt cannot display natively — use thumbnail cache for preview
+_RAW_EXTENSIONS = {
+    ".cr2", ".cr3",
+    ".nef", ".nrw",
+    ".arw", ".srf", ".sr2",
+    ".dng",
+    ".orf", ".rw2", ".pef", ".raf", ".rwl", ".srw",
+}
 
 
 class AppController(QObject):
@@ -77,7 +87,7 @@ class AppController(QObject):
         self._find_text = ""
         self._find_positions: List[Tuple[int, int]] = []
         self._find_index = -1
-        self._sort_by = ""
+        self._sort_by = "path_asc"
         self._ext_filter = ""
         self._available_formats: str = "[]"
         self._folder_filter: str = ""
@@ -183,7 +193,7 @@ class AppController(QObject):
             self._unlock_error = ""
             self._is_locked = False
             self._ext_filter = ""
-            self._sort_by = ""
+            self._sort_by = "path_asc"
             self._folder_filter = ""
             self.isLockedChanged.emit()
             self.unlockErrorChanged.emit()
@@ -322,7 +332,13 @@ class AppController(QObject):
         self._update_details_html()
         self._update_exif_table(meta_json)
         if path and os.path.exists(path):
-            self._selected_image_source = QUrl.fromLocalFile(path).toString()
+            ext = Path(path).suffix.lower()
+            if ext in _RAW_EXTENSIONS:
+                # Use the async QQuickImageProvider — no file size limit for preview
+                encoded = urllib.parse.quote(path, safe="")
+                self._selected_image_source = f"image://raw/{encoded}"
+            else:
+                self._selected_image_source = QUrl.fromLocalFile(path).toString()
         else:
             self._selected_image_source = ""
         self.selectedImageSourceChanged.emit()
