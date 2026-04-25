@@ -113,7 +113,10 @@ USING fts5(path, filename, metadata_text);
 | Model | Fields |
 |-------|--------|
 | `IndexedImage` | `path`, `filename`, `mtime`, `size`, `metadata: dict[str, str]` |
-| `SearchResult` | `path`, `filename`, `metadata_json`, `size` |
+| `SearchResult` | `path`, `filename`, `metadata_json`, `size`, `mtime` |
+
+`SearchResult.mtime` is populated from the DB-stored stamp so the UI can
+derive stable thumbnail cache names without a live `os.stat` call.
 
 ### 5.5 `ui/`
 
@@ -121,13 +124,23 @@ USING fts5(path, filename, metadata_text);
 |--------|---------|
 | `app_main.py` | `main()` — bootstraps `QGuiApplication`, sets Material style, registers `RawImageProvider`, loads `Main.qml` |
 | `view_models/app_controller.py` | `AppController(QObject)` — all business logic exposed to QML via `Q_PROPERTY`, `Signal`, `Slot` |
-| `models/search_list_model.py` | `QAbstractListModel` — search result rows; roles: `path`, `filename`, `metadataJson`, `thumbnailSource`, `fileSize` |
+| `models/search_list_model.py` | `QAbstractListModel` — search result rows; roles: `path`, `filename`, `metadataJson`, `thumbnailSource`, `fileSize`. Thumbnail URIs are pre-computed at `set_rows` / `append_rows` time using DB-stored `mtime`/`size` stamps — no `os.stat` per repaint. |
 | `models/exif_list_model.py` | `QAbstractListModel` — EXIF key/value pairs for the detail panel |
 | `workers/index_worker.py` | `QThread` — runs `IndexerService.build_index` off the GUI thread; emits progress signals |
 | `workers/thumb_worker.py` | `QThread` — generates thumbnail cache off the GUI thread |
 | `providers/raw_image_provider.py` | `RawImageProvider(QQuickImageProvider)` — serves RAW images to QML as `image://raw/<encoded-path>`; uses `ForceAsynchronousImageLoading` |
 | `qml/Main.qml` | Main application window: tab bar (Search, Browse), split-pane layout, EXIF detail panel, find-in-page bar |
 | `qml/FloatingBadge.qml` | Reusable badge overlay component |
+
+**AppController design notes:**
+
+- `unlock()` catches `sqlcipher3.DatabaseError` (wrong password) separately
+  from generic `Exception` (I/O, corrupt file). The repository is always
+  closed on any error path.
+- `_DEFAULT_WORKERS = min(os.cpu_count() or 1, 12)` caps parallel workers;
+  used in both `startIndexing` and `buildThumbnails`.
+- `_run_search()` guards with `if self._repo is None: return` (safe under
+  `-O` optimised bytecode in the frozen bundle).
 
 **AppController signals (selection):**
 
@@ -176,11 +189,16 @@ User types in search box
 
 ```
 ThumbWorker iterates search results
-  → thumb_cache_path(path, mtime, size) → cache PNG path
+  → thumb_cache_name_from_stamp(path, mtime, size) → cache PNG name
   → If missing: Pillow open → ImageOps.exif_transpose → resize → save PNG
   → For RAW: rawpy.imread → extract_thumb (JPEG) or postprocess → Pillow
   → SearchListModel.thumbnailSource updated → QML Image refreshes
 ```
+
+Thumbnail URIs are pre-computed at `set_rows` time using DB-stored
+`(mtime, size)` stamps — no live `os.stat` call per repaint. The cache
+directory is derived from the active database path so multiple databases
+maintain independent caches.
 
 ### RAW preview
 
@@ -329,6 +347,16 @@ exif-turbo/
 │       ├── app_icon.svg
 │       └── lense.svg
 ├── tests/
+│   ├── conftest.py              # shared fixtures (repo, make_jpeg, make_png)
+│   ├── data/
+│   │   └── test_image_index_repository.py
+│   ├── indexing/
+│   │   ├── test_image_utils.py
+│   │   ├── test_indexer_service.py  # e2e — real images, real DB
+│   │   └── test_metadata_to_text.py
+│   └── ui/
+│       ├── conftest.py          # Material style session fixture
+│       └── test_app_controller.py  # pytest-qt live QML window tests
 ├── installer/
 │   └── exif-turbo.wxs           # WiX v4 MSI descriptor
 ├── scripts/

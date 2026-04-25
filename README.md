@@ -11,6 +11,47 @@ Fully generated using VS Code Copilot.
 - RAW format support: CR2, CR3, NEF, ARW, DNG, ORF, RW2, PEF, RAF, RWL, SRW
 - EXIF orientation correction for thumbnails (all formats including RAW)
 - CLI indexer (`exif-turbo-index`) for scripted/headless use
+- Encrypted database at rest (SQLCipher); password unlocked via the UI
+
+## Recent changes
+
+### UI & view-model improvements
+
+- **Thumbnail rendering** — thumbnail URIs are pre-computed once when search
+  results load, not recalculated on every repaint. This eliminates the
+  per-frame `os.stat` call that caused visible jank on large result sets.
+- **Thumbnail cache path** — the cache directory is now derived from the
+  active database path (`~/.exif-turbo/data/<db-stem>/thumbs/`) so multiple
+  databases keep independent caches.
+- **`AppController.unlock()`** — SQLCipher authentication errors (wrong
+  password) are now reported separately from other failures and the
+  connection is always closed on any error path.
+- **Worker count** — parallel worker count is capped at `min(cpu_count, 12)`
+  in all code paths (UI and CLI) via a shared `_DEFAULT_WORKERS` constant.
+- **`SearchResult`** — carries `mtime` so the UI can generate stable
+  thumbnail cache keys without hitting the filesystem.
+
+### Indexing & repository improvements
+
+- **Atomic upserts** — the two-table write in `upsert_image` (`images` +
+  `images_fts`) is now wrapped in a single transaction.
+- **Efficient `delete_missing`** — replaced an O(N) per-row DELETE loop with
+  a single set-difference query via a temporary table.
+- **`RAW_EXTENSIONS`** — exported from `image_utils` as a named constant;
+  `IMAGE_EXTENSIONS` is defined as `{..., *RAW_EXTENSIONS}`. No more
+  duplicated extension lists across modules.
+- **Logged failures** — `ExifMetadataExtractor` now logs a `WARNING` instead
+  of silently swallowing extraction errors.
+
+### Test suite
+
+40 automated tests across four layers:
+
+| Suite | Count | What it covers |
+|-------|-------|----------------|
+| `tests/data/` | 10 | Repository: upsert, FTS5 search, delete_missing, mtime column |
+| `tests/indexing/` | 15 | Image utils, metadata text, IndexerService e2e (real JPEG/PNG files) |
+| `tests/ui/` | 5 | Live QML window driven via pytest-qt — unlock, search, filter, clear |
 
 ## Requirements
 
