@@ -134,7 +134,8 @@ class AppController(QObject):
         try:
             return _pkg_version("exif-turbo")
         except Exception:
-            return "unknown"
+            from exif_turbo import __version__
+            return __version__
 
     @Property(str, notify=statusTextChanged)
     def statusText(self) -> str:
