@@ -113,6 +113,17 @@ class Translator:
         """Return the active language code (e.g. ``'de'``)."""
         return self._lang
 
+    def current_theme(self) -> str:
+        """Return the active theme code: ``'system'``, ``'light'``, or ``'dark'``."""
+        if self._settings is not None:
+            return str(self._settings.value("theme", "system"))
+        return "system"
+
+    def set_theme(self, theme: str) -> None:
+        """Persist the theme choice (does not require an app restart)."""
+        if self._settings is not None:
+            self._settings.set_value("theme", theme)
+
     @staticmethod
     def available_languages() -> Sequence[tuple[str, str]]:
         """Return ``(code, display_name)`` pairs for all supported languages."""

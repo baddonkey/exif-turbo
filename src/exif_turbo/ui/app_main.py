@@ -109,6 +109,20 @@ def main() -> None:
     ctx.setContextProperty("folderListModel", folder_model)
     ctx.setContextProperty("settingsModel", settings)
 
+    # Third-party licenses text — bundled beside assets in frozen builds,
+    # or read from the project root in dev mode.
+    assets_dir = Path(__file__).resolve().parent.parent / "assets"
+    _licenses_candidates = [
+        assets_dir / "THIRD-PARTY-LICENSES.md",
+        Path(__file__).resolve().parents[4] / "THIRD-PARTY-LICENSES.md",
+    ]
+    _licenses_text = ""
+    for _p in _licenses_candidates:
+        if _p.exists():
+            _licenses_text = _p.read_text(encoding="utf-8")
+            break
+    ctx.setContextProperty("thirdPartyLicensesText", _licenses_text)
+
     qml_path = Path(__file__).resolve().parent / "qml" / "Main.qml"
     engine.load(QUrl.fromLocalFile(str(qml_path)))
 

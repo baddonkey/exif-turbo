@@ -40,6 +40,7 @@ class AppController(QObject):
     totalResultsChanged = Signal()
     loadedResultsChanged = Signal()
     isLockedChanged = Signal()
+    isNewDatabaseChanged = Signal()
     unlockErrorChanged = Signal()
     indexCurrentChanged = Signal()
     indexTotalChanged = Signal()
@@ -75,6 +76,7 @@ class AppController(QObject):
         self._folder_model = folder_model
         self._status_text = _("Enter the database password to continue")
         self._is_locked = True
+        self._is_new_database = not db_path.exists()
         self._unlock_error = ""
         self._is_indexing = False
         self._is_building_thumbs = False
@@ -118,6 +120,10 @@ class AppController(QObject):
     @Property(bool, notify=isLockedChanged)
     def isLocked(self) -> bool:
         return self._is_locked
+
+    @Property(bool, notify=isNewDatabaseChanged)
+    def isNewDatabase(self) -> bool:
+        return self._is_new_database
 
     @Property(str, notify=unlockErrorChanged)
     def unlockError(self) -> str:
@@ -233,6 +239,7 @@ class AppController(QObject):
             self._key = password
             self._unlock_error = ""
             self._is_locked = False
+            self._is_new_database = False
             self._ext_filter = ""
             self._sort_by = "path_asc"
             self._folder_filter = ""

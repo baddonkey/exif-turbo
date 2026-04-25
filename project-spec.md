@@ -78,6 +78,7 @@ Ports & adapters (hexagonal) structure. Domain logic has no dependency on PySide
 | Module | Purpose |
 |--------|---------|
 | `image_index_repository.py` | `ImageIndexRepository` — all DB access. Schema: `images` table + `images_fts` FTS5 virtual table. Encrypted via SQLCipher. |
+| `indexed_folder_repository.py` | `IndexedFolderRepository` — manages the set of user-added folders: add, remove, enable/disable, status updates. |
 
 **Schema:**
 
@@ -114,6 +115,7 @@ USING fts5(path, filename, metadata_text);
 |-------|--------|
 | `IndexedImage` | `path`, `filename`, `mtime`, `size`, `metadata: dict[str, str]` |
 | `SearchResult` | `path`, `filename`, `metadata_json`, `size`, `mtime` |
+| `IndexedFolder` | `id`, `path`, `display_name`, `status`, `image_count`, `error_message`, `enabled` |
 
 `SearchResult.mtime` is populated from the DB-stored stamp so the UI can
 derive stable thumbnail cache names without a live `os.stat` call.
@@ -126,10 +128,13 @@ derive stable thumbnail cache names without a live `os.stat` call.
 | `view_models/app_controller.py` | `AppController(QObject)` — all business logic exposed to QML via `Q_PROPERTY`, `Signal`, `Slot` |
 | `models/search_list_model.py` | `QAbstractListModel` — search result rows; roles: `path`, `filename`, `metadataJson`, `thumbnailSource`, `fileSize`. Thumbnail URIs are pre-computed at `set_rows` / `append_rows` time using DB-stored `mtime`/`size` stamps — no `os.stat` per repaint. |
 | `models/exif_list_model.py` | `QAbstractListModel` — EXIF key/value pairs for the detail panel |
+| `models/folder_list_model.py` | `QAbstractListModel` — rows for the Folders management panel; roles: `folderId`, `path`, `displayName`, `status`, `imageCount`, `errorMessage`, `enabled` |
+| `models/settings_model.py` | `SettingsModel(QObject)` — exposes `workerCount`, `blacklist`, `language`, and `theme` to QML; per-DB settings persisted as JSON; language and theme stored globally via `i18n` module |
 | `workers/index_worker.py` | `QThread` — runs `IndexerService.build_index` off the GUI thread; emits progress signals |
 | `workers/thumb_worker.py` | `QThread` — generates thumbnail cache off the GUI thread |
 | `providers/raw_image_provider.py` | `RawImageProvider(QQuickImageProvider)` — serves RAW images to QML as `image://raw/<encoded-path>`; uses `ForceAsynchronousImageLoading` |
-| `qml/Main.qml` | Main application window: tab bar (Search, Browse), split-pane layout, EXIF detail panel, find-in-page bar |
+| `qml/Main.qml` | Main application window: tab bar (Search, Browse), split-pane layout, EXIF detail panel, Settings sheet, lock screen |
+| `qml/FoldersPanel.qml` | Folder management panel — add/remove/enable folders, shows per-folder indexing status |
 | `qml/FloatingBadge.qml` | Reusable badge overlay component |
 
 **AppController design notes:**
@@ -141,6 +146,10 @@ derive stable thumbnail cache names without a live `os.stat` call.
   used in both `startIndexing` and `buildThumbnails`.
 - `_run_search()` guards with `if self._repo is None: return` (safe under
   `-O` optimised bytecode in the frozen bundle).
+- `isNewDatabase` — bool property, `True` when `db_path` does not exist at
+  construction time. The QML lock screen switches to a passphrase-creation
+  mode (confirm field + security hint). Cleared to `False` after a
+  successful `unlock()` call.
 
 **AppController signals (selection):**
 
@@ -149,12 +158,25 @@ derive stable thumbnail cache names without a live `os.stat` call.
 | `statusTextChanged` | Status bar message |
 | `isIndexingChanged` | Whether index build is in progress |
 | `isBuildingThumbsChanged` | Whether thumb generation is in progress |
+| `isLockedChanged` | Whether the DB lock screen is shown |
+| `isNewDatabaseChanged` | Whether the DB does not yet exist (passphrase-creation mode) |
 | `selectedImageSourceChanged` | QML `Image.source` for the preview pane |
 | `detailsHtmlChanged` | HTML for the EXIF detail panel |
 | `indexCurrentChanged / indexTotalChanged` | Indexing progress |
 | `thumbCurrentChanged / thumbTotalChanged` | Thumbnail progress |
+| `indexedFoldersChanged` | Folder list changed (add/remove/enable/disable) |
 
-### 5.6 `utils/`
+### 5.6 `i18n/`
+
+| Module | Purpose |
+|--------|---------|
+| `__init__.py` | Public API: `_()`, `set_language()`, `current_language()`, `available_languages()`, `current_theme()`, `set_theme()` |
+| `translator.py` | `Translator` singleton — loads `.mo` binary catalogs at runtime via Python `gettext`; persists language and theme to a global `settings.json` |
+| `locales/<lang>/LC_MESSAGES/exif_turbo.mo` | Compiled translation catalogs (de, fr, it, rm) |
+
+Translation domain: `exif_turbo`. Supported languages: German (`de`), French (`fr`), Italian (`it`), Romansh (`rm`). Strings extracted from Python (`_()`) and QML (`qsTr()`) sources. Pipeline: `scripts/regenerate_translations.py`.
+
+### 5.7 `utils/`
 
 | Module | Purpose |
 |--------|---------|
@@ -218,7 +240,17 @@ User selects RAW image in UI
 | Database path | `--db` CLI arg or env | `~/.exif-turbo/data/index.db` |
 | Thumbnail cache | Derived from db path | `~/.exif-turbo/data/<db-stem>/thumbs/` |
 | Skip dotfiles | `EXIF_TURBO_SKIP_DOTFILES` env | `true` |
-| Database encryption key | UI unlock dialog | `""` (no encryption) |
+| Database encryption key | UI lock screen | — (required; prompted on first launch) |
+| UI language | Settings sheet → Language | System locale, fallback `en` |
+| UI theme | Settings sheet → Theme | `system` (follows OS dark/light mode) |
+
+Language and theme are persisted globally to `settings.json`:
+
+| Platform | Path |
+|----------|------|
+| Windows | `%APPDATA%\exif-turbo\settings.json` |
+| macOS | `~/Library/Application Support/exif-turbo/settings.json` |
+| Linux | `$XDG_CONFIG_HOME/exif-turbo/settings.json` (fallback `~/.config/`) |
 
 ---
 
@@ -315,7 +347,12 @@ exif-turbo/
 │   ├── index.py                 # CLI entry point
 │   ├── config.py                # AppConfig, env vars, paths
 │   ├── data/
-│   │   └── image_index_repository.py
+│   │   ├── image_index_repository.py
+│   │   └── indexed_folder_repository.py
+│   ├── i18n/
+│   │   ├── __init__.py          # public API: _(), set_language(), current_theme(), …
+│   │   ├── translator.py        # Translator singleton; settings.json persistence
+│   │   └── locales/             # de, fr, it, rm — .po + .mo catalogs
 │   ├── indexing/
 │   │   ├── cli.py
 │   │   ├── exif_metadata_extractor.py
@@ -324,17 +361,21 @@ exif-turbo/
 │   │   ├── indexer_service.py
 │   │   └── metadata_extractor.py
 │   ├── models/
+│   │   ├── indexed_folder.py
 │   │   ├── indexed_image.py
 │   │   └── search_result.py
 │   ├── ui/
 │   │   ├── app_main.py
 │   │   ├── models/
 │   │   │   ├── exif_list_model.py
-│   │   │   └── search_list_model.py
+│   │   │   ├── folder_list_model.py
+│   │   │   ├── search_list_model.py
+│   │   │   └── settings_model.py
 │   │   ├── providers/
 │   │   │   └── raw_image_provider.py
 │   │   ├── qml/
 │   │   │   ├── Main.qml
+│   │   │   ├── FoldersPanel.qml
 │   │   │   └── FloatingBadge.qml
 │   │   ├── view_models/
 │   │   │   └── app_controller.py
@@ -349,19 +390,23 @@ exif-turbo/
 ├── tests/
 │   ├── conftest.py              # shared fixtures (repo, make_jpeg, make_png)
 │   ├── data/
-│   │   └── test_image_index_repository.py
+│   │   ├── test_excluded_paths.py
+│   │   ├── test_image_index_repository.py
+│   │   └── test_indexed_folder_repository.py
 │   ├── indexing/
 │   │   ├── test_image_utils.py
 │   │   ├── test_indexer_service.py  # e2e — real images, real DB
 │   │   └── test_metadata_to_text.py
 │   └── ui/
-│       ├── conftest.py          # Material style session fixture
-│       └── test_app_controller.py  # pytest-qt live QML window tests
+│       ├── conftest.py              # Material style session fixture
+│       ├── test_app_controller.py   # pytest-qt live QML window tests
+│       └── test_folder_management.py
 ├── installer/
 │   └── exif-turbo.wxs           # WiX v4 MSI descriptor
 ├── scripts/
 │   ├── build_windows.ps1
 │   ├── build_macos.sh
+│   ├── regenerate_translations.py
 │   └── tag_release.ps1
 ├── exif-turbo.spec              # PyInstaller — Windows
 ├── exif-turbo-macos.spec        # PyInstaller — macOS
@@ -378,8 +423,7 @@ exif-turbo/
 | PySide6 | ≥6.5 | Qt bindings — QML, widgets, image providers |
 | Pillow | ≥10.0 | Thumbnail generation; EXIF orientation correction |
 | rawpy | ≥0.18 | libraw wrapper for RAW format decoding |
-| sqlcipher3 | ≥0.5 | Encrypted SQLite |
-| ExifTool | any (system) | EXIF extraction (external process) |
+| sqlcipher3 | ≥0.5 | Encrypted SQLite || Babel | any | `.po`/`.mo` catalog management (dev-time only) || ExifTool | any (system) | EXIF extraction (external process) |
 
 Build-time only:
 

@@ -25,7 +25,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # ── Lock screen ─────────────────────────────────────────────────────
         "Enter the database password": "Datenbankpasswort eingeben",
         "Password": "Passwort",
+        "New passphrase": "Neues Passwort",
+        "Confirm passphrase": "Passwort best\u00e4tigen",
+        "Create Database": "Datenbank erstellen",
         "Unlock": "Entsperren",
+        "Create a passphrase for your new database": "Passwort f\u00fcr neue Datenbank festlegen",
+        "This passphrase encrypts your entire image index. Use at least 12 characters and a mix of letters, numbers, and symbols. There is no way to recover a lost passphrase.":
+            "Dieses Passwort verschl\u00fcsselt den gesamten Bildindex. Verwenden Sie mindestens 12 Zeichen und eine Kombination aus Buchstaben, Ziffern und Sonderzeichen. Ein verlorenes Passwort kann nicht wiederhergestellt werden.",
+        "Passphrases do not match": "Passw\u00f6rter stimmen nicht \u00fcberein",
         "Enter the database password to continue": "Datenbankpasswort eingeben, um fortzufahren",
         # ── Progress panel ──────────────────────────────────────────────────
         "Indexing folder %1 of %2": "Ordner %1 von %2 indizieren",
@@ -90,6 +97,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Patterns are matched against individual file or folder names (not full paths). Wildcards: * matches any characters, ? matches one character.":
             "Muster werden gegen einzelne Datei- oder Ordnernamen (keine vollst\u00e4ndigen Pfade) verglichen. Platzhalter: * entspricht beliebigen Zeichen, ? entspricht einem Zeichen.",
         "Language": "Sprache",
+        "Theme": "Design",
         "Restart the application for language changes to take full effect.":
             "Starten Sie die Anwendung neu, damit die Sprach\u00e4nderung vollst\u00e4ndig wirksam wird.",
         # ── Status bar ──────────────────────────────────────────────────────
@@ -140,7 +148,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # ── Lock screen ─────────────────────────────────────────────────────
         "Enter the database password": "Saisir le mot de passe de la base de donn\u00e9es",
         "Password": "Mot de passe",
+        "New passphrase": "Nouveau mot de passe",
+        "Confirm passphrase": "Confirmer le mot de passe",
+        "Create Database": "Cr\u00e9er la base de donn\u00e9es",
         "Unlock": "D\u00e9verrouiller",
+        "Create a passphrase for your new database": "Cr\u00e9er un mot de passe pour votre nouvelle base de donn\u00e9es",
+        "This passphrase encrypts your entire image index. Use at least 12 characters and a mix of letters, numbers, and symbols. There is no way to recover a lost passphrase.":
+            "Ce mot de passe chiffre l\u2019int\u00e9gralit\u00e9 de votre index d\u2019images. Utilisez au moins 12 caract\u00e8res et un m\u00e9lange de lettres, chiffres et symboles. Il est impossible de r\u00e9cup\u00e9rer un mot de passe perdu.",
+        "Passphrases do not match": "Les mots de passe ne correspondent pas",
         "Enter the database password to continue":
             "Saisir le mot de passe de la base de donn\u00e9es pour continuer",
         # ── Progress panel ──────────────────────────────────────────────────
@@ -206,6 +221,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Patterns are matched against individual file or folder names (not full paths). Wildcards: * matches any characters, ? matches one character.":
             "Les mod\u00e8les sont compar\u00e9s aux noms de fichiers ou dossiers individuels (pas les chemins complets). Caract\u00e8res g\u00e9n\u00e9riques\u00a0: * correspond \u00e0 n\u2019importe quels caract\u00e8res, ? correspond \u00e0 un caract\u00e8re.",
         "Language": "Langue",
+        "Theme": "Th\u00e8me",
         "Restart the application for language changes to take full effect.":
             "Red\u00e9marrez l\u2019application pour que le changement de langue prenne pleinement effet.",
         # ── Status bar ──────────────────────────────────────────────────────
@@ -257,7 +273,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # ── Lock screen ─────────────────────────────────────────────────────
         "Enter the database password": "Inserisci la password del database",
         "Password": "Password",
+        "New passphrase": "Nuova passphrase",
+        "Confirm passphrase": "Conferma passphrase",
+        "Create Database": "Crea database",
         "Unlock": "Sblocca",
+        "Create a passphrase for your new database": "Crea una passphrase per il tuo nuovo database",
+        "This passphrase encrypts your entire image index. Use at least 12 characters and a mix of letters, numbers, and symbols. There is no way to recover a lost passphrase.":
+            "Questa passphrase cifra l\u2019intero indice delle immagini. Utilizza almeno 12 caratteri e una combinazione di lettere, numeri e simboli. Una passphrase persa non pu\u00f2 essere recuperata.",
+        "Passphrases do not match": "Le passphrase non corrispondono",
         "Enter the database password to continue":
             "Inserisci la password del database per continuare",
         # ── Progress panel ──────────────────────────────────────────────────
@@ -326,6 +349,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Patterns are matched against individual file or folder names (not full paths). Wildcards: * matches any characters, ? matches one character.":
             "I modelli vengono confrontati con nomi di file o cartelle singoli (non percorsi completi). Caratteri jolly: * corrisponde a qualsiasi carattere, ? corrisponde a un carattere.",
         "Language": "Lingua",
+        "Theme": "Tema",
         "Restart the application for language changes to take full effect.":
             "Riavvia l\u2019applicazione affinch\u00e9 le modifiche alla lingua abbiano pieno effetto.",
         # ── Status bar ──────────────────────────────────────────────────────
@@ -379,7 +403,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # ── Lock screen ─────────────────────────────────────────────────────
         "Enter the database password": "Endatar la pled-clav da la banca da datas",
         "Password": "Pled-clav",
+        "New passphrase": "Nova pled-clav",
+        "Confirm passphrase": "Confermar la pled-clav",
+        "Create Database": "Crear banca da datas",
         "Unlock": "Avrir",
+        "Create a passphrase for your new database": "Crear ina pled-clav per la nova banca da datas",
+        "This passphrase encrypts your entire image index. Use at least 12 characters and a mix of letters, numbers, and symbols. There is no way to recover a lost passphrase.":
+            "Questa pled-clav cifrescha l\u2019entir index da maletgs. Duvrai almain 12 caratters ed ina mesadad da lettras, cifras e simbols. Ina pled-clav persa na po betg vegnir recuperada.",
+        "Passphrases do not match": "Las pled-clavs na correspundan betg",
         "Enter the database password to continue":
             "Endatar la pled-clav da la banca da datas per cuntinuar",
         # ── Progress panel ──────────────────────────────────────────────────
@@ -447,10 +478,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Patterns are matched against individual file or folder names (not full paths). Wildcards: * matches any characters, ? matches one character.":
             "Ils schemes vegnan comparads cun nums singuls da datotecas u cartella (betg trajects cumplains). Caratters jolly: * correspunda a insaquants caratters, ? correspunda ad in caracter.",
         "Language": "Lingua",
+        "Theme": "Tema",
         "Restart the application for language changes to take full effect.":
             "Restartad l\u2019applicaziun per che la midada da lingua saja daditg activa.",
-        # ── Status bar ──────────────────────────────────────────────────────
-        "Indexing\u2026": "Indexaziun\u2026",
         # ── Folders panel ───────────────────────────────────────────────────
         "Select Folder to Manage": "Tscherner cartella per manaschar",
         "Managed Folders": "Cartellas manasgiadas",

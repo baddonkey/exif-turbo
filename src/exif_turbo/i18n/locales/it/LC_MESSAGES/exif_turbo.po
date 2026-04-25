@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-04-25 17:34+0200\n"
+"POT-Creation-Date: 2026-04-25 17:48+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: it\n"
@@ -18,39 +18,39 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:76
+#: src/exif_turbo/ui/view_models/app_controller.py:77
 msgid "Enter the database password to continue"
 msgstr "Inserisci la password del database per continuare"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:457
+#: src/exif_turbo/ui/view_models/app_controller.py:464
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Cartella già monitorata: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:589
+#: src/exif_turbo/ui/view_models/app_controller.py:596
 #, python-brace-format
 msgid "Indexing {}…"
 msgstr "Indicizzazione {}…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:618
+#: src/exif_turbo/ui/view_models/app_controller.py:625
 #, python-brace-format
 msgid "Indexed {} images"
 msgstr "{} immagini indicizzate"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:645
+#: src/exif_turbo/ui/view_models/app_controller.py:652
 #, python-brace-format
 msgid "Index failed: {}"
 msgstr "Indicizzazione fallita: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:677
+#: src/exif_turbo/ui/view_models/app_controller.py:684
 msgid "Index canceled"
 msgstr "Indicizzazione annullata"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:696
+#: src/exif_turbo/ui/view_models/app_controller.py:703
 msgid "Canceling…"
 msgstr "Annullamento…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:790
+#: src/exif_turbo/ui/view_models/app_controller.py:797
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indicizzazione… {} / {}"
@@ -110,6 +110,18 @@ msgstr "Annulla miniature"
 #: QML
 msgid "Canceling\\u2026"
 msgstr ""
+
+#: QML
+msgid "Confirm passphrase"
+msgstr "Conferma passphrase"
+
+#: QML
+msgid "Create Database"
+msgstr "Crea database"
+
+#: QML
+msgid "Create a passphrase for your new database"
+msgstr "Crea una passphrase per il tuo nuovo database"
 
 #: QML
 msgid "Date"
@@ -246,6 +258,10 @@ msgid "Name Z→A"
 msgstr "Nome Z→A"
 
 #: QML
+msgid "New passphrase"
+msgstr "Nuova passphrase"
+
+#: QML
 msgid "New pattern, e.g.  @eaDir  or  *.tmp"
 msgstr "Nuovo modello, es.  @eaDir  o  *.tmp"
 
@@ -285,6 +301,10 @@ msgstr "Più vecchio prima"
 #: QML
 msgid "PREVIEW"
 msgstr "ANTEPRIMA"
+
+#: QML
+msgid "Passphrases do not match"
+msgstr "Le passphrase non corrispondono"
 
 #: QML
 msgid "Password"
@@ -394,6 +414,20 @@ msgstr "Ordina"
 #: QML
 msgid "Tag"
 msgstr "Tag"
+
+#: QML
+msgid "Theme"
+msgstr "Tema"
+
+#: QML
+msgid ""
+"This passphrase encrypts your entire image index. Use at least 12 "
+"characters and a mix of letters, numbers, and symbols. There is no way to"
+" recover a lost passphrase."
+msgstr ""
+"Questa passphrase cifra l’intero indice delle immagini. Utilizza almeno "
+"12 caratteri e una combinazione di lettere, numeri e simboli. Una "
+"passphrase persa non può essere recuperata."
 
 #: QML
 msgid "Unlock"

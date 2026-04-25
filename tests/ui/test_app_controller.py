@@ -22,6 +22,7 @@ from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.ui.models.exif_list_model import ExifListModel
 from exif_turbo.ui.models.folder_list_model import FolderListModel
 from exif_turbo.ui.models.search_list_model import SearchListModel
+from exif_turbo.ui.models.settings_model import SettingsModel
 from exif_turbo.ui.view_models.app_controller import AppController
 
 # How long to leave the window visible between steps (ms).
@@ -91,6 +92,7 @@ def window(
     search_model = SearchListModel(cache_dir=base / "thumbs")
     exif_model = ExifListModel()
     folder_model = FolderListModel()
+    settings_model = SettingsModel(base / "settings.json")
     controller = AppController(db_path, search_model, exif_model, folder_model)
 
     engine = QQmlApplicationEngine()
@@ -99,6 +101,8 @@ def window(
     ctx.setContextProperty("searchModel", search_model)
     ctx.setContextProperty("exifModel", exif_model)
     ctx.setContextProperty("folderListModel", folder_model)
+    ctx.setContextProperty("settingsModel", settings_model)
+    ctx.setContextProperty("thirdPartyLicensesText", "")
     engine.load(QUrl.fromLocalFile(str(_QML_PATH)))
 
     qtbot.waitUntil(lambda: bool(engine.rootObjects()), timeout=5000)

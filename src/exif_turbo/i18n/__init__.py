@@ -52,6 +52,14 @@ def current_language() -> str:
     return _get().current_language()
 
 
+def current_theme() -> str:
+    return _get().current_theme()
+
+
+def set_theme(theme: str) -> None:
+    _get().set_theme(theme)
+
+
 def available_languages() -> Sequence[tuple[str, str]]:
     return Translator.available_languages()
 
@@ -62,6 +70,8 @@ __all__ = [
     "apply_language",
     "available_languages",
     "current_language",
+    "current_theme",
     "set_language",
+    "set_theme",
     "set_translator",
 ]

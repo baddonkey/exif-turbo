@@ -12,7 +12,11 @@ ApplicationWindow {
     minimumHeight: 600
     title: "exif-turbo"
 
-    Material.theme: Material.System
+    Material.theme: {
+        if (settingsModel?.theme === "dark")  return Material.Dark
+        if (settingsModel?.theme === "light") return Material.Light
+        return Material.System
+    }
     Material.accent: Material.Blue
     Material.primary: Material.Blue
 
@@ -39,6 +43,7 @@ ApplicationWindow {
 
     // ── Null-safe proxies ─────────────────────────────────────────────────
     readonly property bool   _isLocked:            controller ? controller.isLocked           : true
+    readonly property bool   _isNewDatabase:       controller ? controller.isNewDatabase      : false
     readonly property bool   _isIndexing:          controller ? controller.isIndexing         : false
     readonly property bool   _isBuildingThumbs:    controller ? controller.isBuildingThumbs   : false
     readonly property string _unlockError:         controller ? controller.unlockError        : ""
@@ -88,6 +93,30 @@ ApplicationWindow {
         }
     }
 
+    Dialog {
+        id: thirdPartyDialog
+        title: qsTr("Third-Party Licenses")
+        standardButtons: Dialog.Close
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(root.width * 0.85, 820)
+        height: Math.min(root.height * 0.85, 640)
+
+        ScrollView {
+            anchors.fill: parent
+            clip: true
+
+            TextArea {
+                text: thirdPartyLicensesText
+                readOnly: true
+                font.family: root.monoFont
+                font.pixelSize: 12
+                wrapMode: TextArea.Wrap
+                selectByMouse: true
+                background: null
+            }
+        }
+    }
+
     // ── Menu bar ──────────────────────────────────────────────────────────
     menuBar: MenuBar {
         Menu {
@@ -100,6 +129,10 @@ ApplicationWindow {
         }
         Menu {
             title: qsTr("&Help")
+            Action {
+                text: qsTr("Third-Party &Licenses")
+                onTriggered: thirdPartyDialog.open()
+            }
             Action {
                 text: qsTr("&About")
                 onTriggered: aboutDialog.open()
@@ -121,7 +154,7 @@ ApplicationWindow {
 
         Pane {
             anchors.centerIn: parent
-            width: 360
+            width: 380
             padding: 28
             Material.elevation: 4
 
@@ -139,39 +172,84 @@ ApplicationWindow {
 
                 Label {
                     Layout.alignment: Qt.AlignHCenter
-                    text: qsTr("Enter the database password")
+                    text: _isNewDatabase
+                          ? qsTr("Create a passphrase for your new database")
+                          : qsTr("Enter the database password")
                     font.pixelSize: 14
                     opacity: 0.7
+                    wrapMode: Text.WordWrap
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                // New-database hint banner
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: newDbHint.implicitHeight + 16
+                    radius: 6
+                    color: Qt.rgba(Material.accentColor.r, Material.accentColor.g, Material.accentColor.b, 0.10)
+                    border.color: Qt.rgba(Material.accentColor.r, Material.accentColor.g, Material.accentColor.b, 0.30)
+                    border.width: 1
+                    visible: _isNewDatabase
+
+                    Label {
+                        id: newDbHint
+                        anchors { fill: parent; margins: 8 }
+                        text: qsTr("This passphrase encrypts your entire image index. Use at least 12 characters and a mix of letters, numbers, and symbols. There is no way to recover a lost passphrase.")
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                        opacity: 0.85
+                    }
                 }
 
                 TextField {
                     id: passwordField
                     Layout.fillWidth: true
-                    placeholderText: qsTr("Password")
+                    placeholderText: _isNewDatabase ? qsTr("New passphrase") : qsTr("Password")
                     echoMode: TextInput.Password
                     font.pixelSize: 14
-                    Keys.onReturnPressed: controller.unlock(text)
+                    Keys.onReturnPressed: _isNewDatabase ? confirmField.forceActiveFocus() : controller.unlock(text)
                     Component.onCompleted: forceActiveFocus()
                 }
 
+                TextField {
+                    id: confirmField
+                    Layout.fillWidth: true
+                    visible: _isNewDatabase
+                    placeholderText: qsTr("Confirm passphrase")
+                    echoMode: TextInput.Password
+                    font.pixelSize: 14
+                    Keys.onReturnPressed: _tryCreate()
+                }
+
+                // Mismatch / error label
                 Label {
                     Layout.fillWidth: true
-                    text: _unlockError
+                    text: _unlockError !== "" ? _unlockError
+                          : (_isNewDatabase && confirmField.text.length > 0 && passwordField.text !== confirmField.text
+                             ? qsTr("Passphrases do not match") : "")
                     color: "#f44336"
                     font.pixelSize: 12
-                    visible: _unlockError !== ""
+                    visible: text !== ""
                     wrapMode: Text.WordWrap
                 }
 
                 Button {
                     Layout.fillWidth: true
-                    text: qsTr("Unlock")
+                    text: _isNewDatabase ? qsTr("Create Database") : qsTr("Unlock")
                     highlighted: true
                     implicitHeight: 44
                     font.pixelSize: 14
-                    onClicked: controller.unlock(passwordField.text)
+                    enabled: _isNewDatabase
+                             ? (passwordField.text.length >= 1 && passwordField.text === confirmField.text)
+                             : passwordField.text.length >= 1
+                    onClicked: _isNewDatabase ? _tryCreate() : controller.unlock(passwordField.text)
                 }
             }
+        }
+
+        function _tryCreate() {
+            if (passwordField.text !== confirmField.text) return
+            controller.unlock(passwordField.text)
         }
     }
 
@@ -1500,6 +1578,39 @@ ApplicationWindow {
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                         Layout.bottomMargin: 40
+                    }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
+
+                    // ── Theme ─────────────────────────────────────────────
+                    Label {
+                        text: qsTr("Theme")
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                        Layout.bottomMargin: 12
+                    }
+
+                    RowLayout {
+                        spacing: 12
+                        Layout.bottomMargin: 40
+
+                        ComboBox {
+                            id: themeCombo
+                            objectName: "themeCombo"
+                            Layout.preferredHeight: 38
+                            Layout.preferredWidth: 200
+                            model: ["system", "light", "dark"]
+                            property bool ready: false
+                            Component.onCompleted: {
+                                if (!settingsModel) return
+                                var idx = model.indexOf(settingsModel.theme)
+                                currentIndex = idx >= 0 ? idx : 0
+                                ready = true
+                            }
+                            onCurrentTextChanged: {
+                                if (ready && settingsModel) settingsModel.theme = currentText
+                            }
+                        }
                     }
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }

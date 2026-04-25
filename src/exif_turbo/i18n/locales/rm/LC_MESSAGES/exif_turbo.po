@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-04-25 17:34+0200\n"
+"POT-Creation-Date: 2026-04-25 17:48+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: rm\n"
@@ -18,39 +18,39 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:76
+#: src/exif_turbo/ui/view_models/app_controller.py:77
 msgid "Enter the database password to continue"
 msgstr "Endatar la pled-clav da la banca da datas per cuntinuar"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:457
+#: src/exif_turbo/ui/view_models/app_controller.py:464
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Cartella gia trackata: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:589
+#: src/exif_turbo/ui/view_models/app_controller.py:596
 #, python-brace-format
 msgid "Indexing {}…"
 msgstr "Indexaziun {}…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:618
+#: src/exif_turbo/ui/view_models/app_controller.py:625
 #, python-brace-format
 msgid "Indexed {} images"
 msgstr "{} maletgs indexads"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:645
+#: src/exif_turbo/ui/view_models/app_controller.py:652
 #, python-brace-format
 msgid "Index failed: {}"
 msgstr "Indexaziun buca reussida: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:677
+#: src/exif_turbo/ui/view_models/app_controller.py:684
 msgid "Index canceled"
 msgstr "Indexaziun interrutta"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:696
+#: src/exif_turbo/ui/view_models/app_controller.py:703
 msgid "Canceling…"
 msgstr "Interruziun…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:790
+#: src/exif_turbo/ui/view_models/app_controller.py:797
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indexaziun… {} / {}"
@@ -110,6 +110,18 @@ msgstr "Interrumper miniatures"
 #: QML
 msgid "Canceling\\u2026"
 msgstr ""
+
+#: QML
+msgid "Confirm passphrase"
+msgstr "Confermar la pled-clav"
+
+#: QML
+msgid "Create Database"
+msgstr "Crear banca da datas"
+
+#: QML
+msgid "Create a passphrase for your new database"
+msgstr "Crear ina pled-clav per la nova banca da datas"
 
 #: QML
 msgid "Date"
@@ -248,6 +260,10 @@ msgid "Name Z→A"
 msgstr "Num Z→A"
 
 #: QML
+msgid "New passphrase"
+msgstr "Nova pled-clav"
+
+#: QML
 msgid "New pattern, e.g.  @eaDir  or  *.tmp"
 msgstr "Nov schema, p.ex.  @eaDir  u  *.tmp"
 
@@ -286,6 +302,10 @@ msgstr "Pli vegl emprim"
 #: QML
 msgid "PREVIEW"
 msgstr "PREVISTA"
+
+#: QML
+msgid "Passphrases do not match"
+msgstr "Las pled-clavs na correspundan betg"
 
 #: QML
 msgid "Password"
@@ -391,6 +411,20 @@ msgstr "Sortir"
 #: QML
 msgid "Tag"
 msgstr "Tag"
+
+#: QML
+msgid "Theme"
+msgstr "Tema"
+
+#: QML
+msgid ""
+"This passphrase encrypts your entire image index. Use at least 12 "
+"characters and a mix of letters, numbers, and symbols. There is no way to"
+" recover a lost passphrase."
+msgstr ""
+"Questa pled-clav cifrescha l’entir index da maletgs. Duvrai almain 12 "
+"caratters ed ina mesadad da lettras, cifras e simbols. Ina pled-clav "
+"persa na po betg vegnir recuperada."
 
 #: QML
 msgid "Unlock"

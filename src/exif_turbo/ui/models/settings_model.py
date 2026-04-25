@@ -7,7 +7,7 @@ from typing import List
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
-from exif_turbo.i18n import available_languages, current_language, set_language
+from exif_turbo.i18n import available_languages, current_language, current_theme, set_language, set_theme
 
 
 _CPU_COUNT = os.cpu_count() or 2
@@ -36,6 +36,7 @@ class SettingsModel(QObject):
 
     workerCountChanged = Signal()
     blacklistChanged = Signal()
+    themeChanged = Signal()
     languageChanged = Signal()
     retranslateRequested = Signal()
 
@@ -44,6 +45,7 @@ class SettingsModel(QObject):
         self._path = settings_path
         self._worker_count: int = _DEFAULT_WORKERS
         self._blacklist: List[str] = list(_DEFAULT_BLACKLIST)
+        self._theme: str = current_theme()
         self._language: str = current_language()
         self._load()
 
@@ -64,6 +66,19 @@ class SettingsModel(QObject):
     @Property("QVariantList", notify=blacklistChanged)
     def blacklist(self) -> List[str]:
         return list(self._blacklist)
+
+    # ── Theme ─────────────────────────────────────────────────────────────────
+
+    def _get_theme(self) -> str:
+        return self._theme
+
+    def _set_theme(self, value: str) -> None:
+        if self._theme != value:
+            self._theme = value
+            set_theme(value)
+            self.themeChanged.emit()
+
+    theme = Property(str, _get_theme, _set_theme, notify=themeChanged)
 
     # ── Language ──────────────────────────────────────────────────────────────
 
