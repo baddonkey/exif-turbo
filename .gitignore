@@ -31,6 +31,9 @@ MANIFEST
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+# Track the project's own specs — they contain bundle configuration (datas, hiddenimports)
+!exif-turbo.spec
+!exif-turbo-macos.spec
 
 # Installer logs
 pip-log.txt
