@@ -32,6 +32,33 @@ Fully generated using VS Code Copilot.
   `settingsModel.theme`. The selection is persisted globally to `settings.json`
   and applied immediately without restart.
 
+### Preview performance on network drives
+
+- **GIL-safe image loading** — `PreviewImageProvider` reads the full image
+  file via `open(path, "rb").read()` so CPython releases the GIL during the
+  `ReadFile()` syscall. This prevents PIL's C decoder from blocking the Qt
+  event loop while fetching from a NAS or slow share.
+- **Dedicated high-priority image provider** — `image://preview/` handles all
+  formats (JPEG/PNG/TIFF/RAW). The provider thread is boosted to
+  `HighPriority` and uses `PIL.Image.draft()` for JPEG subsampled decode (up
+  to 8× faster for large camera files).
+- **Background worker pause/resume** — clicking a result pauses
+  `ThumbWorker` and `IndexWorker` for 2 seconds via `threading.Event` so the
+  preview provider gets undivided I/O bandwidth on the network share.
+- **Instant thumbnail placeholder** — the cached 144 px thumbnail is shown
+  immediately while the full-resolution image loads asynchronously; it fades
+  out with a 150 ms transition once the full image is ready.
+
+### Browse tab
+
+- **Browse tab enabled** — the Browse tab is now fully functional. Selecting
+  a folder in the tree filters the image list to that folder; clicking an
+  image shows the full EXIF detail panel and preview, identical to the Search
+  tab.
+- **Tab-switch row preservation** — `AppController` tracks `currentResultRow`
+  as a `Q_PROPERTY`. Switching away and back to the Search or Browse tab
+  restores the previously selected row instead of resetting to row 0.
+
 ### New-database passphrase UX
 
 - **Passphrase creation screen** — when a database does not yet exist,
@@ -75,13 +102,13 @@ Fully generated using VS Code Copilot.
 
 ### Test suite
 
-73 automated tests across four layers:
+81 automated tests across four layers:
 
 | Suite | Count | What it covers |
 |-------|-------|----------------|
 | `tests/data/` | 38 | Repository: upsert, FTS5 search, delete_missing, excluded paths, folder management |
 | `tests/indexing/` | 25 | Image utils, metadata text, IndexerService e2e (real JPEG/PNG files) |
-| `tests/ui/` | 10 | Live QML window driven via pytest-qt — unlock, search, filter, folder add/remove/enable |
+| `tests/ui/` | 18 | Live QML window driven via pytest-qt — unlock, search, filter, folder add/remove/enable, controller state |
 
 ## Requirements
 

@@ -43,7 +43,8 @@ Ports & adapters (hexagonal) structure. Domain logic has no dependency on PySide
 ┌─────────────────────────────────────────────────────────┐
 │  UI Layer (PySide6 / QML)                               │
 │  AppController · SearchListModel · ExifListModel        │
-│  RawImageProvider · IndexWorker · ThumbWorker           │
+│  PreviewImageProvider · RawImageProvider                │
+│  IndexWorker · ThumbWorker                              │
 └───────────────────┬─────────────────────────────────────┘
                     │ Slots / Signals
 ┌───────────────────▼─────────────────────────────────────┐
@@ -124,15 +125,16 @@ derive stable thumbnail cache names without a live `os.stat` call.
 
 | Module | Purpose |
 |--------|---------|
-| `app_main.py` | `main()` — bootstraps `QGuiApplication`, sets Material style, registers `RawImageProvider`, loads `Main.qml` |
+| `app_main.py` | `main()` — bootstraps `QGuiApplication`, sets Material style, registers `PreviewImageProvider` (`image://preview/`) and `RawImageProvider` (`image://raw/`), loads `Main.qml` |
 | `view_models/app_controller.py` | `AppController(QObject)` — all business logic exposed to QML via `Q_PROPERTY`, `Signal`, `Slot` |
 | `models/search_list_model.py` | `QAbstractListModel` — search result rows; roles: `path`, `filename`, `metadataJson`, `thumbnailSource`, `fileSize`. Thumbnail URIs are pre-computed at `set_rows` / `append_rows` time using DB-stored `mtime`/`size` stamps — no `os.stat` per repaint. |
 | `models/exif_list_model.py` | `QAbstractListModel` — EXIF key/value pairs for the detail panel |
 | `models/folder_list_model.py` | `QAbstractListModel` — rows for the Folders management panel; roles: `folderId`, `path`, `displayName`, `status`, `imageCount`, `errorMessage`, `enabled` |
 | `models/settings_model.py` | `SettingsModel(QObject)` — exposes `workerCount`, `blacklist`, `language`, and `theme` to QML; per-DB settings persisted as JSON; language and theme stored globally via `i18n` module |
-| `workers/index_worker.py` | `QThread` — runs `IndexerService.build_index` off the GUI thread; emits progress signals |
-| `workers/thumb_worker.py` | `QThread` — generates thumbnail cache off the GUI thread |
-| `providers/raw_image_provider.py` | `RawImageProvider(QQuickImageProvider)` — serves RAW images to QML as `image://raw/<encoded-path>`; uses `ForceAsynchronousImageLoading` |
+| `workers/index_worker.py` | `QThread` — runs `IndexerService.build_index` off the GUI thread; emits progress signals; supports `pause()`/`resume()` via `threading.Event` to yield I/O bandwidth during preview loads |
+| `workers/thumb_worker.py` | `QThread` — generates thumbnail cache off the GUI thread; supports `pause()`/`resume()` via `threading.Event` |
+| `providers/preview_image_provider.py` | `PreviewImageProvider(QQuickImageProvider)` — serves full-resolution previews for all formats (JPEG/PNG/TIFF/RAW) as `image://preview/<encoded-path>`; `ForceAsynchronousImageLoading`, `HighPriority` thread; reads raw bytes via `open().read()` to release the GIL during network I/O, then decodes in-memory with Pillow `draft()` for fast JPEG subsampling |
+| `providers/raw_image_provider.py` | `RawImageProvider(QQuickImageProvider)` — legacy RAW-only provider (`image://raw/`); kept for backward compatibility |
 | `qml/Main.qml` | Main application window: tab bar (Search, Browse), split-pane layout, EXIF detail panel, Settings sheet, lock screen |
 | `qml/FoldersPanel.qml` | Folder management panel — add/remove/enable folders, shows per-folder indexing status |
 | `qml/FloatingBadge.qml` | Reusable badge overlay component |
@@ -150,6 +152,15 @@ derive stable thumbnail cache names without a live `os.stat` call.
   construction time. The QML lock screen switches to a passphrase-creation
   mode (confirm field + security hint). Cleared to `False` after a
   successful `unlock()` call.
+- `currentResultRow` — `int` property tracking the currently selected result
+  row. `_run_search()` restores it after a re-run (tab switch, filter change)
+  so the selection survives navigation. Resets to `0` only when the query or
+  filter actually changes. Drives QML `resultsList.currentIndex` and
+  `browseImageList.currentIndex` via a declarative binding.
+- **Pause/resume on selection** — `selectResult()` calls `pause()` on both
+  `ThumbWorker` and `IndexWorker`, then schedules a 2-second `QTimer` to
+  `resume()` them. This yields I/O bandwidth to `PreviewImageProvider` on
+  slow network drives.
 
 **AppController signals (selection):**
 
@@ -160,8 +171,8 @@ derive stable thumbnail cache names without a live `os.stat` call.
 | `isBuildingThumbsChanged` | Whether thumb generation is in progress |
 | `isLockedChanged` | Whether the DB lock screen is shown |
 | `isNewDatabaseChanged` | Whether the DB does not yet exist (passphrase-creation mode) |
-| `selectedImageSourceChanged` | QML `Image.source` for the preview pane |
-| `detailsHtmlChanged` | HTML for the EXIF detail panel |
+| `selectedImageSourceChanged` | QML `Image.source` for the preview pane || `selectedThumbSourceChanged` | QML `Image.source` for the low-res placeholder shown while full preview loads |
+| `currentResultRowChanged` | Currently selected result row index || `detailsHtmlChanged` | HTML for the EXIF detail panel |
 | `indexCurrentChanged / indexTotalChanged` | Indexing progress |
 | `thumbCurrentChanged / thumbTotalChanged` | Thumbnail progress |
 | `indexedFoldersChanged` | Folder list changed (add/remove/enable/disable) |
@@ -222,13 +233,21 @@ Thumbnail URIs are pre-computed at `set_rows` time using DB-stored
 directory is derived from the active database path so multiple databases
 maintain independent caches.
 
-### RAW preview
+### Image preview
 
 ```
-User selects RAW image in UI
-  → AppController sets selectedImageSource = "image://raw/<encoded path>"
-  → Qt calls RawImageProvider.requestImage on background thread
-  → rawpy → Pillow → QImage returned to QML
+User selects image in UI
+  → AppController.selectResult(row)
+      • sets selectedThumbSource = cached 144px thumbnail (shown instantly)
+      • sets selectedImageSource = "image://preview/<encoded path>"
+      • pauses ThumbWorker + IndexWorker (yields I/O bandwidth)
+      • schedules 2s timer to resume workers
+  → Qt calls PreviewImageProvider.requestImage on HighPriority background thread
+      • reads full file bytes via open().read()  ← GIL released during ReadFile()
+      • decodes from BytesIO (in-memory, fast)
+      • for JPEG: PIL.Image.draft() for subsampled decode (up to 8× faster)
+      • for RAW: rawpy → Pillow
+      • QImage returned to QML; placeholder fades out as full preview fades in
 ```
 
 ---
