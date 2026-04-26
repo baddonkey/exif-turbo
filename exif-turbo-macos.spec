@@ -21,6 +21,9 @@ a = Analysis(
     datas=[
         ('src/exif_turbo/ui/qml', 'exif_turbo/ui/qml'),
         ('src/exif_turbo/assets', 'exif_turbo/assets'),
+        ('THIRD-PARTY-LICENSES.md', 'exif_turbo/assets'),
+        ('docs/user-manual.pdf', 'exif_turbo/assets'),
+        ('src/exif_turbo/i18n/locales', 'exif_turbo/i18n/locales'),
     ],
     hiddenimports=[
         'exif_turbo.ui',
