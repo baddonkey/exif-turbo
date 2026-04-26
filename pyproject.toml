@@ -12,6 +12,7 @@ dependencies = [
   "Pillow>=10.0",
   "rawpy>=0.18",
   "sqlcipher3>=0.5",
+  "markdown>=3.4",
 ]
 
 [project.scripts]

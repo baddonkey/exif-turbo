@@ -76,6 +76,8 @@ _common_hiddenimports = [
     'exif_turbo.ui.providers.raw_image_provider',
     'rawpy',
     'sqlcipher3',
+    'markdown',
+    'markdown.extensions.tables',
 ]
 
 # ── GUI executable ─────────────────────────────────────────────────────────────
