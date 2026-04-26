@@ -426,8 +426,7 @@ ApplicationWindow {
                                  ? Font.DemiBold : Font.Normal
                     color: TabBar.tabBar && TabBar.tabBar.currentIndex === index
                            ? root._accentColor : Material.foreground
-                    opacity: index === 1 ? 0.25
-                             : (TabBar.tabBar && TabBar.tabBar.currentIndex === index ? 1.0 : 0.6)
+                    opacity: TabBar.tabBar && TabBar.tabBar.currentIndex === index ? 1.0 : 0.6
                 }
             }
         }
@@ -659,7 +658,7 @@ ApplicationWindow {
                         Layout.fillHeight: true
                         clip: true
                         model: searchModel
-                        currentIndex: -1
+                        currentIndex: controller ? controller.currentResultRow : -1
                         ScrollBar.vertical: ScrollBar {}
 
                         delegate: Rectangle {
@@ -820,7 +819,6 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 acceptedButtons: Qt.LeftButton
                                 onClicked: {
-                                    resultsList.currentIndex = index
                                     controller.selectResult(index)
                                 }
                                 onDoubleClicked: (mouse) => {
@@ -1261,6 +1259,7 @@ ApplicationWindow {
                         clip: true
                         visible: root._folderFilter !== ""
                         model: root._folderFilter !== "" ? searchModel : null
+                        currentIndex: controller ? controller.currentResultRow : -1
                         ScrollBar.vertical: ScrollBar {}
 
                         delegate: Rectangle {
@@ -1401,7 +1400,6 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 acceptedButtons: Qt.LeftButton
                                 onClicked: {
-                                    browseImageList.currentIndex = index
                                     controller.selectResult(index)
                                 }
                                 onDoubleClicked: controller.openImage(model.path)

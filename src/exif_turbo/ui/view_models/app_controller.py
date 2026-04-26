@@ -53,6 +53,7 @@ class AppController(QObject):
     thumbCurrentFileChanged = Signal()
     sortByChanged = Signal()
     extFilterChanged = Signal()
+    currentResultRowChanged = Signal()
     availableFormatsChanged = Signal()
     folderTreeChanged = Signal()
     folderFilterChanged = Signal()
@@ -94,6 +95,7 @@ class AppController(QObject):
         self._find_scroll_fraction = 0.0
         self._selected_image_source = ""
         self._selected_thumb_source = ""
+        self._current_result_row: int = -1
         self._total_results = 0
         self._loaded_results = 0
         self._loading = False
@@ -178,6 +180,10 @@ class AppController(QObject):
     @Property(str, notify=selectedThumbSourceChanged)
     def selectedThumbSource(self) -> str:
         return self._selected_thumb_source
+
+    @Property(int, notify=currentResultRowChanged)
+    def currentResultRow(self) -> int:
+        return self._current_result_row
 
     @Property(int, notify=totalResultsChanged)
     def totalResults(self) -> int:
@@ -300,7 +306,10 @@ class AppController(QObject):
     def search(self, query: str) -> None:
         if self._repo is None:
             return
-        self._query_text = query.strip()
+        new_query = query.strip()
+        if new_query != self._query_text:
+            self._current_result_row = 0  # new query — start from top
+        self._query_text = new_query
         self._run_search()
 
     @Slot(str)
@@ -308,6 +317,7 @@ class AppController(QObject):
         if self._sort_by == sort:
             return
         self._sort_by = sort
+        self._current_result_row = 0
         self.sortByChanged.emit()
         self._run_search()
 
@@ -316,6 +326,7 @@ class AppController(QObject):
         if self._ext_filter == ext:
             return
         self._ext_filter = ext
+        self._current_result_row = 0
         self.extFilterChanged.emit()
         self._run_search()
 
@@ -324,6 +335,7 @@ class AppController(QObject):
         if self._folder_filter == path:
             return
         self._folder_filter = path
+        self._current_result_row = 0
         self.folderFilterChanged.emit()
         self._run_search()
 
@@ -375,10 +387,11 @@ class AppController(QObject):
             excluded_paths=excluded or None,
         )
         if results:
-            self.selectResult(0, load_image=False)
+            row = self._current_result_row if 0 <= self._current_result_row < len(results) else 0
+            self.selectResult(row, load_image=False)
             # Give QML's async image loader ~300 ms to paint the cached thumbnails,
             # then load the preview so it doesn't compete with them.
-            QTimer.singleShot(300, lambda: self.selectResult(0))
+            QTimer.singleShot(300, lambda r=row: self.selectResult(r))
         else:
             self._clear_details()
 
@@ -477,6 +490,8 @@ class AppController(QObject):
             self._selected_thumb_source = thumb_uri or ""
             self.selectedThumbSourceChanged.emit()
             self.selectedImageSourceChanged.emit()
+            self._current_result_row = row
+            self.currentResultRowChanged.emit()
             # Pause background workers to yield I/O bandwidth to the preview load
             if self._thumb_worker and self._thumb_worker.isRunning():
                 self._thumb_worker.pause()
@@ -823,8 +838,10 @@ class AppController(QObject):
         self._exif_model.set_rows([])
         self._selected_image_source = ""
         self._selected_thumb_source = ""
+        self._current_result_row = -1
         self.selectedImageSourceChanged.emit()
         self.selectedThumbSourceChanged.emit()
+        self.currentResultRowChanged.emit()
 
     def _update_exif_table(self, meta_json: str) -> None:
         try:
