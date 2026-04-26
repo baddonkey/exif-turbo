@@ -145,7 +145,7 @@ Item {
                             Layout.fillWidth: true
                             text: model.path
                             font.pixelSize: 10
-                            font.family: Qt.platform.os === "osx" ? "Menlo" : "Consolas"
+                            font.family: "monospace"
                             opacity: 0.45
                             elide: Text.ElideMiddle
                         }
@@ -236,6 +236,7 @@ Item {
                             title: qsTr("Remove Folder")
                             standardButtons: Dialog.Ok | Dialog.Cancel
                             anchors.centerIn: Overlay.overlay
+                            width: 420
                             Label {
                                 text: qsTr("Remove \"%1\" and delete all its indexed images from the database?").arg(model.displayName)
                                 wrapMode: Text.WordWrap

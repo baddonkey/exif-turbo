@@ -23,7 +23,7 @@ ApplicationWindow {
 
     // Resolved accent colour — safe to use from bare Rectangle children.
     readonly property color _accentColor: Material.accentColor
-    readonly property string monoFont: Qt.platform.os === "osx" ? "Menlo" : "Consolas"
+    readonly property string monoFont: "monospace"
     // Colours for the third-party licenses WebEngineView HTML template.
     // Use rgb() to avoid Qt's #AARRGGBB string format being misread by CSS as #RRGGBBAA.
     readonly property string _licenseLinkColor: settingsModel?.theme === "dark" ? "#64B5F6" : "#1565C0"
@@ -99,6 +99,7 @@ ApplicationWindow {
         title: qsTr("About exif-turbo")
         standardButtons: Dialog.Ok
         anchors.centerIn: Overlay.overlay
+        width: 340
 
         Label {
             text: "exif-turbo" + (_appVersion ? " v" + _appVersion : "") + "\n\nCross-platform image EXIF metadata\nsearch and indexing tool.\n\nLicense: MIT"
@@ -1787,6 +1788,7 @@ ApplicationWindow {
         title: qsTr("Reset Database")
         modal: true
         anchors.centerIn: Overlay.overlay
+        width: 420
         standardButtons: Dialog.Ok | Dialog.Cancel
 
         Label {
