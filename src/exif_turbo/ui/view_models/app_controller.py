@@ -104,6 +104,7 @@ class AppController(QObject):
         self._available_formats: str = "[]"
         self._folder_filter: str = ""
         self._folder_tree: str = "[]"
+        self._folder_tree_dirty: bool = False
         self._index_worker: IndexWorker | None = None
         self._thumb_worker: ThumbWorker | None = None
         self._scanning_folder_id: int | None = None
@@ -250,23 +251,13 @@ class AppController(QObject):
             self.isLockedChanged.emit()
             self.unlockErrorChanged.emit()
             self._load_formats()
-            self._load_folder_tree()
-            # Resume any folders interrupted from the previous session
-            pending = self._folder_repo.get_pending_folders()
-            for folder in pending:
-                if folder.status == "scanning":
-                    # Normalise interrupted scans → queued (not running yet)
-                    self._folder_repo.update_status(folder.id, "queued")
-                entry = (folder.id, False)
-                if entry not in self._scan_queue:
-                    self._scan_queue.append(entry)
-                    self._index_queue_total += 1
-            if pending:
-                self.indexQueueTotalChanged.emit()
+            self._folder_tree_dirty = True  # loaded on demand when Browse tab is opened
             self._load_indexed_folders()
             self.search("")
-            if self._scan_queue:
-                self._process_next_in_queue()
+            # Resume indexing for all enabled folders that aren't up-to-date
+            if self._folder_repo:
+                for folder in self._folder_repo.get_enabled_folders():
+                    self._start_managed_folder_indexing(folder, force=False)
         except sqlcipher3.DatabaseError:
             self._unlock_error = "Wrong password — please try again."
             self.unlockErrorChanged.emit()
@@ -363,20 +354,51 @@ class AppController(QObject):
         self._loading = False
         self.totalResultsChanged.emit()
         self.loadedResultsChanged.emit()
+        self._load_formats(
+            query=self._query_text,
+            path_filter=self._folder_filter,
+            excluded_paths=excluded or None,
+        )
         if results:
-            self.selectResult(0)
+            self.selectResult(0, load_image=False)
+            # Give QML's async image loader ~300 ms to paint the cached thumbnails,
+            # then load the preview so it doesn't compete with them.
+            QTimer.singleShot(300, lambda: self.selectResult(0))
         else:
             self._clear_details()
 
-    def _load_formats(self) -> None:
+    def _load_formats(
+        self,
+        query: str = "",
+        path_filter: str = "",
+        excluded_paths: list[str] | None = None,
+    ) -> None:
         if self._repo is None:
             return
         import json as _json
-        counts = self._repo.get_format_counts()
+        counts = self._repo.get_format_counts(
+            query=query,
+            path_filter=path_filter,
+            excluded_paths=excluded_paths,
+        )
         self._available_formats = _json.dumps(
             [{"ext": ext, "count": cnt} for ext, cnt in counts]
         )
         self.availableFormatsChanged.emit()
+
+    def _invalidate_folder_tree(self) -> None:
+        """Mark the folder tree as stale; it will be rebuilt on next Browse tab visit."""
+        self._folder_tree_dirty = True
+
+    @Slot()
+    def loadFolderTree(self) -> None:
+        """Load (or reload) the folder tree — called by QML when Browse tab is activated."""
+        if self._repo is None or not self._folder_tree_dirty:
+            return
+        nodes = self._repo.get_folder_tree()
+        self._folder_tree = json.dumps(nodes)
+        self._folder_tree_dirty = False
+        self.folderTreeChanged.emit()
 
     def _load_folder_tree(self) -> None:
         if self._repo is None:
@@ -409,7 +431,7 @@ class AppController(QObject):
         self._loading = False
 
     @Slot(int)
-    def selectResult(self, row: int) -> None:
+    def selectResult(self, row: int, load_image: bool = True) -> None:
         meta_json = self._search_model.get_metadata_json(row)
         path = self._search_model.get_path(row)
         if not meta_json:
@@ -426,17 +448,17 @@ class AppController(QObject):
         self._find_index = -1
         self._update_details_html()
         self._update_exif_table(meta_json)
-        if path:
-            ext = Path(path).suffix.lower()
-            if ext in RAW_EXTENSIONS:
-                # Use the async QQuickImageProvider — no file size limit for preview
-                encoded = urllib.parse.quote(path, safe="")
-                self._selected_image_source = f"image://raw/{encoded}"
+        if load_image:
+            if path:
+                ext = Path(path).suffix.lower()
+                if ext in RAW_EXTENSIONS:
+                    encoded = urllib.parse.quote(path, safe="")
+                    self._selected_image_source = f"image://raw/{encoded}"
+                else:
+                    self._selected_image_source = QUrl.fromLocalFile(path).toString()
             else:
-                self._selected_image_source = QUrl.fromLocalFile(path).toString()
-        else:
-            self._selected_image_source = ""
-        self.selectedImageSourceChanged.emit()
+                self._selected_image_source = ""
+            self.selectedImageSourceChanged.emit()
 
     @Slot(str)
     def findNext(self, find_text: str) -> None:
@@ -495,7 +517,7 @@ class AppController(QObject):
         self._folder_model.remove_folder(folder_id)
         self._repo.delete_by_path_prefix(folder.path)
         self.indexedFoldersChanged.emit()
-        self._load_folder_tree()
+        self._invalidate_folder_tree()
         self._load_formats()
         self._run_search()
 
@@ -637,7 +659,7 @@ class AppController(QObject):
         self._scanning_folder_id = None
         self._set_status(_("Indexed {} images").format(count))
         self._load_formats()
-        self._load_folder_tree()
+        self._invalidate_folder_tree()
         self.search(self._query_text)
         if self._scan_queue:
             # More folders waiting — keep going before building thumbs

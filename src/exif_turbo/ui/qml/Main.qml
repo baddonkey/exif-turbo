@@ -407,6 +407,7 @@ ApplicationWindow {
                 text: modelData
                 implicitWidth: 140
                 implicitHeight: 40
+                enabled: true
 
                 background: Rectangle {
                     color: TabBar.tabBar && TabBar.tabBar.currentIndex === index
@@ -424,7 +425,8 @@ ApplicationWindow {
                                  ? Font.DemiBold : Font.Normal
                     color: TabBar.tabBar && TabBar.tabBar.currentIndex === index
                            ? root._accentColor : Material.foreground
-                    opacity: TabBar.tabBar && TabBar.tabBar.currentIndex === index ? 1.0 : 0.6
+                    opacity: index === 1 ? 0.25
+                             : (TabBar.tabBar && TabBar.tabBar.currentIndex === index ? 1.0 : 0.6)
                 }
             }
         }
@@ -1071,6 +1073,8 @@ ApplicationWindow {
         anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; bottom: parent.bottom }
         visible: !_isLocked && mainTabBar.currentIndex === 1
         orientation: Qt.Horizontal
+
+        onVisibleChanged: { if (visible) controller.loadFolderTree() }
         handle: Rectangle {
             implicitWidth: 5
             color: SplitHandle.pressed ? root._accentColor : Material.dividerColor

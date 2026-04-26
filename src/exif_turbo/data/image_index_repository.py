@@ -229,18 +229,62 @@ class ImageIndexRepository:
     # Extensions that should be merged into a single facet key.
     _EXT_ALIASES: Dict[str, str] = {"jpeg": "jpg"}
 
-    def get_format_counts(self) -> List[Tuple[str, int]]:
+    def get_format_counts(
+        self,
+        query: str = "",
+        path_filter: str = "",
+        excluded_paths: List[str] | None = None,
+    ) -> List[Tuple[str, int]]:
         """Return [(extension, count)] sorted by count descending.
 
         Aliased extensions (e.g. jpeg → jpg) are merged into one bucket.
+        When *query* or *path_filter* are given, counts are scoped to the
+        current search context (but never filtered by ext — that would be
+        meaningless for a facet).
         """
-        cur = self.conn.execute("SELECT filename FROM images")
+        path_clause = ""
+        path_args: tuple = ()
+        if path_filter:
+            prefix = os.path.normpath(path_filter) + os.sep
+            path_clause = "AND images.path LIKE ?"
+            path_args = (prefix + "%",)
+
+        exclude_clause = ""
+        exclude_args: tuple = ()
+        if excluded_paths:
+            parts = " AND ".join("images.path NOT LIKE ?" for _ in excluded_paths)
+            exclude_clause = f"AND ({parts})"
+            exclude_args = tuple(
+                os.path.normpath(p) + os.sep + "%" for p in excluded_paths
+            )
+
+        if query.strip():
+            sql = (
+                "SELECT LOWER(SUBSTR(images.filename, INSTR(images.filename, '.') + 1)) AS ext,"
+                " COUNT(*) AS cnt"
+                " FROM images_fts"
+                " JOIN images ON images_fts.rowid = images.id"
+                f" WHERE images_fts MATCH ? AND images.filename LIKE '%.%'"
+                f" {path_clause} {exclude_clause}"
+                " GROUP BY ext"
+            )
+            args = (query,) + path_args + exclude_args
+        else:
+            sql = (
+                "SELECT LOWER(SUBSTR(filename, INSTR(filename, '.') + 1)) AS ext,"
+                " COUNT(*) AS cnt"
+                " FROM images"
+                f" WHERE filename LIKE '%.%' {path_clause} {exclude_clause}"
+                " GROUP BY ext"
+            )
+            args = path_args + exclude_args
+
+        cur = self.conn.execute(sql, args)
         counts: Dict[str, int] = {}
-        for (fname,) in cur.fetchall():
-            ext = Path(fname).suffix.lower().lstrip(".")
+        for ext, cnt in cur.fetchall():
             ext = self._EXT_ALIASES.get(ext, ext)
             if ext:
-                counts[ext] = counts.get(ext, 0) + 1
+                counts[ext] = counts.get(ext, 0) + cnt
         return sorted(counts.items(), key=lambda x: -x[1])
 
     def get_folder_tree(self) -> List[Dict[str, Any]]:

@@ -149,8 +149,8 @@ def test_build_index_reindexes_changed_file(
     service = IndexerService(repo, extractor=_CountingExtractor())
     service.build_index([image_folder])
 
-    # Modify the file to change its mtime/size
-    _make_jpeg(img)  # overwrite with new image bytes
+    # Modify the file — write a larger image so size changes even within the same mtime tick
+    Image.new("RGB", (32, 32), color=(50, 200, 100)).save(str(img), format="JPEG")
 
     # Act
     service.build_index([image_folder])
