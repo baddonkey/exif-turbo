@@ -258,33 +258,32 @@ class ImageIndexRepository:
                 os.path.normpath(p) + os.sep + "%" for p in excluded_paths
             )
 
+        # Fetch only filenames and group in Python so that rsplit('.', 1) correctly
+        # extracts the extension after the *last* dot — INSTR finds the first dot,
+        # which breaks files like "cb-01.07.16-name-.jpg".
         if query.strip():
             sql = (
-                "SELECT LOWER(SUBSTR(images.filename, INSTR(images.filename, '.') + 1)) AS ext,"
-                " COUNT(*) AS cnt"
-                " FROM images_fts"
+                "SELECT images.filename FROM images_fts"
                 " JOIN images ON images_fts.rowid = images.id"
                 f" WHERE images_fts MATCH ? AND images.filename LIKE '%.%'"
                 f" {path_clause} {exclude_clause}"
-                " GROUP BY ext"
             )
             args = (query,) + path_args + exclude_args
         else:
             sql = (
-                "SELECT LOWER(SUBSTR(filename, INSTR(filename, '.') + 1)) AS ext,"
-                " COUNT(*) AS cnt"
-                " FROM images"
+                "SELECT filename FROM images"
                 f" WHERE filename LIKE '%.%' {path_clause} {exclude_clause}"
-                " GROUP BY ext"
             )
             args = path_args + exclude_args
 
         cur = self.conn.execute(sql, args)
         counts: Dict[str, int] = {}
-        for ext, cnt in cur.fetchall():
-            ext = self._EXT_ALIASES.get(ext, ext)
-            if ext:
-                counts[ext] = counts.get(ext, 0) + cnt
+        for (filename,) in cur.fetchall():
+            parts = filename.rsplit(".", 1)
+            if len(parts) == 2:
+                ext = self._EXT_ALIASES.get(parts[1].lower(), parts[1].lower())
+                if ext:
+                    counts[ext] = counts.get(ext, 0) + 1
         return sorted(counts.items(), key=lambda x: -x[1])
 
     def get_folder_tree(self) -> List[Dict[str, Any]]:

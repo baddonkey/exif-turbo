@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import html as html_lib
 import json
+import logging
 import os
 import subprocess
 import time
 import urllib.parse
-from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import List, Tuple
 
@@ -28,6 +28,7 @@ from ..workers.thumb_worker import ThumbWorker
 
 _PAGE_SIZE = 10
 _DEFAULT_WORKERS = max(1, (os.cpu_count() or 2) // 2)
+_log = logging.getLogger(__name__)
 
 
 class AppController(QObject):
@@ -112,6 +113,7 @@ class AppController(QObject):
         self._index_queue_position = 0
         self._index_queue_total = 0
         self._app_closing = False
+        self._pending_thumb_restart = False
         # Timer: kick off a batch thumb build every 8 s while indexing runs
         self._thumb_batch_timer = QTimer(self)
         self._thumb_batch_timer.setInterval(8_000)
@@ -135,11 +137,8 @@ class AppController(QObject):
 
     @Property(str, constant=True)
     def appVersion(self) -> str:
-        try:
-            return _pkg_version("exif-turbo")
-        except Exception:
-            from exif_turbo import __version__
-            return __version__
+        from exif_turbo import __version__
+        return __version__
 
     @Property(str, notify=statusTextChanged)
     def statusText(self) -> str:
@@ -248,15 +247,20 @@ class AppController(QObject):
             self._ext_filter = ""
             self._sort_by = "path_asc"
             self._folder_filter = ""
+            self._status_text = ""
             self.isLockedChanged.emit()
             self.unlockErrorChanged.emit()
+            self.statusTextChanged.emit()
             self._load_formats()
             self._folder_tree_dirty = True  # loaded on demand when Browse tab is opened
             self._load_indexed_folders()
             self.search("")
-            # Resume indexing for all enabled folders that aren't up-to-date
+            # Resume only folders whose scan was interrupted in a previous session
+            # (status = 'queued' or 'scanning').  Do NOT re-queue folders that are
+            # already 'indexed' — that would trigger a full incremental re-scan of
+            # all enabled folders on every startup.
             if self._folder_repo:
-                for folder in self._folder_repo.get_enabled_folders():
+                for folder in self._folder_repo.get_pending_folders():
                     self._start_managed_folder_indexing(folder, force=False)
         except sqlcipher3.DatabaseError:
             self._unlock_error = "Wrong password — please try again."
@@ -670,7 +674,13 @@ class AppController(QObject):
             self._index_queue_total = 0
             self.indexQueuePositionChanged.emit()
             self.indexQueueTotalChanged.emit()
-            self._start_auto_thumbs()
+            if self._is_building_thumbs:
+                # A thumb worker started by the 8-second timer is still running
+                # with a stale DB snapshot.  Flag it to restart when it finishes
+                # so it picks up any images added since it began.
+                self._pending_thumb_restart = True
+            else:
+                self._start_auto_thumbs()
 
     def _on_managed_folder_index_failed(self, error: str) -> None:
         self._thumb_batch_timer.stop()
@@ -721,22 +731,28 @@ class AppController(QObject):
 
     @Slot()
     def cancelIndex(self) -> None:
-        # Reset all queued (not yet started) folders back to "new"
-        if self._folder_repo:
-            for folder_id, _ in self._scan_queue:
-                self._folder_repo.update_status(folder_id, "new")
-                updated = self._folder_repo.get_by_id(folder_id)
-                if updated:
-                    self._folder_model.update_folder(updated)
-        self._scan_queue.clear()
-        if self._thumb_worker and self._thumb_worker.isRunning():
-            self._thumb_batch_timer.stop()
-            self._thumb_worker.cancel()
-        if self._index_worker and self._index_worker.isRunning():
-            self._is_canceling = True
+        try:
+            # Reset all queued (not yet started) folders back to "new"
+            if self._folder_repo:
+                for folder_id, _force in self._scan_queue:
+                    self._folder_repo.update_status(folder_id, "new")
+                    updated = self._folder_repo.get_by_id(folder_id)
+                    if updated:
+                        self._folder_model.update_folder(updated)
+            self._scan_queue.clear()
+            if self._thumb_worker and self._thumb_worker.isRunning():
+                self._thumb_batch_timer.stop()
+                self._thumb_worker.cancel()
+            if self._index_worker and self._index_worker.isRunning():
+                self._is_canceling = True
+                self.isCancelingChanged.emit()
+                self._set_status(_("Canceling\u2026"))
+                self._index_worker.cancel()
+        except Exception:
+            _log.exception("cancelIndex failed")
+            # Reset stuck UI state so the button is usable again.
+            self._is_canceling = False
             self.isCancelingChanged.emit()
-            self._set_status(_("Canceling\u2026"))
-            self._index_worker.cancel()
 
     @Slot()
     def onAppClosing(self) -> None:
@@ -882,6 +898,9 @@ class AppController(QObject):
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
         self._search_model.refresh_thumbnails()
+        if self._pending_thumb_restart:
+            self._pending_thumb_restart = False
+            self._start_auto_thumbs()
 
     def _on_thumb_failed(self, error: str) -> None:
         self._is_building_thumbs = False

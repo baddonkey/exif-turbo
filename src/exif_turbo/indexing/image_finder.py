@@ -51,6 +51,8 @@ class ImageFinder:
                     if not self._is_blacklisted(root_path / d)
                 ]
                 for file_name in files:
+                    if cancel_check and cancel_check():
+                        return
                     if self.skip_dotfiles and file_name.startswith("."):
                         continue
                     path = root_path / file_name
