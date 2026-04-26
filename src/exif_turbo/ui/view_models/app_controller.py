@@ -26,7 +26,7 @@ from ..models.settings_model import SettingsModel
 from ..workers.index_worker import IndexWorker
 from ..workers.thumb_worker import ThumbWorker
 
-_PAGE_SIZE = 100
+_PAGE_SIZE = 10
 _DEFAULT_WORKERS = max(1, (os.cpu_count() or 2) // 2)
 
 
@@ -426,7 +426,7 @@ class AppController(QObject):
         self._find_index = -1
         self._update_details_html()
         self._update_exif_table(meta_json)
-        if path and os.path.exists(path):
+        if path:
             ext = Path(path).suffix.lower()
             if ext in RAW_EXTENSIONS:
                 # Use the async QQuickImageProvider — no file size limit for preview
@@ -833,25 +833,20 @@ class AppController(QObject):
         """Queue thumbnail generation for all images not yet cached."""
         if self._repo is None or self._is_building_thumbs:
             return
-        rows = self._repo.all_images()
-        paths = [r[0] for r in rows]
-        if not paths:
-            return
-        stamps = self._repo.get_all_stamps()
         self._is_building_thumbs = True
         self._thumb_current = 0
-        self._thumb_total = len(paths)
+        self._thumb_total = 0  # indeterminate until ThumbWorker reports total
         self._thumb_current_file = ""
         self.isBuildingThumbsChanged.emit()
         self.thumbCurrentChanged.emit()
         self.thumbTotalChanged.emit()
         self.thumbCurrentFileChanged.emit()
         self._thumb_worker = ThumbWorker(
-            paths,
+            self._db_path,
             self._search_model.cache_dir,
             self._search_model.max_thumb_bytes,
             workers=self._settings.workerCount if self._settings else _DEFAULT_WORKERS,
-            stamps=stamps,
+            key=self._key,
         )
         self._thumb_worker.progress.connect(self._on_thumb_progress)
         self._thumb_worker.finished.connect(self._on_thumb_done)

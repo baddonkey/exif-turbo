@@ -5,7 +5,7 @@ import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 try:
     import rawpy
@@ -16,6 +16,7 @@ except ImportError:
 from PIL import Image, ImageOps, UnidentifiedImageError
 from PySide6.QtCore import QThread, Signal
 
+from ...data.image_index_repository import ImageIndexRepository
 from ...indexing.image_utils import RAW_EXTENSIONS
 from ...utils.thumb_cache import thumb_cache_name_from_stamp, thumb_cache_path
 
@@ -54,18 +55,18 @@ class ThumbWorker(QThread):
 
     def __init__(
         self,
-        paths: List[str],
+        db_path: Path,
         cache_dir: Path,
         max_thumb_bytes: int,
         workers: int = 1,
-        stamps: Optional[Dict[str, Tuple[float, int]]] = None,
+        key: str = "",
     ) -> None:
         super().__init__()
-        self.paths = paths
+        self._db_path = db_path
         self.cache_dir = cache_dir
         self.max_thumb_bytes = max_thumb_bytes
         self.workers = max(1, workers)
-        self._stamps = stamps or {}
+        self._key = key
         self._cancel_event = threading.Event()
 
     def cancel(self) -> None:
@@ -73,8 +74,23 @@ class ThumbWorker(QThread):
 
     def run(self) -> None:
         try:
+            # Read paths and stamps from the DB on this background thread —
+            # keeps the main thread free so QML can paint thumbnails immediately.
+            repo = ImageIndexRepository(self._db_path, key=self._key)
+            stamps = repo.get_all_stamps()
+            repo.close()
+
+            paths = list(stamps.keys())
+            total = len(paths)
+
+            # Announce total immediately so the progress bar goes non-indeterminate.
+            self.progress.emit(0, total, "")
+
+            if self._cancel_event.is_set():
+                self.canceled.emit(0, total)
+                return
+
             self.cache_dir.mkdir(parents=True, exist_ok=True)
-            total = len(self.paths)
             cached = 0
 
             # Pre-scan cache dir once — O(1) set lookup replaces per-file exists()
@@ -91,7 +107,7 @@ class ThumbWorker(QThread):
                 if not path:
                     return False
                 # Compute cache filename — use DB stamp to avoid network stat
-                stamp = self._stamps.get(path)
+                stamp = stamps.get(path)
                 if stamp is not None:
                     cache_name = thumb_cache_name_from_stamp(path, stamp[0], stamp[1])
                     if cache_name in existing:
@@ -117,7 +133,7 @@ class ThumbWorker(QThread):
 
             if self.workers > 1 and total > 0:
                 executor = ThreadPoolExecutor(max_workers=self.workers)
-                futures = {executor.submit(build_thumb, path): path for path in self.paths}
+                futures = {executor.submit(build_thumb, path): path for path in paths}
                 completed = 0
                 try:
                     for future in as_completed(futures):
@@ -132,7 +148,7 @@ class ThumbWorker(QThread):
                 finally:
                     executor.shutdown(wait=not self._cancel_event.is_set(), cancel_futures=True)
             else:
-                for idx, path in enumerate(self.paths, start=1):
+                for idx, path in enumerate(paths, start=1):
                     if self._cancel_event.is_set():
                         self.canceled.emit(cached, total)
                         return
@@ -146,4 +162,5 @@ class ThumbWorker(QThread):
                 self.finished.emit(cached, total)
         except Exception as exc:
             self.failed.emit(str(exc))
+
 

@@ -250,18 +250,16 @@ class ImageIndexRepository:
         where count is the number of images directly inside that folder.
         Depth is relative to the deepest common ancestor of all indexed folders.
         """
-        cur = self.conn.execute("SELECT path FROM images")
-        rows = cur.fetchall()
-        if not rows:
-            return []
-
-        # Count images per direct parent folder
-        folder_counts: Dict[str, int] = {}
-        unique_parents: set[str] = set()
-        for (img_path,) in rows:
-            parent = str(Path(img_path).parent)
-            folder_counts[parent] = folder_counts.get(parent, 0) + 1
-            unique_parents.add(parent)
+        # Aggregate in SQL: derive parent dir from path/filename to avoid fetching
+        # all image rows into Python (can be 20 K+).
+        cur = self.conn.execute(
+            "SELECT substr(path, 1, length(path) - length(filename) - 1) AS folder,"
+            " COUNT(*) AS cnt"
+            " FROM images"
+            " GROUP BY folder"
+        )
+        folder_counts: Dict[str, int] = {row[0]: row[1] for row in cur.fetchall()}
+        unique_parents: set[str] = set(folder_counts.keys())
 
         if not unique_parents:
             return []
