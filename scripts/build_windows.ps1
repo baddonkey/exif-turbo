@@ -39,18 +39,20 @@ Write-Host "Building exif-turbo $VERSION for Windows ..."
 
 # ── Compile translation catalogs (.po -> .mo) ──────────────────────────────────
 Write-Host "  Compiling translation catalogs ..."
-python -c @"
-import subprocess, sys, pathlib
-pybabel = pathlib.Path(sys.executable).parent / 'Scripts' / 'pybabel.exe'
-if not pybabel.exists():
-    pybabel = pathlib.Path(sys.executable).parent / 'pybabel'
-locales = pathlib.Path('src/exif_turbo/i18n/locales')
-for po in locales.rglob('*.po'):
-    mo = po.with_suffix('.mo')
-    subprocess.run([str(pybabel), 'compile', '-i', str(po), '-o', str(mo)], check=True, capture_output=True)
-    print(f'    {mo}')
-"@
-if ($LASTEXITCODE -ne 0) { Write-Error "Translation compile failed"; exit 1 }
+# Resolve pybabel: prefer the venv (if active), fall back to system Python's Scripts dir
+$pybabelCmd = Get-Command pybabel -ErrorAction SilentlyContinue
+if (-not $pybabelCmd) {
+    $venvPybabel = Join-Path $RepoRoot '.venv\Scripts\pybabel.exe'
+    if (Test-Path $venvPybabel) { $pybabelCmd = $venvPybabel }
+}
+if (-not $pybabelCmd) { Write-Error "pybabel not found. Run: pip install babel"; exit 1 }
+$localesDir = Join-Path $RepoRoot 'src\exif_turbo\i18n\locales'
+Get-ChildItem -Path $localesDir -Recurse -Filter '*.po' | ForEach-Object {
+    $mo = $_.FullName -replace '\.po$', '.mo'
+    & "$pybabelCmd" compile -i $_.FullName -o $mo
+    if ($LASTEXITCODE -ne 0) { Write-Error "pybabel failed for $($_.FullName)"; exit 1 }
+    Write-Host "    $mo"
+}
 Write-Host "  Translation catalogs compiled."
 
 # ── Build with PyInstaller ─────────────────────────────────────────────────────
