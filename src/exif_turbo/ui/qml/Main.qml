@@ -183,6 +183,7 @@ ApplicationWindow {
 
     // ── Lock screen ───────────────────────────────────────────────────────
     Pane {
+        id: lockScreen
         anchors.fill: parent
         visible: _isLocked
         z: 100
@@ -259,7 +260,7 @@ ApplicationWindow {
                     placeholderText: qsTr("Confirm passphrase")
                     echoMode: TextInput.Password
                     font.pixelSize: 14
-                    Keys.onReturnPressed: _tryCreate()
+                    Keys.onReturnPressed: lockScreen._tryCreate()
                 }
 
                 // Mismatch / error label
@@ -283,7 +284,7 @@ ApplicationWindow {
                     enabled: _isNewDatabase
                              ? (passwordField.text.length >= 1 && passwordField.text === confirmField.text)
                              : passwordField.text.length >= 1
-                    onClicked: _isNewDatabase ? _tryCreate() : controller.unlock(passwordField.text)
+                    onClicked: _isNewDatabase ? lockScreen._tryCreate() : controller.unlock(passwordField.text)
                 }
             }
         }
