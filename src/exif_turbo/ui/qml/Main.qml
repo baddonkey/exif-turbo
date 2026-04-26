@@ -194,7 +194,7 @@ ApplicationWindow {
             Material.elevation: 4
 
             ColumnLayout {
-                anchors.fill: parent
+                width: parent.width
                 spacing: 16
 
                 Label {
@@ -237,7 +237,7 @@ ApplicationWindow {
 
                     Label {
                         id: newDbHint
-                        anchors { fill: parent; margins: 8 }
+                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8 }
                         text: qsTr("This passphrase encrypts your entire image index. Use at least 12 characters and a mix of letters, numbers, and symbols. There is no way to recover a lost passphrase.")
                         font.pixelSize: 12
                         wrapMode: Text.WordWrap
