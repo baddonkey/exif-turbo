@@ -4,6 +4,7 @@ import html as html_lib
 import json
 import logging
 import os
+import shutil
 import subprocess
 import time
 import urllib.parse
@@ -68,10 +69,12 @@ class AppController(QObject):
         exif_model: ExifListModel,
         folder_model: FolderListModel,
         settings: SettingsModel | None = None,
+        cache_dir: Path | None = None,
     ) -> None:
         super().__init__()
         self._db_path = db_path
         self._settings = settings
+        self._cache_dir = cache_dir
         self._repo: ImageIndexRepository | None = None
         self._folder_repo: IndexedFolderRepository | None = None
         self._key = ""
@@ -809,6 +812,30 @@ class AppController(QObject):
     def cancelThumbnails(self) -> None:
         if self._thumb_worker and self._thumb_worker.isRunning():
             self._thumb_worker.cancel()
+
+    @Slot()
+    def resetDatabase(self) -> None:
+        """Wipe all images, indexed-folder records, and the thumbnail cache."""
+        if self._repo is None or self._folder_repo is None:
+            return
+        try:
+            self._repo.clear_all()
+            self._folder_repo.clear_all()
+            if self._cache_dir and self._cache_dir.exists():
+                shutil.rmtree(self._cache_dir)
+                self._cache_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            _log.exception("resetDatabase failed")
+            return
+        self._search_model.set_rows([])
+        self._exif_model.set_rows([])
+        self._folder_model.set_rows([])
+        self._total_results = 0
+        self.totalResultsChanged.emit()
+        self._clear_details()
+        self._folder_tree_dirty = True
+        self.folderTreeChanged.emit()
+        self._set_status(_("Database reset"))
 
     @Slot(str)
     def openImage(self, path: str) -> None:

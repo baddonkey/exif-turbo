@@ -1738,9 +1738,64 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.bottomMargin: 40
                     }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
+
+                    // ── Reset database ────────────────────────────────────
+                    Label {
+                        text: qsTr("Reset Database")
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                        Layout.bottomMargin: 6
+                    }
+                    Label {
+                        text: qsTr("Permanently deletes all indexed images and folder records. This cannot be undone.")
+                        font.pixelSize: 12
+                        opacity: 0.6
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 14
+                    }
+
+                    RowLayout {
+                        spacing: 10
+                        Layout.bottomMargin: 40
+
+                        Label {
+                            text: "\u26A0\uFE0F"
+                            font.pixelSize: 18
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        Button {
+                            id: resetDbButton
+                            text: qsTr("Reset Database\u2026")
+                            Material.background: Material.Red
+                            Material.foreground: "white"
+                            enabled: !_isIndexing && !_isLocked
+                            onClicked: resetDbDialog.open()
+                        }
+                    }
                 }
             }
         }
+    }
+
+    // ── Reset database confirmation dialog ────────────────────────────────
+    Dialog {
+        id: resetDbDialog
+        title: qsTr("Reset Database")
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        standardButtons: Dialog.Ok | Dialog.Cancel
+
+        Label {
+            width: 360
+            wrapMode: Text.WordWrap
+            text: qsTr("This will permanently delete all indexed images and indexed folder records.\n\nAre you sure you want to continue?")
+        }
+
+        onAccepted: controller.resetDatabase()
     }
 
     // ── Status bar ────────────────────────────────────────────────────────

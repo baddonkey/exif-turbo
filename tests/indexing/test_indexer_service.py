@@ -210,6 +210,27 @@ def test_build_index_removes_deleted_files(
     assert rows[0][2] == "a.jpg"
 
 
+def test_build_index_rescanning_one_folder_preserves_other_indexed_folders(
+    repo: ImageIndexRepository, image_folder: Path, tmp_path: Path
+) -> None:
+    # Arrange — index one image in each of two separate folders
+    folder_b = tmp_path / "folder_b"
+    folder_b.mkdir()
+    _make_jpeg(image_folder / "a.jpg")
+    _make_jpeg(folder_b / "b.jpg")
+    service = IndexerService(repo, extractor=_FakeExtractor())
+    service.build_index([image_folder, folder_b])
+    assert repo.count_images("") == 2
+
+    # Act — rescan only image_folder (folder_b is not included)
+    service.build_index([image_folder])
+
+    # Assert — b.jpg from folder_b must still be in the index
+    assert repo.count_images("") == 2
+    filenames = {r[2] for r in repo.search_images("", limit=10, offset=0)}
+    assert "b.jpg" in filenames
+
+
 # ── FTS5 search after indexing ────────────────────────────────────────────────
 
 

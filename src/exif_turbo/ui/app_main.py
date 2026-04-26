@@ -99,10 +99,11 @@ def main() -> None:
 
     db_path = db_path_for_name(args.db) if args.db else default_db_path()
     settings = SettingsModel(settings_path(db_path))
-    search_model = SearchListModel(cache_dir=thumb_cache_dir(db_path))
+    _cache_dir = thumb_cache_dir(db_path)
+    search_model = SearchListModel(cache_dir=_cache_dir)
     exif_model = ExifListModel()
     folder_model = FolderListModel()
-    controller = AppController(db_path, search_model, exif_model, folder_model, settings)
+    controller = AppController(db_path, search_model, exif_model, folder_model, settings, cache_dir=_cache_dir)
     engine = QQmlApplicationEngine()
     engine.addImageProvider("preview", PreviewImageProvider())
     engine.addImageProvider("raw", RawImageProvider())

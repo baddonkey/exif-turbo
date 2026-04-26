@@ -164,7 +164,7 @@ class IndexerService:
         # delete_missing on a partial/canceled scan would wipe every file that
         # wasn't reached yet — potentially deleting the entire index.
         if not canceled:
-            self.repo.delete_missing(existing_paths)
+            self.repo.delete_missing(existing_paths, folder_roots=[str(f) for f in folders])
         self.repo.commit()
 
         if json_path and not canceled:

@@ -118,6 +118,31 @@ def test_delete_missing_all_kept_removes_nothing(repo: ImageIndexRepository, tmp
     assert repo.count_images("") == 1
 
 
+def test_delete_missing_scoped_to_folder_preserves_images_in_other_folders(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange — two images in separate sibling folders
+    folder_a = tmp_path / "folder_a"
+    folder_b = tmp_path / "folder_b"
+    folder_a.mkdir()
+    folder_b.mkdir()
+    path_a = str(make_jpeg(folder_a / "a.jpg"))
+    path_b = str(make_jpeg(folder_b / "b.jpg"))
+    repo.upsert_image(path_a, "a.jpg", 1.0, 100, {}, "a jpg")
+    repo.upsert_image(path_b, "b.jpg", 1.0, 100, {}, "b jpg")
+    repo.commit()
+
+    # Act — delete_missing scoped to folder_a only, with an empty keep-set
+    # (simulates rescanning folder_a which now has no images on disk)
+    repo.delete_missing([], folder_roots=[str(folder_a)])
+    repo.commit()
+    rows = repo.search_images("", limit=10, offset=0)
+
+    # Assert — path_b in folder_b must be untouched
+    assert len(rows) == 1
+    assert rows[0][1] == path_b
+
+
 # ── format counts ─────────────────────────────────────────────────────────────
 
 

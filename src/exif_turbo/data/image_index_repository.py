@@ -74,7 +74,11 @@ class ImageIndexRepository:
                 (path, path, filename, metadata_text),
             )
 
-    def delete_missing(self, existing_paths: Iterable[str]) -> None:
+    def delete_missing(
+        self,
+        existing_paths: Iterable[str],
+        folder_roots: List[str] | None = None,
+    ) -> None:
         # Load the keep-set into a temporary table so the DELETE can be a
         # single set-difference operation instead of O(N) individual statements.
         with self.conn:
@@ -86,18 +90,65 @@ class ImageIndexRepository:
                 "INSERT OR IGNORE INTO _keep_paths (path) VALUES (?)",
                 ((p,) for p in existing_paths),
             )
-            self.conn.execute(
-                "DELETE FROM images_fts WHERE path IN "
-                "(SELECT path FROM images WHERE path NOT IN (SELECT path FROM _keep_paths))"
-            )
-            self.conn.execute(
-                "DELETE FROM images WHERE path NOT IN (SELECT path FROM _keep_paths)"
-            )
+            if folder_roots:
+                # Scope deletions to only rows whose path is under one of the
+                # scanned folders.  Rows from other folders are left untouched,
+                # so a single-folder rescan does not wipe the rest of the index.
+                prefixes = [
+                    r if r.endswith(os.sep) else r + os.sep
+                    for r in folder_roots
+                ]
+                self.conn.execute(
+                    "CREATE TEMPORARY TABLE IF NOT EXISTS _scan_roots"
+                    " (prefix TEXT PRIMARY KEY)"
+                )
+                self.conn.execute("DELETE FROM _scan_roots")
+                self.conn.executemany(
+                    "INSERT OR IGNORE INTO _scan_roots (prefix) VALUES (?)",
+                    ((p,) for p in prefixes),
+                )
+                self.conn.execute(
+                    "DELETE FROM images_fts WHERE path IN ("
+                    "  SELECT i.path FROM images i"
+                    "  WHERE i.path NOT IN (SELECT path FROM _keep_paths)"
+                    "  AND EXISTS"
+                    "    (SELECT 1 FROM _scan_roots WHERE i.path LIKE prefix || '%')"
+                    ")"
+                )
+                self.conn.execute(
+                    "DELETE FROM images"
+                    " WHERE path NOT IN (SELECT path FROM _keep_paths)"
+                    " AND EXISTS"
+                    "   (SELECT 1 FROM _scan_roots WHERE images.path LIKE prefix || '%')"
+                )
+                self.conn.execute("DROP TABLE IF EXISTS _scan_roots")
+            else:
+                self.conn.execute(
+                    "DELETE FROM images_fts WHERE path IN "
+                    "(SELECT path FROM images WHERE path NOT IN (SELECT path FROM _keep_paths))"
+                )
+                self.conn.execute(
+                    "DELETE FROM images WHERE path NOT IN (SELECT path FROM _keep_paths)"
+                )
             self.conn.execute("DROP TABLE IF EXISTS _keep_paths")
 
     def clear_all(self) -> None:
-        self.conn.execute("DELETE FROM images_fts")
+        # DROP + recreate the FTS5 virtual table to fully purge its shadow tables
+        # (images_fts_data, images_fts_idx, etc.).  A plain DELETE leaves
+        # tombstone entries that keep the file large even after VACUUM.
         self.conn.execute("DELETE FROM images")
+        self.conn.execute("DROP TABLE IF EXISTS images_fts")
+        self.conn.execute(
+            "CREATE VIRTUAL TABLE images_fts"
+            " USING fts5(path, filename, metadata_text)"
+        )
+        self.conn.commit()
+        # Reclaim disk space — VACUUM must run outside any transaction.
+        self.conn.execute("VACUUM")
+        # In WAL mode, VACUUM writes compacted pages into the WAL file; the
+        # main database file only shrinks after a checkpoint.  Force an
+        # immediate full checkpoint so the file is small right away.
+        self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
     _SORT_MAP: Dict[str, str] = {
         "filename_asc":  "images.filename COLLATE NOCASE ASC",

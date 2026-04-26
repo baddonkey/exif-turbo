@@ -169,3 +169,7 @@ class IndexedFolderRepository:
 
     def close(self) -> None:
         self.conn.close()
+
+    def clear_all(self) -> None:
+        with self.conn:
+            self.conn.execute("DELETE FROM indexed_folders")
