@@ -125,7 +125,7 @@ derive stable thumbnail cache names without a live `os.stat` call.
 
 | Module | Purpose |
 |--------|---------|
-| `app_main.py` | `main()` — bootstraps `QGuiApplication`, sets Material style, registers `PreviewImageProvider` (`image://preview/`) and `RawImageProvider` (`image://raw/`), loads `Main.qml` |
+| `app_main.py` | `main()` — bootstraps `QGuiApplication`, sets Material style, registers `PreviewImageProvider` (`image://preview/`) and `RawImageProvider` (`image://raw/`), loads `Main.qml`. Sets `PIL.Image.MAX_IMAGE_PIXELS = 894_784_850` (10× Pillow default) at startup so large panoramas and high-resolution TIFFs load without a `DecompressionBombWarning`. |
 | `view_models/app_controller.py` | `AppController(QObject)` — all business logic exposed to QML via `Q_PROPERTY`, `Signal`, `Slot`. Accepts `cache_dir: Path | None` for thumbnail cache management. `resetDatabase()` slot calls `clear_all()` on both repositories, removes the thumbnail cache directory, and resets all UI models. |
 | `models/search_list_model.py` | `QAbstractListModel` — search result rows; roles: `path`, `filename`, `metadataJson`, `thumbnailSource`, `fileSize`. Thumbnail URIs are pre-computed at `set_rows` / `append_rows` time using DB-stored `mtime`/`size` stamps — no `os.stat` per repaint. |
 | `models/exif_list_model.py` | `QAbstractListModel` — EXIF key/value pairs for the detail panel |

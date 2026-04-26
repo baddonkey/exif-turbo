@@ -52,6 +52,9 @@ Fully generated using VS Code Copilot.
 - **Instant thumbnail placeholder** — the cached 144 px thumbnail is shown
   immediately while the full-resolution image loads asynchronously; it fades
   out with a 150 ms transition once the full image is ready.
+- **Raised decompression bomb limit** — `PIL.Image.MAX_IMAGE_PIXELS` is set
+  to 894 MP (10× Pillow's default) at startup in `app_main.py` so large
+  panoramas and high-resolution TIFFs load without a warning.
 
 ### Browse tab
 
