@@ -82,7 +82,7 @@ class MainWindow(QMainWindow):
         self.repo = repo
         self.db_path = repo.db_path
 
-        icon_path = Path(__file__).resolve().parent.parent / "assets" / "app_icon.svg"
+        icon_path = Path(__file__).resolve().parent.parent / "assets" / "logo.png"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
 

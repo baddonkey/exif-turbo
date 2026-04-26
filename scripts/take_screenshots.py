@@ -132,7 +132,7 @@ def _run_gui() -> None:
     except Exception:
         pass
 
-    icon_path = _SRC / "exif_turbo" / "assets" / "app_icon.svg"
+    icon_path = _SRC / "exif_turbo" / "assets" / "logo.png"
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 

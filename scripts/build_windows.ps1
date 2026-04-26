@@ -54,7 +54,20 @@ if ($gitStatus) {
 $AppDir  = (Resolve-Path "dist\exif-turbo").Path
 $MsiOut  = "dist\exif-turbo-$VERSION-windows.msi"
 
+# ── Generate icon.ico from logo.png if not already present ───────────────────
 $IconFile = Join-Path $RepoRoot "assets\icon.ico"
+$LogoPng  = Join-Path $RepoRoot "src\exif_turbo\assets\logo.png"
+if (-not (Test-Path $IconFile) -and (Test-Path $LogoPng)) {
+    Write-Host "  Generating assets\icon.ico from logo.png ..."
+    New-Item -ItemType Directory -Force -Path (Join-Path $RepoRoot "assets") | Out-Null
+    python -c @"
+from PIL import Image
+import pathlib
+img = Image.open(r'$LogoPng').convert('RGBA')
+img.save(r'$IconFile', format='ICO', sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])
+print('icon.ico generated')
+"@
+}
 if (-not (Test-Path $IconFile)) {
     Write-Warning "Icon file not found: $IconFile"
     Write-Warning "The MSI will be built without a custom icon."

@@ -41,23 +41,32 @@ PYEOF
 )
 echo "Building exif-turbo $VERSION for macOS ..."
 
-# ── Generate .icns from bundled PNGs (optional) ────────────────────────────────
-if [[ -f assets/icon_16.png ]]; then
+# ── Generate .icns from logo.png ──────────────────────────────────────────────
+if [[ -f src/exif_turbo/assets/logo.png ]]; then
     ICONSET_DIR="$(mktemp -d)/exif-turbo.iconset"
     mkdir -p "$ICONSET_DIR"
-    cp assets/icon_16.png  "$ICONSET_DIR/icon_16x16.png"
-    cp assets/icon_32.png  "$ICONSET_DIR/icon_16x16@2x.png"
-    cp assets/icon_32.png  "$ICONSET_DIR/icon_32x32.png"
-    cp assets/icon_64.png  "$ICONSET_DIR/icon_32x32@2x.png"
-    cp assets/icon_128.png "$ICONSET_DIR/icon_128x128.png"
-    cp assets/icon_256.png "$ICONSET_DIR/icon_128x128@2x.png"
-    cp assets/icon_256.png "$ICONSET_DIR/icon_256x256.png"
-    cp assets/icon_512.png "$ICONSET_DIR/icon_256x256@2x.png"
-    cp assets/icon_512.png "$ICONSET_DIR/icon_512x512.png"
+    export ICONSET_DIR
+    python3 - << 'PYEOF'
+from PIL import Image
+import pathlib, os
+src = pathlib.Path('src/exif_turbo/assets/logo.png')
+iconset = pathlib.Path(os.environ['ICONSET_DIR'])
+img = Image.open(src).convert('RGBA')
+for name, size in [
+    ('icon_16x16.png',16),('icon_16x16@2x.png',32),
+    ('icon_32x32.png',32),('icon_32x32@2x.png',64),
+    ('icon_128x128.png',128),('icon_128x128@2x.png',256),
+    ('icon_256x256.png',256),('icon_256x256@2x.png',512),
+    ('icon_512x512.png',512),('icon_512x512@2x.png',1024),
+]:
+    img.resize((size, size), Image.LANCZOS).save(iconset / name, 'PNG')
+PYEOF
+    mkdir -p assets
     iconutil --convert icns --output assets/icon.icns "$ICONSET_DIR"
-    echo "  icon.icns generated."
+    rm -rf "$(dirname "$ICONSET_DIR")"
+    echo "  icon.icns generated from logo.png."
 else
-    echo "  No icon PNGs found in assets/ — skipping .icns generation."
+    echo "  No logo.png found — skipping .icns generation."
 fi
 
 # ── Build with PyInstaller ─────────────────────────────────────────────────────

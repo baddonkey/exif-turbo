@@ -95,7 +95,7 @@ def main() -> None:
     QtWebEngineQuick.initialize()  # must be called before QGuiApplication
     app = QGuiApplication(sys.argv)
     app.setApplicationName("Exif-Turbo")
-    icon_path = Path(__file__).resolve().parent.parent / "assets" / "app_icon.svg"
+    icon_path = Path(__file__).resolve().parent.parent / "assets" / "logo.png"
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 
