@@ -1012,7 +1012,7 @@ class AppController(QObject):
     def _build_html(text: str, ranges: List[Tuple[int, int, str]]) -> str:
         sorted_ranges = sorted(ranges, key=lambda r: r[0])
         parts: List[str] = [
-            "<pre style=\"font-family: 'Consolas', 'Courier New', monospace;"
+            "<pre style=\"font-family: 'Courier New', monospace;"
             " white-space: pre-wrap; word-break: break-all;"
             " font-size: 11pt; margin: 0; padding: 8px;\">"
         ]

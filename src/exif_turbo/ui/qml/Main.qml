@@ -23,7 +23,7 @@ ApplicationWindow {
 
     // Resolved accent colour — safe to use from bare Rectangle children.
     readonly property color _accentColor: Material.accentColor
-    readonly property string monoFont: "monospace"
+    readonly property string monoFont: "Courier New"
     // Colours for the third-party licenses WebEngineView HTML template.
     // Use rgb() to avoid Qt's #AARRGGBB string format being misread by CSS as #RRGGBBAA.
     readonly property string _licenseLinkColor: settingsModel?.theme === "dark" ? "#64B5F6" : "#1565C0"

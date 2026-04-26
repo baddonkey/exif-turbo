@@ -145,7 +145,7 @@ Item {
                             Layout.fillWidth: true
                             text: model.path
                             font.pixelSize: 10
-                            font.family: "monospace"
+                            font.family: "Courier New"
                             opacity: 0.45
                             elide: Text.ElideMiddle
                         }
