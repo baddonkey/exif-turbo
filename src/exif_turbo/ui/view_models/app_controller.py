@@ -39,6 +39,7 @@ class AppController(QObject):
     detailsHtmlChanged = Signal()
     findScrollFractionChanged = Signal()
     selectedImageSourceChanged = Signal()
+    selectedThumbSourceChanged = Signal()
     totalResultsChanged = Signal()
     loadedResultsChanged = Signal()
     isLockedChanged = Signal()
@@ -92,6 +93,7 @@ class AppController(QObject):
         self._details_html = ""
         self._find_scroll_fraction = 0.0
         self._selected_image_source = ""
+        self._selected_thumb_source = ""
         self._total_results = 0
         self._loaded_results = 0
         self._loading = False
@@ -118,6 +120,11 @@ class AppController(QObject):
         self._thumb_batch_timer = QTimer(self)
         self._thumb_batch_timer.setInterval(8_000)
         self._thumb_batch_timer.timeout.connect(self._start_auto_thumbs)
+        # Timer: resume ThumbWorker after yielding bandwidth to a preview load
+        self._preview_resume_timer = QTimer(self)
+        self._preview_resume_timer.setSingleShot(True)
+        self._preview_resume_timer.setInterval(2_000)
+        self._preview_resume_timer.timeout.connect(self._resume_thumb_for_preview)
         self._last_progress_update: float = 0.0
         self._last_thumb_progress_update: float = 0.0
 
@@ -167,6 +174,10 @@ class AppController(QObject):
     @Property(str, notify=selectedImageSourceChanged)
     def selectedImageSource(self) -> str:
         return self._selected_image_source
+
+    @Property(str, notify=selectedThumbSourceChanged)
+    def selectedThumbSource(self) -> str:
+        return self._selected_thumb_source
 
     @Property(int, notify=totalResultsChanged)
     def totalResults(self) -> int:
@@ -454,15 +465,24 @@ class AppController(QObject):
         self._update_exif_table(meta_json)
         if load_image:
             if path:
-                ext = Path(path).suffix.lower()
-                if ext in RAW_EXTENSIONS:
-                    encoded = urllib.parse.quote(path, safe="")
-                    self._selected_image_source = f"image://raw/{encoded}"
-                else:
-                    self._selected_image_source = QUrl.fromLocalFile(path).toString()
+                encoded = urllib.parse.quote(path, safe="")
+                self._selected_image_source = f"image://preview/{encoded}"
             else:
                 self._selected_image_source = ""
+            # Set thumb placeholder immediately from local cache (instant, no network hit)
+            thumb_uri = self._search_model.data(
+                self._search_model.index(row, 0),
+                SearchListModel.ThumbnailSourceRole,
+            )
+            self._selected_thumb_source = thumb_uri or ""
+            self.selectedThumbSourceChanged.emit()
             self.selectedImageSourceChanged.emit()
+            # Pause background workers to yield I/O bandwidth to the preview load
+            if self._thumb_worker and self._thumb_worker.isRunning():
+                self._thumb_worker.pause()
+            if self._index_worker and self._index_worker.isRunning():
+                self._index_worker.pause()
+            self._preview_resume_timer.start()  # resets if already running
 
     @Slot(str)
     def findNext(self, find_text: str) -> None:
@@ -802,7 +822,9 @@ class AppController(QObject):
         self.detailsHtmlChanged.emit()
         self._exif_model.set_rows([])
         self._selected_image_source = ""
+        self._selected_thumb_source = ""
         self.selectedImageSourceChanged.emit()
+        self.selectedThumbSourceChanged.emit()
 
     def _update_exif_table(self, meta_json: str) -> None:
         try:
@@ -893,6 +915,12 @@ class AppController(QObject):
         # Run at low priority — thumbnail building is background work and must not
         # compete with the GUI thread or the async preview image provider.
         self._thumb_worker.start(QThread.Priority.LowestPriority)
+
+    def _resume_thumb_for_preview(self) -> None:
+        if self._thumb_worker and self._thumb_worker.isRunning():
+            self._thumb_worker.resume()
+        if self._index_worker and self._index_worker.isRunning():
+            self._index_worker.resume()
 
     def _on_thumb_done(self, cached: int, total: int) -> None:
         self._is_building_thumbs = False

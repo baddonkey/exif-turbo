@@ -66,6 +66,7 @@ ApplicationWindow {
     readonly property int    _thumbTotal:          controller ? controller.thumbTotal         : 0
     readonly property string _thumbCurrentFile:    controller ? controller.thumbCurrentFile   : ""
     readonly property string _selectedImageSource: controller ? controller.selectedImageSource : ""
+    readonly property string _selectedThumbSource: controller ? controller.selectedThumbSource : ""
     readonly property int    _indexQueuePosition:  controller ? controller.indexQueuePosition  : 0
     readonly property int    _indexQueueTotal:     controller ? controller.indexQueueTotal     : 0
     readonly property string _detailsHtml:         controller ? controller.detailsHtml        : ""
@@ -858,14 +859,33 @@ ApplicationWindow {
                         }
                     }
 
-                    Image {
+                    // Preview: show cached thumbnail instantly as placeholder,
+                    // then fade in the full image once it has loaded.
+                    Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        source: _selectedImageSource
-                        fillMode: Image.PreserveAspectFit
-                        smooth: true
-                        asynchronous: true
-                        cache: false
+
+                        // Low-res thumbnail placeholder — visible from cache immediately
+                        Image {
+                            anchors.fill: parent
+                            source: _selectedThumbSource
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                            visible: _selectedThumbSource !== "" && fullPreview.status !== Image.Ready
+                        }
+
+                        // Full-resolution image — fades in when loaded
+                        Image {
+                            id: fullPreview
+                            anchors.fill: parent
+                            source: _selectedImageSource
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                            asynchronous: true
+                            cache: false
+                            opacity: status === Image.Ready ? 1.0 : 0.0
+                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                        }
                     }
                 }
             }
@@ -1417,12 +1437,29 @@ ApplicationWindow {
                         }
                     }
 
-                    Image {
+                    // Preview: show cached thumbnail instantly as placeholder,
+                    // then fade in the full image once it has loaded.
+                    Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        source: _selectedImageSource
-                        fillMode: Image.PreserveAspectFit
-                        smooth: true; asynchronous: true; cache: false
+
+                        Image {
+                            anchors.fill: parent
+                            source: _selectedThumbSource
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                            visible: _selectedThumbSource !== "" && fullPreview2.status !== Image.Ready
+                        }
+
+                        Image {
+                            id: fullPreview2
+                            anchors.fill: parent
+                            source: _selectedImageSource
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true; asynchronous: true; cache: false
+                            opacity: status === Image.Ready ? 1.0 : 0.0
+                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                        }
                     }
                 }
             }

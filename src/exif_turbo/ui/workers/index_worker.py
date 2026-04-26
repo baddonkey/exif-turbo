@@ -38,9 +38,26 @@ class IndexWorker(QThread):
         self._clear_cache_dir = clear_cache_dir
         self._blacklist: List[str] = list(blacklist) if blacklist else []
         self._cancel_event = threading.Event()
+        self._resume_event = threading.Event()
+        self._resume_event.set()  # starts unpaused
 
     def cancel(self) -> None:
         self._cancel_event.set()
+        self._resume_event.set()  # unblock any thread waiting in pause
+
+    def pause(self) -> None:
+        """Temporarily suspend indexing I/O to yield bandwidth to the preview."""
+        self._resume_event.clear()
+
+    def resume(self) -> None:
+        """Resume indexing after a preview has had time to load."""
+        self._resume_event.set()
+
+    def _cancel_or_pause(self) -> bool:
+        """cancel_check callable: blocks while paused, then returns the canceled state."""
+        if not self._resume_event.is_set():
+            self._resume_event.wait(timeout=2.0)
+        return self._cancel_event.is_set()
 
     def run(self) -> None:
         try:
@@ -67,7 +84,7 @@ class IndexWorker(QThread):
                 None,
                 on_progress=_on_progress,
                 workers=self.workers,
-                cancel_check=self._cancel_event.is_set,
+                cancel_check=self._cancel_or_pause,
                 force=self._force,
             )
             repo.close()

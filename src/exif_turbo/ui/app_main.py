@@ -19,6 +19,7 @@ from .models.exif_list_model import ExifListModel
 from .models.folder_list_model import FolderListModel
 from .models.search_list_model import SearchListModel
 from .models.settings_model import SettingsModel
+from .providers.preview_image_provider import PreviewImageProvider
 from .providers.raw_image_provider import RawImageProvider
 from .view_models.app_controller import AppController
 
@@ -103,6 +104,7 @@ def main() -> None:
     folder_model = FolderListModel()
     controller = AppController(db_path, search_model, exif_model, folder_model, settings)
     engine = QQmlApplicationEngine()
+    engine.addImageProvider("preview", PreviewImageProvider())
     engine.addImageProvider("raw", RawImageProvider())
     ctx = engine.rootContext()
     ctx.setContextProperty("controller", controller)

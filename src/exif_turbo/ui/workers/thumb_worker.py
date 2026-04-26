@@ -68,9 +68,20 @@ class ThumbWorker(QThread):
         self.workers = max(1, workers)
         self._key = key
         self._cancel_event = threading.Event()
+        self._resume_event = threading.Event()
+        self._resume_event.set()  # starts unpaused
 
     def cancel(self) -> None:
         self._cancel_event.set()
+        self._resume_event.set()  # unblock any waiting build_thumb
+
+    def pause(self) -> None:
+        """Temporarily suspend thumbnail I/O to yield bandwidth to the preview."""
+        self._resume_event.clear()
+
+    def resume(self) -> None:
+        """Resume thumbnail building after a preview has had time to load."""
+        self._resume_event.set()
 
     def run(self) -> None:
         try:
@@ -105,6 +116,11 @@ class ThumbWorker(QThread):
 
             def build_thumb(path: str) -> bool:
                 if not path:
+                    return False
+                # Yield to preview loads: wait while paused (2s max safety valve)
+                if not self._resume_event.is_set():
+                    self._resume_event.wait(timeout=2.0)
+                if self._cancel_event.is_set():
                     return False
                 # Compute cache filename — use DB stamp to avoid network stat
                 stamp = stamps.get(path)
