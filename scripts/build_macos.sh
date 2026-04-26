@@ -10,8 +10,9 @@
 #   bash scripts/build_macos.sh --sign "Developer ID Application: Your Name (TEAMID)"
 #
 # Requirements:
-#   pip install pyinstaller
+#   pip install pyinstaller babel
 #   Xcode Command Line Tools (for hdiutil)
+#   (babel is used to compile .po -> .mo translation catalogs)
 #
 # Optional (for custom icon):
 #   assets/icon_16.png, icon_32.png, icon_64.png, icon_128.png,
@@ -68,6 +69,20 @@ PYEOF
 else
     echo "  No logo.png found — skipping .icns generation."
 fi
+
+# ── Compile translation catalogs (.po -> .mo) ──────────────────────────────────
+echo "  Compiling translation catalogs ..."
+python3 -c "
+import subprocess, sys, pathlib
+pybabel = pathlib.Path(sys.executable).parent / 'pybabel'
+locales = pathlib.Path('src/exif_turbo/i18n/locales')
+for po in locales.rglob('*.po'):
+    mo = po.with_suffix('.mo')
+    subprocess.run([str(pybabel), 'compile', '-i', str(po), '-o', str(mo)],
+                   check=True, capture_output=True)
+    print(f'    {mo.relative_to(pathlib.Path.cwd())}')
+"
+echo "  Translation catalogs compiled."
 
 # ── Build with PyInstaller ─────────────────────────────────────────────────────
 pyinstaller \

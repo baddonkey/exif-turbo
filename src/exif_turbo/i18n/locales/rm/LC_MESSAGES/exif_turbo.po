@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-04-25 17:48+0200\n"
+"POT-Creation-Date: 2026-04-26 23:19+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: rm\n"
@@ -18,39 +18,43 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:77
+#: src/exif_turbo/ui/view_models/app_controller.py:84
 msgid "Enter the database password to continue"
 msgstr "Endatar la pled-clav da la banca da datas per cuntinuar"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:464
+#: src/exif_turbo/ui/view_models/app_controller.py:540
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Cartella gia trackata: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:596
+#: src/exif_turbo/ui/view_models/app_controller.py:672
 #, python-brace-format
 msgid "Indexing {}…"
 msgstr "Indexaziun {}…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:625
+#: src/exif_turbo/ui/view_models/app_controller.py:702
 #, python-brace-format
 msgid "Indexed {} images"
 msgstr "{} maletgs indexads"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:652
+#: src/exif_turbo/ui/view_models/app_controller.py:735
 #, python-brace-format
 msgid "Index failed: {}"
 msgstr "Indexaziun buca reussida: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:684
+#: src/exif_turbo/ui/view_models/app_controller.py:767
 msgid "Index canceled"
 msgstr "Indexaziun interrutta"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:703
+#: src/exif_turbo/ui/view_models/app_controller.py:787
 msgid "Canceling…"
 msgstr "Interruziun…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:797
+#: src/exif_turbo/ui/view_models/app_controller.py:838
+msgid "Database reset"
+msgstr ""
+
+#: src/exif_turbo/ui/view_models/app_controller.py:920
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indexaziun… {} / {}"
@@ -70,6 +74,10 @@ msgstr "&Datoteca"
 #: QML
 msgid "&Help"
 msgstr "&Agid"
+
+#: QML
+msgid "&User Manual"
+msgstr ""
 
 #: QML
 msgid "About exif-turbo"
@@ -329,6 +337,12 @@ msgstr ""
 "caratters, ? correspunda ad in caracter."
 
 #: QML
+msgid ""
+"Permanently deletes all indexed images and folder records. This cannot be"
+" undone."
+msgstr ""
+
+#: QML
 msgid "Preparing\\u2026"
 msgstr ""
 
@@ -367,6 +381,14 @@ msgstr "Re-indexar"
 #: QML
 msgid "Rescan All"
 msgstr "Re-indexar tut"
+
+#: QML
+msgid "Reset Database"
+msgstr ""
+
+#: QML
+msgid "Reset Database\\u2026"
+msgstr ""
 
 #: QML
 msgid "Restart the application for language changes to take full effect."
@@ -417,6 +439,14 @@ msgid "Theme"
 msgstr "Tema"
 
 #: QML
+msgid "Third-Party &Licenses"
+msgstr ""
+
+#: QML
+msgid "Third-Party Licenses"
+msgstr ""
+
+#: QML
 msgid ""
 "This passphrase encrypts your entire image index. Use at least 12 "
 "characters and a mix of letters, numbers, and symbols. There is no way to"
@@ -425,6 +455,14 @@ msgstr ""
 "Questa pled-clav cifrescha l’entir index da maletgs. Duvrai almain 12 "
 "caratters ed ina mesadad da lettras, cifras e simbols. Ina pled-clav "
 "persa na po betg vegnir recuperada."
+
+#: QML
+msgid ""
+"This will permanently delete all indexed images and indexed folder "
+"records.\n"
+"\n"
+"Are you sure you want to continue?"
+msgstr ""
 
 #: QML
 msgid "Unlock"

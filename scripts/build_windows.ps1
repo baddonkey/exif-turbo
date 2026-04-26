@@ -6,8 +6,9 @@
 #   dist\exif-turbo-<version>-windows.msi    — distributable MSI installer
 #
 # Requirements:
-#   pip install pyinstaller
+#   pip install pyinstaller babel
 #   dotnet tool install --global wix          (WiX Toolset v4)
+#   (babel is used to compile .po -> .mo translation catalogs)
 #
 # Optional:
 #   assets\icon.ico   — application icon (embedded in EXE and shown in installer)
@@ -35,6 +36,22 @@ if (-not $match) {
 }
 $VERSION = $match.Matches[0].Groups[1].Value
 Write-Host "Building exif-turbo $VERSION for Windows ..."
+
+# ── Compile translation catalogs (.po -> .mo) ──────────────────────────────────
+Write-Host "  Compiling translation catalogs ..."
+python -c @"
+import subprocess, sys, pathlib
+pybabel = pathlib.Path(sys.executable).parent / 'Scripts' / 'pybabel.exe'
+if not pybabel.exists():
+    pybabel = pathlib.Path(sys.executable).parent / 'pybabel'
+locales = pathlib.Path('src/exif_turbo/i18n/locales')
+for po in locales.rglob('*.po'):
+    mo = po.with_suffix('.mo')
+    subprocess.run([str(pybabel), 'compile', '-i', str(po), '-o', str(mo)], check=True, capture_output=True)
+    print(f'    {mo}')
+"@
+if ($LASTEXITCODE -ne 0) { Write-Error "Translation compile failed"; exit 1 }
+Write-Host "  Translation catalogs compiled."
 
 # ── Build with PyInstaller ─────────────────────────────────────────────────────
 pyinstaller exif-turbo.spec --noconfirm --clean

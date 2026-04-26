@@ -187,7 +187,14 @@ def main() -> None:
         sys.exit(1)
 
     # Re-evaluate all qsTr() bindings in live QML objects when language changes.
-    settings.retranslateRequested.connect(engine.retranslate)
+    # remove+install sends QEvent::LanguageChange which causes the QML engine
+    # to re-query all translators; retranslate() then re-evaluates all bindings.
+    def _on_retranslate() -> None:
+        app.removeTranslator(translator)
+        app.installTranslator(translator)
+        engine.retranslate()
+
+    settings.retranslateRequested.connect(_on_retranslate)
 
     sys.exit(app.exec())
 

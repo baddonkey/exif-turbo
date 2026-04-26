@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-04-25 17:48+0200\n"
+"POT-Creation-Date: 2026-04-26 23:19+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: de\n"
@@ -18,39 +18,43 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:77
+#: src/exif_turbo/ui/view_models/app_controller.py:84
 msgid "Enter the database password to continue"
 msgstr "Datenbankpasswort eingeben, um fortzufahren"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:464
+#: src/exif_turbo/ui/view_models/app_controller.py:540
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Ordner bereits verfolgt: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:596
+#: src/exif_turbo/ui/view_models/app_controller.py:672
 #, python-brace-format
 msgid "Indexing {}…"
 msgstr "Indizierung von {}…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:625
+#: src/exif_turbo/ui/view_models/app_controller.py:702
 #, python-brace-format
 msgid "Indexed {} images"
 msgstr "{} Bilder indiziert"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:652
+#: src/exif_turbo/ui/view_models/app_controller.py:735
 #, python-brace-format
 msgid "Index failed: {}"
 msgstr "Indizierung fehlgeschlagen: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:684
+#: src/exif_turbo/ui/view_models/app_controller.py:767
 msgid "Index canceled"
 msgstr "Indizierung abgebrochen"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:703
+#: src/exif_turbo/ui/view_models/app_controller.py:787
 msgid "Canceling…"
 msgstr "Abbrechen…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:797
+#: src/exif_turbo/ui/view_models/app_controller.py:838
+msgid "Database reset"
+msgstr ""
+
+#: src/exif_turbo/ui/view_models/app_controller.py:920
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indizierung… {} / {}"
@@ -70,6 +74,10 @@ msgstr "&Datei"
 #: QML
 msgid "&Help"
 msgstr "&Hilfe"
+
+#: QML
+msgid "&User Manual"
+msgstr ""
 
 #: QML
 msgid "About exif-turbo"
@@ -328,6 +336,12 @@ msgstr ""
 "entspricht einem Zeichen."
 
 #: QML
+msgid ""
+"Permanently deletes all indexed images and folder records. This cannot be"
+" undone."
+msgstr ""
+
+#: QML
 msgid "Preparing\\u2026"
 msgstr ""
 
@@ -366,6 +380,14 @@ msgstr "Neu indizieren"
 #: QML
 msgid "Rescan All"
 msgstr "Alle erneut indizieren"
+
+#: QML
+msgid "Reset Database"
+msgstr ""
+
+#: QML
+msgid "Reset Database\\u2026"
+msgstr ""
 
 #: QML
 msgid "Restart the application for language changes to take full effect."
@@ -418,6 +440,14 @@ msgid "Theme"
 msgstr "Design"
 
 #: QML
+msgid "Third-Party &Licenses"
+msgstr ""
+
+#: QML
+msgid "Third-Party Licenses"
+msgstr ""
+
+#: QML
 msgid ""
 "This passphrase encrypts your entire image index. Use at least 12 "
 "characters and a mix of letters, numbers, and symbols. There is no way to"
@@ -427,6 +457,14 @@ msgstr ""
 "mindestens 12 Zeichen und eine Kombination aus Buchstaben, Ziffern und "
 "Sonderzeichen. Ein verlorenes Passwort kann nicht wiederhergestellt "
 "werden."
+
+#: QML
+msgid ""
+"This will permanently delete all indexed images and indexed folder "
+"records.\n"
+"\n"
+"Are you sure you want to continue?"
+msgstr ""
 
 #: QML
 msgid "Unlock"
