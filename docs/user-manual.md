@@ -111,6 +111,9 @@ Use **Full Rescan** (or **Full Rescan All**) to force every file to be
 re-processed even if its modification time has not changed. This is useful after
 updating ExifTool or if you suspect the index is out of date.
 
+When rescanning a single folder, only the records belonging to that folder are
+updated or removed. Images indexed from other folders are not affected.
+
 ### Folder statuses
 
 Each folder row shows a coloured status badge and an image count badge
@@ -315,6 +318,26 @@ The theme changes immediately.
 
 Select the display language from the dropdown. A restart is required for the
 language change to take full effect.
+
+### Reset Database
+
+At the bottom of the Settings tab, a divider separates the standard settings
+from a destructive-action zone.
+
+Click the ⚠️ **Reset Database…** button (red) to open a confirmation dialog.
+Click **OK** to confirm. This permanently:
+
+- Deletes all indexed images from the database
+- Removes all indexed folder records
+- Wipes the thumbnail cache on disk
+
+The database is vacuumed and checkpointed immediately, so the database file
+shrinks to near-zero on disk straight away.
+
+> **This action cannot be undone.** After a reset you will need to re-add your
+> folders and run a full rescan to rebuild the index.
+
+The **Reset Database…** button is disabled while indexing is in progress.
 
 ---
 

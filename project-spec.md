@@ -78,8 +78,8 @@ Ports & adapters (hexagonal) structure. Domain logic has no dependency on PySide
 
 | Module | Purpose |
 |--------|---------|
-| `image_index_repository.py` | `ImageIndexRepository` — all DB access. Schema: `images` table + `images_fts` FTS5 virtual table. Encrypted via SQLCipher. |
-| `indexed_folder_repository.py` | `IndexedFolderRepository` — manages the set of user-added folders: add, remove, enable/disable, status updates. |
+| `image_index_repository.py` | `ImageIndexRepository` — all DB access. Schema: `images` table + `images_fts` FTS5 virtual table. Encrypted via SQLCipher. Key methods: `upsert_image`, `search_fts`, `delete_missing(existing_paths, folder_roots=None)` (scoped delete), `clear_all()` (drops + recreates FTS5 table, VACUUM, WAL checkpoint). |
+| `indexed_folder_repository.py` | `IndexedFolderRepository` — manages the set of user-added folders: add, remove, enable/disable, status updates. `clear_all()` deletes all folder records. |
 
 **Schema:**
 
@@ -108,7 +108,7 @@ USING fts5(path, filename, metadata_text);
 | `indexer_service.py` | `IndexerService` — orchestrates scan → extract → upsert; supports parallel workers, incremental updates (mtime/size stamps), force-rebuild, progress callback, cancel |
 | `image_utils.py` | Image file type helpers |
 
-**Incremental indexing:** On each run, `IndexerService` compares `(mtime, size)` against DB-stored stamps. Only new or modified files are re-extracted. `force=True` clears all and rebuilds.
+**Incremental indexing:** On each run, `IndexerService` compares `(mtime, size)` against DB-stored stamps. Only new or modified files are re-extracted. `force=True` clears all and rebuilds. After scanning, `delete_missing(existing_paths, folder_roots=[...])` removes stale records scoped to the rescanned folder roots — records from other folders are not affected.
 
 ### 5.4 `models/`
 
@@ -126,7 +126,7 @@ derive stable thumbnail cache names without a live `os.stat` call.
 | Module | Purpose |
 |--------|---------|
 | `app_main.py` | `main()` — bootstraps `QGuiApplication`, sets Material style, registers `PreviewImageProvider` (`image://preview/`) and `RawImageProvider` (`image://raw/`), loads `Main.qml` |
-| `view_models/app_controller.py` | `AppController(QObject)` — all business logic exposed to QML via `Q_PROPERTY`, `Signal`, `Slot` |
+| `view_models/app_controller.py` | `AppController(QObject)` — all business logic exposed to QML via `Q_PROPERTY`, `Signal`, `Slot`. Accepts `cache_dir: Path | None` for thumbnail cache management. `resetDatabase()` slot calls `clear_all()` on both repositories, removes the thumbnail cache directory, and resets all UI models. |
 | `models/search_list_model.py` | `QAbstractListModel` — search result rows; roles: `path`, `filename`, `metadataJson`, `thumbnailSource`, `fileSize`. Thumbnail URIs are pre-computed at `set_rows` / `append_rows` time using DB-stored `mtime`/`size` stamps — no `os.stat` per repaint. |
 | `models/exif_list_model.py` | `QAbstractListModel` — EXIF key/value pairs for the detail panel |
 | `models/folder_list_model.py` | `QAbstractListModel` — rows for the Folders management panel; roles: `folderId`, `path`, `displayName`, `status`, `imageCount`, `errorMessage`, `enabled` |
@@ -161,6 +161,10 @@ derive stable thumbnail cache names without a live `os.stat` call.
   `ThumbWorker` and `IndexWorker`, then schedules a 2-second `QTimer` to
   `resume()` them. This yields I/O bandwidth to `PreviewImageProvider` on
   slow network drives.
+- `resetDatabase()` — drops and recreates `images_fts` FTS5 table (purging all
+  shadow tables), runs `VACUUM` + `PRAGMA wal_checkpoint(TRUNCATE)` to shrink
+  the database file immediately, removes the thumbnail cache directory, and
+  emits signals to clear all QML models. Disabled while indexing is in progress.
 
 **AppController signals (selection):**
 

@@ -7,6 +7,12 @@ import os
 import sys
 from pathlib import Path
 
+from PIL import Image as _PILImage
+
+# Raise the decompression bomb limit 10× above Pillow's default (89 MP → 894 MP).
+# Large panoramas and high-resolution TIFFs legitimately exceed the default.
+_PILImage.MAX_IMAGE_PIXELS = 894_784_850
+
 from PySide6.QtCore import QUrl, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QGuiApplication, QIcon, QImageReader
 from PySide6.QtQml import QQmlApplicationEngine

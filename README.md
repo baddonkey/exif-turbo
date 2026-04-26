@@ -12,6 +12,8 @@ Fully generated using VS Code Copilot.
 - Multilanguage UI: English, German, French, Italian, Romansh
 - Search and Browse tabs with 50/50 split-pane thumbnail preview
 - Folder management — add, remove, enable/disable indexed folders with per-folder status
+- Scoped rescan — rescanning a single folder only updates that folder's records; other indexed folders are never touched
+- Reset Database — wipes all indexed images, folder records, and thumbnail cache in one step; database file shrinks immediately
 - RAW format support: CR2, CR3, NEF, ARW, DNG, ORF, RW2, PEF, RAF, RWL, SRW
 - EXIF orientation correction for thumbnails (all formats including RAW)
 - CLI indexer (`exif-turbo-index`) for scripted/headless use
@@ -79,6 +81,17 @@ Fully generated using VS Code Copilot.
 - **Per-folder status** — each folder tracks its last indexing status
   (`new`, `indexed`, `error`) and image count.
 
+### Scoped rescan and Reset Database
+
+- **Scoped rescan** — `IndexerService.build_index()` passes `folder_roots` to
+  `ImageIndexRepository.delete_missing()`. Deletion is scoped to paths under
+  the scanned roots, so rescanning one folder never removes data from another.
+- **Reset Database** — a ⚠️ **Reset Database…** button (red) at the bottom of
+  the Settings tab opens a confirmation dialog. On confirm,
+  `AppController.resetDatabase()` calls `clear_all()` on both repositories and
+  removes the thumbnail cache directory, then emits UI signals to clear all
+  models instantly.
+
 ### UI & view-model improvements
 
 - **Thumbnail rendering** — thumbnail URIs are pre-computed once when search
@@ -95,8 +108,14 @@ Fully generated using VS Code Copilot.
 
 - **Atomic upserts** — `upsert_image` wraps both `images` + `images_fts` writes
   in a single transaction.
-- **Efficient `delete_missing`** — set-difference query via a temporary table
-  replaces an O(N) per-row DELETE loop.
+- **Scoped `delete_missing`** — set-difference query via a temporary table; an
+  optional `folder_roots` parameter limits deletion to rows whose path belongs
+  to the scanned folder roots, so rescanning one folder never removes records
+  from other folders.
+- **`clear_all()` on both repositories** — drops and recreates the `images_fts`
+  FTS5 virtual table (purging all shadow tables), runs `VACUUM`, then
+  `PRAGMA wal_checkpoint(TRUNCATE)` so the database file shrinks to near-zero
+  immediately without requiring an app restart.
 - **`RAW_EXTENSIONS`** — exported constant; `IMAGE_EXTENSIONS` is defined as
   `{..., *RAW_EXTENSIONS}`. No duplicated extension lists.
 - **Logged failures** — `ExifMetadataExtractor` logs a `WARNING` instead of
@@ -104,13 +123,13 @@ Fully generated using VS Code Copilot.
 
 ### Test suite
 
-81 automated tests across four layers:
+93 automated tests across four layers:
 
 | Suite | Count | What it covers |
 |-------|-------|----------------|
-| `tests/data/` | 38 | Repository: upsert, FTS5 search, delete_missing, excluded paths, folder management |
-| `tests/indexing/` | 25 | Image utils, metadata text, IndexerService e2e (real JPEG/PNG files) |
-| `tests/ui/` | 18 | Live QML window driven via pytest-qt — unlock, search, filter, folder add/remove/enable, controller state |
+| `tests/data/` | 39 | Repository: upsert, FTS5 search, delete_missing (scoped), clear_all, excluded paths, folder management |
+| `tests/indexing/` | 26 | Image utils, metadata text, IndexerService e2e (real JPEG/PNG files), scoped rescan |
+| `tests/ui/` | 28 | Live QML window driven via pytest-qt — unlock, search, filter, folder add/remove/enable, controller state |
 
 ## Requirements
 
