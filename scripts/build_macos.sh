@@ -32,12 +32,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ── Read version ───────────────────────────────────────────────────────────────
-VERSION=$(python3 -c "
+VERSION=$(python3 - << 'PYEOF'
 import re, pathlib
-m = re.search(r'__version__\s*=\s*[\"\'']([^\"\']+)[\"\'']',
+m = re.search(r"__version__\s*=\s*[\"']([^\"']+)[\"']",
               pathlib.Path('src/exif_turbo/__init__.py').read_text())
 print(m.group(1) if m else '0.0.0')
-")
+PYEOF
+)
 echo "Building exif-turbo $VERSION for macOS ..."
 
 # ── Generate .icns from bundled PNGs (optional) ────────────────────────────────
