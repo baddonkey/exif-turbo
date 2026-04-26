@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any, Dict
@@ -10,6 +11,26 @@ from typing import Any, Dict
 from PIL import Image
 
 _log = logging.getLogger(__name__)
+
+# When the app runs as a frozen .app bundle on macOS (or a similar restricted
+# environment on Windows), the process PATH is minimal and does not include
+# Homebrew or other user-installed tool directories.  Build a best-effort
+# augmented PATH so shutil.which() can locate exiftool.
+_EXTRA_PATHS = [
+    "/usr/local/bin",       # Homebrew (Intel Mac)
+    "/opt/homebrew/bin",    # Homebrew (Apple Silicon)
+    "/opt/homebrew/sbin",
+    "/usr/bin",
+    "/bin",
+]
+
+def _find_exiftool() -> str:
+    """Return the path to exiftool, searching common locations if needed."""
+    augmented = os.pathsep.join(
+        [os.environ.get("PATH", "")] + _EXTRA_PATHS
+    )
+    found = shutil.which("exiftool", path=augmented)
+    return found or "exiftool"  # fall back to bare name; will fail with a clear error
 
 
 class ExifMetadataExtractor:
@@ -23,7 +44,7 @@ class ExifMetadataExtractor:
             )
             result = subprocess.run(
                 [
-                    "exiftool",
+                    _find_exiftool(),
                     "-json",
                     "-g1",
                     "-n",
