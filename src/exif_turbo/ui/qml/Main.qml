@@ -226,22 +226,19 @@ ApplicationWindow {
                 }
 
                 // New-database hint banner
-                Rectangle {
+                Label {
                     Layout.fillWidth: true
-                    height: newDbHint.implicitHeight + 16
-                    radius: 6
-                    color: Qt.rgba(Material.accentColor.r, Material.accentColor.g, Material.accentColor.b, 0.10)
-                    border.color: Qt.rgba(Material.accentColor.r, Material.accentColor.g, Material.accentColor.b, 0.30)
-                    border.width: 1
                     visible: _isNewDatabase
-
-                    Label {
-                        id: newDbHint
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8 }
-                        text: qsTr("This passphrase encrypts your entire image index. Use at least 12 characters and a mix of letters, numbers, and symbols. There is no way to recover a lost passphrase.")
-                        font.pixelSize: 12
-                        wrapMode: Text.WordWrap
-                        opacity: 0.85
+                    text: qsTr("This passphrase encrypts your entire image index. Use at least 12 characters and a mix of letters, numbers, and symbols. There is no way to recover a lost passphrase.")
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                    opacity: 0.85
+                    topPadding: 8; bottomPadding: 8; leftPadding: 8; rightPadding: 8
+                    background: Rectangle {
+                        radius: 6
+                        color: Qt.rgba(Material.accentColor.r, Material.accentColor.g, Material.accentColor.b, 0.10)
+                        border.color: Qt.rgba(Material.accentColor.r, Material.accentColor.g, Material.accentColor.b, 0.30)
+                        border.width: 1
                     }
                 }
 
