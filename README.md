@@ -3,6 +3,8 @@
 Fast image EXIF metadata search and indexing tool with a PySide6 QML desktop UI.
 Fully generated using VS Code Copilot.
 
+📖 **[User Manual](docs/user-manual.md)** — full feature reference, keyboard shortcuts, and screenshots.
+
 ## Features
 
 - Full-text search over all EXIF metadata using SQLite FTS5
