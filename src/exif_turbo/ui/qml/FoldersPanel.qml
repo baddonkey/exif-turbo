@@ -199,7 +199,6 @@ Item {
                         text: qsTr("Rescan")
                         font.pixelSize: 11
                         implicitHeight: 30
-                        implicitWidth: 72
                         enabled: model.enabled && model.status !== "scanning"
                         ToolTip.text: qsTr("Re-index this folder (incremental)")
                         ToolTip.visible: hovered
@@ -212,7 +211,6 @@ Item {
                         text: qsTr("Full Rescan")
                         font.pixelSize: 11
                         implicitHeight: 30
-                        implicitWidth: 84
                         enabled: model.enabled && model.status !== "scanning"
                         ToolTip.text: qsTr("Force re-extract EXIF for every file in this folder")
                         ToolTip.visible: hovered
@@ -225,7 +223,6 @@ Item {
                         text: qsTr("Remove")
                         font.pixelSize: 11
                         implicitHeight: 30
-                        implicitWidth: 72
                         Material.foreground: Material.Red
                         ToolTip.text: qsTr("Remove this folder and delete its indexed images")
                         ToolTip.visible: hovered
