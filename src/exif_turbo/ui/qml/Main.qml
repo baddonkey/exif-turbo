@@ -500,13 +500,42 @@ ApplicationWindow {
 
                                 TextInput {
                                     id: searchField
-                                    anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: 10; verticalCenter: parent.verticalCenter }
+                                    anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: text.length > 0 ? 28 : 10; verticalCenter: parent.verticalCenter }
                                     font.pixelSize: 13
                                     color: Material.foreground
                                     selectedTextColor: "white"
                                     selectionColor: root._accentColor
                                     clip: true
                                     Keys.onReturnPressed: controller.search(text)
+                                }
+
+                                // Clear button — visible whenever the field has text
+                                Item {
+                                    id: clearSearchButton
+                                    anchors { right: parent.right; rightMargin: 4; verticalCenter: parent.verticalCenter }
+                                    width: 20; height: 20
+                                    visible: searchField.text.length > 0
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "\u00D7"
+                                        font.pixelSize: 16
+                                        color: Material.foreground
+                                        opacity: clearSearchMouse.containsMouse ? 1.0 : 0.45
+                                        Behavior on opacity { NumberAnimation { duration: 80 } }
+                                    }
+
+                                    MouseArea {
+                                        id: clearSearchMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            searchField.text = ""
+                                            searchField.forceActiveFocus()
+                                            controller.search("")
+                                        }
+                                    }
                                 }
                             }
 
