@@ -125,10 +125,20 @@ class AppController(QObject):
         self._thumb_batch_timer = QTimer(self)
         self._thumb_batch_timer.setInterval(8_000)
         self._thumb_batch_timer.timeout.connect(self._start_auto_thumbs)
-        # Timer: resume ThumbWorker after yielding bandwidth to a preview load
+        # Timer: refresh the search list with newly written thumbs every 10 s
+        # during a thumb build — ensures mid-batch thumbnails appear on macOS
+        # where LowestPriority threads are aggressively throttled by the OS.
+        self._thumb_refresh_timer = QTimer(self)
+        self._thumb_refresh_timer.setInterval(10_000)
+        self._thumb_refresh_timer.timeout.connect(self._on_thumb_refresh_tick)
+        # Timer: resume workers after yielding I/O bandwidth to a preview load.
+        # This is a fallback only — the primary trigger is onPreviewStatusChanged()
+        # called by QML when the image reaches Ready or Error status.  The timer
+        # fires after 10 s so workers are not stuck paused if QML never reports
+        # (e.g. empty source, app minimised, or the image provider crashes).
         self._preview_resume_timer = QTimer(self)
         self._preview_resume_timer.setSingleShot(True)
-        self._preview_resume_timer.setInterval(2_000)
+        self._preview_resume_timer.setInterval(10_000)
         self._preview_resume_timer.timeout.connect(self._resume_thumb_for_preview)
         self._last_progress_update: float = 0.0
         self._last_thumb_progress_update: float = 0.0
@@ -963,9 +973,12 @@ class AppController(QObject):
         self._thumb_worker.finished.connect(self._on_thumb_done)
         self._thumb_worker.failed.connect(self._on_thumb_failed)
         self._thumb_worker.canceled.connect(self._on_thumb_canceled)
-        # Run at low priority — thumbnail building is background work and must not
-        # compete with the GUI thread or the async preview image provider.
-        self._thumb_worker.start(QThread.Priority.LowestPriority)
+        # LowPriority (QoS utility) instead of LowestPriority (QoS background):
+        # on macOS, LowestPriority maps to QOS_CLASS_BACKGROUND which the scheduler
+        # starves whenever IndexWorker (LowPriority/utility) is active, making thumbs
+        # appear to generate only after indexing finishes.
+        self._thumb_worker.start(QThread.Priority.LowPriority)
+        self._thumb_refresh_timer.start()
 
     def _resume_thumb_for_preview(self) -> None:
         if self._thumb_worker and self._thumb_worker.isRunning():
@@ -973,7 +986,26 @@ class AppController(QObject):
         if self._index_worker and self._index_worker.isRunning():
             self._index_worker.resume()
 
+    @Slot()
+    def onPreviewStatusChanged(self) -> None:
+        """Called by QML when the full-res preview image reaches Ready or Error.
+
+        Cancels the fallback timer and immediately resumes background workers
+        so they are not kept paused longer than necessary.  On macOS, the scan
+        phase can hold off disk I/O long enough that a NAS preview read takes
+        more than the old 2-second fixed timeout; signalling from QML means
+        workers resume the instant the decode finishes, no earlier and no later.
+        """
+        self._preview_resume_timer.stop()
+        self._resume_thumb_for_preview()
+
+    def _on_thumb_refresh_tick(self) -> None:
+        """Periodic mid-batch refresh so thumbnails appear as they are written."""
+        if self._is_building_thumbs:
+            self._search_model.refresh_thumbnails()
+
     def _on_thumb_done(self, cached: int, total: int) -> None:
+        self._thumb_refresh_timer.stop()
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
         self._search_model.refresh_thumbnails()
@@ -982,10 +1014,12 @@ class AppController(QObject):
             self._start_auto_thumbs()
 
     def _on_thumb_failed(self, error: str) -> None:
+        self._thumb_refresh_timer.stop()
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
 
     def _on_thumb_canceled(self, cached: int, total: int) -> None:
+        self._thumb_refresh_timer.stop()
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
         self._search_model.refresh_thumbnails()

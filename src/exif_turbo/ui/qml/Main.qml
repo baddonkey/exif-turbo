@@ -883,6 +883,10 @@ ApplicationWindow {
                             cache: false
                             opacity: status === Image.Ready ? 1.0 : 0.0
                             Behavior on opacity { NumberAnimation { duration: 150 } }
+                            onStatusChanged: {
+                                if (status === Image.Ready || status === Image.Error)
+                                    if (controller) controller.onPreviewStatusChanged()
+                            }
                         }
                     }
                 }
@@ -1458,6 +1462,10 @@ ApplicationWindow {
                             smooth: true; asynchronous: true; cache: false
                             opacity: status === Image.Ready ? 1.0 : 0.0
                             Behavior on opacity { NumberAnimation { duration: 150 } }
+                            onStatusChanged: {
+                                if (status === Image.Ready || status === Image.Error)
+                                    if (controller) controller.onPreviewStatusChanged()
+                            }
                         }
                     }
                 }
