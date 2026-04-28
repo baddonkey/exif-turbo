@@ -639,10 +639,13 @@ class MainWindow(QMainWindow):
         self.worker.canceled.connect(self.on_index_canceled)
         self.worker.start()
 
-    def on_index_done(self, count: int) -> None:
+    def on_index_done(self, count: int, error_count: int = 0) -> None:
         self.index_button.setEnabled(True)
         self.cancel_index_button.setVisible(False)
-        self.status_label.setText(f"Indexed {count} images")
+        if error_count:
+            self.status_label.setText(f"Indexed {count} images ({error_count} skipped due to errors)")
+        else:
+            self.status_label.setText(f"Indexed {count} images")
         self.search()
 
     def on_index_failed(self, error: str) -> None:

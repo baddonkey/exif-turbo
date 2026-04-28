@@ -687,7 +687,7 @@ class AppController(QObject):
         self._index_worker.start(QThread.Priority.LowPriority)
         self._thumb_batch_timer.start()
 
-    def _on_managed_folder_index_done(self, count: int) -> None:
+    def _on_managed_folder_index_done(self, count: int, error_count: int = 0) -> None:
         self._thumb_batch_timer.stop()
         self._is_indexing = False
         self.isIndexingChanged.emit()
@@ -699,7 +699,14 @@ class AppController(QObject):
             if updated:
                 self._folder_model.update_folder(updated)
         self._scanning_folder_id = None
-        self._set_status(_("Indexed {} images").format(count))
+        if error_count:
+            self._set_status(
+                _("Indexed {count} images ({errors} skipped due to errors)").format(
+                    count=count, errors=error_count
+                )
+            )
+        else:
+            self._set_status(_("Indexed {} images").format(count))
         self._load_formats()
         self._invalidate_folder_tree()
         self.search(self._query_text)

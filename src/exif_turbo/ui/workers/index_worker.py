@@ -14,7 +14,7 @@ from ...indexing.indexer_service import IndexerService
 
 
 class IndexWorker(QThread):
-    finished = Signal(int)
+    finished = Signal(int, int)   # (indexed_count, error_count)
     failed = Signal(str)
     progress = Signal(int, int, str)
     canceled = Signal(int)
@@ -79,7 +79,7 @@ class IndexWorker(QThread):
                     _last_emit[0] = now
                     self.progress.emit(current, total, str(p))
 
-            count = indexer.build_index(
+            count, error_count = indexer.build_index(
                 self.folders,
                 None,
                 on_progress=_on_progress,
@@ -91,7 +91,7 @@ class IndexWorker(QThread):
             if self._cancel_event.is_set():
                 self.canceled.emit(count)
             else:
-                self.finished.emit(count)
+                self.finished.emit(count, error_count)
         except Exception as exc:
             self.failed.emit(str(exc))
 

@@ -67,7 +67,7 @@ def test_build_index_indexes_single_jpeg(
     service = IndexerService(repo, extractor=_FakeExtractor({"photo": {"Make": "Canon"}}))
 
     # Act
-    count = service.build_index([image_folder])
+    count, _ = service.build_index([image_folder])
 
     # Assert
     assert count == 1
@@ -85,7 +85,7 @@ def test_build_index_indexes_multiple_formats(
     service = IndexerService(repo, extractor=_FakeExtractor())
 
     # Act
-    count = service.build_index([image_folder])
+    count, _ = service.build_index([image_folder])
 
     # Assert
     assert count == 2
@@ -99,7 +99,7 @@ def test_build_index_empty_folder_returns_zero(
     empty.mkdir()
     service = IndexerService(repo, extractor=_FakeExtractor())
 
-    count = service.build_index([empty])
+    count, _ = service.build_index([empty])
 
     assert count == 0
     assert repo.count_images("") == 0
@@ -279,7 +279,7 @@ def test_build_index_with_parallel_workers_produces_same_result(
     )
 
     # Act
-    count = service.build_index([image_folder], workers=3)
+    count, _ = service.build_index([image_folder], workers=3)
 
     # Assert
     assert count == 6
@@ -305,7 +305,7 @@ def test_build_index_cancel_stops_processing(
     service = IndexerService(repo, extractor=_FakeExtractor())
 
     # Act
-    count = service.build_index([image_folder], cancel_check=cancel_after_one)
+    count, _ = service.build_index([image_folder], cancel_check=cancel_after_one)
 
     # Assert — fewer than all 10 files were indexed
     assert count < 10

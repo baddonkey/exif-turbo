@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait as cf_wait
 from pathlib import Path
 from typing import Callable, Dict, List
+
+_log = logging.getLogger(__name__)
 
 from ..data.image_index_repository import ImageIndexRepository
 from ..models.indexed_image import IndexedImage
@@ -47,9 +50,10 @@ class IndexerService:
         workers: int = 1,
         cancel_check: Callable[[], bool] | None = None,
         force: bool = False,
-    ) -> int:
+    ) -> tuple[int, int]:  # (indexed_count, error_count)
         existing_paths: List[str] = []
         count = 0
+        error_count = 0
         canceled = False
 
         if force:
@@ -58,16 +62,16 @@ class IndexerService:
         # Collect paths lazily so cancel_check fires per-file during discovery.
         paths = list(self.finder.iter_images(folders, cancel_check=cancel_check))
         if cancel_check and cancel_check():
-            return 0
+            return 0, 0
         total = len(paths)
         if total == 0:
-            return 0
+            return 0, 0
 
         # Snapshot of DB stamps — used to skip unchanged files without re-reading EXIF.
         # Empty when force=True so every file is re-extracted.
         known_stamps = {} if force else self.repo.get_all_stamps()
         if cancel_check and cancel_check():
-            return 0
+            return 0, 0
 
         def build_item(path: Path) -> IndexedImage | None | _UnchangedType:
             # Fast bail-out: don't start a new (potentially slow) extraction after cancel.
@@ -90,19 +94,21 @@ class IndexerService:
                     metadata=metadata,
                     metadata_text=metadata_text,
                 )
-            except Exception:
+            except Exception as exc:
+                _log.warning("Skipping %s: %s", path, exc)
                 return None
 
         def should_cancel() -> bool:
             return bool(cancel_check and cancel_check())
 
         def record(item: IndexedImage | None | _UnchangedType, path: Path) -> None:
-            nonlocal count
+            nonlocal count, error_count
             if isinstance(item, _UnchangedType):
                 existing_paths.append(str(path))
                 count += 1
                 return
             if not item:
+                error_count += 1
                 return
             self.repo.upsert_image(
                 item.path,
@@ -183,4 +189,10 @@ class IndexerService:
                 json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8"
             )
 
-        return count
+        if error_count:
+            _log.warning(
+                "build_index: %d file(s) skipped due to errors out of %d total",
+                error_count,
+                total,
+            )
+        return count, error_count

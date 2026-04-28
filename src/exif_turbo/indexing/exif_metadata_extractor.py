@@ -55,6 +55,7 @@ class ExifMetadataExtractor:
                 encoding="utf-8",
                 errors="replace",
                 check=False,
+                timeout=30,
                 **_platform_kwargs,
             )
             if result.stdout:
@@ -66,6 +67,8 @@ class ExifMetadataExtractor:
                                 metadata[f"{key}:{sub_key}"] = str(sub_value)
                         else:
                             metadata[str(key)] = str(value)
+        except subprocess.TimeoutExpired as exc:
+            _log.warning("exiftool timed out for %s: %s", path, exc)
         except Exception as exc:
             _log.warning("exiftool extraction failed for %s: %s", path, exc)
 
