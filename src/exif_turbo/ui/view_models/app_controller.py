@@ -401,10 +401,7 @@ class AppController(QObject):
         )
         if results:
             row = self._current_result_row if 0 <= self._current_result_row < len(results) else 0
-            self.selectResult(row, load_image=False)
-            # Give QML's async image loader ~300 ms to paint the cached thumbnails,
-            # then load the preview so it doesn't compete with them.
-            QTimer.singleShot(300, lambda r=row: self.selectResult(r))
+            self.selectResult(row)
         else:
             self._clear_details()
 
@@ -489,6 +486,8 @@ class AppController(QObject):
         self._find_index = -1
         self._update_details_html()
         self._update_exif_table(meta_json)
+        self._current_result_row = row
+        self.currentResultRowChanged.emit()
         if load_image:
             if path:
                 encoded = urllib.parse.quote(path, safe="")
@@ -503,8 +502,6 @@ class AppController(QObject):
             self._selected_thumb_source = thumb_uri or ""
             self.selectedThumbSourceChanged.emit()
             self.selectedImageSourceChanged.emit()
-            self._current_result_row = row
-            self.currentResultRowChanged.emit()
             # Pause background workers to yield I/O bandwidth to the preview load
             if self._thumb_worker and self._thumb_worker.isRunning():
                 self._thumb_worker.pause()
