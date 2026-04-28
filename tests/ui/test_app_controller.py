@@ -23,6 +23,8 @@ from exif_turbo.ui.models.exif_list_model import ExifListModel
 from exif_turbo.ui.models.folder_list_model import FolderListModel
 from exif_turbo.ui.models.search_list_model import SearchListModel
 from exif_turbo.ui.models.settings_model import SettingsModel
+from exif_turbo.ui.providers.preview_image_provider import PreviewImageProvider
+from exif_turbo.ui.providers.raw_image_provider import RawImageProvider
 from exif_turbo.ui.view_models.app_controller import AppController
 
 # How long to leave the window visible between steps (ms).
@@ -96,6 +98,8 @@ def window(
     controller = AppController(db_path, search_model, exif_model, folder_model)
 
     engine = QQmlApplicationEngine()
+    engine.addImageProvider("preview", PreviewImageProvider())
+    engine.addImageProvider("raw", RawImageProvider())
     ctx = engine.rootContext()
     ctx.setContextProperty("controller", controller)
     ctx.setContextProperty("searchModel", search_model)
