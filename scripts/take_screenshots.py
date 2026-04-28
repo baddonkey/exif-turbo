@@ -56,6 +56,7 @@ from exif_turbo.ui.models.exif_list_model import ExifListModel  # noqa: E402
 from exif_turbo.ui.models.folder_list_model import FolderListModel  # noqa: E402
 from exif_turbo.ui.models.search_list_model import SearchListModel  # noqa: E402
 from exif_turbo.ui.models.settings_model import SettingsModel  # noqa: E402
+from exif_turbo.ui.providers.preview_image_provider import PreviewImageProvider  # noqa: E402
 from exif_turbo.ui.providers.raw_image_provider import RawImageProvider  # noqa: E402
 from exif_turbo.ui.view_models.app_controller import AppController  # noqa: E402
 
@@ -81,7 +82,7 @@ def build_demo_db() -> None:
     print(f"Indexing sample images from {SAMPLE_DATA} ...")
     repo = ImageIndexRepository(DB_PATH, key="")
     service = IndexerService(repo)
-    total = service.build_index(
+    indexed_count, _errors = service.build_index(
         folders=[SAMPLE_DATA],
         on_progress=lambda cur, tot, p: print(f"  {cur}/{tot}  {p.name}"),
         workers=4,
@@ -92,10 +93,10 @@ def build_demo_db() -> None:
     # Register the folder so it appears in the Indexed Folders tab
     folder_repo = IndexedFolderRepository(DB_PATH, key="")
     folder = folder_repo.add(str(SAMPLE_DATA))
-    folder_repo.update_status(folder.id, "indexed", image_count=total)
+    folder_repo.update_status(folder.id, "indexed", image_count=indexed_count)
     folder_repo.close()
 
-    print(f"Indexed {total} image(s) into {DB_PATH}")
+    print(f"Indexed {indexed_count} image(s) into {DB_PATH}")
 
 
 # -- Screenshot helper ---------------------------------------------------------
@@ -111,6 +112,63 @@ def _grab(window: Any, name: str) -> None:
         print(f"  [{idx}/{len(_STEPS)}] {out.relative_to(_REPO_ROOT)}")
     else:
         print(f"  WARNING: failed to save {out}")
+
+
+# -- Preview wait helper -------------------------------------------------------
+def _wait_for_preview(
+    root: Any,
+    ctrl: Any,
+    callback: Any,
+    preview_id: str = "fullPreview",
+    prev_source: str = "",
+    timeout_ms: int = 15_000,
+) -> None:
+    """Poll until the named QML Image is fully loaded, then call *callback*.
+
+    If *prev_source* is given, waits until ctrl.selectedImageSource differs from
+    it first (guards the 300 ms selectResult auto-fire race after search()).
+    Adds a 200 ms settle delay after load for the QML opacity animation.
+    """
+    from PySide6.QtCore import QObject
+
+    elapsed = [0]
+
+    def poll() -> None:
+        cur = ctrl.selectedImageSource
+
+        if prev_source and cur == prev_source:
+            # Source not yet changed — still on the old result
+            elapsed[0] += 100
+            if elapsed[0] < timeout_ms:
+                QTimer.singleShot(100, poll)
+            else:
+                print(f"  WARNING: source unchanged after {timeout_ms} ms, proceeding")
+                callback()
+            return
+
+        if not cur:
+            # Source cleared — nothing to wait for
+            callback()
+            return
+
+        preview = root.findChild(QObject, preview_id)
+        if preview is not None:
+            try:
+                progress = float(preview.property("progress") or 0.0)
+            except (TypeError, ValueError):
+                progress = 0.0
+            if progress >= 1.0:
+                QTimer.singleShot(200, callback)  # let opacity animation finish
+                return
+
+        elapsed[0] += 100
+        if elapsed[0] < timeout_ms:
+            QTimer.singleShot(100, poll)
+        else:
+            print(f"  WARNING: {preview_id!r} timed out after {timeout_ms} ms")
+            callback()
+
+    poll()
 
 
 # -- GUI runner ----------------------------------------------------------------
@@ -145,6 +203,7 @@ def _run_gui() -> None:
     ctrl = AppController(DB_PATH, search_model, exif_model, folder_model, settings)
 
     engine = QQmlApplicationEngine()
+    engine.addImageProvider("preview", PreviewImageProvider())
     engine.addImageProvider("raw", RawImageProvider())
     ctx = engine.rootContext()
     ctx.setContextProperty("controller", ctrl)
@@ -178,7 +237,7 @@ def _run_gui() -> None:
     def step_0_lock() -> None:
         switch_tab(0)
         _grab(root, "01_lock_screen")
-        ctrl.unlock("")          # unlocks + search("") + selectResult(0)
+        ctrl.unlock("")
         ctrl._start_auto_thumbs()  # not triggered automatically on a pre-built DB
         print("  Unlocked -- waiting for thumbnails to build ...")
         QTimer.singleShot(100, step_0_wait_thumbs)
@@ -188,38 +247,35 @@ def _run_gui() -> None:
             QTimer.singleShot(100, step_0_wait_thumbs)
             return
         print(f"  Thumbnails done ({ctrl._thumb_total}) -- waiting for preview to decode ...")
-        QTimer.singleShot(3000, step_1_search_all)
+        _wait_for_preview(root, ctrl, step_1_search_all)
 
     # -- Step 1: search tab (all results) -------------------------------------
     def step_1_search_all() -> None:
         switch_tab(0)
         _grab(root, "02_search_all")
+        prev = ctrl.selectedImageSource
         ctrl.search("eagle")
         print("  Searching 'eagle' -- waiting for preview to decode ...")
-        QTimer.singleShot(2000, step_2_eagle)
+        _wait_for_preview(root, ctrl, step_2_eagle, prev_source=prev)
 
     # -- Step 2: eagle search -------------------------------------------------
     def step_2_eagle() -> None:
         _grab(root, "03_search_eagle")
+        prev = ctrl.selectedImageSource
         ctrl.search("milky way")
         print("  Searching 'milky way' -- waiting for preview to decode ...")
-        QTimer.singleShot(2000, step_3_milky_way)
+        _wait_for_preview(root, ctrl, step_3_milky_way, prev_source=prev)
 
-    # -- Step 3: milky way search ---------------------------------------------
+    # -- Step 3: milky way search → browse tab --------------------------------
     def step_3_milky_way() -> None:
         _grab(root, "04_search_milky_way")
-        ctrl.search("")
         switch_tab(1)
-        print("  Browse tab -- waiting for view to settle ...")
-        QTimer.singleShot(2000, step_4_browse)
+        prev = ctrl.selectedImageSource
+        ctrl.browseFolder(str(SAMPLE_DATA))
+        print("  Browse tab -- waiting for preview to decode ...")
+        _wait_for_preview(root, ctrl, step_4_browse_grab, preview_id="fullPreview2", prev_source=prev)
 
     # -- Step 4: browse tab ---------------------------------------------------
-    def step_4_browse() -> None:
-        # Select the sample folder so the images panel is populated
-        ctrl.browseFolder(str(SAMPLE_DATA))
-        print("  Browse tab -- folder selected, waiting for images to load ...")
-        QTimer.singleShot(2000, step_4_browse_grab)
-
     def step_4_browse_grab() -> None:
         _grab(root, "05_browse_tab")
         switch_tab(2)

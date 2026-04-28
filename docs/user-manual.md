@@ -75,8 +75,8 @@ When you start exif-turbo you are greeted by the **lock screen**:
 If this is the first time you have launched exif-turbo (or you are using a new
 named database), the lock screen shows a **New passphrase** field, a
 **Confirm passphrase** field, and a **Create Database** button. Choose a strong
-passphrase — it encrypts your entire image index and **cannot be recovered if
-lost**.
+passphrase of at least 12 characters that mixes letters, numbers, and symbols —
+it encrypts your entire image index and **cannot be recovered if lost**.
 
 ### Opening an existing database
 
@@ -85,6 +85,12 @@ Enter your password in the **Password** field and click **Unlock** (or press
 
 Once unlocked, the **Search** tab opens and any previously indexed images are
 immediately available.
+
+### Help menu
+
+The **Help** menu in the menu bar provides access to this user manual, the
+third-party open-source licence list, and the **About** dialog which shows the
+application version.
 
 ---
 
@@ -147,13 +153,19 @@ on disk are not touched.
 While scanning, a non-blocking progress panel appears in the bottom-right corner
 of the **Indexed Folders** tab:
 
-- **Queue indicator** — shows which folder in the queue is currently being scanned
-  (e.g. "Indexing folder 2 of 5").
-- **Progress bar** — percentage of files processed in the current folder.
-- **File counter** — `n / total` files scanned.
+- **Queue indicator** — shows which folder is currently being scanned. When
+  multiple folders are queued it reads **"Indexing folder 2 of 5"**; when only
+  one folder is being processed it reads **"Indexing"**.
+- **Progress bar** — shows an indeterminate animation while exif-turbo is
+  scanning the folder for image files, then switches to a percentage once the
+  total file count is known.
+- **File counter** — shows **"Scanning for images…"** during the initial
+  discovery phase, then `n / total` files once counting is complete.
 - **Current file** — name of the file being processed.
-- **Cancel Indexing** button — stops indexing immediately. During the
-  thumbnail-build phase the same button shows **Cancel Thumbnails**.
+- **Cancel Indexing** button — stops indexing immediately. While the worker is
+  stopping the label changes to **"Canceling…"** and the button is disabled
+  until the worker has stopped. During the thumbnail-build phase the same button
+  shows **Cancel Thumbnails**.
 
 The same progress panel is reused after indexing finishes to show **thumbnail
 building** progress ("Building Thumbnails"). Thumbnails are generated in a
@@ -162,7 +174,9 @@ background pass and cached to disk so subsequent launches are fast.
 Across **all tabs** the **status bar** at the very bottom of the window shows a
 pulsing blue dot and the text **Indexing…** during the file-indexing phase, so
 you always know the indexer is running even when you are working in Search or
-Browse. The dot is not shown during the separate thumbnail-building phase.
+Browse. The dot is not shown during the separate thumbnail-building phase. The
+status bar also shows brief event messages to its right (such as "Indexed 42
+images" after a scan completes).
 
 ### Pause and resume
 
@@ -190,8 +204,8 @@ Press **Enter** with an empty search bar to show all indexed images.
 
 ### Filtering by format
 
-Below the search bar a row of format chips lists every file type present in the
-results. Click a chip to show only that format:
+When results contain more than one file format, a row of format chips appears
+below the search bar. Click a chip to show only that format:
 
 ```
 All   CR2 · 1 459   JPG · 563   TIF · 113   PNG · 2
@@ -207,11 +221,17 @@ Use the **Sort** dropdown at the top-right of the results panel:
 |--------|-------------|
 | Name A→Z | Filename ascending |
 | Name Z→A | Filename descending |
-| Path A→Z | Full path ascending |
+| Path A→Z | Full path ascending (default) |
 | Path Z→A | Full path descending |
 | Newest first | Date taken, most recent first |
 | Oldest first | Date taken, oldest first |
 | Largest | File size, largest first |
+
+### Loading more results
+
+Results are loaded in batches as you scroll. When you reach the bottom of the
+result list the next batch is fetched automatically. The total match count is
+shown next to the **RESULTS** badge in the panel header.
 
 ### Opening images from results
 
@@ -222,8 +242,9 @@ panels.
 default application:
 - Double-clicking the **thumbnail** (left side of the card) opens the image
   in your default image viewer.
-- Double-clicking the **info area** (right side of the card) opens the
-  containing folder in the system file manager (Explorer on Windows).
+- Double-clicking the **info area** (right side of the card) opens the parent
+  folder in the system file manager. On Windows, Explorer opens with the file
+  highlighted; on macOS and Linux the parent folder is opened.
 
 ### Search examples
 
@@ -234,6 +255,24 @@ default application:
 | `Switzerland 2024` | Images with Switzerland and 2024 in any metadata field |
 | `eagle` | Images whose filename, title, or keywords mention eagle |
 | `Nikon Z 9 ISO 6400` | Nikon Z 9 shots at ISO 6400 |
+
+### Advanced query syntax
+
+The search box accepts the full **SQLite FTS5** query language:
+
+| Syntax | Example | What it does |
+|--------|---------|--------------|
+| `term` | `Canon` | Keyword anywhere in metadata |
+| `"exact phrase"` | `"red deer"` | Terms must appear adjacent and in order |
+| `term1 AND term2` | `Canon AND 50mm` | Both terms must be present |
+| `term1 OR term2` | `Canon OR Nikon` | Either term must be present |
+| `term1 NOT term2` | `50mm NOT Nikon` | First term present, second term absent |
+| `column:term` | `filename:IMG_1234` | Search within a specific field only |
+| `prefix*` | `Fuji*` | Matches any token starting with the prefix |
+
+Available column names for scoped queries: `path`, `filename`, `metadata_text`.
+
+Multiple terms without an operator (`Canon 50mm`) are treated as an implicit AND.
 
 ---
 
@@ -246,14 +285,17 @@ The **Browse** tab lets you navigate your library by folder hierarchy:
 The left panel shows all indexed folders as an indented list — sub-folders are
 indented under their parent. Each entry shows the folder name and a count of
 images inside it. Click any folder to show only its images in the centre panel.
+Click the highlighted folder again to deselect it and show all images.
 
 The same thumbnail list and preview pane appear as in Search. **Double-click**
-an image to open it in your system's default viewer. The Metadata and EXIF Tags
-panels are not shown in the Browse tab — switch to the **Search** tab to access
-the full metadata view for a selected image.
+an image to open it in your system's default viewer. (Unlike the Search tab,
+double-clicking in Browse always opens the image — there is no folder-open
+shortcut.) The Metadata and EXIF Tags panels are not shown in the Browse tab;
+use the **Search** tab for the full metadata view of a selected image.
 
-Switching back to the **Search** tab clears the folder filter and restores your
-previous search results.
+Switching to the **Search** tab clears the folder filter and re-runs the current
+search query. Any image previously selected while browsing is not automatically
+highlighted in Search.
 
 ---
 
@@ -265,9 +307,11 @@ Selecting any image in the result list populates three panels:
 
 ### Preview
 
-The right pane shows a full-resolution preview of the selected image scaled
-to fit the available space. For RAW files (CR2, CR3, NEF, ARW, DNG, etc.) the
-embedded preview JPEG is used.
+The right pane shows a full-resolution preview of the selected image scaled to
+fit the available space. For RAW files (CR2, CR3, NEF, ARW, DNG, etc.) the
+embedded preview JPEG is used. A cached thumbnail is shown immediately as a
+low-resolution placeholder while the full image is loading; the full image fades
+in once it has been decoded.
 
 ### Metadata panel (bottom-left)
 
@@ -347,6 +391,7 @@ The **Reset Database…** button is disabled while indexing is in progress.
 |----------|--------|
 | `Enter` | Run search |
 | `Ctrl+F` | Open / close find-in-metadata bar |
+| `Escape` | Close the find-in-metadata bar |
 | `F3` | Jump to next match in metadata |
 | `Shift+F3` | Jump to previous match in metadata |
 | `Ctrl+Q` | Quit |

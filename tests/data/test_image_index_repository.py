@@ -86,6 +86,150 @@ def test_search_fts_no_match_returns_empty(repo: ImageIndexRepository, tmp_path:
     assert rows == []
 
 
+# ── FTS5 logical operators ────────────────────────────────────────────────────
+
+
+def test_search_fts_and_operator_returns_intersection(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange — canon has both terms; nikon has only the second
+    path_canon = str(make_jpeg(tmp_path / "canon.jpg"))
+    path_nikon = str(make_jpeg(tmp_path / "nikon.jpg"))
+    repo.upsert_image(path_canon, "canon.jpg", 1.0, 100, {}, "Make Canon lens 50mm")
+    repo.upsert_image(path_nikon, "nikon.jpg", 1.0, 100, {}, "Make Nikon lens 85mm")
+    repo.commit()
+
+    # Act
+    rows = repo.search_images("Canon AND 50mm", limit=10, offset=0)
+
+    # Assert — only the image that has both terms is returned
+    assert len(rows) == 1
+    assert "canon.jpg" in rows[0][2]
+
+
+def test_search_fts_and_operator_returns_empty_when_no_intersection(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange
+    path_canon = str(make_jpeg(tmp_path / "canon.jpg"))
+    path_nikon = str(make_jpeg(tmp_path / "nikon.jpg"))
+    repo.upsert_image(path_canon, "canon.jpg", 1.0, 100, {}, "Make Canon lens 50mm")
+    repo.upsert_image(path_nikon, "nikon.jpg", 1.0, 100, {}, "Make Nikon lens 85mm")
+    repo.commit()
+
+    # Act — no image has both Nikon and 50mm
+    rows = repo.search_images("Nikon AND 50mm", limit=10, offset=0)
+
+    # Assert
+    assert rows == []
+
+
+def test_search_fts_or_operator_returns_union(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange
+    path_canon = str(make_jpeg(tmp_path / "canon.jpg"))
+    path_nikon = str(make_jpeg(tmp_path / "nikon.jpg"))
+    repo.upsert_image(path_canon, "canon.jpg", 1.0, 100, {}, "Make Canon lens 50mm")
+    repo.upsert_image(path_nikon, "nikon.jpg", 1.0, 100, {}, "Make Nikon lens 85mm")
+    repo.commit()
+
+    # Act
+    rows = repo.search_images("Canon OR Nikon", limit=10, offset=0)
+
+    # Assert — both images are returned
+    assert len(rows) == 2
+    filenames = {r[2] for r in rows}
+    assert filenames == {"canon.jpg", "nikon.jpg"}
+
+
+def test_search_fts_not_operator_excludes_negated_term(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange — only canon has "50mm"; nikon does not
+    path_canon = str(make_jpeg(tmp_path / "canon.jpg"))
+    path_nikon = str(make_jpeg(tmp_path / "nikon.jpg"))
+    repo.upsert_image(path_canon, "canon.jpg", 1.0, 100, {}, "Make Canon lens 50mm")
+    repo.upsert_image(path_nikon, "nikon.jpg", 1.0, 100, {}, "Make Nikon lens 85mm")
+    repo.commit()
+
+    # Act — "50mm" present AND "Nikon" absent → only canon qualifies
+    rows = repo.search_images("50mm NOT Nikon", limit=10, offset=0)
+
+    # Assert
+    assert len(rows) == 1
+    assert "canon.jpg" in rows[0][2]
+
+
+def test_search_fts_not_operator_returns_empty_when_all_excluded(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange
+    path_canon = str(make_jpeg(tmp_path / "canon.jpg"))
+    repo.upsert_image(path_canon, "canon.jpg", 1.0, 100, {}, "Make Canon lens 50mm")
+    repo.commit()
+
+    # Act — "50mm" present but "Canon" also present → excluded by NOT
+    rows = repo.search_images("50mm NOT Canon", limit=10, offset=0)
+
+    # Assert
+    assert rows == []
+
+
+def test_search_fts_phrase_search_returns_exact_match_only(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange — both images share individual words but differ in adjacency
+    path_deer = str(make_jpeg(tmp_path / "deer.jpg"))
+    path_fox = str(make_jpeg(tmp_path / "fox.jpg"))
+    repo.upsert_image(path_deer, "deer.jpg", 1.0, 100, {}, "red deer wildlife")
+    repo.upsert_image(path_fox, "fox.jpg", 1.0, 100, {}, "red fox wildlife")
+    repo.commit()
+
+    # Act
+    rows = repo.search_images('"red deer"', limit=10, offset=0)
+
+    # Assert — only the image with the exact adjacent phrase is returned
+    assert len(rows) == 1
+    assert "deer.jpg" in rows[0][2]
+
+
+def test_search_fts_prefix_wildcard_returns_prefix_matches(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange
+    path_fuji = str(make_jpeg(tmp_path / "fuji.jpg"))
+    path_nikon = str(make_jpeg(tmp_path / "nikon.jpg"))
+    repo.upsert_image(path_fuji, "fuji.jpg", 1.0, 100, {}, "Make Fujifilm X100V")
+    repo.upsert_image(path_nikon, "nikon.jpg", 1.0, 100, {}, "Make Nikon Z9")
+    repo.commit()
+
+    # Act
+    rows = repo.search_images("Fuji*", limit=10, offset=0)
+
+    # Assert — only the Fujifilm image matches
+    assert len(rows) == 1
+    assert "fuji.jpg" in rows[0][2]
+
+
+def test_search_fts_column_scope_restricts_to_filename_column(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange — "eagle" appears in filename of one image and metadata_text of another
+    path_hawk = str(make_jpeg(tmp_path / "hawk.jpg"))
+    path_eagle = str(make_jpeg(tmp_path / "eagle.jpg"))
+    repo.upsert_image(path_hawk, "hawk.jpg", 1.0, 100, {}, "eagle soaring wildlife")
+    repo.upsert_image(path_eagle, "eagle.jpg", 1.0, 100, {}, "hawk diving wildlife")
+    repo.commit()
+
+    # Act — restrict search to the filename column
+    rows = repo.search_images("filename:eagle", limit=10, offset=0)
+
+    # Assert — only the image whose filename contains "eagle" is returned
+    assert len(rows) == 1
+    assert "eagle.jpg" in rows[0][2]
+
+
+def test_search_fts_column_scope_restricts_to_metadata_text_column(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange — same setup as above
+    path_hawk = str(make_jpeg(tmp_path / "hawk.jpg"))
+    path_eagle = str(make_jpeg(tmp_path / "eagle.jpg"))
+    repo.upsert_image(path_hawk, "hawk.jpg", 1.0, 100, {}, "eagle soaring wildlife")
+    repo.upsert_image(path_eagle, "eagle.jpg", 1.0, 100, {}, "hawk diving wildlife")
+    repo.commit()
+
+    # Act — restrict search to metadata_text column
+    rows = repo.search_images("metadata_text:eagle", limit=10, offset=0)
+
+    # Assert — only the image whose metadata_text contains "eagle" is returned
+    assert len(rows) == 1
+    assert "hawk.jpg" in rows[0][2]
+
+
 # ── delete_missing ────────────────────────────────────────────────────────────
 
 

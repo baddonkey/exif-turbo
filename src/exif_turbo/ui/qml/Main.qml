@@ -874,6 +874,7 @@ ApplicationWindow {
                         // Full-resolution image — fades in when loaded
                         Image {
                             id: fullPreview
+                            objectName: "fullPreview"
                             anchors.fill: parent
                             source: _selectedImageSource
                             fillMode: Image.PreserveAspectFit
@@ -1450,6 +1451,7 @@ ApplicationWindow {
 
                         Image {
                             id: fullPreview2
+                            objectName: "fullPreview2"
                             anchors.fill: parent
                             source: _selectedImageSource
                             fillMode: Image.PreserveAspectFit
