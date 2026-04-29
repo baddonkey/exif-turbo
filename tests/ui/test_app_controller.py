@@ -215,3 +215,111 @@ def test_search_no_match_returns_empty_results(
     # Assert
     assert controller.totalResults == 0
     assert search_model.rowCount() == 0
+
+
+# ── Debounce tests (no QML window needed) ─────────────────────────────────────
+
+
+@pytest.fixture
+def bare_controller(
+    tmp_path: Path,
+    demo_db: tuple[Path, Path],
+) -> AppController:
+    """Lightweight AppController backed by the demo DB — no QML engine."""
+    db_path, base = demo_db
+    search_model = SearchListModel(cache_dir=base / "thumbs")
+    exif_model = ExifListModel()
+    folder_model = FolderListModel()
+    return AppController(db_path, search_model, exif_model, folder_model)
+
+
+def test_selectResult_thumb_source_updates_synchronously(
+    qtbot: QtBot,
+    bare_controller: AppController,
+) -> None:
+    # Arrange — unlock so the search model is populated
+    with qtbot.waitSignal(bare_controller.totalResultsChanged, timeout=3000):
+        bare_controller.unlock("")
+
+    fired: list[int] = []
+    bare_controller.selectedThumbSourceChanged.connect(lambda: fired.append(1))
+
+    # Act — no event-loop spin after this call
+    bare_controller.selectResult(0)
+
+    # Assert — signal was emitted synchronously (inside selectResult, not deferred)
+    assert len(fired) == 1
+
+
+def test_selectResult_image_source_is_empty_before_debounce_fires(
+    qtbot: QtBot,
+    bare_controller: AppController,
+) -> None:
+    # Arrange
+    with qtbot.waitSignal(bare_controller.totalResultsChanged, timeout=3000):
+        bare_controller.unlock("")
+
+    # Act — call selectResult but do NOT advance the event loop
+    bare_controller.selectResult(0)
+
+    # Assert — full preview has not loaded yet (timer has not fired)
+    assert bare_controller.selectedImageSource == ""
+
+
+def test_selectResult_image_source_set_after_debounce_fires(
+    qtbot: QtBot,
+    bare_controller: AppController,
+) -> None:
+    # Arrange
+    with qtbot.waitSignal(bare_controller.totalResultsChanged, timeout=3000):
+        bare_controller.unlock("")
+
+    # Act — wait for the debounce timer to fire
+    with qtbot.waitSignal(bare_controller.selectedImageSourceChanged, timeout=1000):
+        bare_controller.selectResult(0)
+
+    # Assert — full preview source is now set
+    assert bare_controller.selectedImageSource != ""
+
+
+def test_selectResult_rapid_calls_use_last_path(
+    qtbot: QtBot,
+    bare_controller: AppController,
+) -> None:
+    # Arrange — need at least 2 results
+    with qtbot.waitSignal(bare_controller.totalResultsChanged, timeout=3000):
+        bare_controller.unlock("")
+    assert bare_controller.totalResults >= 2
+
+    path_1 = bare_controller._search_model.get_path(0)
+    path_2 = bare_controller._search_model.get_path(1)
+    assert path_1 != path_2
+
+    # Act — select row 0 then immediately row 1; only one timer fire expected
+    with qtbot.waitSignal(bare_controller.selectedImageSourceChanged, timeout=1000):
+        bare_controller.selectResult(0)
+        bare_controller.selectResult(1)
+
+    # Assert — final source encodes path_2, not path_1
+    import urllib.parse
+    expected = "image://preview/" + urllib.parse.quote(path_2, safe="")
+    assert bare_controller.selectedImageSource == expected
+
+
+def test_clear_details_cancels_pending_preview(
+    qtbot: QtBot,
+    bare_controller: AppController,
+) -> None:
+    # Arrange — arm the debounce timer without letting it fire
+    with qtbot.waitSignal(bare_controller.totalResultsChanged, timeout=3000):
+        bare_controller.unlock("")
+    bare_controller.selectResult(0)
+    assert bare_controller._preview_delay_timer.isActive()
+
+    # Act
+    bare_controller._clear_details()
+
+    # Assert — timer is stopped and pending path is cleared
+    assert not bare_controller._preview_delay_timer.isActive()
+    assert bare_controller._pending_preview_path == ""
+    assert bare_controller.selectedImageSource == ""

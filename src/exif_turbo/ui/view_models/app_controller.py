@@ -476,7 +476,7 @@ class AppController(QObject):
         self._loading = False
 
     @Slot(int)
-    def selectResult(self, row: int, load_image: bool = True) -> None:
+    def selectResult(self, row: int) -> None:
         meta_json = self._search_model.get_metadata_json(row)
         path = self._search_model.get_path(row)
         if not meta_json:
@@ -495,18 +495,17 @@ class AppController(QObject):
         self._update_exif_table(meta_json)
         self._current_result_row = row
         self.currentResultRowChanged.emit()
-        if load_image:
-            # Show thumb placeholder immediately from local cache (instant, no disk I/O)
-            thumb_uri = self._search_model.data(
-                self._search_model.index(row, 0),
-                SearchListModel.ThumbnailSourceRole,
-            )
-            self._selected_thumb_source = thumb_uri or ""
-            self.selectedThumbSourceChanged.emit()
-            # Debounce the full preview load — lets visible card thumbnails in the
-            # list render before the heavier preview decode starts.
-            self._pending_preview_path = path or ""
-            self._preview_delay_timer.start()  # resets if already running
+        # Show thumb placeholder immediately from local cache (instant, no disk I/O)
+        thumb_uri = self._search_model.data(
+            self._search_model.index(row, 0),
+            SearchListModel.ThumbnailSourceRole,
+        )
+        self._selected_thumb_source = thumb_uri or ""
+        self.selectedThumbSourceChanged.emit()
+        # Debounce the full preview load — lets visible card thumbnails in the
+        # list render before the heavier preview decode starts.
+        self._pending_preview_path = path or ""
+        self._preview_delay_timer.start()  # resets if already running
 
     @Slot(str)
     def findNext(self, find_text: str) -> None:

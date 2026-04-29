@@ -939,6 +939,7 @@ ApplicationWindow {
                     // Wheel to zoom · drag to pan · double-click to reset.
                     Item {
                         id: previewHost
+                        objectName: "previewHost"
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
@@ -948,6 +949,7 @@ ApplicationWindow {
 
                         Flickable {
                             id: previewFlick
+                            objectName: "previewFlick"
                             anchors.fill: parent
                             contentWidth:  Math.max(width,  previewHost.width  * previewHost._zoom)
                             contentHeight: Math.max(height, previewHost.height * previewHost._zoom)
@@ -989,7 +991,16 @@ ApplicationWindow {
                             }
 
                             // WheelHandler inside Flickable takes priority over Flickable's own
-                            // wheel-scroll handling. event.x/y are in content coordinates here.
+                            // wheel-scroll handling.
+                            //
+                            // Qt 6 delivers event.x/y in CONTENT coordinates (contentX + viewportX)
+                            // when the WheelHandler is declared inside a Flickable body.
+                            // Correct cursor-anchor formula for content-coord event.x:
+                            //   new_contentX = event.x * (factor − 1) + oldContentX
+                            // Derivation: let vx = event.x − oldContentX  (viewport cursor position)
+                            //   new_contentX = (oldContentX + vx) * factor − vx
+                            //               = event.x * factor − (event.x − oldContentX)
+                            //               = event.x * (factor − 1) + oldContentX  ∎
                             WheelHandler {
                                 onWheel: (event) => {
                                     var step    = event.angleDelta.y > 0 ? 1.2 : (1.0 / 1.2)
@@ -997,16 +1008,17 @@ ApplicationWindow {
                                     var newZoom = Math.max(1.0, Math.min(previewHost._maxZoom, oldZoom * step))
                                     if (newZoom === oldZoom) { event.accepted = true; return }
                                     var actualFactor = newZoom / oldZoom
-                                    // cursor position in viewport (content coords minus scroll offset)
-                                    var viewX = event.x - previewFlick.contentX
-                                    var viewY = event.y - previewFlick.contentY
+                                    // Capture scroll position before mutating _zoom — binding
+                                    // re-evaluation can clamp contentX/Y immediately.
+                                    var oldContentX = previewFlick.contentX
+                                    var oldContentY = previewFlick.contentY
                                     var newW = Math.max(previewFlick.width,  previewHost.width  * newZoom)
                                     var newH = Math.max(previewFlick.height, previewHost.height * newZoom)
                                     previewHost._zoom = newZoom
                                     previewFlick.contentX = Math.max(0,
-                                        Math.min(event.x * actualFactor - viewX, newW - previewFlick.width))
+                                        Math.min(event.x * (actualFactor - 1) + oldContentX, newW - previewFlick.width))
                                     previewFlick.contentY = Math.max(0,
-                                        Math.min(event.y * actualFactor - viewY, newH - previewFlick.height))
+                                        Math.min(event.y * (actualFactor - 1) + oldContentY, newH - previewFlick.height))
                                     event.accepted = true
                                 }
                             }
@@ -1644,15 +1656,15 @@ ApplicationWindow {
                                     var newZoom = Math.max(1.0, Math.min(previewHost2._maxZoom, oldZoom * step))
                                     if (newZoom === oldZoom) { event.accepted = true; return }
                                     var actualFactor = newZoom / oldZoom
-                                    var viewX = event.x - previewFlick2.contentX
-                                    var viewY = event.y - previewFlick2.contentY
+                                    var oldContentX = previewFlick2.contentX
+                                    var oldContentY = previewFlick2.contentY
                                     var newW = Math.max(previewFlick2.width,  previewHost2.width  * newZoom)
                                     var newH = Math.max(previewFlick2.height, previewHost2.height * newZoom)
                                     previewHost2._zoom = newZoom
                                     previewFlick2.contentX = Math.max(0,
-                                        Math.min(event.x * actualFactor - viewX, newW - previewFlick2.width))
+                                        Math.min(event.x * (actualFactor - 1) + oldContentX, newW - previewFlick2.width))
                                     previewFlick2.contentY = Math.max(0,
-                                        Math.min(event.y * actualFactor - viewY, newH - previewFlick2.height))
+                                        Math.min(event.y * (actualFactor - 1) + oldContentY, newH - previewFlick2.height))
                                     event.accepted = true
                                 }
                             }
