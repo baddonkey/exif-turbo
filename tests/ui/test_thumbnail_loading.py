@@ -43,6 +43,7 @@ from PIL import Image
 from pytestqt.qtbot import QtBot
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
+from exif_turbo.data.indexed_folder_repository import IndexedFolderRepository
 from exif_turbo.ui.models.exif_list_model import ExifListModel
 from exif_turbo.ui.models.folder_list_model import FolderListModel
 from exif_turbo.ui.models.search_list_model import SearchListModel
@@ -336,3 +337,91 @@ def test_thumbnail_building_triggered_for_preindexed_db_without_pending_scans(
     assert all(src.startswith("file://") for src in sources), (
         f"Expected file:// thumbnail URIs after unlock on pre-indexed DB, got: {sources}"
     )
+
+
+def test_rescan_triggers_exactly_one_thumb_build_not_multiple(
+    qtbot: QtBot,
+    indexed_db: tuple[Path, Path],
+    tmp_path: Path,
+) -> None:
+    """Pressing Rescan must not trigger multiple thumb-build runs.
+
+    Before the fix, unlock() started ThumbWorker A and then rescanFolder()
+    started indexing without cancelling A.  The races between A, the 8-second
+    batch timer, and the post-index trigger caused 2–3 sequential builds,
+    misleading progress ("1/3 thumbs" when 4 images exist because a previous
+    run had already cached 1).
+
+    After the fix, _actually_start_indexing() cancels any running ThumbWorker
+    so there is at most one build from the 8-second timer (only relevant for
+    long-running index jobs) plus the definitive build at the end of indexing.
+    For a fast small-collection rescan only the post-index build fires.
+    """
+    db_path, base = indexed_db
+    cache_dir = tmp_path / "thumbs"
+    cache_dir.mkdir()
+
+    # The indexed_db fixture does not register an IndexedFolder row, so we
+    # need a DB that has both images AND a folder row so rescanFolder() works.
+    # Build that here using a separate temp space.
+    img_dir = tmp_path / "images"
+    img_dir.mkdir()
+    for fname, make, model, date in _CAMERAS:
+        img_path = img_dir / fname
+        Image.new("RGB", (32, 32), color=(80, 120, 200)).save(str(img_path), "JPEG")
+
+    local_db = tmp_path / "rescan_test.db"
+    repo = ImageIndexRepository(local_db, key="")
+    folder_repo = IndexedFolderRepository(local_db, key="")
+    folder_obj = folder_repo.add(str(img_dir))
+    folder_repo.update_status(folder_obj.id, "indexed", image_count=len(_CAMERAS))
+    for fname, make, model, date in _CAMERAS:
+        img_path = img_dir / fname
+        stat = img_path.stat()
+        metadata = {"FileName": fname, "Make": make, "Model": model}
+        repo.upsert_image(str(img_path), fname, stat.st_mtime, stat.st_size, metadata, fname)
+    repo.commit()
+    repo.close()
+    folder_repo.close()
+
+    search_model = SearchListModel(cache_dir=cache_dir)
+    ctrl = AppController(local_db, search_model, ExifListModel(), FolderListModel())
+
+    try:
+        # Unlock — this starts ThumbWorker A (from the unlock fix)
+        with qtbot.waitSignal(ctrl.totalResultsChanged, timeout=3000):
+            ctrl.unlock("")
+        assert ctrl.totalResults == len(_CAMERAS)
+
+        # Track how many times isBuildingThumbs transitions False→True
+        build_starts: list[int] = []
+        ctrl.isBuildingThumbsChanged.connect(
+            lambda: build_starts.append(1) if ctrl.isBuildingThumbs else None
+        )
+
+        # Act — rescan the folder; this must cancel ThumbWorker A immediately
+        folder_id = ctrl._folder_model._rows[0].id
+        ctrl.rescanFolder(folder_id)
+
+        # Wait for indexing + thumb build to fully complete
+        qtbot.waitUntil(
+            lambda: not ctrl.isBuildingThumbs and not ctrl.isIndexing,
+            timeout=30_000,
+        )
+
+        # Assert — thumb building started at most once during the rescan lifecycle.
+        # (The unlock-started worker is cancelled before indexing begins, so the
+        # only build is the definitive post-index one.)
+        assert len(build_starts) <= 1, (
+            f"Expected at most 1 thumb-build start during rescan, got {len(build_starts)}: "
+            "multiple builds indicate the unlock-triggered worker was not cancelled."
+        )
+
+        # And all thumbnails are present in the end
+        sources = _thumb_sources(ctrl)
+        assert all(src.startswith("file://") for src in sources), (
+            f"Expected all thumbnails populated after rescan, got: {sources}"
+        )
+
+    finally:
+        _shutdown(ctrl)

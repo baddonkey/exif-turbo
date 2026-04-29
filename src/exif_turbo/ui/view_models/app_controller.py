@@ -665,6 +665,14 @@ class AppController(QObject):
         """Immediately start an IndexWorker for the given folder."""
         if self._repo is None:
             return
+        # Cancel any thumb worker that is still running (e.g. the one started at
+        # unlock time).  A definitive build will be triggered after indexing
+        # finishes, so there is no value in letting the two workers race.
+        if self._thumb_worker and self._thumb_worker.isRunning():
+            self._thumb_worker.cancel()
+            self._is_building_thumbs = False
+            self._pending_thumb_restart = False
+            self.isBuildingThumbsChanged.emit()
         self._scanning_folder_id = folder_obj.id
         if self._folder_repo:
             self._folder_repo.update_status(folder_obj.id, "scanning")
