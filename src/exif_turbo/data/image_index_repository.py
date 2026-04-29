@@ -160,6 +160,34 @@ class ImageIndexRepository:
         "size_desc":     "images.size DESC",
     }
 
+    @staticmethod
+    def _sanitize_fts_query(query: str) -> str:
+        """Sanitize a user query for FTS5 MATCH.
+
+        FTS5's query parser raises a syntax error for characters that are
+        neither alphanumeric nor a recognised FTS5 operator character (e.g.
+        a bare '.' or '-' triggers "fts5: syntax error near '.'").
+
+        Strategy: replace every character that is not part of valid FTS5 query
+        syntax with a space.  Valid characters are:
+          - word characters (\\w — letters, digits, underscore)
+          - whitespace (token separators)
+          - '"'  — phrase literal delimiter
+          - '*'  — prefix wildcard (e.g. ``Fuji*``)
+          - ':'  — column scope separator (e.g. ``filename:eagle``)
+          - '^'  — relevance boost
+          - '(' ')' — grouping
+
+        This preserves FTS5 operators (AND, OR, NOT), phrase literals, prefix
+        queries, column scopes, and boost expressions while silently converting
+        characters like '.' and '-' into token separators.  A query such as
+        ``img004.png`` becomes the implicit-AND query ``img004 png``, which
+        correctly matches images whose FTS5 document contains both tokens.
+        """
+        import re
+        sanitized = re.sub(r'[^\w\s"*:^()]', ' ', query)
+        return ' '.join(sanitized.split())
+
     def search_images(
         self,
         query: str,
@@ -201,6 +229,7 @@ class ImageIndexRepository:
             )
 
         if query.strip():
+            fts_query = self._sanitize_fts_query(query)
             # When user picks an explicit sort keep it; otherwise use relevance.
             order_expr = f"ORDER BY {order}" if sort_by else "ORDER BY bm25(images_fts)"
             sql = (
@@ -211,7 +240,7 @@ class ImageIndexRepository:
                 f"{order_expr} "
                 "LIMIT ? OFFSET ?"
             )
-            args = (query,) + ext_args + path_args + exclude_args + (limit, offset)
+            args = (fts_query,) + ext_args + path_args + exclude_args + (limit, offset)
         else:
             sql = (
                 "SELECT id, path, filename, metadata_json, size, mtime "
@@ -261,12 +290,13 @@ class ImageIndexRepository:
             )
 
         if query.strip():
+            fts_query = self._sanitize_fts_query(query)
             sql = (
                 "SELECT COUNT(*) FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
                 f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {exclude_clause}"
             )
-            args = (query,) + ext_args + path_args + exclude_args
+            args = (fts_query,) + ext_args + path_args + exclude_args
         else:
             sql = (
                 f"SELECT COUNT(*) FROM images "
@@ -313,13 +343,14 @@ class ImageIndexRepository:
         # extracts the extension after the *last* dot — INSTR finds the first dot,
         # which breaks files like "cb-01.07.16-name-.jpg".
         if query.strip():
+            fts_query = self._sanitize_fts_query(query)
             sql = (
                 "SELECT images.filename FROM images_fts"
                 " JOIN images ON images_fts.rowid = images.id"
                 f" WHERE images_fts MATCH ? AND images.filename LIKE '%.%'"
                 f" {path_clause} {exclude_clause}"
             )
-            args = (query,) + path_args + exclude_args
+            args = (fts_query,) + path_args + exclude_args
         else:
             sql = (
                 "SELECT filename FROM images"
