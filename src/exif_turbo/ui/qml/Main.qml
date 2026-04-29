@@ -936,7 +936,7 @@ ApplicationWindow {
 
                     // Preview: show cached thumbnail instantly as placeholder,
                     // then fade in the full image once it has loaded.
-                    // Wheel to zoom · drag to pan · double-click to reset.
+                    // Wheel/pinch to zoom · drag/swipe to pan · double-click/tap to reset.
                     Item {
                         id: previewHost
                         objectName: "previewHost"
@@ -1001,9 +1001,14 @@ ApplicationWindow {
                             //   new_contentX = (oldContentX + vx) * factor − vx
                             //               = event.x * factor − (event.x − oldContentX)
                             //               = event.x * (factor − 1) + oldContentX  ∎
+                            //
+                            // Math.pow(1.2, angleDelta/120) gives proportional steps:
+                            // one full mouse-wheel notch (120 units) → ×1.2 (unchanged)
+                            // trackpad smooth scroll (small units)   → proportionally smaller
                             WheelHandler {
                                 onWheel: (event) => {
-                                    var step    = event.angleDelta.y > 0 ? 1.2 : (1.0 / 1.2)
+                                    if (event.angleDelta.y === 0) return
+                                    var step    = Math.pow(1.2, event.angleDelta.y / 120.0)
                                     var oldZoom = previewHost._zoom
                                     var newZoom = Math.max(1.0, Math.min(previewHost._maxZoom, oldZoom * step))
                                     if (newZoom === oldZoom) { event.accepted = true; return }
@@ -1021,6 +1026,43 @@ ApplicationWindow {
                                         Math.min(event.y * (actualFactor - 1) + oldContentY, newH - previewFlick.height))
                                     event.accepted = true
                                 }
+                            }
+                        }
+
+                        // Touchpad pinch-to-zoom — anchored at the pinch centroid.
+                        // centroid.position is in previewHost (viewport) coordinates,
+                        // so the viewport-coord anchor formula applies:
+                        //   new_contentX = (startContentX + cx) * totalFactor − cx
+                        // We apply the total scale relative to the gesture's start state
+                        // so that zooming stays smooth even when scale updates arrive
+                        // at varying rates.
+                        PinchHandler {
+                            target: null
+
+                            property real _startZoom: 1.0
+                            property real _startContentX: 0.0
+                            property real _startContentY: 0.0
+
+                            onActiveChanged: {
+                                if (active) {
+                                    _startZoom     = previewHost._zoom
+                                    _startContentX = previewFlick.contentX
+                                    _startContentY = previewFlick.contentY
+                                }
+                            }
+                            onScaleChanged: {
+                                var newZoom = Math.max(1.0, Math.min(previewHost._maxZoom,
+                                                                      _startZoom * scale))
+                                var totalFactor = newZoom / _startZoom
+                                var cx = centroid.position.x
+                                var cy = centroid.position.y
+                                var newW = Math.max(previewFlick.width,  previewHost.width  * newZoom)
+                                var newH = Math.max(previewFlick.height, previewHost.height * newZoom)
+                                previewHost._zoom = newZoom
+                                previewFlick.contentX = Math.max(0,
+                                    Math.min((_startContentX + cx) * totalFactor - cx, newW - previewFlick.width))
+                                previewFlick.contentY = Math.max(0,
+                                    Math.min((_startContentY + cy) * totalFactor - cy, newH - previewFlick.height))
                             }
                         }
 
@@ -1601,7 +1643,7 @@ ApplicationWindow {
 
                     // Preview: show cached thumbnail instantly as placeholder,
                     // then fade in the full image once it has loaded.
-                    // Wheel to zoom · drag to pan · double-click to reset.
+                    // Wheel/pinch to zoom · drag/swipe to pan · double-click/tap to reset.
                     Item {
                         id: previewHost2
                         Layout.fillWidth: true
@@ -1651,7 +1693,8 @@ ApplicationWindow {
 
                             WheelHandler {
                                 onWheel: (event) => {
-                                    var step    = event.angleDelta.y > 0 ? 1.2 : (1.0 / 1.2)
+                                    if (event.angleDelta.y === 0) return
+                                    var step    = Math.pow(1.2, event.angleDelta.y / 120.0)
                                     var oldZoom = previewHost2._zoom
                                     var newZoom = Math.max(1.0, Math.min(previewHost2._maxZoom, oldZoom * step))
                                     if (newZoom === oldZoom) { event.accepted = true; return }
@@ -1667,6 +1710,36 @@ ApplicationWindow {
                                         Math.min(event.y * (actualFactor - 1) + oldContentY, newH - previewFlick2.height))
                                     event.accepted = true
                                 }
+                            }
+                        }
+
+                        PinchHandler {
+                            target: null
+
+                            property real _startZoom: 1.0
+                            property real _startContentX: 0.0
+                            property real _startContentY: 0.0
+
+                            onActiveChanged: {
+                                if (active) {
+                                    _startZoom     = previewHost2._zoom
+                                    _startContentX = previewFlick2.contentX
+                                    _startContentY = previewFlick2.contentY
+                                }
+                            }
+                            onScaleChanged: {
+                                var newZoom = Math.max(1.0, Math.min(previewHost2._maxZoom,
+                                                                      _startZoom * scale))
+                                var totalFactor = newZoom / _startZoom
+                                var cx = centroid.position.x
+                                var cy = centroid.position.y
+                                var newW = Math.max(previewFlick2.width,  previewHost2.width  * newZoom)
+                                var newH = Math.max(previewFlick2.height, previewHost2.height * newZoom)
+                                previewHost2._zoom = newZoom
+                                previewFlick2.contentX = Math.max(0,
+                                    Math.min((_startContentX + cx) * totalFactor - cx, newW - previewFlick2.width))
+                                previewFlick2.contentY = Math.max(0,
+                                    Math.min((_startContentY + cy) * totalFactor - cy, newH - previewFlick2.height))
                             }
                         }
 
