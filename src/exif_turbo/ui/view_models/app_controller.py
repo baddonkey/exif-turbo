@@ -991,6 +991,9 @@ class AppController(QObject):
             self._search_model.max_thumb_bytes,
             workers=self._settings.workerCount if self._settings else _DEFAULT_WORKERS,
             key=self._key,
+            excluded_paths=(
+                self._folder_repo.get_disabled_paths() if self._folder_repo else None
+            ),
         )
         self._thumb_worker.progress.connect(self._on_thumb_progress)
         self._thumb_worker.finished.connect(self._on_thumb_done)

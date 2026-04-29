@@ -61,6 +61,7 @@ class ThumbWorker(QThread):
         max_thumb_bytes: int,
         workers: int = 1,
         key: str = "",
+        excluded_paths: list[str] | None = None,
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -68,6 +69,11 @@ class ThumbWorker(QThread):
         self.max_thumb_bytes = max_thumb_bytes
         self.workers = max(1, workers)
         self._key = key
+        # Normalised prefix strings for disabled folders — images whose path
+        # starts with any of these are skipped entirely.
+        self._excluded_prefixes: tuple[str, ...] = tuple(
+            os.path.normpath(p) + os.sep for p in (excluded_paths or [])
+        )
         self._cancel_event = threading.Event()
         self._resume_event = threading.Event()
         self._resume_event.set()  # starts unpaused
@@ -89,8 +95,17 @@ class ThumbWorker(QThread):
             # Read paths and stamps from the DB on this background thread —
             # keeps the main thread free so QML can paint thumbnails immediately.
             repo = ImageIndexRepository(self._db_path, key=self._key)
-            stamps = repo.get_all_stamps()
+            all_stamps = repo.get_all_stamps()
             repo.close()
+
+            # Drop images that belong to disabled (excluded) folders.
+            if self._excluded_prefixes:
+                stamps = {
+                    p: s for p, s in all_stamps.items()
+                    if not os.path.normpath(p).startswith(self._excluded_prefixes)
+                }
+            else:
+                stamps = all_stamps
 
             if self._cancel_event.is_set():
                 self.canceled.emit(0, 0)
@@ -109,23 +124,29 @@ class ThumbWorker(QThread):
             except OSError:
                 pass
 
-            # Filter to only images that don't yet have a cached thumbnail so
-            # that total reflects actual work rather than the entire collection.
-            # This avoids showing "0 / 50 000" after a small incremental rescan.
+            # Split all indexed images into already-cached and still-missing.
+            # total_all is always the full DB size so the progress counter
+            # always matches the user's total image count (e.g. "3/4" not "1/3"
+            # when 3 are missing out of 4 total).
             def _expected_cache_name(path: str) -> str:
                 stamp = stamps.get(path)
                 if stamp is not None:
                     return thumb_cache_name_from_stamp(path, stamp[0], stamp[1])
                 return thumb_cache_path(path, self.cache_dir).name
 
+            total_all = len(stamps)
+            already_cached = sum(
+                1 for p in stamps if _expected_cache_name(p) in existing
+            )
             paths = [p for p in stamps if _expected_cache_name(p) not in existing]
-            total = len(paths)
 
-            # Announce the real total so the progress bar is accurate.
-            self.progress.emit(0, total, "")
+            # Announce: current = already cached, total = all images.
+            # This way the progress bar shows "3/4" (not "1/3") when 3 are
+            # missing out of 4 total, and "4/4" when all are done.
+            self.progress.emit(already_cached, total_all, "")
 
             if self._cancel_event.is_set():
-                self.canceled.emit(0, total)
+                self.canceled.emit(cached, total_all)
                 return
 
             def build_thumb(path: str) -> bool:
@@ -157,18 +178,18 @@ class ThumbWorker(QThread):
                 except (UnidentifiedImageError, OSError, Exception):
                     return False
 
-            if self.workers > 1 and total > 0:
+            if self.workers > 1 and len(paths) > 0:
                 executor = ThreadPoolExecutor(max_workers=self.workers)
                 futures = {executor.submit(build_thumb, path): path for path in paths}
-                completed = 0
+                completed = already_cached
                 try:
                     for future in as_completed(futures):
                         if self._cancel_event.is_set():
-                            self.canceled.emit(cached, total)
+                            self.canceled.emit(cached, total_all)
                             return
                         path = futures[future]
                         completed += 1
-                        self.progress.emit(completed, total, path)
+                        self.progress.emit(completed, total_all, path)
                         if future.result():
                             cached += 1
                 finally:
@@ -176,17 +197,15 @@ class ThumbWorker(QThread):
             else:
                 for idx, path in enumerate(paths, start=1):
                     if self._cancel_event.is_set():
-                        self.canceled.emit(cached, total)
+                        self.canceled.emit(cached, total_all)
                         return
-                    self.progress.emit(idx, total, path)
+                    self.progress.emit(already_cached + idx, total_all, path)
                     if build_thumb(path):
                         cached += 1
 
             if self._cancel_event.is_set():
-                self.canceled.emit(cached, total)
+                self.canceled.emit(cached, total_all)
             else:
-                self.finished.emit(cached, total)
+                self.finished.emit(cached, total_all)
         except Exception as exc:
             self.failed.emit(str(exc))
-
-

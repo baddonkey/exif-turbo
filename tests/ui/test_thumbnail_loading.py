@@ -283,19 +283,20 @@ def test_start_auto_thumbs_populates_thumbnail_source(
     )
 
 
-def test_start_auto_thumbs_reports_only_missing_count_not_total_db_size(
+def test_start_auto_thumbs_progress_uses_total_indexed_count_not_missing_count(
     qtbot: QtBot,
     ctrl_prebuilt_cache: AppController,
 ) -> None:
-    """ThumbWorker reports the number of *missing* thumbs, not the total DB size.
+    """ThumbWorker progress total always equals the total DB image count.
 
-    After a small rescan the progress bar must show e.g. "0 / 2" (only the
-    newly-added images) rather than "0 / 50 000" (the entire collection).
-    When all thumbnails already exist the total must be 0.
+    When all thumbnails already exist, the initial progress emit is
+    (already_cached=N, total_all=N, "") so the bar starts full and the
+    label shows "N / N images" rather than "0 / 0" or "0 / 3 missing".
+    This ensures the denominator always matches the user's image count.
     """
     ctrl = ctrl_prebuilt_cache
 
-    # Arrange — unlock; all thumbs are pre-built so nothing should need building
+    # Arrange — unlock; all thumbs are pre-built
     with qtbot.waitSignal(ctrl.totalResultsChanged, timeout=3000):
         ctrl.unlock("")
     assert ctrl._search_model.rowCount() == 3
@@ -303,9 +304,14 @@ def test_start_auto_thumbs_reports_only_missing_count_not_total_db_size(
     # Wait for the worker triggered by unlock() to finish
     qtbot.waitUntil(lambda: not ctrl.isBuildingThumbs, timeout=15_000)
 
-    # Assert — zero images needed thumbnails, so thumbTotal reported was 0
-    assert ctrl.thumbTotal == 0, (
-        f"Expected thumbTotal=0 when all thumbs are cached, got {ctrl.thumbTotal}"
+    # Assert — total equals the full DB size (3 images), not just missing (0)
+    assert ctrl.thumbTotal == 3, (
+        f"Expected thumbTotal=3 (total indexed) when all thumbs are cached, "
+        f"got {ctrl.thumbTotal}"
+    )
+    assert ctrl.thumbCurrent == 3, (
+        f"Expected thumbCurrent=3 (all already done) when all thumbs are cached, "
+        f"got {ctrl.thumbCurrent}"
     )
 
 
