@@ -113,6 +113,7 @@ class AppController(QObject):
         self._folder_filter: str = ""
         self._folder_tree: str = "[]"
         self._folder_tree_dirty: bool = False
+        self._pending_preview_path: str = ""
         self._index_worker: IndexWorker | None = None
         self._thumb_worker: ThumbWorker | None = None
         self._scanning_folder_id: int | None = None
@@ -140,6 +141,12 @@ class AppController(QObject):
         self._preview_resume_timer.setSingleShot(True)
         self._preview_resume_timer.setInterval(10_000)
         self._preview_resume_timer.timeout.connect(self._resume_thumb_for_preview)
+        # Timer: delay the full preview load by 150 ms so visible card thumbnails
+        # in the list get a chance to render before the heavier preview decode starts.
+        self._preview_delay_timer = QTimer(self)
+        self._preview_delay_timer.setSingleShot(True)
+        self._preview_delay_timer.setInterval(150)
+        self._preview_delay_timer.timeout.connect(self._load_pending_preview)
         self._last_progress_update: float = 0.0
         self._last_thumb_progress_update: float = 0.0
 
@@ -489,25 +496,17 @@ class AppController(QObject):
         self._current_result_row = row
         self.currentResultRowChanged.emit()
         if load_image:
-            if path:
-                encoded = urllib.parse.quote(path, safe="")
-                self._selected_image_source = f"image://preview/{encoded}"
-            else:
-                self._selected_image_source = ""
-            # Set thumb placeholder immediately from local cache (instant, no network hit)
+            # Show thumb placeholder immediately from local cache (instant, no disk I/O)
             thumb_uri = self._search_model.data(
                 self._search_model.index(row, 0),
                 SearchListModel.ThumbnailSourceRole,
             )
             self._selected_thumb_source = thumb_uri or ""
             self.selectedThumbSourceChanged.emit()
-            self.selectedImageSourceChanged.emit()
-            # Pause background workers to yield I/O bandwidth to the preview load
-            if self._thumb_worker and self._thumb_worker.isRunning():
-                self._thumb_worker.pause()
-            if self._index_worker and self._index_worker.isRunning():
-                self._index_worker.pause()
-            self._preview_resume_timer.start()  # resets if already running
+            # Debounce the full preview load — lets visible card thumbnails in the
+            # list render before the heavier preview decode starts.
+            self._pending_preview_path = path or ""
+            self._preview_delay_timer.start()  # resets if already running
 
     @Slot(str)
     def findNext(self, find_text: str) -> None:
@@ -873,6 +872,8 @@ class AppController(QObject):
             self.statusTextChanged.emit()
 
     def _clear_details(self) -> None:
+        self._preview_delay_timer.stop()
+        self._pending_preview_path = ""
         self._details_plain_text = ""
         self._details_html = ""
         self.detailsHtmlChanged.emit()
@@ -976,6 +977,22 @@ class AppController(QObject):
         # appear to generate only after indexing finishes.
         self._thumb_worker.start(QThread.Priority.LowPriority)
         self._thumb_refresh_timer.start()
+
+    def _load_pending_preview(self) -> None:
+        """Fire the full preview load after the debounce delay."""
+        path = self._pending_preview_path
+        if path:
+            encoded = urllib.parse.quote(path, safe="")
+            self._selected_image_source = f"image://preview/{encoded}"
+        else:
+            self._selected_image_source = ""
+        self.selectedImageSourceChanged.emit()
+        # Pause background workers to yield I/O bandwidth to the preview load
+        if self._thumb_worker and self._thumb_worker.isRunning():
+            self._thumb_worker.pause()
+        if self._index_worker and self._index_worker.isRunning():
+            self._index_worker.pause()
+        self._preview_resume_timer.start()  # resets if already running
 
     def _resume_thumb_for_preview(self) -> None:
         if self._thumb_worker and self._thumb_worker.isRunning():

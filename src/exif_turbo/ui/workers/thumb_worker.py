@@ -17,7 +17,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from PySide6.QtCore import QThread, Signal
 
 from ...data.image_index_repository import ImageIndexRepository
-from ...indexing.image_utils import RAW_EXTENSIONS
+from ...indexing.image_utils import RAW_EXTENSIONS, orient_raw_thumb
 from ...utils.thumb_cache import thumb_cache_name_from_stamp, thumb_cache_path
 
 _THUMB_SIZE = (144, 144)
@@ -31,6 +31,7 @@ def _open_image(path: str) -> Image.Image:
     ext = Path(path).suffix.lower()
     if ext in _RAW_EXTENSIONS and _RAWPY_AVAILABLE:
         with rawpy.imread(path) as raw:
+            raw_flip = raw.sizes.flip
             try:
                 thumb = raw.extract_thumb()
                 if thumb.format == rawpy.ThumbFormat.JPEG:
@@ -39,10 +40,10 @@ def _open_image(path: str) -> Image.Image:
                 else:
                     img = Image.fromarray(thumb.data)
             except rawpy.LibRawNoThumbnailError:
-                # Fall back to full demosaic
+                # postprocess() applies orientation automatically.
                 rgb = raw.postprocess(use_camera_wb=True, half_size=True)
-                img = Image.fromarray(rgb)
-        return ImageOps.exif_transpose(img)
+                return Image.fromarray(rgb)
+        return orient_raw_thumb(img, raw_flip)
     img = Image.open(path)
     return ImageOps.exif_transpose(img)
 

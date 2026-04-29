@@ -15,7 +15,7 @@ from PySide6.QtCore import QSize, QThread
 from PySide6.QtGui import QImage
 from PySide6.QtQuick import QQuickImageProvider
 
-from ...indexing.image_utils import RAW_EXTENSIONS
+from ...indexing.image_utils import RAW_EXTENSIONS, orient_raw_thumb
 
 # Cap preview decoding at this size — avoids allocating 200 MB for a 50 MP image
 # while still looking sharp on any monitor up to 4K.
@@ -120,6 +120,7 @@ def _load_standard(path: str, target: tuple[int, int]) -> Image.Image:
 def _load_raw(path: str, target: tuple[int, int]) -> Image.Image:
     """Load a RAW file via rawpy, preferring the embedded JPEG thumbnail."""
     with rawpy.imread(path) as raw:
+        raw_flip = raw.sizes.flip  # orientation from the RAW file's IFD
         try:
             thumb = raw.extract_thumb()
             if thumb.format == rawpy.ThumbFormat.JPEG:
@@ -129,9 +130,12 @@ def _load_raw(path: str, target: tuple[int, int]) -> Image.Image:
             else:
                 img = Image.fromarray(thumb.data)
         except rawpy.LibRawNoThumbnailError:
-            # No embedded preview — fall back to half-size demosaic (faster)
+            # No embedded preview — fall back to half-size demosaic.
+            # rawpy.postprocess() applies orientation automatically.
             rgb = raw.postprocess(use_camera_wb=True, half_size=True)
             img = Image.fromarray(rgb)
-    img = ImageOps.exif_transpose(img)
+            img.thumbnail(target, Image.LANCZOS)
+            return img
+    img = orient_raw_thumb(img, raw_flip)
     img.thumbnail(target, Image.LANCZOS)
     return img

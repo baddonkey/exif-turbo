@@ -49,6 +49,44 @@ ApplicationWindow {
     }
     Shortcut { sequences: [ StandardKey.FindNext ];     onActivated: controller.findNext(findField.text) }
     Shortcut { sequences: [ StandardKey.FindPrevious ]; onActivated: controller.findPrev(findField.text) }
+    Shortcut {
+        sequence: StandardKey.MoveToNextPage
+        enabled: mainTabBar.currentIndex === 0 && controller && controller.currentResultRow < resultsList.count - 1
+        onActivated: {
+            var step = Math.max(1, Math.floor(resultsList.height / 210))
+            var next = Math.min(controller.currentResultRow + step, resultsList.count - 1)
+            controller.selectResult(next)
+            resultsList.positionViewAtIndex(next, ListView.Contain)
+        }
+    }
+    Shortcut {
+        sequence: StandardKey.MoveToPreviousPage
+        enabled: mainTabBar.currentIndex === 0 && controller && controller.currentResultRow > 0
+        onActivated: {
+            var step = Math.max(1, Math.floor(resultsList.height / 210))
+            var prev = Math.max(controller.currentResultRow - step, 0)
+            controller.selectResult(prev)
+            resultsList.positionViewAtIndex(prev, ListView.Contain)
+        }
+    }
+    Shortcut {
+        sequence: StandardKey.MoveToNextLine
+        enabled: mainTabBar.currentIndex === 0 && controller && controller.currentResultRow < resultsList.count - 1
+        onActivated: {
+            var next = controller.currentResultRow + 1
+            controller.selectResult(next)
+            resultsList.positionViewAtIndex(next, ListView.Contain)
+        }
+    }
+    Shortcut {
+        sequence: StandardKey.MoveToPreviousLine
+        enabled: mainTabBar.currentIndex === 0 && controller && controller.currentResultRow > 0
+        onActivated: {
+            var prev = controller.currentResultRow - 1
+            controller.selectResult(prev)
+            resultsList.positionViewAtIndex(prev, ListView.Contain)
+        }
+    }
 
     property bool findBarVisible: false
 
@@ -689,6 +727,17 @@ ApplicationWindow {
                         currentIndex: controller ? controller.currentResultRow : -1
                         ScrollBar.vertical: ScrollBar {}
 
+                        WheelHandler {
+                            onWheel: (event) => {
+                                var step = 210
+                                var delta = event.angleDelta.y < 0 ? step : -step
+                                resultsList.contentY = Math.max(0,
+                                    Math.min(resultsList.contentY + delta,
+                                             Math.max(0, resultsList.contentHeight - resultsList.height)))
+                                event.accepted = true
+                            }
+                        }
+
                         delegate: Rectangle {
                             id: cardDelegate
                             width: resultsList.width
@@ -887,34 +936,104 @@ ApplicationWindow {
 
                     // Preview: show cached thumbnail instantly as placeholder,
                     // then fade in the full image once it has loaded.
+                    // Wheel to zoom · drag to pan · double-click to reset.
                     Item {
+                        id: previewHost
                         Layout.fillWidth: true
                         Layout.fillHeight: true
+                        clip: true
 
-                        // Low-res thumbnail placeholder — visible from cache immediately
-                        Image {
+                        property real _zoom: 1.0
+                        readonly property real _maxZoom: 8.0
+
+                        Flickable {
+                            id: previewFlick
                             anchors.fill: parent
-                            source: _selectedThumbSource
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                            visible: _selectedThumbSource !== "" && fullPreview.status !== Image.Ready
+                            contentWidth:  Math.max(width,  previewHost.width  * previewHost._zoom)
+                            contentHeight: Math.max(height, previewHost.height * previewHost._zoom)
+                            boundsBehavior: Flickable.StopAtBounds
+                            clip: true
+
+                            // Low-res thumbnail placeholder — visible from cache immediately
+                            Image {
+                                width:  previewFlick.contentWidth
+                                height: previewFlick.contentHeight
+                                source: _selectedThumbSource
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                                visible: _selectedThumbSource !== "" && fullPreview.status !== Image.Ready
+                            }
+
+                            // Full-resolution image — fades in when loaded
+                            Image {
+                                id: fullPreview
+                                objectName: "fullPreview"
+                                width:  previewFlick.contentWidth
+                                height: previewFlick.contentHeight
+                                source: _selectedImageSource
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                                asynchronous: true
+                                cache: false
+                                opacity: status === Image.Ready ? 1.0 : 0.0
+                                Behavior on opacity { NumberAnimation { duration: 150 } }
+                                onSourceChanged: {
+                                    previewHost._zoom = 1.0
+                                    previewFlick.contentX = 0
+                                    previewFlick.contentY = 0
+                                }
+                                onStatusChanged: {
+                                    if (status === Image.Ready || status === Image.Error)
+                                        if (controller) controller.onPreviewStatusChanged()
+                                }
+                            }
+
+                            // WheelHandler inside Flickable takes priority over Flickable's own
+                            // wheel-scroll handling. event.x/y are in content coordinates here.
+                            WheelHandler {
+                                onWheel: (event) => {
+                                    var step    = event.angleDelta.y > 0 ? 1.2 : (1.0 / 1.2)
+                                    var oldZoom = previewHost._zoom
+                                    var newZoom = Math.max(1.0, Math.min(previewHost._maxZoom, oldZoom * step))
+                                    if (newZoom === oldZoom) { event.accepted = true; return }
+                                    var actualFactor = newZoom / oldZoom
+                                    // cursor position in viewport (content coords minus scroll offset)
+                                    var viewX = event.x - previewFlick.contentX
+                                    var viewY = event.y - previewFlick.contentY
+                                    var newW = Math.max(previewFlick.width,  previewHost.width  * newZoom)
+                                    var newH = Math.max(previewFlick.height, previewHost.height * newZoom)
+                                    previewHost._zoom = newZoom
+                                    previewFlick.contentX = Math.max(0,
+                                        Math.min(event.x * actualFactor - viewX, newW - previewFlick.width))
+                                    previewFlick.contentY = Math.max(0,
+                                        Math.min(event.y * actualFactor - viewY, newH - previewFlick.height))
+                                    event.accepted = true
+                                }
+                            }
                         }
 
-                        // Full-resolution image — fades in when loaded
-                        Image {
-                            id: fullPreview
-                            objectName: "fullPreview"
-                            anchors.fill: parent
-                            source: _selectedImageSource
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                            asynchronous: true
-                            cache: false
-                            opacity: status === Image.Ready ? 1.0 : 0.0
-                            Behavior on opacity { NumberAnimation { duration: 150 } }
-                            onStatusChanged: {
-                                if (status === Image.Ready || status === Image.Error)
-                                    if (controller) controller.onPreviewStatusChanged()
+                        TapHandler {
+                            onDoubleTapped: {
+                                previewHost._zoom = 1.0
+                                previewFlick.contentX = 0
+                                previewFlick.contentY = 0
+                            }
+                        }
+
+                        // Zoom level badge
+                        Rectangle {
+                            anchors { bottom: parent.bottom; right: parent.right; margins: 8 }
+                            width: previewZoomLabel.implicitWidth + 16
+                            height: 22
+                            radius: 4
+                            color: Qt.rgba(0, 0, 0, 0.55)
+                            visible: previewHost._zoom > 1.05
+                            Label {
+                                id: previewZoomLabel
+                                anchors.centerIn: parent
+                                text: Math.round(previewHost._zoom * 100) + "%"
+                                font.pixelSize: 11
+                                color: "#ffffff"
                             }
                         }
                     }
@@ -1470,30 +1589,96 @@ ApplicationWindow {
 
                     // Preview: show cached thumbnail instantly as placeholder,
                     // then fade in the full image once it has loaded.
+                    // Wheel to zoom · drag to pan · double-click to reset.
                     Item {
+                        id: previewHost2
                         Layout.fillWidth: true
                         Layout.fillHeight: true
+                        clip: true
 
-                        Image {
+                        property real _zoom: 1.0
+                        readonly property real _maxZoom: 8.0
+
+                        Flickable {
+                            id: previewFlick2
                             anchors.fill: parent
-                            source: _selectedThumbSource
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                            visible: _selectedThumbSource !== "" && fullPreview2.status !== Image.Ready
+                            contentWidth:  Math.max(width,  previewHost2.width  * previewHost2._zoom)
+                            contentHeight: Math.max(height, previewHost2.height * previewHost2._zoom)
+                            boundsBehavior: Flickable.StopAtBounds
+                            clip: true
+
+                            Image {
+                                width:  previewFlick2.contentWidth
+                                height: previewFlick2.contentHeight
+                                source: _selectedThumbSource
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                                visible: _selectedThumbSource !== "" && fullPreview2.status !== Image.Ready
+                            }
+
+                            Image {
+                                id: fullPreview2
+                                objectName: "fullPreview2"
+                                width:  previewFlick2.contentWidth
+                                height: previewFlick2.contentHeight
+                                source: _selectedImageSource
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true; asynchronous: true; cache: false
+                                opacity: status === Image.Ready ? 1.0 : 0.0
+                                Behavior on opacity { NumberAnimation { duration: 150 } }
+                                onSourceChanged: {
+                                    previewHost2._zoom = 1.0
+                                    previewFlick2.contentX = 0
+                                    previewFlick2.contentY = 0
+                                }
+                                onStatusChanged: {
+                                    if (status === Image.Ready || status === Image.Error)
+                                        if (controller) controller.onPreviewStatusChanged()
+                                }
+                            }
+
+                            WheelHandler {
+                                onWheel: (event) => {
+                                    var step    = event.angleDelta.y > 0 ? 1.2 : (1.0 / 1.2)
+                                    var oldZoom = previewHost2._zoom
+                                    var newZoom = Math.max(1.0, Math.min(previewHost2._maxZoom, oldZoom * step))
+                                    if (newZoom === oldZoom) { event.accepted = true; return }
+                                    var actualFactor = newZoom / oldZoom
+                                    var viewX = event.x - previewFlick2.contentX
+                                    var viewY = event.y - previewFlick2.contentY
+                                    var newW = Math.max(previewFlick2.width,  previewHost2.width  * newZoom)
+                                    var newH = Math.max(previewFlick2.height, previewHost2.height * newZoom)
+                                    previewHost2._zoom = newZoom
+                                    previewFlick2.contentX = Math.max(0,
+                                        Math.min(event.x * actualFactor - viewX, newW - previewFlick2.width))
+                                    previewFlick2.contentY = Math.max(0,
+                                        Math.min(event.y * actualFactor - viewY, newH - previewFlick2.height))
+                                    event.accepted = true
+                                }
+                            }
                         }
 
-                        Image {
-                            id: fullPreview2
-                            objectName: "fullPreview2"
-                            anchors.fill: parent
-                            source: _selectedImageSource
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true; asynchronous: true; cache: false
-                            opacity: status === Image.Ready ? 1.0 : 0.0
-                            Behavior on opacity { NumberAnimation { duration: 150 } }
-                            onStatusChanged: {
-                                if (status === Image.Ready || status === Image.Error)
-                                    if (controller) controller.onPreviewStatusChanged()
+                        TapHandler {
+                            onDoubleTapped: {
+                                previewHost2._zoom = 1.0
+                                previewFlick2.contentX = 0
+                                previewFlick2.contentY = 0
+                            }
+                        }
+
+                        Rectangle {
+                            anchors { bottom: parent.bottom; right: parent.right; margins: 8 }
+                            width: previewZoomLabel2.implicitWidth + 16
+                            height: 22
+                            radius: 4
+                            color: Qt.rgba(0, 0, 0, 0.55)
+                            visible: previewHost2._zoom > 1.05
+                            Label {
+                                id: previewZoomLabel2
+                                anchors.centerIn: parent
+                                text: Math.round(previewHost2._zoom * 100) + "%"
+                                font.pixelSize: 11
+                                color: "#ffffff"
                             }
                         }
                     }
