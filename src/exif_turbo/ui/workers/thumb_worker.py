@@ -44,18 +44,34 @@ def _open_image(path: str) -> Image.Image:
                 rgb = raw.postprocess(use_camera_wb=True, half_size=True)
                 return Image.fromarray(rgb)
         return orient_raw_thumb(img, raw_flip)
+    # Read all bytes first so the codec decodes from memory rather than making
+    # many small seeks over a network share (NFS/SMB TIFF codecs are especially
+    # seek-heavy — reading bytes sequentially first is orders of magnitude faster).
+    with open(path, "rb") as f:
+        data = f.read()
+    buf = io.BytesIO(data)
     try:
-        img = Image.open(path)
+        img = Image.open(buf)
+        img.load()
     except UnidentifiedImageError:
         # Pillow 12 treats some valid-but-unusual files (e.g. 16-bit RGBA PNGs
         # with large metadata chunks) as truncated.  Retry with the truncated-
         # image flag so we still produce a thumbnail rather than silently skip.
         ImageFile.LOAD_TRUNCATED_IMAGES = True
         try:
-            img = Image.open(path)
+            buf.seek(0)
+            img = Image.open(buf)
+            img.load()
         finally:
             ImageFile.LOAD_TRUNCATED_IMAGES = False
-    return ImageOps.exif_transpose(img)
+    img = ImageOps.exif_transpose(img)
+    # Convert 16-bit / raw-mode images (e.g. mode "I;16" from 16-bit TIFFs) to
+    # RGB before resampling.  LANCZOS on Pillow's integer/float modes is
+    # extremely slow — converting to 8-bit first gives identical visual quality
+    # for a 144×144 thumbnail and avoids multi-minute hangs.
+    if img.mode not in ("RGB", "RGBA", "L", "LA", "P"):
+        img = img.convert("RGB")
+    return img
 
 
 class ThumbWorker(QThread):
@@ -161,6 +177,10 @@ class ThumbWorker(QThread):
 
             def build_thumb(path: str) -> bool:
                 if not path:
+                    return False
+                # Skip immediately if the file is not reachable — avoids a
+                # multi-second hang when a NAS or external volume is offline.
+                if not os.path.exists(path):
                     return False
                 # Yield to preview loads: wait while paused (2s max safety valve)
                 if not self._resume_event.is_set():
