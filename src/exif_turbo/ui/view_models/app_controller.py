@@ -669,6 +669,19 @@ class AppController(QObject):
         # unlock time).  A definitive build will be triggered after indexing
         # finishes, so there is no value in letting the two workers race.
         if self._thumb_worker and self._thumb_worker.isRunning():
+            # Disconnect all callbacks BEFORE cancelling.  The 'canceled' signal
+            # is emitted asynchronously on the worker thread; without this it can
+            # arrive after the post-index Worker B has already started, causing
+            # _on_thumb_canceled to stop Worker B's refresh timer and flip
+            # _is_building_thumbs to False while B is still running.
+            try:
+                self._thumb_worker.progress.disconnect(self._on_thumb_progress)
+                self._thumb_worker.finished.disconnect(self._on_thumb_done)
+                self._thumb_worker.failed.disconnect(self._on_thumb_failed)
+                self._thumb_worker.canceled.disconnect(self._on_thumb_canceled)
+            except RuntimeError:
+                pass  # already disconnected
+            self._thumb_refresh_timer.stop()
             self._thumb_worker.cancel()
             self._is_building_thumbs = False
             self._pending_thumb_restart = False

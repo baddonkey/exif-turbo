@@ -344,26 +344,26 @@ def test_rescan_triggers_exactly_one_thumb_build_not_multiple(
     indexed_db: tuple[Path, Path],
     tmp_path: Path,
 ) -> None:
-    """Pressing Rescan must not trigger multiple thumb-build runs.
+    """Pressing Rescan must not trigger multiple thumb-build runs, and the
+    cancelled unlock-time worker must not corrupt the post-index worker's state.
 
-    Before the fix, unlock() started ThumbWorker A and then rescanFolder()
-    started indexing without cancelling A.  The races between A, the 8-second
-    batch timer, and the post-index trigger caused 2–3 sequential builds,
-    misleading progress ("1/3 thumbs" when 4 images exist because a previous
-    run had already cached 1).
+    Before the fixes, two bugs combined:
+    1. unlock()-triggered Worker A raced with the post-index Worker B, causing
+       2-3 builds.
+    2. Worker A's late 'canceled' signal (arriving after B started) called
+       _on_thumb_canceled, which stopped Worker B's refresh timer and set
+       _is_building_thumbs=False while B was still running — hiding the progress
+       bar and preventing mid-build thumbnail refreshes.
 
-    After the fix, _actually_start_indexing() cancels any running ThumbWorker
-    so there is at most one build from the 8-second timer (only relevant for
-    long-running index jobs) plus the definitive build at the end of indexing.
-    For a fast small-collection rescan only the post-index build fires.
+    After the fixes:
+    - _actually_start_indexing() disconnects Worker A's signals before cancelling,
+      so its late 'canceled' can never touch Worker B's state.
+    - isBuildingThumbs stays True continuously throughout Worker B's entire run.
     """
     db_path, base = indexed_db
     cache_dir = tmp_path / "thumbs"
     cache_dir.mkdir()
 
-    # The indexed_db fixture does not register an IndexedFolder row, so we
-    # need a DB that has both images AND a folder row so rescanFolder() works.
-    # Build that here using a separate temp space.
     img_dir = tmp_path / "images"
     img_dir.mkdir()
     for fname, make, model, date in _CAMERAS:
@@ -388,18 +388,25 @@ def test_rescan_triggers_exactly_one_thumb_build_not_multiple(
     ctrl = AppController(local_db, search_model, ExifListModel(), FolderListModel())
 
     try:
-        # Unlock — this starts ThumbWorker A (from the unlock fix)
+        # Unlock — starts Worker A (unlock-triggered)
         with qtbot.waitSignal(ctrl.totalResultsChanged, timeout=3000):
             ctrl.unlock("")
         assert ctrl.totalResults == len(_CAMERAS)
 
-        # Track how many times isBuildingThumbs transitions False→True
+        # Track isBuildingThumbs transitions
         build_starts: list[int] = []
-        ctrl.isBuildingThumbsChanged.connect(
-            lambda: build_starts.append(1) if ctrl.isBuildingThumbs else None
-        )
+        build_stops: list[int] = []
 
-        # Act — rescan the folder; this must cancel ThumbWorker A immediately
+        def _on_building_changed() -> None:
+            if ctrl.isBuildingThumbs:
+                build_starts.append(1)
+            else:
+                build_stops.append(1)
+
+        ctrl.isBuildingThumbsChanged.connect(_on_building_changed)
+
+        # Act — rescan; _actually_start_indexing cancels Worker A and
+        # disconnects its signals
         folder_id = ctrl._folder_model._rows[0].id
         ctrl.rescanFolder(folder_id)
 
@@ -409,15 +416,25 @@ def test_rescan_triggers_exactly_one_thumb_build_not_multiple(
             timeout=30_000,
         )
 
-        # Assert — thumb building started at most once during the rescan lifecycle.
-        # (The unlock-started worker is cancelled before indexing begins, so the
-        # only build is the definitive post-index one.)
+        # Assert — at most one thumb-build start during the rescan
         assert len(build_starts) <= 1, (
-            f"Expected at most 1 thumb-build start during rescan, got {len(build_starts)}: "
-            "multiple builds indicate the unlock-triggered worker was not cancelled."
+            f"Expected ≤1 thumb-build start during rescan, got {len(build_starts)}: "
+            "multiple starts indicate Worker A was not properly cancelled."
         )
 
-        # And all thumbnails are present in the end
+        # Assert — the only extra False transition is from cancelling Worker A
+        # before indexing starts.  The sequence must be: [False(cancel A), True(B
+        # starts), False(B done)].  build_stops - build_starts == 1 is correct;
+        # a larger gap means Worker A's late 'canceled' fired _on_thumb_canceled
+        # while Worker B was running.
+        assert len(build_stops) <= len(build_starts) + 1, (
+            f"isBuildingThumbs went False {len(build_stops)} times vs "
+            f"True {len(build_starts)} times: more than one extra False means "
+            "Worker A's 'canceled' signal is still firing _on_thumb_canceled "
+            "while Worker B is running."
+        )
+
+        # All thumbnails must be present at the end
         sources = _thumb_sources(ctrl)
         assert all(src.startswith("file://") for src in sources), (
             f"Expected all thumbnails populated after rescan, got: {sources}"
