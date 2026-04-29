@@ -50,7 +50,7 @@ ApplicationWindow {
     Shortcut { sequences: [ StandardKey.FindNext ];     onActivated: controller.findNext(findField.text) }
     Shortcut { sequences: [ StandardKey.FindPrevious ]; onActivated: controller.findPrev(findField.text) }
     Shortcut {
-        sequence: StandardKey.MoveToNextPage
+        sequences: [ StandardKey.MoveToNextPage ]
         enabled: mainTabBar.currentIndex === 0 && controller && controller.currentResultRow < resultsList.count - 1
         onActivated: {
             var step = Math.max(1, Math.floor(resultsList.height / 210))
@@ -60,7 +60,7 @@ ApplicationWindow {
         }
     }
     Shortcut {
-        sequence: StandardKey.MoveToPreviousPage
+        sequences: [ StandardKey.MoveToPreviousPage ]
         enabled: mainTabBar.currentIndex === 0 && controller && controller.currentResultRow > 0
         onActivated: {
             var step = Math.max(1, Math.floor(resultsList.height / 210))
@@ -70,7 +70,7 @@ ApplicationWindow {
         }
     }
     Shortcut {
-        sequence: StandardKey.MoveToNextLine
+        sequences: [ StandardKey.MoveToNextLine ]
         enabled: mainTabBar.currentIndex === 0 && controller && controller.currentResultRow < resultsList.count - 1
         onActivated: {
             var next = controller.currentResultRow + 1
@@ -79,7 +79,7 @@ ApplicationWindow {
         }
     }
     Shortcut {
-        sequence: StandardKey.MoveToPreviousLine
+        sequences: [ StandardKey.MoveToPreviousLine ]
         enabled: mainTabBar.currentIndex === 0 && controller && controller.currentResultRow > 0
         onActivated: {
             var prev = controller.currentResultRow - 1

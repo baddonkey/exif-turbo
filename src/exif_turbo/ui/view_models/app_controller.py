@@ -299,6 +299,11 @@ class AppController(QObject):
             if self._folder_repo:
                 for folder in self._folder_repo.get_pending_folders():
                     self._start_managed_folder_indexing(folder, force=False)
+            # If no folder scan was queued (e.g. opening a pre-existing fully-indexed
+            # DB), kick off thumbnail generation immediately so search-result cards
+            # are populated without the user having to trigger an index run.
+            if not self._scan_queue and not self._is_indexing:
+                self._start_auto_thumbs()
         except sqlcipher3.DatabaseError:
             self._unlock_error = "Wrong password — please try again."
             self.unlockErrorChanged.emit()
