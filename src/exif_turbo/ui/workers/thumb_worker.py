@@ -13,7 +13,7 @@ try:
 except ImportError:
     _RAWPY_AVAILABLE = False
 
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageFile, ImageOps, UnidentifiedImageError
 from PySide6.QtCore import QThread, Signal
 
 from ...data.image_index_repository import ImageIndexRepository
@@ -44,7 +44,17 @@ def _open_image(path: str) -> Image.Image:
                 rgb = raw.postprocess(use_camera_wb=True, half_size=True)
                 return Image.fromarray(rgb)
         return orient_raw_thumb(img, raw_flip)
-    img = Image.open(path)
+    try:
+        img = Image.open(path)
+    except UnidentifiedImageError:
+        # Pillow 12 treats some valid-but-unusual files (e.g. 16-bit RGBA PNGs
+        # with large metadata chunks) as truncated.  Retry with the truncated-
+        # image flag so we still produce a thumbnail rather than silently skip.
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
+        try:
+            img = Image.open(path)
+        finally:
+            ImageFile.LOAD_TRUNCATED_IMAGES = False
     return ImageOps.exif_transpose(img)
 
 

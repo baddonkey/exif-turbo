@@ -10,7 +10,7 @@ try:
 except ImportError:
     _RAWPY_AVAILABLE = False
 
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageFile, ImageOps, UnidentifiedImageError
 from PySide6.QtCore import QSize, QThread
 from PySide6.QtGui import QImage
 from PySide6.QtQuick import QQuickImageProvider
@@ -107,7 +107,17 @@ def _load_standard(path: str, target: tuple[int, int]) -> Image.Image:
     with open(path, "rb") as f:
         data = f.read()  # GIL released during ReadFile() → Qt events flow freely
     buf = io.BytesIO(data)
-    img = Image.open(buf)
+    try:
+        img = Image.open(buf)
+    except UnidentifiedImageError:
+        # Pillow 12 treats some valid-but-unusual files (e.g. 16-bit RGBA PNGs
+        # with large metadata chunks) as truncated.  Retry with the flag set.
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
+        try:
+            buf.seek(0)
+            img = Image.open(buf)
+        finally:
+            ImageFile.LOAD_TRUNCATED_IMAGES = False
     # draft() instructs libjpeg to decode at a subsampled resolution
     # (1/2, 1/4 or 1/8) — only effective for JPEG, no-op for other formats.
     img.draft("RGB", target)
