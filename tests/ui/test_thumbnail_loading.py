@@ -282,6 +282,32 @@ def test_start_auto_thumbs_populates_thumbnail_source(
     )
 
 
+def test_start_auto_thumbs_reports_only_missing_count_not_total_db_size(
+    qtbot: QtBot,
+    ctrl_prebuilt_cache: AppController,
+) -> None:
+    """ThumbWorker reports the number of *missing* thumbs, not the total DB size.
+
+    After a small rescan the progress bar must show e.g. "0 / 2" (only the
+    newly-added images) rather than "0 / 50 000" (the entire collection).
+    When all thumbnails already exist the total must be 0.
+    """
+    ctrl = ctrl_prebuilt_cache
+
+    # Arrange — unlock; all thumbs are pre-built so nothing should need building
+    with qtbot.waitSignal(ctrl.totalResultsChanged, timeout=3000):
+        ctrl.unlock("")
+    assert ctrl._search_model.rowCount() == 3
+
+    # Wait for the worker triggered by unlock() to finish
+    qtbot.waitUntil(lambda: not ctrl.isBuildingThumbs, timeout=15_000)
+
+    # Assert — zero images needed thumbnails, so thumbTotal reported was 0
+    assert ctrl.thumbTotal == 0, (
+        f"Expected thumbTotal=0 when all thumbs are cached, got {ctrl.thumbTotal}"
+    )
+
+
 def test_thumbnail_building_triggered_for_preindexed_db_without_pending_scans(
     qtbot: QtBot,
     ctrl_empty_cache: AppController,

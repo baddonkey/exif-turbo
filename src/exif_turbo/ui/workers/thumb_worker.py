@@ -92,14 +92,8 @@ class ThumbWorker(QThread):
             stamps = repo.get_all_stamps()
             repo.close()
 
-            paths = list(stamps.keys())
-            total = len(paths)
-
-            # Announce total immediately so the progress bar goes non-indeterminate.
-            self.progress.emit(0, total, "")
-
             if self._cancel_event.is_set():
-                self.canceled.emit(0, total)
+                self.canceled.emit(0, 0)
                 return
 
             self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -115,6 +109,25 @@ class ThumbWorker(QThread):
             except OSError:
                 pass
 
+            # Filter to only images that don't yet have a cached thumbnail so
+            # that total reflects actual work rather than the entire collection.
+            # This avoids showing "0 / 50 000" after a small incremental rescan.
+            def _expected_cache_name(path: str) -> str:
+                stamp = stamps.get(path)
+                if stamp is not None:
+                    return thumb_cache_name_from_stamp(path, stamp[0], stamp[1])
+                return thumb_cache_path(path, self.cache_dir).name
+
+            paths = [p for p in stamps if _expected_cache_name(p) not in existing]
+            total = len(paths)
+
+            # Announce the real total so the progress bar is accurate.
+            self.progress.emit(0, total, "")
+
+            if self._cancel_event.is_set():
+                self.canceled.emit(0, total)
+                return
+
             def build_thumb(path: str) -> bool:
                 if not path:
                     return False
@@ -127,13 +140,9 @@ class ThumbWorker(QThread):
                 stamp = stamps.get(path)
                 if stamp is not None:
                     cache_name = thumb_cache_name_from_stamp(path, stamp[0], stamp[1])
-                    if cache_name in existing:
-                        return True
                     cache_path_obj = self.cache_dir / cache_name
                 else:
                     cache_path_obj = thumb_cache_path(path, self.cache_dir)
-                    if cache_path_obj.name in existing:
-                        return True
                 try:
                     if os.path.getsize(path) > self.max_thumb_bytes:
                         return False
