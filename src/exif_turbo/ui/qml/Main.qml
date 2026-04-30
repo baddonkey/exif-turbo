@@ -991,31 +991,28 @@ ApplicationWindow {
                                 }
                             }
 
-                            // WheelHandler inside Flickable takes priority over Flickable's own
-                            // wheel-scroll handling.
+                            // Mouse-wheel zoom (physical scroll wheel, or Ctrl + trackpad scroll).
+                            //
+                            // acceptedDevices limits this handler to real wheel events so that
+                            // plain two-finger trackpad scroll is left to the Flickable for panning.
+                            // On macOS, Ctrl + two-finger scroll also reaches here (system zoom-
+                            // scroll shortcut), which is a reasonable fallback for mouse users.
                             //
                             // Qt 6 delivers event.x/y in CONTENT coordinates (contentX + viewportX)
-                            // when the WheelHandler is declared inside a Flickable body.
-                            // Correct cursor-anchor formula for content-coord event.x:
+                            // when the WheelHandler is inside a Flickable.
+                            // Correct cursor-anchor formula:
                             //   new_contentX = event.x * (factor − 1) + oldContentX
-                            // Derivation: let vx = event.x − oldContentX  (viewport cursor position)
-                            //   new_contentX = (oldContentX + vx) * factor − vx
-                            //               = event.x * factor − (event.x − oldContentX)
-                            //               = event.x * (factor − 1) + oldContentX  ∎
-                            //
-                            // Math.pow(1.2, angleDelta/120) gives proportional steps:
-                            // one full mouse-wheel notch (120 units) → ×1.2 (unchanged)
-                            // trackpad smooth scroll (small units)   → proportionally smaller
                             WheelHandler {
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                acceptedModifiers: Qt.ControlModifier
                                 onWheel: (event) => {
+                                    if (event.phase === Qt.ScrollMomentum) { event.accepted = true; return }
                                     if (event.angleDelta.y === 0) return
                                     var step    = Math.pow(1.2, event.angleDelta.y / 120.0)
                                     var oldZoom = previewHost._zoom
                                     var newZoom = Math.max(1.0, Math.min(previewHost._maxZoom, oldZoom * step))
                                     if (newZoom === oldZoom) { event.accepted = true; return }
                                     var actualFactor = newZoom / oldZoom
-                                    // Capture scroll position before mutating _zoom — binding
-                                    // re-evaluation can clamp contentX/Y immediately.
                                     var oldContentX = previewFlick.contentX
                                     var oldContentY = previewFlick.contentY
                                     var newW = Math.max(previewFlick.width,  previewHost.width  * newZoom)
@@ -1028,50 +1025,67 @@ ApplicationWindow {
                                     event.accepted = true
                                 }
                             }
+
+                            // Double-click / double-tap resets zoom and pan to 1×.
+                            // Must live inside the Flickable so it receives the press
+                            // events that the Flickable otherwise consumes.
+                            TapHandler {
+                                onDoubleTapped: {
+                                    previewHost._zoom = 1.0
+                                    previewFlick.contentX = 0
+                                    previewFlick.contentY = 0
+                                }
+                            }
                         }
 
                         // Touchpad pinch-to-zoom — anchored at the pinch centroid.
-                        // centroid.position is in previewHost (viewport) coordinates,
-                        // so the viewport-coord anchor formula applies:
-                        //   new_contentX = (startContentX + cx) * totalFactor − cx
-                        // We apply the total scale relative to the gesture's start state
-                        // so that zooming stays smooth even when scale updates arrive
-                        // at varying rates.
+                        // centroid.position is in previewHost (viewport) coordinates.
+                        //
+                        // grabPermissions: CanTakeOverFromHandlersOfDifferentType lets the
+                        // PinchHandler steal the touch points from the Flickable as soon as a
+                        // pinch is recognised, eliminating the startup delay.
+                        //
+                        // scaleAxis.minimum/maximum remove Qt's built-in scale dead-zone so
+                        // zoom responds from the very first movement.
                         PinchHandler {
                             target: null
+                            grabPermissions: PointerHandler.CanTakeOverFromHandlersOfDifferentType
+                                           | PointerHandler.ApprovesTakeOverByHandlersOfSameType
+                            scaleAxis.minimum:  0.001   // allow any pinch distance; zoom is clamped in code
+                            scaleAxis.maximum: 99.0
 
-                            property real _startZoom: 1.0
-                            property real _startContentX: 0.0
-                            property real _startContentY: 0.0
+                            // _prevScale tracks the PinchHandler.scale from the previous
+                            // onScaleChanged tick so we can compute an incremental factor:
+                            //   factor = scale / _prevScale
+                            // Applying the *delta* each tick (rather than startZoom * scale)
+                            // means there is no stale "start-scale" that can diverge between
+                            // two separate gestures and cause a jump on the second pinch.
+                            property real _prevScale: 1.0
 
                             onActiveChanged: {
                                 if (active) {
-                                    _startZoom     = previewHost._zoom
-                                    _startContentX = previewFlick.contentX
-                                    _startContentY = previewFlick.contentY
+                                    _prevScale = scale   // scale resets to 1.0 at gesture start
                                 }
                             }
                             onScaleChanged: {
-                                var newZoom = Math.max(1.0, Math.min(previewHost._maxZoom,
-                                                                      _startZoom * scale))
-                                var totalFactor = newZoom / _startZoom
+                                var factor      = scale / _prevScale
+                                _prevScale      = scale
+                                var oldZoom     = previewHost._zoom
+                                var newZoom     = Math.max(1.0, Math.min(previewHost._maxZoom, oldZoom * factor))
+                                if (newZoom === oldZoom) return
+                                var actualFactor = newZoom / oldZoom
+                                // centroid.position is in previewHost (viewport) coordinates.
                                 var cx = centroid.position.x
                                 var cy = centroid.position.y
+                                var oldContentX = previewFlick.contentX
+                                var oldContentY = previewFlick.contentY
                                 var newW = Math.max(previewFlick.width,  previewHost.width  * newZoom)
                                 var newH = Math.max(previewFlick.height, previewHost.height * newZoom)
                                 previewHost._zoom = newZoom
                                 previewFlick.contentX = Math.max(0,
-                                    Math.min((_startContentX + cx) * totalFactor - cx, newW - previewFlick.width))
+                                    Math.min((oldContentX + cx) * actualFactor - cx, newW - previewFlick.width))
                                 previewFlick.contentY = Math.max(0,
-                                    Math.min((_startContentY + cy) * totalFactor - cy, newH - previewFlick.height))
-                            }
-                        }
-
-                        TapHandler {
-                            onDoubleTapped: {
-                                previewHost._zoom = 1.0
-                                previewFlick.contentX = 0
-                                previewFlick.contentY = 0
+                                    Math.min((oldContentY + cy) * actualFactor - cy, newH - previewFlick.height))
                             }
                         }
 
