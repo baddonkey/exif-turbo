@@ -23,7 +23,7 @@ class SearchListModel(QAbstractListModel):
         self._thumbnail_uris: List[Optional[str]] = []
         self._cache_dir = cache_dir
         self._cache_dir.mkdir(parents=True, exist_ok=True)
-        self._max_thumb_bytes = 200 * 1024 * 1024
+        self._max_thumb_bytes = 1024 * 1024 * 1024
         self._cached_files: set[str] = self._scan_cache_dir()
 
     @property

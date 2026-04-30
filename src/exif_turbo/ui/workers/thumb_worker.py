@@ -140,13 +140,19 @@ class ThumbWorker(QThread):
             self.cache_dir.mkdir(parents=True, exist_ok=True)
             cached = 0
 
-            # Pre-scan cache dir once — O(1) set lookup replaces per-file exists()
+            # Pre-scan cache dir once — O(1) set lookup replaces per-file exists().
+            # A ".skip" sentinel (e.g. abc123.skip) is written when thumbnailing
+            # fails permanently (unsupported format, file too large).  We store the
+            # corresponding ".png" name in `existing` so those images are excluded
+            # from `paths` on every subsequent run.
             existing: set[str] = set()
             try:
                 with os.scandir(self.cache_dir) as it:
                     for entry in it:
                         if entry.name.endswith(".png"):
                             existing.add(entry.name)
+                        elif entry.name.endswith(".skip"):
+                            existing.add(entry.name[:-5] + ".png")
             except OSError:
                 pass
 
@@ -165,15 +171,34 @@ class ThumbWorker(QThread):
                 1 for p in stamps if _expected_cache_name(p) in existing
             )
             paths = [p for p in stamps if _expected_cache_name(p) not in existing]
+            missing_total = len(paths)
 
-            # Announce: current = already cached, total = all images.
-            # This way the progress bar shows "3/4" (not "1/3") when 3 are
-            # missing out of 4 total, and "4/4" when all are done.
-            self.progress.emit(already_cached, total_all, "")
+            # Announce: 0 out of missing_total thumbnails built yet.
+            # Only counts images that actually need building — so a rescan
+            # of 87 images shows "0 / 8" instead of "44660 / 44668".
+            self.progress.emit(0, missing_total, "")
 
             if self._cancel_event.is_set():
                 self.canceled.emit(cached, total_all)
                 return
+
+            skip_log = self.cache_dir / "thumbs_skipped.log"
+
+            def _mark_skip(cache_path_obj: Path, reason: str) -> None:
+                """Write a .skip sentinel (containing the reason) so this image
+                is excluded on future runs, and append a line to the skip log."""
+                try:
+                    cache_path_obj.with_suffix(".skip").write_text(
+                        reason, encoding="utf-8"
+                    )
+                    existing.add(cache_path_obj.name)  # exclude for rest of this run
+                except OSError:
+                    pass
+                try:
+                    with skip_log.open("a", encoding="utf-8") as f:
+                        f.write(f"{cache_path_obj.stem}\t{reason}\n")
+                except OSError:
+                    pass
 
             def build_thumb(path: str) -> bool:
                 if not path:
@@ -196,30 +221,33 @@ class ThumbWorker(QThread):
                     cache_path_obj = thumb_cache_path(path, self.cache_dir)
                 try:
                     if os.path.getsize(path) > self.max_thumb_bytes:
+                        size_mb = os.path.getsize(path) // (1024 * 1024)
+                        _mark_skip(cache_path_obj, f"file too large ({size_mb} MB): {path}")
                         return False
                 except OSError:
-                    return False
+                    return False  # transient (e.g. NAS offline) — don't mark as skip
                 try:
                     img = _open_image(path)
                     img.thumbnail(_THUMB_SIZE, Image.LANCZOS)
                     img.save(str(cache_path_obj), "PNG")
                     existing.add(cache_path_obj.name)
                     return True
-                except (UnidentifiedImageError, OSError, Exception):
+                except (UnidentifiedImageError, OSError, Exception) as exc:
+                    _mark_skip(cache_path_obj, f"{type(exc).__name__}: {exc} — {path}")
                     return False
 
             if self.workers > 1 and len(paths) > 0:
                 executor = ThreadPoolExecutor(max_workers=self.workers)
                 futures = {executor.submit(build_thumb, path): path for path in paths}
-                completed = already_cached
+                missing_completed = 0
                 try:
                     for future in as_completed(futures):
                         if self._cancel_event.is_set():
                             self.canceled.emit(cached, total_all)
                             return
                         path = futures[future]
-                        completed += 1
-                        self.progress.emit(completed, total_all, path)
+                        missing_completed += 1
+                        self.progress.emit(missing_completed, missing_total, path)
                         if future.result():
                             cached += 1
                 finally:
@@ -229,7 +257,7 @@ class ThumbWorker(QThread):
                     if self._cancel_event.is_set():
                         self.canceled.emit(cached, total_all)
                         return
-                    self.progress.emit(already_cached + idx, total_all, path)
+                    self.progress.emit(idx, missing_total, path)
                     if build_thumb(path):
                         cached += 1
 

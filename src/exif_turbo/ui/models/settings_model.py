@@ -13,7 +13,7 @@ from exif_turbo.i18n import available_languages, current_language, current_theme
 _CPU_COUNT = os.cpu_count() or 2
 _DEFAULT_WORKERS = max(1, _CPU_COUNT // 2)
 _MIN_WORKERS = 1
-_MAX_WORKERS = _CPU_COUNT
+_MAX_WORKERS = min(_CPU_COUNT, 16)
 
 # Patterns that are almost always noise — applied as defaults on first run
 _DEFAULT_BLACKLIST: List[str] = [
@@ -62,6 +62,14 @@ class SettingsModel(QObject):
     @Property(int, constant=True)
     def maxWorkers(self) -> int:
         return _MAX_WORKERS
+
+    @Property(int, constant=True)
+    def defaultWorkers(self) -> int:
+        return _DEFAULT_WORKERS
+
+    @Property(int, constant=True)
+    def cpuCount(self) -> int:
+        return _CPU_COUNT
 
     @Property("QVariantList", notify=blacklistChanged)
     def blacklist(self) -> List[str]:

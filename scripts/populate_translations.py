@@ -87,7 +87,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "Anzahl paralleler Threads f\u00fcr Indizierung und Vorschaubilderstellung. H\u00f6here Werte beschleunigen die Verarbeitung, ben\u00f6tigen jedoch mehr CPU und Speicher.",
         "thread": "Thread",
         "threads": "Threads",
-        "Default: %1 (half of %2 detected CPU threads)": "Standard: %1 (H\u00e4lfte von %2 erkannten CPU-Threads)",
+        "Factory default: %1 (%2 CPU threads detected)": "Werkseinstellung: %1 (%2 erkannte CPU-Threads)",
         "Indexing Blacklist": "Indizierungs-Blacklist",
         "File and folder name patterns to skip during indexing. Supports wildcards (e.g. *, ?).\nChanges take effect on the next rescan.":
             "Datei- und Ordnernamenmuster, die bei der Indizierung \u00fcbersprungen werden. Unterst\u00fctzt Platzhalter (z.B. *, ?).\n\u00c4nderungen werden beim n\u00e4chsten Neuindizieren wirksam.",
@@ -211,7 +211,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "Nombre de threads parall\u00e8les pour l\u2019indexation et la cr\u00e9ation de miniatures. Des valeurs plus \u00e9lev\u00e9es acc\u00e9l\u00e8rent le traitement mais utilisent plus de CPU et de m\u00e9moire.",
         "thread": "thread",
         "threads": "threads",
-        "Default: %1 (half of %2 detected CPU threads)": "Par d\u00e9faut\u00a0: %1 (moiti\u00e9 de %2 threads CPU d\u00e9tect\u00e9s)",
+        "Factory default: %1 (%2 CPU threads detected)": "Valeur par d\u00e9faut\u00a0: %1 (%2 threads CPU d\u00e9tect\u00e9s)",
         "Indexing Blacklist": "Liste noire d\u2019indexation",
         "File and folder name patterns to skip during indexing. Supports wildcards (e.g. *, ?).\nChanges take effect on the next rescan.":
             "Mod\u00e8les de noms de fichiers et dossiers \u00e0 ignorer lors de l\u2019indexation. Supporte les caract\u00e8res g\u00e9n\u00e9riques (ex. *, ?).\nLes modifications prennent effet lors de la prochaine r\u00e9indexation.",
@@ -338,8 +338,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "Numero di thread paralleli per l\u2019indicizzazione e la generazione di miniature. Valori pi\u00f9 alti accelerano l\u2019elaborazione ma utilizzano pi\u00f9 CPU e memoria.",
         "thread": "thread",
         "threads": "thread",
-        "Default: %1 (half of %2 detected CPU threads)":
-            "Predefinito: %1 (met\u00e0 di %2 thread CPU rilevati)",
+        "Factory default: %1 (%2 CPU threads detected)":
+            "Impostazione predefinita: %1 (%2 thread CPU rilevati)",
         "Indexing Blacklist": "Lista nera indicizzazione",
         "File and folder name patterns to skip during indexing. Supports wildcards (e.g. *, ?).\nChanges take effect on the next rescan.":
             "Modelli di nomi di file e cartelle da ignorare durante l\u2019indicizzazione. Supporta caratteri jolly (es. *, ?).\nLe modifiche hanno effetto alla prossima reindicizzazione.",
@@ -467,8 +467,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "Dumber da threads parallels per indexaziun e creaziun da miniatures. Valurs pli autas acceleran la tractaziun ma duvran dapli CPU e memoria.",
         "thread": "thread",
         "threads": "threads",
-        "Default: %1 (half of %2 detected CPU threads)":
-            "Standard: %1 (mesadad da %2 threads CPU detektads)",
+        "Factory default: %1 (%2 CPU threads detected)":
+            "Predefin\u00ec: %1 (%2 threads CPU detectads)",
         "Indexing Blacklist": "Glista naira d\u2019indexaziun",
         "File and folder name patterns to skip during indexing. Supports wildcards (e.g. *, ?).\nChanges take effect on the next rescan.":
             "Schemes da nums da datotecas e cartellas da sursiglir durant l\u2019indexaziun. Supporta caratters jolly (p.ex. *, ?).\nMutaziuns vegnan activas en la proxima re-indexaziun.",

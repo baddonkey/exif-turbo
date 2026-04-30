@@ -119,7 +119,9 @@ ApplicationWindow {
     // Settings model null-safe proxies
     readonly property int    _workerCount:         settingsModel ? settingsModel.workerCount   : 4
     readonly property int    _minWorkers:          settingsModel ? settingsModel.minWorkers    : 1
-    readonly property int    _maxWorkers:          settingsModel ? settingsModel.maxWorkers    : 32
+    readonly property int    _maxWorkers:          settingsModel ? settingsModel.maxWorkers    : 16
+    readonly property int    _defaultWorkers:      settingsModel ? settingsModel.defaultWorkers : 1
+    readonly property int    _cpuCount:             settingsModel ? settingsModel.cpuCount        : 1
 
     // Parsed format list — updated reactively when _availableFormats changes
     readonly property var _formats: {
@@ -1854,7 +1856,8 @@ ApplicationWindow {
                             from: _minWorkers
                             to: _maxWorkers
                             value: _workerCount
-                            implicitWidth: 120
+                            implicitWidth: 160
+                            editable: false
                             onValueModified: settingsModel.setWorkerCount(value)
                         }
 
@@ -1867,7 +1870,7 @@ ApplicationWindow {
                     }
 
                     Label {
-                        text: qsTr("Default: %1 (half of %2 detected CPU threads)").arg(_workerCount).arg(_maxWorkers)
+                        text: qsTr("Factory default: %1 (%2 CPU threads detected)").arg(_defaultWorkers).arg(_cpuCount)
                         font.pixelSize: 11
                         opacity: 0.45
                         Layout.bottomMargin: 28

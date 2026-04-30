@@ -283,16 +283,15 @@ def test_start_auto_thumbs_populates_thumbnail_source(
     )
 
 
-def test_start_auto_thumbs_progress_uses_total_indexed_count_not_missing_count(
+def test_start_auto_thumbs_progress_shows_missing_count_only(
     qtbot: QtBot,
     ctrl_prebuilt_cache: AppController,
 ) -> None:
-    """ThumbWorker progress total always equals the total DB image count.
+    """ThumbWorker progress counts only images that actually need building.
 
-    When all thumbnails already exist, the initial progress emit is
-    (already_cached=N, total_all=N, "") so the bar starts full and the
-    label shows "N / N images" rather than "0 / 0" or "0 / 3 missing".
-    This ensures the denominator always matches the user's image count.
+    When all thumbnails already exist (missing_total=0), the progress emits
+    (0, 0, "") so the bar shows "0 / 0" and finishes instantly — the user
+    never sees an alarming "44660 / 44668" after a small rescan.
     """
     ctrl = ctrl_prebuilt_cache
 
@@ -304,13 +303,13 @@ def test_start_auto_thumbs_progress_uses_total_indexed_count_not_missing_count(
     # Wait for the worker triggered by unlock() to finish
     qtbot.waitUntil(lambda: not ctrl.isBuildingThumbs, timeout=15_000)
 
-    # Assert — total equals the full DB size (3 images), not just missing (0)
-    assert ctrl.thumbTotal == 3, (
-        f"Expected thumbTotal=3 (total indexed) when all thumbs are cached, "
+    # Assert — total equals the missing count (0), not the full DB size (3)
+    assert ctrl.thumbTotal == 0, (
+        f"Expected thumbTotal=0 (nothing missing) when all thumbs are cached, "
         f"got {ctrl.thumbTotal}"
     )
-    assert ctrl.thumbCurrent == 3, (
-        f"Expected thumbCurrent=3 (all already done) when all thumbs are cached, "
+    assert ctrl.thumbCurrent == 0, (
+        f"Expected thumbCurrent=0 when all thumbs are cached, "
         f"got {ctrl.thumbCurrent}"
     )
 

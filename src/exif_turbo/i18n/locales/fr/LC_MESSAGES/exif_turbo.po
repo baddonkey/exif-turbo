@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-04-26 23:19+0200\n"
+"POT-Creation-Date: 2026-04-30 23:53+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: fr\n"
@@ -22,39 +22,44 @@ msgstr ""
 msgid "Enter the database password to continue"
 msgstr "Saisir le mot de passe de la base de données pour continuer"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:540
+#: src/exif_turbo/ui/view_models/app_controller.py:550
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Dossier déjà suivi : {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:672
+#: src/exif_turbo/ui/view_models/app_controller.py:703
 #, python-brace-format
 msgid "Indexing {}…"
 msgstr "Indexation de {}…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:702
+#: src/exif_turbo/ui/view_models/app_controller.py:735
+#, python-brace-format
+msgid "Indexed {count} images ({errors} skipped due to errors)"
+msgstr ""
+
+#: src/exif_turbo/ui/view_models/app_controller.py:740
 #, python-brace-format
 msgid "Indexed {} images"
 msgstr "{} images indexées"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:735
+#: src/exif_turbo/ui/view_models/app_controller.py:773
 #, python-brace-format
 msgid "Index failed: {}"
 msgstr "Indexation échouée : {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:767
+#: src/exif_turbo/ui/view_models/app_controller.py:805
 msgid "Index canceled"
 msgstr "Indexation annulée"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:787
+#: src/exif_turbo/ui/view_models/app_controller.py:825
 msgid "Canceling…"
 msgstr "Annulation…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:838
+#: src/exif_turbo/ui/view_models/app_controller.py:876
 msgid "Database reset"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:920
+#: src/exif_turbo/ui/view_models/app_controller.py:960
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indexation… {} / {}"
@@ -136,10 +141,6 @@ msgid "Date"
 msgstr "Date"
 
 #: QML
-msgid "Default: %1 (half of %2 detected CPU threads)"
-msgstr "Par défaut : %1 (moitié de %2 threads CPU détectés)"
-
-#: QML
 msgid "Dimensions"
 msgstr "Dimensions"
 
@@ -162,6 +163,10 @@ msgstr "Exposition"
 #: QML
 msgid "FOLDERS"
 msgstr "DOSSIERS"
+
+#: QML
+msgid "Factory default: %1 (%2 CPU threads detected)"
+msgstr "Valeur par défaut : %1 (%2 threads CPU détectés)"
 
 #: QML
 msgid ""

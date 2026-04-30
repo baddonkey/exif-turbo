@@ -707,7 +707,6 @@ class AppController(QObject):
             workers=self._settings.workerCount if self._settings else _DEFAULT_WORKERS,
             key=self._key,
             force=force,
-            clear_cache_dir=self._search_model.cache_dir if force else None,
             blacklist=self._settings.blacklist_patterns if self._settings else [],
         )
         self._index_worker.finished.connect(self._on_managed_folder_index_done)
