@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "exif-turbo"
-version = "1.0.10"
+version = "1.0.11"
 description = "Fast EXIF full-text search with a PySide6 UI"
 requires-python = ">=3.9"
 dependencies = [
