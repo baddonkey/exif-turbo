@@ -57,7 +57,9 @@ class IndexerService:
         canceled = False
 
         if force:
-            self.repo.clear_all()
+            # Wipe only the rows that belong to the folders being rescanned.
+            # clear_all() would destroy images from every other folder.
+            self.repo.delete_missing([], folder_roots=[str(f) for f in folders])
 
         # Collect paths lazily so cancel_check fires per-file during discovery.
         paths = list(self.finder.iter_images(folders, cancel_check=cancel_check))
