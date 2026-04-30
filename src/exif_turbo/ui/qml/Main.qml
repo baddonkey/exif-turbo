@@ -1710,7 +1710,10 @@ ApplicationWindow {
                             }
 
                             WheelHandler {
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                acceptedModifiers: Qt.ControlModifier
                                 onWheel: (event) => {
+                                    if (event.phase === Qt.ScrollMomentum) { event.accepted = true; return }
                                     if (event.angleDelta.y === 0) return
                                     var step    = Math.pow(1.2, event.angleDelta.y / 120.0)
                                     var oldZoom = previewHost2._zoom
@@ -1729,43 +1732,51 @@ ApplicationWindow {
                                     event.accepted = true
                                 }
                             }
+
+                            // Double-click / double-tap resets zoom and pan to 1×.
+                            // Must live inside the Flickable so it receives the press
+                            // events that the Flickable otherwise consumes.
+                            TapHandler {
+                                onDoubleTapped: {
+                                    previewHost2._zoom = 1.0
+                                    previewFlick2.contentX = 0
+                                    previewFlick2.contentY = 0
+                                }
+                            }
                         }
 
                         PinchHandler {
                             target: null
+                            grabPermissions: PointerHandler.CanTakeOverFromHandlersOfDifferentType
+                                           | PointerHandler.ApprovesTakeOverByHandlersOfSameType
+                            scaleAxis.minimum:  0.001
+                            scaleAxis.maximum: 99.0
 
-                            property real _startZoom: 1.0
-                            property real _startContentX: 0.0
-                            property real _startContentY: 0.0
+                            property real _prevScale: 1.0
 
                             onActiveChanged: {
                                 if (active) {
-                                    _startZoom     = previewHost2._zoom
-                                    _startContentX = previewFlick2.contentX
-                                    _startContentY = previewFlick2.contentY
+                                    _prevScale = scale
                                 }
                             }
                             onScaleChanged: {
-                                var newZoom = Math.max(1.0, Math.min(previewHost2._maxZoom,
-                                                                      _startZoom * scale))
-                                var totalFactor = newZoom / _startZoom
+                                var factor      = scale / _prevScale
+                                _prevScale      = scale
+                                var oldZoom     = previewHost2._zoom
+                                var newZoom     = Math.max(1.0, Math.min(previewHost2._maxZoom, oldZoom * factor))
+                                if (newZoom === oldZoom) return
+                                var actualFactor = newZoom / oldZoom
                                 var cx = centroid.position.x
                                 var cy = centroid.position.y
+                                var oldContentX = previewFlick2.contentX
+                                var oldContentY = previewFlick2.contentY
                                 var newW = Math.max(previewFlick2.width,  previewHost2.width  * newZoom)
                                 var newH = Math.max(previewFlick2.height, previewHost2.height * newZoom)
                                 previewHost2._zoom = newZoom
                                 previewFlick2.contentX = Math.max(0,
-                                    Math.min((_startContentX + cx) * totalFactor - cx, newW - previewFlick2.width))
+                                    Math.min((oldContentX + cx) * actualFactor - cx, newW - previewFlick2.width))
                                 previewFlick2.contentY = Math.max(0,
-                                    Math.min((_startContentY + cy) * totalFactor - cy, newH - previewFlick2.height))
-                            }
-                        }
-
-                        TapHandler {
-                            onDoubleTapped: {
-                                previewHost2._zoom = 1.0
-                                previewFlick2.contentX = 0
-                                previewFlick2.contentY = 0
+                                    Math.min((oldContentY + cy) * actualFactor - cy, newH - previewFlick2.height))
                             }
                         }
 
