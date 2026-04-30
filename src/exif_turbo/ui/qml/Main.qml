@@ -970,6 +970,7 @@ ApplicationWindow {
                             Image {
                                 id: fullPreview
                                 objectName: "fullPreview"
+                                property int loadStatus: status
                                 width:  previewFlick.contentWidth
                                 height: previewFlick.contentHeight
                                 source: _selectedImageSource
@@ -1673,6 +1674,7 @@ ApplicationWindow {
                             Image {
                                 id: fullPreview2
                                 objectName: "fullPreview2"
+                                property int loadStatus: status
                                 width:  previewFlick2.contentWidth
                                 height: previewFlick2.contentHeight
                                 source: _selectedImageSource

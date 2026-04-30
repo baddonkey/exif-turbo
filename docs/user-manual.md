@@ -58,7 +58,7 @@ exif-turbo [--db NAME]
 
 | Option | Description |
 |--------|-------------|
-| `--db NAME` | Open (or create) a named database instead of the default one. The database is always stored in `~/.exif-turbo/data/<NAME>.db`. Useful for keeping separate libraries — e.g. `exif-turbo --db work` and `exif-turbo --db holidays`. |
+| `--db NAME` | Open (or create) a named database instead of the default one. The database is always stored in `~/.exif-turbo/data/<NAME>/<NAME>.db`. Useful for keeping separate libraries — e.g. `exif-turbo --db work` and `exif-turbo --db holidays`. |
 
 If `--db` is omitted, the default database `~/.exif-turbo/data/index/index.db` is used.
 
@@ -287,11 +287,15 @@ indented under their parent. Each entry shows the folder name and a count of
 images inside it. Click any folder to show only its images in the centre panel.
 Click the highlighted folder again to deselect it and show all images.
 
-The same thumbnail list and preview pane appear as in Search. **Double-click**
-an image to open it in your system's default viewer. (Unlike the Search tab,
-double-clicking in Browse always opens the image — there is no folder-open
-shortcut.) The Metadata and EXIF Tags panels are not shown in the Browse tab;
-use the **Search** tab for the full metadata view of a selected image.
+The same thumbnail list and preview pane appear as in Search. **Single-click**
+an image to select it and load the preview. The preview supports the same
+zoom and pan gestures as in Search (scroll wheel, touchpad scroll, touchpad
+pinch-to-zoom, drag-to-pan, double-tap to reset — see
+[Zooming and panning](#zooming-and-panning)). **Double-click** an image to open
+it in your system's default viewer. (Unlike the Search tab, double-clicking in
+Browse always opens the image — there is no folder-open shortcut.) The Metadata
+and EXIF Tags panels are not shown in the Browse tab; use the **Search** tab
+for the full metadata view of a selected image.
 
 Switching to the **Search** tab clears the folder filter and re-runs the current
 search query. Any image previously selected while browsing is not automatically
@@ -312,6 +316,24 @@ fit the available space. For RAW files (CR2, CR3, NEF, ARW, DNG, etc.) the
 embedded preview JPEG is used. A cached thumbnail is shown immediately as a
 low-resolution placeholder while the full image is loading; the full image fades
 in once it has been decoded.
+
+#### Zooming and panning
+
+The preview supports cursor-anchored zoom and drag-to-pan:
+
+| Input | Action |
+|-------|--------|
+| **Scroll wheel** — up / down | Zoom in / out, anchored to the cursor position |
+| **Mouse — click and drag** | Pan the zoomed image in any direction |
+| **Touchpad — two-finger swipe** up / down | Smooth zoom in / out, anchored to the cursor position |
+| **Touchpad — two-finger swipe** left / right | Pan left / right |
+| **Touchpad — two-finger drag** | Pan in any direction |
+| **Touchpad — pinch** | Zoom in / out, anchored to the pinch centroid |
+| **Double-click** / **double-tap** | Reset zoom to fit |
+
+Zoom is capped at **8×**. A badge in the bottom-right corner of the preview shows
+the current zoom level when it is above 1×. Selecting a new image always resets
+the zoom to fit.
 
 ### Metadata panel (bottom-left)
 
@@ -394,6 +416,10 @@ The **Reset Database…** button is disabled while indexing is in progress.
 | `Escape` | Close the find-in-metadata bar |
 | `F3` | Jump to next match in metadata |
 | `Shift+F3` | Jump to previous match in metadata |
+| `↓` | Select the next result (Search tab) |
+| `↑` | Select the previous result (Search tab) |
+| `Page Down` | Jump one page forward in results (Search tab) |
+| `Page Up` | Jump one page backward in results (Search tab) |
 | `Ctrl+Q` | Quit |
 
 ---

@@ -120,45 +120,67 @@ def _wait_for_preview(
     ctrl: Any,
     callback: Any,
     preview_id: str = "fullPreview",
-    prev_source: str = "",
+    prev_source: str | None = None,
     timeout_ms: int = 15_000,
 ) -> None:
     """Poll until the named QML Image is fully loaded, then call *callback*.
 
-    If *prev_source* is given, waits until ctrl.selectedImageSource differs from
-    it first (guards the 300 ms selectResult auto-fire race after search()).
-    Adds a 200 ms settle delay after load for the QML opacity animation.
+    How it works
+    ------------
+    1. If *prev_source* is not None, keep polling until ctrl.selectedImageSource
+       changes from that value AND is non-empty.  This guards against two races:
+       a) The 150 ms debounce in AppController that briefly leaves
+          selectedImageSource as "" before the new URL is set.
+       b) The auto-select that fires after search() resolves.
+       Pass prev_source="" to wait for *any* new non-empty source (e.g. after
+       calling selectResult when the source was previously "").
+       Pass prev_source=None to skip phase 1 entirely and wait on Image.status.
+    2. Once a non-empty, changed source is seen (or phase 1 is skipped), poll
+       the QML Image's *status* property until it reaches Image.Ready (1) or
+       Image.Error (3).
+    3. Wait an extra 400 ms after Ready so the 150 ms opacity fade-in and any
+       GPU texture upload have both completed before grabWindow() is called.
     """
     from PySide6.QtCore import QObject
+
+    # Qt QML Image status codes
+    _IMAGE_READY = 1
+    _IMAGE_ERROR = 3
 
     elapsed = [0]
 
     def poll() -> None:
         cur = ctrl.selectedImageSource
 
-        if prev_source and cur == prev_source:
-            # Source not yet changed — still on the old result
-            elapsed[0] += 100
-            if elapsed[0] < timeout_ms:
-                QTimer.singleShot(100, poll)
-            else:
-                print(f"  WARNING: source unchanged after {timeout_ms} ms, proceeding")
-                callback()
-            return
+        # --- Phase 1: wait for the source to change from prev_source ----------
+        if prev_source is not None:
+            if cur == prev_source or not cur:
+                # Source hasn't changed yet (or debounce set it to "" briefly)
+                elapsed[0] += 100
+                if elapsed[0] < timeout_ms:
+                    QTimer.singleShot(100, poll)
+                else:
+                    print(f"  WARNING: source unchanged after {timeout_ms} ms, proceeding")
+                    callback()
+                return
 
+        # --- Phase 2: prev_source is None and source is empty → nothing to wait
         if not cur:
-            # Source cleared — nothing to wait for
             callback()
             return
 
+        # --- Phase 3: poll Image.loadStatus (int alias for status) until Ready or Error ---
         preview = root.findChild(QObject, preview_id)
         if preview is not None:
             try:
-                progress = float(preview.property("progress") or 0.0)
-            except (TypeError, ValueError):
-                progress = 0.0
-            if progress >= 1.0:
-                QTimer.singleShot(200, callback)  # let opacity animation finish
+                raw = preview.property("loadStatus")
+                # loadStatus is a QML int property — should come back as a plain int
+                status = int(raw.value if hasattr(raw, "value") else raw)
+            except (TypeError, ValueError, AttributeError):
+                status = 0
+            if status in (_IMAGE_READY, _IMAGE_ERROR):
+                # 400 ms: covers the 150 ms opacity animation + GPU upload buffer
+                QTimer.singleShot(400, callback)
                 return
 
         elapsed[0] += 100
@@ -247,7 +269,8 @@ def _run_gui() -> None:
             QTimer.singleShot(100, step_0_wait_thumbs)
             return
         print(f"  Thumbnails done ({ctrl._thumb_total}) -- waiting for preview to decode ...")
-        _wait_for_preview(root, ctrl, step_1_search_all)
+        ctrl.selectResult(0)  # same fix as Browse tab: explicitly trigger the load
+        _wait_for_preview(root, ctrl, step_1_search_all, prev_source="")
 
     # -- Step 1: search tab (all results) -------------------------------------
     def step_1_search_all() -> None:
@@ -270,8 +293,11 @@ def _run_gui() -> None:
     def step_3_milky_way() -> None:
         _grab(root, "04_search_milky_way")
         switch_tab(1)
-        prev = ctrl.selectedImageSource
         ctrl.browseFolder(str(SAMPLE_DATA))
+        # browseFolder only populates the list; nothing is selected yet.
+        # Select the first result so the preview panel shows a full image.
+        ctrl.selectResult(0)
+        prev = ""  # source was empty before selectResult — wait for any non-empty URL
         print("  Browse tab -- waiting for preview to decode ...")
         _wait_for_preview(root, ctrl, step_4_browse_grab, preview_id="fullPreview2", prev_source=prev)
 
