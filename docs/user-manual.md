@@ -193,6 +193,8 @@ The **Search** tab is the main way to find photos:
 
 ![Search — all images](screenshots/02_search_all.png)
 
+*Photos: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
+
 ### Running a search
 
 Type any word or phrase into the **Search EXIF metadata…** bar and press
@@ -282,6 +284,8 @@ The **Browse** tab lets you navigate your library by folder hierarchy:
 
 ![Browse tab](screenshots/05_browse_tab.png)
 
+*Photos: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
+
 The left panel shows all indexed folders as an indented list — sub-folders are
 indented under their parent. Each entry shows the folder name and a count of
 images inside it. Click any folder to show only its images in the centre panel.
@@ -308,6 +312,8 @@ highlighted in Search.
 Selecting any image in the result list populates three panels:
 
 ![Search results with detail panels](screenshots/04_search_milky_way.png)
+
+*Photo: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
 
 ### Preview
 

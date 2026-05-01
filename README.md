@@ -5,6 +5,8 @@ Fully generated using VS Code Copilot.
 
 ![exif-turbo search tab](docs/screenshots/03_search_eagle.png)
 
+*Photo: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
+
 📖 **[User Manual](docs/user-manual.md)** ([PDF](docs/user-manual.pdf)) — full feature reference, keyboard shortcuts, and screenshots.
 
 ## Features
