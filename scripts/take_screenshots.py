@@ -21,6 +21,7 @@ Output files:
     04_search_milky_way.png  -- search results for "milky way"
     05_browse_tab.png        -- browse tab (folder tree navigation)
     06_indexed_folders.png   -- indexed folders management tab
+    07_folder_filter.png     -- folder filter popup (Schlösser, Sky, Wildlife)
 """
 
 from __future__ import annotations
@@ -39,6 +40,11 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 SAMPLE_DATA = _REPO_ROOT / "tests" / "sample-data" / "schweiz"
+SAMPLE_FOLDERS = [
+    SAMPLE_DATA / "Schl\u00f6sser",
+    SAMPLE_DATA / "Sky",
+    SAMPLE_DATA / "Wildlife",
+]
 SCREENSHOTS_DIR = _REPO_ROOT / "docs" / "screenshots"
 DB_PATH = SCREENSHOTS_DIR / "demo.db"
 THUMB_CACHE = SCREENSHOTS_DIR / "thumbs"
@@ -67,36 +73,42 @@ _STEPS = [
     "04_search_milky_way",
     "05_browse_tab",
     "06_indexed_folders",
+    "07_folder_filter",
 ]
 
 
 # -- Database builder ----------------------------------------------------------
 
 def build_demo_db() -> None:
-    """Index the sample images into the demo database (empty password)."""
+    """Index each sample sub-folder as a separate indexed folder into the demo database."""
     if DB_PATH.exists():
         DB_PATH.unlink()
     SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
     THUMB_CACHE.mkdir(parents=True, exist_ok=True)
 
-    print(f"Indexing sample images from {SAMPLE_DATA} ...")
     repo = ImageIndexRepository(DB_PATH, key="")
     service = IndexerService(repo)
-    indexed_count, _errors = service.build_index(
-        folders=[SAMPLE_DATA],
-        on_progress=lambda cur, tot, p: print(f"  {cur}/{tot}  {p.name}"),
-        workers=4,
-    )
-    repo.commit()
+    folder_counts: list[tuple[Path, int]] = []
+    for subfolder in SAMPLE_FOLDERS:
+        print(f"Indexing {subfolder.name} ...")
+        count, _errors = service.build_index(
+            folders=[subfolder],
+            on_progress=lambda cur, tot, p: print(f"  {cur}/{tot}  {p.name}"),
+            workers=4,
+        )
+        repo.commit()
+        folder_counts.append((subfolder, count))
     repo.close()
 
-    # Register the folder so it appears in the Indexed Folders tab
+    # Register each sub-folder so they all appear in the Indexed Folders tab
     folder_repo = IndexedFolderRepository(DB_PATH, key="")
-    folder = folder_repo.add(str(SAMPLE_DATA))
-    folder_repo.update_status(folder.id, "indexed", image_count=indexed_count)
+    for subfolder, count in folder_counts:
+        folder = folder_repo.add(str(subfolder))
+        folder_repo.update_status(folder.id, "indexed", image_count=count)
     folder_repo.close()
 
-    print(f"Indexed {indexed_count} image(s) into {DB_PATH}")
+    total = sum(c for _, c in folder_counts)
+    print(f"Indexed {total} image(s) across {len(SAMPLE_FOLDERS)} folders into {DB_PATH}")
 
 
 # -- Screenshot helper ---------------------------------------------------------
@@ -265,7 +277,7 @@ def _run_gui() -> None:
         QTimer.singleShot(100, step_0_wait_thumbs)
 
     def step_0_wait_thumbs() -> None:
-        if ctrl._thumb_total == 0 or ctrl.isBuildingThumbs:
+        if ctrl.isBuildingThumbs:
             QTimer.singleShot(100, step_0_wait_thumbs)
             return
         print(f"  Thumbnails done ({ctrl._thumb_total}) -- waiting for preview to decode ...")
@@ -293,7 +305,7 @@ def _run_gui() -> None:
     def step_3_milky_way() -> None:
         _grab(root, "04_search_milky_way")
         switch_tab(1)
-        ctrl.browseFolder(str(SAMPLE_DATA))
+        ctrl.browseFolder(str(SAMPLE_FOLDERS[2]))
         # browseFolder only populates the list; nothing is selected yet.
         # Select the first result so the preview panel shows a full image.
         ctrl.selectResult(0)
@@ -311,6 +323,24 @@ def _run_gui() -> None:
     # -- Step 5: indexed folders tab ------------------------------------------
     def step_5_folders() -> None:
         _grab(root, "06_indexed_folders")
+        switch_tab(0)
+        ctrl.search("")
+        # Select Schlösser filter so its results appear in the background
+        ctrl.toggleSearchFolderFilter(str(SAMPLE_FOLDERS[0]))
+        print("  Schlösser filter active -- waiting for results to settle ...")
+        QTimer.singleShot(1500, step_6_open_popup)
+
+    # -- Step 6: folder filter popup (Schlösser selected, popup open) ---------
+    def step_6_open_popup() -> None:
+        from PySide6.QtCore import QMetaObject, Qt, QCoreApplication
+        QCoreApplication.processEvents()
+        # openFolderFilterPopup() is a QML function defined at the root level
+        QMetaObject.invokeMethod(root, "openFolderFilterPopup", Qt.ConnectionType.DirectConnection)
+        print("  Popup open -- taking screenshot ...")
+        QTimer.singleShot(800, step_6_grab)
+
+    def step_6_grab() -> None:
+        _grab(root, "07_folder_filter")
         print(f"  Done -- screenshots in {SCREENSHOTS_DIR.relative_to(_REPO_ROOT)}/")
         QTimer.singleShot(300, app.quit)
 

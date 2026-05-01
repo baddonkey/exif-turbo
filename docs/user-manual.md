@@ -89,8 +89,8 @@ immediately available.
 ### Help menu
 
 The **Help** menu in the menu bar provides access to this user manual, the
-third-party open-source licence list, and the **About** dialog which shows the
-application version.
+third-party open-source licence list, and the **About** dialog, which shows the
+application version, a brief description of the application, and the licence (MIT).
 
 ---
 
@@ -214,6 +214,27 @@ All   CR2 · 1 459   JPG · 563   TIF · 113   PNG · 2
 ```
 
 Click **All** to return to unfiltered results.
+
+### Filtering by folder
+
+When you have two or more indexed folders enabled, a **Folder(s)** dropdown
+appears in the RESULTS header bar, to the left of the **Sort** control. It is
+hidden when only one folder is indexed.
+
+The button label reflects the current filter state:
+
+| Label | Meaning |
+|-------|---------|
+| **All folders** | No folder filter — results span all enabled folders |
+| _Folder name_ | Exactly one folder is selected |
+| **N folders** | N individual folders are selected |
+
+Click **Folder(s)** to open the selection popup. Tick **All folders** to clear
+any active filter; tick one or more folder names to restrict results to those
+folders only. Multiple folders can be selected simultaneously. Hovering over a
+folder name shows its full path as a tooltip.
+
+![Folder filter popup](screenshots/07_folder_filter.png)
 
 ### Sorting results
 

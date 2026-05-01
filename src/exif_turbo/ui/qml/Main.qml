@@ -30,6 +30,8 @@ ApplicationWindow {
     function _toRgb(c) {
         return "rgb(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + ")"
     }
+    // Automation helper: used by the screenshot script to open the folder filter popup
+    function openFolderFilterPopup() { folderMultiCombo.popup.open() }
     readonly property string _licenseBgColor: _toRgb(Material.background)
     readonly property string _licenseTextColor: _toRgb(Material.foreground)
     readonly property string _licenseBorderColor: _toRgb(Qt.darker(Material.background, 1.4))
@@ -635,6 +637,7 @@ ApplicationWindow {
                             // Multi-select folder filter — checkbox popup inside a ComboBox shell
                             ComboBox {
                                 id: folderMultiCombo
+                                objectName: "folderMultiCombo"
                                 visible: root._indexedFolderCount > 1
                                 implicitHeight: 28
                                 implicitWidth: 170

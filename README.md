@@ -16,6 +16,7 @@ Fully generated using VS Code Copilot.
 - Multilanguage UI: English, German, French, Italian, Romansh
 - Search and Browse tabs with 50/50 split-pane thumbnail preview
 - Folder management — add, remove, enable/disable indexed folders with per-folder status
+- Multi-folder filter — when multiple folders are indexed, a **Folder(s)** dropdown in the search RESULTS header filters results to one or more selected folders simultaneously
 - Scoped rescan — rescanning a single folder only updates that folder's records; other indexed folders are never touched
 - Reset Database — wipes all indexed images, folder records, and thumbnail cache in one step; database file shrinks immediately
 - RAW format support: CR2, CR3, NEF, ARW, DNG, ORF, RW2, PEF, RAF, RWL, SRW
@@ -24,6 +25,17 @@ Fully generated using VS Code Copilot.
 - Encrypted database at rest (SQLCipher); passphrase set on first launch, unlocked via the UI
 
 ## Recent changes
+
+### Folder filter
+
+- **Multi-folder filter** — when two or more indexed folders are enabled, a
+  **Folder(s)** dropdown appears in the RESULTS header bar (left of Sort). The
+  popup shows a checkbox list — **All folders** clears the filter; individual
+  folder names narrow results to exactly those folders. Multiple folders can be
+  selected simultaneously. The button label reflects the state: folder name
+  (one selected), **N folders** (many), or **All folders** (no filter).
+
+![Folder filter popup](docs/screenshots/07_folder_filter.png)
 
 ### Multilanguage support
 
