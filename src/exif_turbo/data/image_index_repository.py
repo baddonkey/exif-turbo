@@ -44,8 +44,29 @@ class ImageIndexRepository:
             CREATE INDEX IF NOT EXISTS idx_images_filename ON images(filename COLLATE NOCASE);
             CREATE INDEX IF NOT EXISTS idx_images_mtime    ON images(mtime DESC);
             CREATE INDEX IF NOT EXISTS idx_images_size     ON images(size DESC);
+
+            CREATE TABLE IF NOT EXISTS image_folders (
+                image_id  INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE,
+                folder_id INTEGER NOT NULL,
+                PRIMARY KEY (image_id, folder_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_image_folders_folder ON image_folders(folder_id);
             """
         )
+        # Backfill image_folders for images indexed before this join table was
+        # introduced (one-time migration, idempotent via INSERT OR IGNORE).
+        cur = self.conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='indexed_folders'"
+        )
+        if cur.fetchone():
+            self.conn.execute(
+                "INSERT OR IGNORE INTO image_folders (image_id, folder_id) "
+                "SELECT i.id, f.id FROM images i, indexed_folders f "
+                "WHERE i.path LIKE (f.path || ? || '%')",
+                (os.sep,),
+            )
+            self.conn.commit()
 
     def upsert_image(
         self,
@@ -55,6 +76,8 @@ class ImageIndexRepository:
         size: int,
         metadata: dict,
         metadata_text: str,
+        *,
+        folder_id: int | None = None,
     ) -> None:
         metadata_json = json.dumps(metadata, ensure_ascii=False)
         with self.conn:
@@ -77,11 +100,18 @@ class ImageIndexRepository:
                 """,
                 (path, path, filename, metadata_text),
             )
+            if folder_id is not None:
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO image_folders (image_id, folder_id) "
+                    "VALUES ((SELECT id FROM images WHERE path = ?), ?)",
+                    (path, folder_id),
+                )
 
     def delete_missing(
         self,
         existing_paths: Iterable[str],
         folder_roots: List[str] | None = None,
+        folder_id: int | None = None,
     ) -> None:
         # Load the keep-set into a temporary table so the DELETE can be a
         # single set-difference operation instead of O(N) individual statements.
@@ -94,10 +124,54 @@ class ImageIndexRepository:
                 "INSERT OR IGNORE INTO _keep_paths (path) VALUES (?)",
                 ((p,) for p in existing_paths),
             )
-            if folder_roots:
-                # Scope deletions to only rows whose path is under one of the
-                # scanned folders.  Rows from other folders are left untouched,
-                # so a single-folder rescan does not wipe the rest of the index.
+            if folder_id is not None:
+                # n:m model: remove this folder's associations for images that
+                # were not found during the scan, then delete images that have
+                # no remaining folder associations (orphans) scoped to this
+                # folder's path so images from other scopes are not touched.
+                self.conn.execute(
+                    "DELETE FROM image_folders "
+                    "WHERE folder_id = ? "
+                    "AND image_id IN ("
+                    "  SELECT id FROM images "
+                    "  WHERE path NOT IN (SELECT path FROM _keep_paths)"
+                    ")",
+                    (folder_id,),
+                )
+                if folder_roots:
+                    prefixes = [
+                        r if r.endswith(os.sep) else r + os.sep
+                        for r in folder_roots
+                    ]
+                    self.conn.execute(
+                        "CREATE TEMPORARY TABLE IF NOT EXISTS _scan_roots"
+                        " (prefix TEXT PRIMARY KEY)"
+                    )
+                    self.conn.execute("DELETE FROM _scan_roots")
+                    self.conn.executemany(
+                        "INSERT OR IGNORE INTO _scan_roots (prefix) VALUES (?)",
+                        ((p,) for p in prefixes),
+                    )
+                    self.conn.execute(
+                        "DELETE FROM images_fts WHERE path IN ("
+                        "  SELECT i.path FROM images i"
+                        "  WHERE i.path NOT IN (SELECT path FROM _keep_paths)"
+                        "  AND i.id NOT IN (SELECT image_id FROM image_folders)"
+                        "  AND EXISTS"
+                        "    (SELECT 1 FROM _scan_roots WHERE i.path LIKE prefix || '%')"
+                        ")"
+                    )
+                    self.conn.execute(
+                        "DELETE FROM images"
+                        " WHERE path NOT IN (SELECT path FROM _keep_paths)"
+                        " AND id NOT IN (SELECT image_id FROM image_folders)"
+                        " AND EXISTS"
+                        "   (SELECT 1 FROM _scan_roots WHERE images.path LIKE prefix || '%')"
+                    )
+                    self.conn.execute("DROP TABLE IF EXISTS _scan_roots")
+            elif folder_roots:
+                # Legacy / CLI path: scope deletions to rows under the scanned
+                # folder roots.  Rows from other folders are left untouched.
                 prefixes = [
                     r if r.endswith(os.sep) else r + os.sep
                     for r in folder_roots
@@ -140,6 +214,7 @@ class ImageIndexRepository:
         # DROP + recreate the FTS5 virtual table to fully purge its shadow tables
         # (images_fts_data, images_fts_idx, etc.).  A plain DELETE leaves
         # tombstone entries that keep the file large even after VACUUM.
+        self.conn.execute("DELETE FROM image_folders")
         self.conn.execute("DELETE FROM images")
         self.conn.execute("DROP TABLE IF EXISTS images_fts")
         self.conn.execute(
@@ -163,6 +238,20 @@ class ImageIndexRepository:
         "date_asc":      "images.mtime ASC",
         "size_desc":     "images.size DESC",
     }
+
+    # SQL fragment used when restrict_to_enabled_folders=True.
+    # Short-circuits to "show all" when image_folders is empty (CLI-indexed DBs
+    # or first-run before any indexing job has run through the GUI).
+    _ENABLED_CLAUSE = (
+        "AND ("
+        "  NOT EXISTS (SELECT 1 FROM image_folders LIMIT 1)"
+        "  OR EXISTS ("
+        "    SELECT 1 FROM image_folders imf"
+        "    JOIN indexed_folders f ON f.id = imf.folder_id"
+        "    WHERE imf.image_id = images.id AND f.enabled = 1"
+        "  )"
+        ")"
+    )
 
     @staticmethod
     def _sanitize_fts_query(query: str) -> str:
@@ -200,7 +289,7 @@ class ImageIndexRepository:
         sort_by: str = "",
         ext_filter: str = "",
         path_filter: List[str] | None = None,
-        excluded_paths: List[str] | None = None,
+        restrict_to_enabled_folders: bool = False,
     ) -> List[Tuple[int, str, str, str, int, float]]:
         order = self._SORT_MAP.get(sort_by, "images.filename COLLATE NOCASE ASC")
         ext_clause = ""
@@ -228,14 +317,7 @@ class ImageIndexRepository:
                 path_clause = f"AND ({parts})"
                 path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
 
-        exclude_clause = ""
-        exclude_args: tuple = ()
-        if excluded_paths:
-            parts = " AND ".join("images.path NOT LIKE ?" for _ in excluded_paths)
-            exclude_clause = f"AND ({parts})"
-            exclude_args = tuple(
-                os.path.normpath(p) + os.sep + "%" for p in excluded_paths
-            )
+        enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
 
         if query.strip():
             fts_query = self._sanitize_fts_query(query)
@@ -245,20 +327,20 @@ class ImageIndexRepository:
                 "SELECT images.id, images.path, images.filename, images.metadata_json, images.size, images.mtime "
                 "FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {exclude_clause} "
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {enabled_clause} "
                 f"{order_expr} "
                 "LIMIT ? OFFSET ?"
             )
-            args = (fts_query,) + ext_args + path_args + exclude_args + (limit, offset)
+            args = (fts_query,) + ext_args + path_args + (limit, offset)
         else:
             sql = (
                 "SELECT id, path, filename, metadata_json, size, mtime "
                 "FROM images "
-                f"WHERE 1=1 {ext_clause} {path_clause} {exclude_clause} "
+                f"WHERE 1=1 {ext_clause} {path_clause} {enabled_clause} "
                 f"ORDER BY {order} "
                 "LIMIT ? OFFSET ?"
             )
-            args = ext_args + path_args + exclude_args + (limit, offset)
+            args = ext_args + path_args + (limit, offset)
 
         cur = self.conn.execute(sql, args)
         return cur.fetchall()
@@ -268,7 +350,7 @@ class ImageIndexRepository:
         query: str,
         ext_filter: str = "",
         path_filter: List[str] | None = None,
-        excluded_paths: List[str] | None = None,
+        restrict_to_enabled_folders: bool = False,
     ) -> int:
         ext_clause = ""
         ext_args: tuple = ()
@@ -294,29 +376,22 @@ class ImageIndexRepository:
                 path_clause = f"AND ({parts})"
                 path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
 
-        exclude_clause = ""
-        exclude_args: tuple = ()
-        if excluded_paths:
-            parts = " AND ".join("images.path NOT LIKE ?" for _ in excluded_paths)
-            exclude_clause = f"AND ({parts})"
-            exclude_args = tuple(
-                os.path.normpath(p) + os.sep + "%" for p in excluded_paths
-            )
+        enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
 
         if query.strip():
             fts_query = self._sanitize_fts_query(query)
             sql = (
                 "SELECT COUNT(*) FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {exclude_clause}"
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {enabled_clause}"
             )
-            args = (fts_query,) + ext_args + path_args + exclude_args
+            args = (fts_query,) + ext_args + path_args
         else:
             sql = (
                 f"SELECT COUNT(*) FROM images "
-                f"WHERE 1=1 {ext_clause} {path_clause} {exclude_clause}"
+                f"WHERE 1=1 {ext_clause} {path_clause} {enabled_clause}"
             )
-            args = ext_args + path_args + exclude_args
+            args = ext_args + path_args
 
         cur = self.conn.execute(sql, args)
         return int(cur.fetchone()[0])
@@ -328,7 +403,7 @@ class ImageIndexRepository:
         self,
         query: str = "",
         path_filter: List[str] | None = None,
-        excluded_paths: List[str] | None = None,
+        restrict_to_enabled_folders: bool = False,
     ) -> List[Tuple[str, int]]:
         """Return [(extension, count)] sorted by count descending.
 
@@ -349,14 +424,7 @@ class ImageIndexRepository:
                 path_clause = f"AND ({parts})"
                 path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
 
-        exclude_clause = ""
-        exclude_args: tuple = ()
-        if excluded_paths:
-            parts = " AND ".join("images.path NOT LIKE ?" for _ in excluded_paths)
-            exclude_clause = f"AND ({parts})"
-            exclude_args = tuple(
-                os.path.normpath(p) + os.sep + "%" for p in excluded_paths
-            )
+        enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
 
         # Fetch only filenames and group in Python so that rsplit('.', 1) correctly
         # extracts the extension after the *last* dot — INSTR finds the first dot,
@@ -367,15 +435,15 @@ class ImageIndexRepository:
                 "SELECT images.filename FROM images_fts"
                 " JOIN images ON images_fts.rowid = images.id"
                 f" WHERE images_fts MATCH ? AND images.filename LIKE '%.%'"
-                f" {path_clause} {exclude_clause}"
+                f" {path_clause} {enabled_clause}"
             )
-            args = (fts_query,) + path_args + exclude_args
+            args = (fts_query,) + path_args
         else:
             sql = (
                 "SELECT filename FROM images"
-                f" WHERE filename LIKE '%.%' {path_clause} {exclude_clause}"
+                f" WHERE filename LIKE '%.%' {path_clause} {enabled_clause}"
             )
-            args = path_args + exclude_args
+            args = path_args
 
         cur = self.conn.execute(sql, args)
         counts: Dict[str, int] = {}
@@ -456,6 +524,30 @@ class ImageIndexRepository:
                 "DELETE FROM images WHERE path LIKE ?", (prefix,)
             )
 
+    def delete_orphans_under_prefix(self, folder_path: str) -> None:
+        """Delete images under folder_path that have no remaining folder associations.
+
+        Used when removing an indexed folder: images that are also covered by a
+        child (or other) indexed folder still have rows in image_folders and must
+        not be deleted.
+        """
+        prefix = os.path.normpath(folder_path) + os.sep + "%"
+        with self.conn:
+            self.conn.execute(
+                "DELETE FROM images_fts WHERE path IN ("
+                "  SELECT path FROM images"
+                "  WHERE path LIKE ?"
+                "  AND id NOT IN (SELECT image_id FROM image_folders)"
+                ")",
+                (prefix,),
+            )
+            self.conn.execute(
+                "DELETE FROM images"
+                " WHERE path LIKE ?"
+                " AND id NOT IN (SELECT image_id FROM image_folders)",
+                (prefix,),
+            )
+
     def all_images(self) -> List[Tuple[str, str, float, int, str]]:
         cur = self.conn.execute(
             "SELECT path, filename, mtime, size, metadata_json FROM images"
@@ -477,6 +569,40 @@ class ImageIndexRepository:
             for row in rows:
                 result[row[0]] = (row[1], row[2])
         return result
+
+    def get_enabled_stamps(self) -> dict[str, tuple[float, int]]:
+        """Return {path: (mtime, size)} restricted to images in enabled folders.
+
+        Falls back to get_all_stamps() when image_folders is empty (e.g. a
+        CLI-only database with no folder tracking).
+        """
+        cur = self.conn.execute("SELECT COUNT(*) FROM image_folders")
+        if cur.fetchone()[0] == 0:
+            return self.get_all_stamps()
+        result: dict[str, tuple[float, int]] = {}
+        cur = self.conn.execute(
+            "SELECT i.path, i.mtime, i.size FROM images i "
+            "WHERE EXISTS ("
+            "  SELECT 1 FROM image_folders imf "
+            "  JOIN indexed_folders f ON f.id = imf.folder_id "
+            "  WHERE imf.image_id = i.id AND f.enabled = 1"
+            ")"
+        )
+        while True:
+            rows = cur.fetchmany(2000)
+            if not rows:
+                break
+            for row in rows:
+                result[row[0]] = (row[1], row[2])
+        return result
+
+    def delete_folder_associations(self, folder_id: int) -> None:
+        """Remove all image_folders rows for the given folder_id."""
+        with self.conn:
+            self.conn.execute(
+                "DELETE FROM image_folders WHERE folder_id = ?",
+                (folder_id,),
+            )
 
     def commit(self) -> None:
         self.conn.commit()

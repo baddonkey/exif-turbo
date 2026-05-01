@@ -430,9 +430,6 @@ class AppController(QObject):
     def _run_search(self) -> None:
         if self._repo is None:
             return
-        excluded = (
-            self._folder_repo.get_disabled_paths() if self._folder_repo else None
-        )
         path_filter: list[str] | None
         if self._folder_filter:
             path_filter = [self._folder_filter]
@@ -444,7 +441,7 @@ class AppController(QObject):
             self._query_text, _PAGE_SIZE, 0,
             sort_by=self._sort_by, ext_filter=self._ext_filter,
             path_filter=path_filter,
-            excluded_paths=excluded or None,
+            restrict_to_enabled_folders=(self._folder_repo is not None),
         )
         results = [
             SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
@@ -454,7 +451,7 @@ class AppController(QObject):
         total = self._repo.count_images(
             self._query_text, ext_filter=self._ext_filter,
             path_filter=path_filter,
-            excluded_paths=excluded or None,
+            restrict_to_enabled_folders=(self._folder_repo is not None),
         )
         self._total_results = total
         self._loaded_results = len(results)
@@ -464,7 +461,7 @@ class AppController(QObject):
         self._load_formats(
             query=self._query_text,
             path_filter=path_filter,
-            excluded_paths=excluded or None,
+            restrict_to_enabled_folders=(self._folder_repo is not None),
         )
         if results:
             row = self._current_result_row if 0 <= self._current_result_row < len(results) else 0
@@ -476,7 +473,7 @@ class AppController(QObject):
         self,
         query: str = "",
         path_filter: list[str] | None = None,
-        excluded_paths: list[str] | None = None,
+        restrict_to_enabled_folders: bool = False,
     ) -> None:
         if self._repo is None:
             return
@@ -484,7 +481,7 @@ class AppController(QObject):
         counts = self._repo.get_format_counts(
             query=query,
             path_filter=path_filter,
-            excluded_paths=excluded_paths,
+            restrict_to_enabled_folders=restrict_to_enabled_folders,
         )
         self._available_formats = _json.dumps(
             [{"ext": ext, "count": cnt} for ext, cnt in counts]
@@ -517,9 +514,6 @@ class AppController(QObject):
         if self._repo is None or self._loading or self._loaded_results >= self._total_results:
             return
         self._loading = True
-        excluded = (
-            self._folder_repo.get_disabled_paths() if self._folder_repo else None
-        )
         if self._folder_filter:
             _pf: list[str] | None = [self._folder_filter]
         elif self._search_folder_filters:
@@ -530,7 +524,7 @@ class AppController(QObject):
             self._query_text, _PAGE_SIZE, self._loaded_results,
             sort_by=self._sort_by, ext_filter=self._ext_filter,
             path_filter=_pf,
-            excluded_paths=excluded or None,
+            restrict_to_enabled_folders=(self._folder_repo is not None),
         )
         results = [
             SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
@@ -632,7 +626,8 @@ class AppController(QObject):
             self._index_worker.cancel()
         self._folder_repo.remove(folder_id)
         self._folder_model.remove_folder(folder_id)
-        self._repo.delete_by_path_prefix(folder.path)
+        self._repo.delete_folder_associations(folder_id)
+        self._repo.delete_orphans_under_prefix(folder.path)
         self.indexedFoldersChanged.emit()
         self._invalidate_folder_tree()
         self._load_formats()
@@ -773,6 +768,7 @@ class AppController(QObject):
             key=self._key,
             force=force,
             blacklist=self._settings.blacklist_patterns if self._settings else [],
+            folder_id=folder_obj.id,
         )
         self._index_worker.finished.connect(self._on_managed_folder_index_done)
         self._index_worker.failed.connect(self._on_managed_folder_index_failed)
@@ -1055,9 +1051,6 @@ class AppController(QObject):
             self._search_model.max_thumb_bytes,
             workers=self._settings.workerCount if self._settings else _DEFAULT_WORKERS,
             key=self._key,
-            excluded_paths=(
-                self._folder_repo.get_disabled_paths() if self._folder_repo else None
-            ),
         )
         self._thumb_worker.progress.connect(self._on_thumb_progress)
         self._thumb_worker.finished.connect(self._on_thumb_done)

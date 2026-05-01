@@ -88,7 +88,6 @@ class ThumbWorker(QThread):
         max_thumb_bytes: int,
         workers: int = 1,
         key: str = "",
-        excluded_paths: list[str] | None = None,
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -96,11 +95,6 @@ class ThumbWorker(QThread):
         self.max_thumb_bytes = max_thumb_bytes
         self.workers = max(1, workers)
         self._key = key
-        # Normalised prefix strings for disabled folders — images whose path
-        # starts with any of these are skipped entirely.
-        self._excluded_prefixes: tuple[str, ...] = tuple(
-            os.path.normpath(p) + os.sep for p in (excluded_paths or [])
-        )
         self._cancel_event = threading.Event()
         self._resume_event = threading.Event()
         self._resume_event.set()  # starts unpaused
@@ -122,17 +116,8 @@ class ThumbWorker(QThread):
             # Read paths and stamps from the DB on this background thread —
             # keeps the main thread free so QML can paint thumbnails immediately.
             repo = ImageIndexRepository(self._db_path, key=self._key)
-            all_stamps = repo.get_all_stamps()
+            stamps = repo.get_enabled_stamps()
             repo.close()
-
-            # Drop images that belong to disabled (excluded) folders.
-            if self._excluded_prefixes:
-                stamps = {
-                    p: s for p, s in all_stamps.items()
-                    if not os.path.normpath(p).startswith(self._excluded_prefixes)
-                }
-            else:
-                stamps = all_stamps
 
             if self._cancel_event.is_set():
                 self.canceled.emit(0, 0)

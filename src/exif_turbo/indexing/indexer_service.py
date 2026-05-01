@@ -50,6 +50,7 @@ class IndexerService:
         workers: int = 1,
         cancel_check: Callable[[], bool] | None = None,
         force: bool = False,
+        folder_id: int | None = None,
     ) -> tuple[int, int]:  # (indexed_count, error_count)
         existing_paths: List[str] = []
         count = 0
@@ -119,6 +120,7 @@ class IndexerService:
                 item.size,
                 item.metadata,
                 item.metadata_text,
+                folder_id=folder_id,
             )
             existing_paths.append(item.path)
             count += 1
@@ -172,7 +174,11 @@ class IndexerService:
         # delete_missing on a partial/canceled scan would wipe every file that
         # wasn't reached yet — potentially deleting the entire index.
         if not canceled:
-            self.repo.delete_missing(existing_paths, folder_roots=[str(f) for f in folders])
+            self.repo.delete_missing(
+                existing_paths,
+                folder_roots=[str(f) for f in folders],
+                folder_id=folder_id,
+            )
         self.repo.commit()
 
         if json_path and not canceled:

@@ -28,6 +28,7 @@ class IndexWorker(QThread):
         force: bool = False,
         clear_cache_dir: Path | None = None,
         blacklist: List[str] | None = None,
+        folder_id: int | None = None,
     ) -> None:
         super().__init__()
         self.db_path = db_path
@@ -37,6 +38,7 @@ class IndexWorker(QThread):
         self._force = force
         self._clear_cache_dir = clear_cache_dir
         self._blacklist: List[str] = list(blacklist) if blacklist else []
+        self._folder_id = folder_id
         self._cancel_event = threading.Event()
         self._resume_event = threading.Event()
         self._resume_event.set()  # starts unpaused
@@ -86,6 +88,7 @@ class IndexWorker(QThread):
                 workers=self.workers,
                 cancel_check=self._cancel_or_pause,
                 force=self._force,
+                folder_id=self._folder_id,
             )
             repo.close()
             if self._cancel_event.is_set():
