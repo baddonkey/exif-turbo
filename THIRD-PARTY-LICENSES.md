@@ -75,3 +75,26 @@ They are **not** Python packages.
 | [ExifTool](https://exiftool.org/) | EXIF extraction — invoked as an external process (`exiftool -g1 -j`) to extract all EXIF, IPTC, and XMP metadata from image files | Artistic License / GPL | https://exiftool.org |
 | `iconutil` *(macOS)* | `build_macos.sh` — converts PNG icon assets into an `.icns` file embedded in the `.app` bundle | Proprietary (Xcode Command Line Tools) | https://developer.apple.com/xcode |
 | `hdiutil` *(macOS)* | `build_macos.sh` — packages the built `.app` bundle into a distributable `.dmg` disk image | Proprietary (macOS built-in) | https://developer.apple.com/macos |
+
+---
+
+## Sample & Screenshot Image Credits
+
+The photographs used in the documentation screenshots and as test sample data
+are by **Giles Laurent**, published on
+[Wikimedia Commons](https://commons.wikimedia.org/wiki/User:Giles_Laurent)
+under the
+[Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/)
+license.
+
+Mandatory attribution per the license:
+
+> © Giles Laurent, gileslaurent.com, License CC BY-SA
+
+| Used in | Description |
+|---------|-------------|
+| Documentation screenshots | Search tab, Browse tab, and Milky Way search screenshots |
+| `tests/sample-data/schweiz/` | 13 wildlife, landscape, and astrophotography test images |
+
+Full per-file attribution is listed in
+[tests/sample-data/ATTRIBUTION.md](tests/sample-data/ATTRIBUTION.md).
