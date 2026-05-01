@@ -199,7 +199,7 @@ class ImageIndexRepository:
         offset: int,
         sort_by: str = "",
         ext_filter: str = "",
-        path_filter: str = "",
+        path_filter: List[str] | None = None,
         excluded_paths: List[str] | None = None,
     ) -> List[Tuple[int, str, str, str, int, float]]:
         order = self._SORT_MAP.get(sort_by, "images.filename COLLATE NOCASE ASC")
@@ -219,9 +219,14 @@ class ImageIndexRepository:
         path_clause = ""
         path_args: tuple = ()
         if path_filter:
-            prefix = os.path.normpath(path_filter) + os.sep
-            path_clause = "AND images.path LIKE ?"
-            path_args = (prefix + "%",)
+            if len(path_filter) == 1:
+                prefix = os.path.normpath(path_filter[0]) + os.sep
+                path_clause = "AND images.path LIKE ?"
+                path_args = (prefix + "%",)
+            else:
+                parts = " OR ".join("images.path LIKE ?" for _ in path_filter)
+                path_clause = f"AND ({parts})"
+                path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
 
         exclude_clause = ""
         exclude_args: tuple = ()
@@ -262,7 +267,7 @@ class ImageIndexRepository:
         self,
         query: str,
         ext_filter: str = "",
-        path_filter: str = "",
+        path_filter: List[str] | None = None,
         excluded_paths: List[str] | None = None,
     ) -> int:
         ext_clause = ""
@@ -280,9 +285,14 @@ class ImageIndexRepository:
         path_clause = ""
         path_args: tuple = ()
         if path_filter:
-            prefix = os.path.normpath(path_filter) + os.sep
-            path_clause = "AND images.path LIKE ?"
-            path_args = (prefix + "%",)
+            if len(path_filter) == 1:
+                prefix = os.path.normpath(path_filter[0]) + os.sep
+                path_clause = "AND images.path LIKE ?"
+                path_args = (prefix + "%",)
+            else:
+                parts = " OR ".join("images.path LIKE ?" for _ in path_filter)
+                path_clause = f"AND ({parts})"
+                path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
 
         exclude_clause = ""
         exclude_args: tuple = ()
@@ -317,7 +327,7 @@ class ImageIndexRepository:
     def get_format_counts(
         self,
         query: str = "",
-        path_filter: str = "",
+        path_filter: List[str] | None = None,
         excluded_paths: List[str] | None = None,
     ) -> List[Tuple[str, int]]:
         """Return [(extension, count)] sorted by count descending.
@@ -330,9 +340,14 @@ class ImageIndexRepository:
         path_clause = ""
         path_args: tuple = ()
         if path_filter:
-            prefix = os.path.normpath(path_filter) + os.sep
-            path_clause = "AND images.path LIKE ?"
-            path_args = (prefix + "%",)
+            if len(path_filter) == 1:
+                prefix = os.path.normpath(path_filter[0]) + os.sep
+                path_clause = "AND images.path LIKE ?"
+                path_args = (prefix + "%",)
+            else:
+                parts = " OR ".join("images.path LIKE ?" for _ in path_filter)
+                path_clause = f"AND ({parts})"
+                path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
 
         exclude_clause = ""
         exclude_args: tuple = ()

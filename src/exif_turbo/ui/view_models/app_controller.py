@@ -58,6 +58,7 @@ class AppController(QObject):
     availableFormatsChanged = Signal()
     folderTreeChanged = Signal()
     folderFilterChanged = Signal()
+    searchFolderFiltersChanged = Signal()
     indexedFoldersChanged = Signal()
     indexQueuePositionChanged = Signal()
     indexQueueTotalChanged = Signal()
@@ -111,6 +112,7 @@ class AppController(QObject):
         self._ext_filter = ""
         self._available_formats: str = "[]"
         self._folder_filter: str = ""
+        self._search_folder_filters: set[str] = set()
         self._folder_tree: str = "[]"
         self._folder_tree_dirty: bool = False
         self._pending_preview_path: str = ""
@@ -253,6 +255,22 @@ class AppController(QObject):
     def folderFilter(self) -> str:
         return self._folder_filter
 
+    @Property(str, notify=searchFolderFiltersChanged)
+    def searchFolderFilters(self) -> str:
+        return json.dumps(sorted(self._search_folder_filters))
+
+    @Property(int, notify=indexedFoldersChanged)
+    def indexedFolderCount(self) -> int:
+        return self._folder_model.rowCount()
+
+    @Property(str, notify=indexedFoldersChanged)
+    def searchFolderListJson(self) -> str:
+        return json.dumps([
+            {"path": f.path, "name": f.display_name}
+            for f in self._folder_model._rows
+            if f.enabled
+        ])
+
     @Property(str, notify=folderTreeChanged)
     def folderTree(self) -> str:
         return self._folder_tree
@@ -284,6 +302,7 @@ class AppController(QObject):
             self._ext_filter = ""
             self._sort_by = "path_asc"
             self._folder_filter = ""
+            self._search_folder_filters = set()
             self._status_text = ""
             self.isLockedChanged.emit()
             self.unlockErrorChanged.emit()
@@ -365,6 +384,35 @@ class AppController(QObject):
         self._run_search()
 
     @Slot(str)
+    def toggleSearchFolderFilter(self, path: str) -> None:
+        if path in self._search_folder_filters:
+            self._search_folder_filters.discard(path)
+        else:
+            self._search_folder_filters.add(path)
+        self._current_result_row = 0
+        self.searchFolderFiltersChanged.emit()
+        self._run_search()
+
+    @Slot()
+    def clearSearchFolderFilters(self) -> None:
+        if not self._search_folder_filters:
+            return
+        self._search_folder_filters.clear()
+        self._current_result_row = 0
+        self.searchFolderFiltersChanged.emit()
+        self._run_search()
+
+    @Slot(str)
+    def setSearchFolderFilter(self, path: str) -> None:
+        new_set: set[str] = {path} if path else set()
+        if new_set == self._search_folder_filters:
+            return
+        self._search_folder_filters = new_set
+        self._current_result_row = 0
+        self.searchFolderFiltersChanged.emit()
+        self._run_search()
+
+    @Slot(str)
     def browseFolder(self, path: str) -> None:
         """Navigate to a folder in the Browse tab.
 
@@ -385,10 +433,17 @@ class AppController(QObject):
         excluded = (
             self._folder_repo.get_disabled_paths() if self._folder_repo else None
         )
+        path_filter: list[str] | None
+        if self._folder_filter:
+            path_filter = [self._folder_filter]
+        elif self._search_folder_filters:
+            path_filter = sorted(self._search_folder_filters)
+        else:
+            path_filter = None
         rows = self._repo.search_images(
             self._query_text, _PAGE_SIZE, 0,
             sort_by=self._sort_by, ext_filter=self._ext_filter,
-            path_filter=self._folder_filter,
+            path_filter=path_filter,
             excluded_paths=excluded or None,
         )
         results = [
@@ -398,7 +453,7 @@ class AppController(QObject):
         self._search_model.set_rows(results)
         total = self._repo.count_images(
             self._query_text, ext_filter=self._ext_filter,
-            path_filter=self._folder_filter,
+            path_filter=path_filter,
             excluded_paths=excluded or None,
         )
         self._total_results = total
@@ -408,7 +463,7 @@ class AppController(QObject):
         self.loadedResultsChanged.emit()
         self._load_formats(
             query=self._query_text,
-            path_filter=self._folder_filter,
+            path_filter=path_filter,
             excluded_paths=excluded or None,
         )
         if results:
@@ -420,7 +475,7 @@ class AppController(QObject):
     def _load_formats(
         self,
         query: str = "",
-        path_filter: str = "",
+        path_filter: list[str] | None = None,
         excluded_paths: list[str] | None = None,
     ) -> None:
         if self._repo is None:
@@ -465,10 +520,16 @@ class AppController(QObject):
         excluded = (
             self._folder_repo.get_disabled_paths() if self._folder_repo else None
         )
+        if self._folder_filter:
+            _pf: list[str] | None = [self._folder_filter]
+        elif self._search_folder_filters:
+            _pf = sorted(self._search_folder_filters)
+        else:
+            _pf = None
         rows = self._repo.search_images(
             self._query_text, _PAGE_SIZE, self._loaded_results,
             sort_by=self._sort_by, ext_filter=self._ext_filter,
-            path_filter=self._folder_filter,
+            path_filter=_pf,
             excluded_paths=excluded or None,
         )
         results = [

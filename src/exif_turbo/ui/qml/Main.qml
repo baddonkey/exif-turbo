@@ -108,11 +108,14 @@ ApplicationWindow {
     readonly property int    _indexQueuePosition:  controller ? controller.indexQueuePosition  : 0
     readonly property int    _indexQueueTotal:     controller ? controller.indexQueueTotal     : 0
     readonly property string _detailsHtml:         controller ? controller.detailsHtml        : ""
-    readonly property string _sortBy:             controller ? controller.sortBy             : ""
-    readonly property string _extFilter:          controller ? controller.extFilter          : ""
-    readonly property string _availableFormats:   controller ? controller.availableFormats   : "[]"
-    readonly property string _folderTreeJson:     controller ? controller.folderTree         : "[]"
-    readonly property string _folderFilter:       controller ? controller.folderFilter       : ""
+    readonly property string _sortBy:                  controller ? controller.sortBy              : ""
+    readonly property string _extFilter:               controller ? controller.extFilter           : ""
+    readonly property string _availableFormats:        controller ? controller.availableFormats    : "[]"
+    readonly property string _folderTreeJson:          controller ? controller.folderTree          : "[]"
+    readonly property string _folderFilter:            controller ? controller.folderFilter        : ""
+    readonly property string _searchFolderFilters:     controller ? controller.searchFolderFilters : "[]"
+    readonly property string _searchFolderListJson:    controller ? controller.searchFolderListJson : "[]"
+    readonly property int    _indexedFolderCount:      controller ? controller.indexedFolderCount  : 0
     readonly property int    _totalResults:       controller ? controller.totalResults        : 0
     readonly property string _appVersion:         controller ? controller.appVersion          : ""
 
@@ -131,6 +134,16 @@ ApplicationWindow {
     // Parsed folder tree — updated reactively when _folderTreeJson changes
     readonly property var _folderTree: {
         try { return JSON.parse(_folderTreeJson) } catch(e) { return [] }
+    }
+
+    // Parsed folder filter (single active path, or "" for All)
+    readonly property var _searchFolderFiltersArray: {
+        try { return JSON.parse(_searchFolderFilters) } catch(e) { return [] }
+    }
+
+    // Parsed list of indexed folders for the folder combo
+    readonly property var _searchFolderList: {
+        try { return JSON.parse(_searchFolderListJson) } catch(e) { return [] }
     }
 
     // ── Dialogs ───────────────────────────────────────────────────────────
@@ -609,6 +622,72 @@ ApplicationWindow {
                             }
 
                             Item { Layout.fillWidth: true }
+
+                            Label {
+                                text: qsTr("Folder")
+                                font.pixelSize: 11
+                                opacity: 0.6
+                                visible: root._indexedFolderCount > 1
+                            }
+
+                            // Multi-select folder filter — checkbox popup inside a ComboBox shell
+                            ComboBox {
+                                id: folderMultiCombo
+                                visible: root._indexedFolderCount > 1
+                                implicitHeight: 28
+                                implicitWidth: 170
+                                font.pixelSize: 11
+                                model: []   // no model items; displayText is computed
+
+                                displayText: {
+                                    var active = root._searchFolderFiltersArray
+                                    if (active.length === 0) return qsTr("All folders")
+                                    if (active.length === 1) {
+                                        var folders = root._searchFolderList
+                                        for (var i = 0; i < folders.length; i++) {
+                                            if (folders[i].path === active[0]) return folders[i].name
+                                        }
+                                    }
+                                    return qsTr("%1 folders").arg(active.length)
+                                }
+
+                                popup: Popup {
+                                    y: folderMultiCombo.height + 2
+                                    width: folderMultiCombo.width
+                                    padding: 6
+                                    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+                                    Column {
+                                        width: parent.width
+                                        spacing: 0
+
+                                        CheckBox {
+                                            width: parent.width
+                                            text: qsTr("All folders")
+                                            font.pixelSize: 11
+                                            checked: root._searchFolderFiltersArray.length === 0
+                                            onClicked: controller.clearSearchFolderFilters()
+                                        }
+
+                                        Repeater {
+                                            model: root._searchFolderList
+                                            delegate: CheckBox {
+                                                required property var modelData
+                                                width: parent.width
+                                                text: modelData.name
+                                                font.pixelSize: 11
+                                                checked: root._searchFolderFiltersArray.indexOf(modelData.path) >= 0
+                                                onClicked: controller.toggleSearchFolderFilter(modelData.path)
+                                                ToolTip.text: modelData.path
+                                                ToolTip.visible: hovered
+                                                ToolTip.delay: 600
+                                            }
+                                        }
+                                    }
+                                }
+
+                                onActivated: {}  // prevent default single-select behavior
+                            }
 
                             Label {
                                 text: qsTr("Sort")
