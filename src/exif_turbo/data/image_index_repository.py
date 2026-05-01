@@ -40,6 +40,10 @@ class ImageIndexRepository:
 
             CREATE VIRTUAL TABLE IF NOT EXISTS images_fts
             USING fts5(path, filename, metadata_text);
+
+            CREATE INDEX IF NOT EXISTS idx_images_filename ON images(filename COLLATE NOCASE);
+            CREATE INDEX IF NOT EXISTS idx_images_mtime    ON images(mtime DESC);
+            CREATE INDEX IF NOT EXISTS idx_images_size     ON images(size DESC);
             """
         )
 
