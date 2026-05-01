@@ -222,15 +222,24 @@ def test_search_no_match_returns_empty_results(
 
 @pytest.fixture
 def bare_controller(
+    qtbot: QtBot,
     tmp_path: Path,
     demo_db: tuple[Path, Path],
-) -> AppController:
+) -> Generator[AppController, None, None]:
     """Lightweight AppController backed by the demo DB — no QML engine."""
     db_path, base = demo_db
     search_model = SearchListModel(cache_dir=base / "thumbs")
     exif_model = ExifListModel()
     folder_model = FolderListModel()
-    return AppController(db_path, search_model, exif_model, folder_model)
+    ctrl = AppController(db_path, search_model, exif_model, folder_model)
+    yield ctrl
+    ctrl.onAppClosing()
+    if ctrl._thumb_worker and ctrl._thumb_worker.isRunning():
+        ctrl._thumb_worker.wait(3000)
+    if ctrl._index_worker and ctrl._index_worker.isRunning():
+        ctrl._index_worker.wait(3000)
+    ctrl.close()
+    qtbot.wait(100)
 
 
 def test_selectResult_thumb_source_updates_synchronously(
