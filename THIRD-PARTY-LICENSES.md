@@ -93,7 +93,7 @@ Mandatory attribution per the license:
 
 | Used in | Description |
 |---------|-------------|
-| Documentation screenshots | Search tab, Browse tab, and Milky Way search screenshots |
+| Documentation screenshots | Lock screen, Search (all / eagle / Milky Way), Browse, Indexed Folders, and folder-filter screenshots (`01_lock_screen.png` – `07_folder_filter.png`) |
 | `tests/sample-data/schweiz/` | 13 wildlife, landscape, and astrophotography test images |
 
 Full per-file attribution is listed in

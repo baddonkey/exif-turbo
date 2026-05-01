@@ -236,6 +236,8 @@ folder name shows its full path as a tooltip.
 
 ![Folder filter popup](screenshots/07_folder_filter.png)
 
+*Photos: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
+
 ### Sorting results
 
 Use the **Sort** dropdown at the top-right of the results panel:

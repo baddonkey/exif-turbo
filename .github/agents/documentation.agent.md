@@ -94,3 +94,18 @@ When asked to produce the full documentation deliverable, always:
 1. Run `scripts/take_screenshots.py` to refresh screenshots
 2. Update `docs/user-manual.md`
 3. Run `scripts/export_manual_pdf.py` to produce `docs/user-manual.pdf`
+
+## Image Credits Checklist
+
+Every screenshot embedded in `docs/user-manual.md` must be followed immediately
+by the photo credit line:
+
+```markdown
+*Photos: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
+```
+
+Whenever a **new screenshot** is added to `docs/screenshots/`:
+- Verify the **Image Credits** section at the bottom of `docs/user-manual.md`
+  covers the photos that appear in the new screenshot.
+- Update the **"Used in"** table in `THIRD-PARTY-LICENSES.md` to list the new
+  screenshot filename(s) alongside the existing ones.
