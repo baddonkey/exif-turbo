@@ -39,8 +39,9 @@ def _open_image(path: str) -> Image.Image:
                     img.load()   # detach from BytesIO before context exits
                 else:
                     img = Image.fromarray(thumb.data)
-            except rawpy.LibRawNoThumbnailError:
-                # postprocess() applies orientation automatically.
+            except rawpy.LibRawError:
+                # No thumbnail, unsupported format, or any other libraw error
+                # — postprocess() applies orientation automatically.
                 rgb = raw.postprocess(use_camera_wb=True, half_size=True)
                 return Image.fromarray(rgb)
         return orient_raw_thumb(img, raw_flip)

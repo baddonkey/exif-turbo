@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import io
+import logging
 import urllib.parse
 from pathlib import Path
+
+_log = logging.getLogger(__name__)
 
 try:
     import rawpy
@@ -59,7 +62,8 @@ class PreviewImageProvider(QQuickImageProvider):
         target = _effective_target(requestedSize)
         try:
             img = _load_image(path, target)
-        except Exception:
+        except Exception as exc:
+            _log.error("Preview failed for %r: %s", path, exc)
             img = QImage()
 
         size.setWidth(img.width())
@@ -134,13 +138,24 @@ def _load_raw(path: str, target: tuple[int, int]) -> Image.Image:
         try:
             thumb = raw.extract_thumb()
             if thumb.format == rawpy.ThumbFormat.JPEG:
-                img: Image.Image = Image.open(io.BytesIO(thumb.data))
-                img.draft("RGB", target)
-                img.load()
+                data = bytes(thumb.data)
+                img: Image.Image = Image.open(io.BytesIO(data))
+                try:
+                    # draft() tells libjpeg to decode at a subsampled size —
+                    # up to 8× faster for large embedded previews (e.g. Sony ARW
+                    # full-res JPEGs).  Some JPEG variants (unusual sampling
+                    # factors, CMYK) cause libjpeg to reject the draft hint and
+                    # raise during img.load(); retry without draft in that case.
+                    img.draft("RGB", target)
+                    img.load()
+                except Exception:
+                    img = Image.open(io.BytesIO(data))
+                    img.load()
             else:
                 img = Image.fromarray(thumb.data)
-        except rawpy.LibRawNoThumbnailError:
-            # No embedded preview — fall back to half-size demosaic.
+        except rawpy.LibRawError:
+            # No thumbnail, unsupported thumbnail format, or any other libraw
+            # error — fall back to half-size demosaic.
             # rawpy.postprocess() applies orientation automatically.
             rgb = raw.postprocess(use_camera_wb=True, half_size=True)
             img = Image.fromarray(rgb)
