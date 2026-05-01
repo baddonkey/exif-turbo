@@ -80,7 +80,7 @@ for po in locales.rglob('*.po'):
     mo = po.with_suffix('.mo')
     subprocess.run([str(pybabel), 'compile', '-i', str(po), '-o', str(mo)],
                    check=True, capture_output=True)
-    print(f'    {mo.relative_to(pathlib.Path.cwd())}')
+    print(f'    {mo}')
 "
 echo "  Translation catalogs compiled."
 
