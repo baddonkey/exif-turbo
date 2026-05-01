@@ -254,3 +254,14 @@ pwsh scripts\tag_release.ps1
 ```
 
 Or use the `/release` prompt in VS Code Copilot Chat.
+
+## Sample Image Credits
+
+The sample images used in tests and screenshots are photographs by
+**[Giles Laurent](https://commons.wikimedia.org/wiki/User:Giles_Laurent)**,
+published on Wikimedia Commons under the
+[Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/) license.
+
+Mandatory attribution: © Giles Laurent, gileslaurent.com, License CC BY-SA
+
+See [tests/sample-data/ATTRIBUTION.md](tests/sample-data/ATTRIBUTION.md) for the full list of images and their Wikimedia Commons links.

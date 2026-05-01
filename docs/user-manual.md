@@ -457,3 +457,14 @@ the `.db` file and re-indexing your folders with a new password.
 A: Thumbnails are generated in a background thread after indexing. Depending
 on the number of images it may take a few minutes for all thumbnails to be
 built and cached. They persist across sessions so subsequent launches are fast.
+
+---
+
+## Image Credits
+
+The screenshots in this manual use sample photographs by
+**[Giles Laurent](https://commons.wikimedia.org/wiki/User:Giles_Laurent)**,
+published on Wikimedia Commons under the
+[Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/) license.
+
+Mandatory attribution: © Giles Laurent, gileslaurent.com, License CC BY-SA
