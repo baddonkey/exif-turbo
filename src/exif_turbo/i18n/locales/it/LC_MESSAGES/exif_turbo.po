@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-04-30 23:53+0200\n"
+"POT-Creation-Date: 2026-05-01 10:23+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: it\n"
@@ -18,48 +18,48 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:84
+#: src/exif_turbo/ui/view_models/app_controller.py:85
 msgid "Enter the database password to continue"
 msgstr "Inserisci la password del database per continuare"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:550
+#: src/exif_turbo/ui/view_models/app_controller.py:615
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Cartella già monitorata: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:703
+#: src/exif_turbo/ui/view_models/app_controller.py:768
 #, python-brace-format
 msgid "Indexing {}…"
 msgstr "Indicizzazione {}…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:735
+#: src/exif_turbo/ui/view_models/app_controller.py:799
 #, python-brace-format
 msgid "Indexed {count} images ({errors} skipped due to errors)"
-msgstr ""
+msgstr "{count} immagini indicizzate ({errors} saltate a causa di errori)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:740
+#: src/exif_turbo/ui/view_models/app_controller.py:804
 #, python-brace-format
 msgid "Indexed {} images"
 msgstr "{} immagini indicizzate"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:773
+#: src/exif_turbo/ui/view_models/app_controller.py:837
 #, python-brace-format
 msgid "Index failed: {}"
 msgstr "Indicizzazione fallita: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:805
+#: src/exif_turbo/ui/view_models/app_controller.py:869
 msgid "Index canceled"
 msgstr "Indicizzazione annullata"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:825
+#: src/exif_turbo/ui/view_models/app_controller.py:889
 msgid "Canceling…"
 msgstr "Annullamento…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:876
+#: src/exif_turbo/ui/view_models/app_controller.py:940
 msgid "Database reset"
-msgstr ""
+msgstr "Database ripristinato"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:960
+#: src/exif_turbo/ui/view_models/app_controller.py:1024
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indicizzazione… {} / {}"
@@ -67,6 +67,10 @@ msgstr "Indicizzazione… {} / {}"
 #: QML
 msgid " images"
 msgstr " immagini"
+
+#: QML
+msgid "%1 folders"
+msgstr "%1 cartelle"
 
 #: QML
 msgid "&About"
@@ -82,7 +86,7 @@ msgstr "A&iuto"
 
 #: QML
 msgid "&User Manual"
-msgstr ""
+msgstr "&Manuale utente"
 
 #: QML
 msgid "About exif-turbo"
@@ -99,6 +103,10 @@ msgstr "Aggiungi cartella"
 #: QML
 msgid "All"
 msgstr "Tutti"
+
+#: QML
+msgid "All folders"
+msgstr "Tutte le cartelle"
 
 #: QML
 msgid "Browse"
@@ -122,7 +130,7 @@ msgstr "Annulla miniature"
 
 #: QML
 msgid "Canceling\\u2026"
-msgstr ""
+msgstr "Annullamento…"
 
 #: QML
 msgid "Confirm passphrase"
@@ -135,6 +143,14 @@ msgstr "Crea database"
 #: QML
 msgid "Create a passphrase for your new database"
 msgstr "Crea una passphrase per il tuo nuovo database"
+
+#: QML
+msgid ""
+"Cross-platform image EXIF metadata\n"
+"search and indexing tool."
+msgstr ""
+"Strumento multipiattaforma per la ricerca\n"
+"e l’indicizzazione di metadati EXIF."
 
 #: QML
 msgid "Date"
@@ -192,7 +208,7 @@ msgstr "Trova nei metadati (Ctrl+F)"
 
 #: QML
 msgid "Find in metadata\\u2026"
-msgstr ""
+msgstr "Trova nei metadati…"
 
 #: QML
 msgid "Folder is excluded from search results"
@@ -201,6 +217,10 @@ msgstr "La cartella è esclusa dai risultati di ricerca"
 #: QML
 msgid "Folder is included in search results"
 msgstr "La cartella è inclusa nei risultati di ricerca"
+
+#: QML
+msgid "Folder(s)"
+msgstr "Cartella/e"
 
 #: QML
 msgid "Force re-extract EXIF for every file in all enabled folders"
@@ -253,6 +273,10 @@ msgstr "Lingua"
 #: QML
 msgid "Largest"
 msgstr "Più grande"
+
+#: QML
+msgid "License: MIT"
+msgstr "Licenza: MIT"
 
 #: QML
 msgid "METADATA"
@@ -345,10 +369,12 @@ msgid ""
 "Permanently deletes all indexed images and folder records. This cannot be"
 " undone."
 msgstr ""
+"Elimina definitivamente tutte le immagini indicizzate e i record delle "
+"cartelle. Questa operazione non può essere annullata."
 
 #: QML
 msgid "Preparing\\u2026"
-msgstr ""
+msgstr "Preparazione…"
 
 #: QML
 msgid "Previous match"
@@ -390,11 +416,11 @@ msgstr "Reindicizza tutto"
 
 #: QML
 msgid "Reset Database"
-msgstr ""
+msgstr "Ripristina database"
 
 #: QML
 msgid "Reset Database\\u2026"
-msgstr ""
+msgstr "Ripristina database…"
 
 #: QML
 msgid "Restart the application for language changes to take full effect."
@@ -408,7 +434,7 @@ msgstr "IMPOSTAZIONI"
 
 #: QML
 msgid "Scanning for images\\u2026"
-msgstr ""
+msgstr "Ricerca immagini…"
 
 #: QML
 msgid "Search"
@@ -416,7 +442,7 @@ msgstr "Cerca"
 
 #: QML
 msgid "Search EXIF metadata\\u2026"
-msgstr ""
+msgstr "Cerca nei metadati EXIF…"
 
 #: QML
 msgid "Select Folder to Manage"
@@ -448,11 +474,11 @@ msgstr "Tema"
 
 #: QML
 msgid "Third-Party &Licenses"
-msgstr ""
+msgstr "&Licenze di terze parti"
 
 #: QML
 msgid "Third-Party Licenses"
-msgstr ""
+msgstr "Licenze di terze parti"
 
 #: QML
 msgid ""
@@ -471,6 +497,10 @@ msgid ""
 "\n"
 "Are you sure you want to continue?"
 msgstr ""
+"Questa operazione eliminerà definitivamente tutte le immagini indicizzate"
+" e i record delle cartelle.\n"
+"\n"
+"Sei sicuro di voler continuare?"
 
 #: QML
 msgid "Unlock"
@@ -486,7 +516,7 @@ msgstr "Thread di lavoro"
 
 #: QML
 msgid "\\u2190 Select a folder to browse images"
-msgstr ""
+msgstr "← Seleziona una cartella per sfogliare le immagini"
 
 #: QML
 msgid "files"

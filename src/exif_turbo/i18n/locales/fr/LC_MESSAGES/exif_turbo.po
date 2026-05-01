@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-04-30 23:53+0200\n"
+"POT-Creation-Date: 2026-05-01 10:23+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: fr\n"
@@ -18,48 +18,48 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:84
+#: src/exif_turbo/ui/view_models/app_controller.py:85
 msgid "Enter the database password to continue"
 msgstr "Saisir le mot de passe de la base de données pour continuer"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:550
+#: src/exif_turbo/ui/view_models/app_controller.py:615
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Dossier déjà suivi : {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:703
+#: src/exif_turbo/ui/view_models/app_controller.py:768
 #, python-brace-format
 msgid "Indexing {}…"
 msgstr "Indexation de {}…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:735
+#: src/exif_turbo/ui/view_models/app_controller.py:799
 #, python-brace-format
 msgid "Indexed {count} images ({errors} skipped due to errors)"
-msgstr ""
+msgstr "{count} images indexées ({errors} ignorées en raison d’erreurs)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:740
+#: src/exif_turbo/ui/view_models/app_controller.py:804
 #, python-brace-format
 msgid "Indexed {} images"
 msgstr "{} images indexées"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:773
+#: src/exif_turbo/ui/view_models/app_controller.py:837
 #, python-brace-format
 msgid "Index failed: {}"
 msgstr "Indexation échouée : {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:805
+#: src/exif_turbo/ui/view_models/app_controller.py:869
 msgid "Index canceled"
 msgstr "Indexation annulée"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:825
+#: src/exif_turbo/ui/view_models/app_controller.py:889
 msgid "Canceling…"
 msgstr "Annulation…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:876
+#: src/exif_turbo/ui/view_models/app_controller.py:940
 msgid "Database reset"
-msgstr ""
+msgstr "Base de données réinitialisée"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:960
+#: src/exif_turbo/ui/view_models/app_controller.py:1024
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indexation… {} / {}"
@@ -67,6 +67,10 @@ msgstr "Indexation… {} / {}"
 #: QML
 msgid " images"
 msgstr " images"
+
+#: QML
+msgid "%1 folders"
+msgstr "%1 dossiers"
 
 #: QML
 msgid "&About"
@@ -82,7 +86,7 @@ msgstr "&Aide"
 
 #: QML
 msgid "&User Manual"
-msgstr ""
+msgstr "&Manuel utilisateur"
 
 #: QML
 msgid "About exif-turbo"
@@ -99,6 +103,10 @@ msgstr "Ajouter un dossier"
 #: QML
 msgid "All"
 msgstr "Tout"
+
+#: QML
+msgid "All folders"
+msgstr "Tous les dossiers"
 
 #: QML
 msgid "Browse"
@@ -122,7 +130,7 @@ msgstr "Annuler les miniatures"
 
 #: QML
 msgid "Canceling\\u2026"
-msgstr ""
+msgstr "Annulation…"
 
 #: QML
 msgid "Confirm passphrase"
@@ -135,6 +143,14 @@ msgstr "Créer la base de données"
 #: QML
 msgid "Create a passphrase for your new database"
 msgstr "Créer un mot de passe pour votre nouvelle base de données"
+
+#: QML
+msgid ""
+"Cross-platform image EXIF metadata\n"
+"search and indexing tool."
+msgstr ""
+"Outil multiplateforme de recherche\n"
+"et d’indexation de métadonnées EXIF."
 
 #: QML
 msgid "Date"
@@ -192,7 +208,7 @@ msgstr "Rechercher dans les métadonnées (Ctrl+F)"
 
 #: QML
 msgid "Find in metadata\\u2026"
-msgstr ""
+msgstr "Rechercher dans les métadonnées…"
 
 #: QML
 msgid "Folder is excluded from search results"
@@ -201,6 +217,10 @@ msgstr "Le dossier est exclu des résultats de recherche"
 #: QML
 msgid "Folder is included in search results"
 msgstr "Le dossier est inclus dans les résultats de recherche"
+
+#: QML
+msgid "Folder(s)"
+msgstr "Dossier(s)"
 
 #: QML
 msgid "Force re-extract EXIF for every file in all enabled folders"
@@ -255,6 +275,10 @@ msgstr "Langue"
 #: QML
 msgid "Largest"
 msgstr "Plus grand"
+
+#: QML
+msgid "License: MIT"
+msgstr "Licence : MIT"
 
 #: QML
 msgid "METADATA"
@@ -347,10 +371,12 @@ msgid ""
 "Permanently deletes all indexed images and folder records. This cannot be"
 " undone."
 msgstr ""
+"Supprime définitivement toutes les images indexées et les enregistrements"
+" de dossiers. Cette opération ne peut pas être annulée."
 
 #: QML
 msgid "Preparing\\u2026"
-msgstr ""
+msgstr "Préparation…"
 
 #: QML
 msgid "Previous match"
@@ -390,11 +416,11 @@ msgstr "Réindexer tout"
 
 #: QML
 msgid "Reset Database"
-msgstr ""
+msgstr "Réinitialiser la base de données"
 
 #: QML
 msgid "Reset Database\\u2026"
-msgstr ""
+msgstr "Réinitialiser la base de données…"
 
 #: QML
 msgid "Restart the application for language changes to take full effect."
@@ -408,7 +434,7 @@ msgstr "PARAMÈTRES"
 
 #: QML
 msgid "Scanning for images\\u2026"
-msgstr ""
+msgstr "Recherche d’images…"
 
 #: QML
 msgid "Search"
@@ -416,7 +442,7 @@ msgstr "Rechercher"
 
 #: QML
 msgid "Search EXIF metadata\\u2026"
-msgstr ""
+msgstr "Rechercher dans les métadonnées EXIF…"
 
 #: QML
 msgid "Select Folder to Manage"
@@ -448,11 +474,11 @@ msgstr "Thème"
 
 #: QML
 msgid "Third-Party &Licenses"
-msgstr ""
+msgstr "&Licences tierces"
 
 #: QML
 msgid "Third-Party Licenses"
-msgstr ""
+msgstr "Licences tierces"
 
 #: QML
 msgid ""
@@ -471,6 +497,10 @@ msgid ""
 "\n"
 "Are you sure you want to continue?"
 msgstr ""
+"Ceci supprimera définitivement toutes les images indexées et les "
+"enregistrements de dossiers.\n"
+"\n"
+"Êtes-vous sûr de vouloir continuer ?"
 
 #: QML
 msgid "Unlock"
@@ -486,7 +516,7 @@ msgstr "Threads de travail"
 
 #: QML
 msgid "\\u2190 Select a folder to browse images"
-msgstr ""
+msgstr "← Sélectionner un dossier pour parcourir les images"
 
 #: QML
 msgid "files"

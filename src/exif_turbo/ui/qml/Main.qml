@@ -155,7 +155,9 @@ ApplicationWindow {
         width: 340
 
         Label {
-            text: "exif-turbo" + (_appVersion ? " v" + _appVersion : "") + "\n\nCross-platform image EXIF metadata\nsearch and indexing tool.\n\nLicense: MIT"
+            text: "exif-turbo" + (_appVersion ? " v" + _appVersion : "") + "\n\n" +
+                  qsTr("Cross-platform image EXIF metadata\nsearch and indexing tool.") +
+                  "\n\n" + qsTr("License: MIT")
         }
     }
 
@@ -624,7 +626,7 @@ ApplicationWindow {
                             Item { Layout.fillWidth: true }
 
                             Label {
-                                text: qsTr("Folder")
+                                text: qsTr("Folder(s)")
                                 font.pixelSize: 11
                                 opacity: 0.6
                                 visible: root._indexedFolderCount > 1

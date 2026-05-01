@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-04-30 23:53+0200\n"
+"POT-Creation-Date: 2026-05-01 10:23+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: rm\n"
@@ -18,48 +18,48 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:84
+#: src/exif_turbo/ui/view_models/app_controller.py:85
 msgid "Enter the database password to continue"
 msgstr "Endatar la pled-clav da la banca da datas per cuntinuar"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:550
+#: src/exif_turbo/ui/view_models/app_controller.py:615
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Cartella gia trackata: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:703
+#: src/exif_turbo/ui/view_models/app_controller.py:768
 #, python-brace-format
 msgid "Indexing {}…"
 msgstr "Indexaziun {}…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:735
+#: src/exif_turbo/ui/view_models/app_controller.py:799
 #, python-brace-format
 msgid "Indexed {count} images ({errors} skipped due to errors)"
-msgstr ""
+msgstr "{count} maletgs indexads ({errors} sursiglids pervia d’errurs)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:740
+#: src/exif_turbo/ui/view_models/app_controller.py:804
 #, python-brace-format
 msgid "Indexed {} images"
 msgstr "{} maletgs indexads"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:773
+#: src/exif_turbo/ui/view_models/app_controller.py:837
 #, python-brace-format
 msgid "Index failed: {}"
 msgstr "Indexaziun buca reussida: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:805
+#: src/exif_turbo/ui/view_models/app_controller.py:869
 msgid "Index canceled"
 msgstr "Indexaziun interrutta"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:825
+#: src/exif_turbo/ui/view_models/app_controller.py:889
 msgid "Canceling…"
 msgstr "Interruziun…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:876
+#: src/exif_turbo/ui/view_models/app_controller.py:940
 msgid "Database reset"
-msgstr ""
+msgstr "Banca da datas resettada"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:960
+#: src/exif_turbo/ui/view_models/app_controller.py:1024
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indexaziun… {} / {}"
@@ -67,6 +67,10 @@ msgstr "Indexaziun… {} / {}"
 #: QML
 msgid " images"
 msgstr " maletgs"
+
+#: QML
+msgid "%1 folders"
+msgstr "%1 cartellas"
 
 #: QML
 msgid "&About"
@@ -82,7 +86,7 @@ msgstr "&Agid"
 
 #: QML
 msgid "&User Manual"
-msgstr ""
+msgstr "&Manual d’utilisader"
 
 #: QML
 msgid "About exif-turbo"
@@ -99,6 +103,10 @@ msgstr "Agiuntar cartella"
 #: QML
 msgid "All"
 msgstr "Tuts"
+
+#: QML
+msgid "All folders"
+msgstr "Tut las cartellas"
 
 #: QML
 msgid "Browse"
@@ -122,7 +130,7 @@ msgstr "Interrumper miniatures"
 
 #: QML
 msgid "Canceling\\u2026"
-msgstr ""
+msgstr "Interruziun…"
 
 #: QML
 msgid "Confirm passphrase"
@@ -135,6 +143,14 @@ msgstr "Crear banca da datas"
 #: QML
 msgid "Create a passphrase for your new database"
 msgstr "Crear ina pled-clav per la nova banca da datas"
+
+#: QML
+msgid ""
+"Cross-platform image EXIF metadata\n"
+"search and indexing tool."
+msgstr ""
+"Instrument multiplatforma per tschertgar\n"
+"e indexar metadata EXIF."
 
 #: QML
 msgid "Date"
@@ -192,7 +208,7 @@ msgstr "Tschertgar en metadata (Ctrl+F)"
 
 #: QML
 msgid "Find in metadata\\u2026"
-msgstr ""
+msgstr "Tschertgar en metadata…"
 
 #: QML
 msgid "Folder is excluded from search results"
@@ -201,6 +217,10 @@ msgstr "La cartella è exclusa dals resultats da tschertga"
 #: QML
 msgid "Folder is included in search results"
 msgstr "La cartella è inclusa en ils resultats da tschertga"
+
+#: QML
+msgid "Folder(s)"
+msgstr "Cartella(s)"
 
 #: QML
 msgid "Force re-extract EXIF for every file in all enabled folders"
@@ -255,6 +275,10 @@ msgstr "Lingua"
 #: QML
 msgid "Largest"
 msgstr "Pli gronds"
+
+#: QML
+msgid "License: MIT"
+msgstr "Licenza: MIT"
 
 #: QML
 msgid "METADATA"
@@ -346,10 +370,12 @@ msgid ""
 "Permanently deletes all indexed images and folder records. This cannot be"
 " undone."
 msgstr ""
+"Stizza definitivamente tuts ils maletgs indexads e las registraziuns da "
+"cartellas. Quai na po betg vegnir annullà."
 
 #: QML
 msgid "Preparing\\u2026"
-msgstr ""
+msgstr "Preparaziun…"
 
 #: QML
 msgid "Previous match"
@@ -389,11 +415,11 @@ msgstr "Re-indexar tut"
 
 #: QML
 msgid "Reset Database"
-msgstr ""
+msgstr "Resettar banca da datas"
 
 #: QML
 msgid "Reset Database\\u2026"
-msgstr ""
+msgstr "Resettar banca da datas…"
 
 #: QML
 msgid "Restart the application for language changes to take full effect."
@@ -405,7 +431,7 @@ msgstr "PARAMETERS"
 
 #: QML
 msgid "Scanning for images\\u2026"
-msgstr ""
+msgstr "Tscherca da maletgs…"
 
 #: QML
 msgid "Search"
@@ -413,7 +439,7 @@ msgstr "Tschertgar"
 
 #: QML
 msgid "Search EXIF metadata\\u2026"
-msgstr ""
+msgstr "Tschertgar en metadata EXIF…"
 
 #: QML
 msgid "Select Folder to Manage"
@@ -445,11 +471,11 @@ msgstr "Tema"
 
 #: QML
 msgid "Third-Party &Licenses"
-msgstr ""
+msgstr "&Licenzas da terzas persunas"
 
 #: QML
 msgid "Third-Party Licenses"
-msgstr ""
+msgstr "Licenzas da terzas persunas"
 
 #: QML
 msgid ""
@@ -468,6 +494,10 @@ msgid ""
 "\n"
 "Are you sure you want to continue?"
 msgstr ""
+"Quai stizzerà definitivamente tuts ils maletgs indexads e las "
+"registraziuns da cartellas.\n"
+"\n"
+"Es ti segir da vulair cuntinuar?"
 
 #: QML
 msgid "Unlock"
@@ -483,7 +513,7 @@ msgstr "Threads da lavur"
 
 #: QML
 msgid "\\u2190 Select a folder to browse images"
-msgstr ""
+msgstr "← Tscherner ina cartella per navigar ils maletgs"
 
 #: QML
 msgid "files"

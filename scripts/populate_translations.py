@@ -132,6 +132,32 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Index failed: {}": "Indizierung fehlgeschlagen: {}",
         "Index canceled": "Indizierung abgebrochen",
         "Indexing\u2026 {} / {}": "Indizierung\u2026 {} / {}",
+        # ── QML literal-escape duplicates (\u2026 as backslash-u) ───────────────
+        "Canceling\\u2026": "Abbrechen\u2026",
+        "Find in metadata\\u2026": "In Metadaten suchen\u2026",
+        "Preparing\\u2026": "Vorbereitung\u2026",
+        "Reset Database\\u2026": "Datenbank zur\u00fccksetzen\u2026",
+        "Scanning for images\\u2026": "Bilder werden gesucht\u2026",
+        "Search EXIF metadata\\u2026": "EXIF-Metadaten durchsuchen\u2026",
+        "\\u2190 Select a folder to browse images": "\u2190 Ordner ausw\u00e4hlen, um Bilder zu durchsuchen",
+        # ── New strings ──────────────────────────────────────────────────────
+        "&User Manual": "&Benutzerhandbuch",
+        "Third-Party &Licenses": "&Drittanbieter-Lizenzen",
+        "Third-Party Licenses": "Drittanbieter-Lizenzen",
+        "All folders": "Alle Ordner",
+        "%1 folders": "%1 Ordner",
+        "Folder(s)": "Ordner",
+        "Reset Database": "Datenbank zur\u00fccksetzen",
+        "Database reset": "Datenbank zur\u00fcckgesetzt",
+        "License: MIT": "Lizenz: MIT",
+        "Cross-platform image EXIF metadata\nsearch and indexing tool.":
+            "Plattform\u00fcbergreifendes Werkzeug zur\nSuche und Indizierung von Bild-EXIF-Metadaten.",
+        "Permanently deletes all indexed images and folder records. This cannot be undone.":
+            "L\u00f6scht dauerhaft alle indizierten Bilder und Ordnereintr\u00e4ge. Dies kann nicht r\u00fckg\u00e4ngig gemacht werden.",
+        "This will permanently delete all indexed images and indexed folder records.\n\nAre you sure you want to continue?":
+            "Dadurch werden alle indizierten Bilder und Ordnereintr\u00e4ge dauerhaft gel\u00f6scht.\n\nM\u00f6chten Sie wirklich fortfahren?",
+        "Indexed {count} images ({errors} skipped due to errors)":
+            "{count} Bilder indiziert ({errors} aufgrund von Fehlern \u00fcbersprungen)",
     },
     "fr": {
         # ── Tabs ────────────────────────────────────────────────────────────
@@ -257,6 +283,32 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Index failed: {}": "Indexation \u00e9chou\u00e9e\u00a0: {}",
         "Index canceled": "Indexation annul\u00e9e",
         "Indexing\u2026 {} / {}": "Indexation\u2026 {} / {}",
+        # ── QML literal-escape duplicates (\u2026 as backslash-u) ───────────────
+        "Canceling\\u2026": "Annulation\u2026",
+        "Find in metadata\\u2026": "Rechercher dans les m\u00e9tadonn\u00e9es\u2026",
+        "Preparing\\u2026": "Pr\u00e9paration\u2026",
+        "Reset Database\\u2026": "R\u00e9initialiser la base de donn\u00e9es\u2026",
+        "Scanning for images\\u2026": "Recherche d\u2019images\u2026",
+        "Search EXIF metadata\\u2026": "Rechercher dans les m\u00e9tadonn\u00e9es EXIF\u2026",
+        "\\u2190 Select a folder to browse images": "\u2190 S\u00e9lectionner un dossier pour parcourir les images",
+        # ── New strings ──────────────────────────────────────────────────────
+        "&User Manual": "&Manuel utilisateur",
+        "Third-Party &Licenses": "&Licences tierces",
+        "Third-Party Licenses": "Licences tierces",
+        "All folders": "Tous les dossiers",
+        "%1 folders": "%1 dossiers",
+        "Folder(s)": "Dossier(s)",
+        "Reset Database": "R\u00e9initialiser la base de donn\u00e9es",
+        "Database reset": "Base de donn\u00e9es r\u00e9initialis\u00e9e",
+        "License: MIT": "Licence\u00a0: MIT",
+        "Cross-platform image EXIF metadata\nsearch and indexing tool.":
+            "Outil multiplateforme de recherche\net d\u2019indexation de m\u00e9tadonn\u00e9es EXIF.",
+        "Permanently deletes all indexed images and folder records. This cannot be undone.":
+            "Supprime d\u00e9finitivement toutes les images index\u00e9es et les enregistrements de dossiers. Cette op\u00e9ration ne peut pas \u00eatre annul\u00e9e.",
+        "This will permanently delete all indexed images and indexed folder records.\n\nAre you sure you want to continue?":
+            "Ceci supprimera d\u00e9finitivement toutes les images index\u00e9es et les enregistrements de dossiers.\n\n\u00cates-vous s\u00fbr de vouloir continuer\u00a0?",
+        "Indexed {count} images ({errors} skipped due to errors)":
+            "{count} images index\u00e9es ({errors} ignor\u00e9es en raison d\u2019erreurs)",
     },
     "it": {
         # ── Tabs ────────────────────────────────────────────────────────────
@@ -387,6 +439,32 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Index failed: {}": "Indicizzazione fallita: {}",
         "Index canceled": "Indicizzazione annullata",
         "Indexing\u2026 {} / {}": "Indicizzazione\u2026 {} / {}",
+        # ── QML literal-escape duplicates (\u2026 as backslash-u) ───────────────
+        "Canceling\\u2026": "Annullamento\u2026",
+        "Find in metadata\\u2026": "Trova nei metadati\u2026",
+        "Preparing\\u2026": "Preparazione\u2026",
+        "Reset Database\\u2026": "Ripristina database\u2026",
+        "Scanning for images\\u2026": "Ricerca immagini\u2026",
+        "Search EXIF metadata\\u2026": "Cerca nei metadati EXIF\u2026",
+        "\\u2190 Select a folder to browse images": "\u2190 Seleziona una cartella per sfogliare le immagini",
+        # ── New strings ──────────────────────────────────────────────────────
+        "&User Manual": "&Manuale utente",
+        "Third-Party &Licenses": "&Licenze di terze parti",
+        "Third-Party Licenses": "Licenze di terze parti",
+        "All folders": "Tutte le cartelle",
+        "%1 folders": "%1 cartelle",
+        "Folder(s)": "Cartella/e",
+        "Reset Database": "Ripristina database",
+        "Database reset": "Database ripristinato",
+        "License: MIT": "Licenza: MIT",
+        "Cross-platform image EXIF metadata\nsearch and indexing tool.":
+            "Strumento multipiattaforma per la ricerca\ne l\u2019indicizzazione di metadati EXIF.",
+        "Permanently deletes all indexed images and folder records. This cannot be undone.":
+            "Elimina definitivamente tutte le immagini indicizzate e i record delle cartelle. Questa operazione non pu\u00f2 essere annullata.",
+        "This will permanently delete all indexed images and indexed folder records.\n\nAre you sure you want to continue?":
+            "Questa operazione eliminer\u00e0 definitivamente tutte le immagini indicizzate e i record delle cartelle.\n\nSei sicuro di voler continuare?",
+        "Indexed {count} images ({errors} skipped due to errors)":
+            "{count} immagini indicizzate ({errors} saltate a causa di errori)",
     },
     "rm": {
         # ── Tabs ────────────────────────────────────────────────────────────
@@ -514,6 +592,32 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Index failed: {}": "Indexaziun buca reussida: {}",
         "Index canceled": "Indexaziun interrutta",
         "Indexing\u2026 {} / {}": "Indexaziun\u2026 {} / {}",
+        # ── QML literal-escape duplicates (\u2026 as backslash-u) ───────────────
+        "Canceling\\u2026": "Interruziun\u2026",
+        "Find in metadata\\u2026": "Tschertgar en metadata\u2026",
+        "Preparing\\u2026": "Preparaziun\u2026",
+        "Reset Database\\u2026": "Resettar banca da datas\u2026",
+        "Scanning for images\\u2026": "Tscherca da maletgs\u2026",
+        "Search EXIF metadata\\u2026": "Tschertgar en metadata EXIF\u2026",
+        "\\u2190 Select a folder to browse images": "\u2190 Tscherner ina cartella per navigar ils maletgs",
+        # ── New strings ──────────────────────────────────────────────────────
+        "&User Manual": "&Manual d\u2019utilisader",
+        "Third-Party &Licenses": "&Licenzas da terzas persunas",
+        "Third-Party Licenses": "Licenzas da terzas persunas",
+        "All folders": "Tut las cartellas",
+        "%1 folders": "%1 cartellas",
+        "Folder(s)": "Cartella(s)",
+        "Reset Database": "Resettar banca da datas",
+        "Database reset": "Banca da datas resettada",
+        "License: MIT": "Licenza: MIT",
+        "Cross-platform image EXIF metadata\nsearch and indexing tool.":
+            "Instrument multiplatforma per tschertgar\ne indexar metadata EXIF.",
+        "Permanently deletes all indexed images and folder records. This cannot be undone.":
+            "Stizza definitivamente tuts ils maletgs indexads e las registraziuns da cartellas. Quai na po betg vegnir annull\u00e0.",
+        "This will permanently delete all indexed images and indexed folder records.\n\nAre you sure you want to continue?":
+            "Quai stizzer\u00e0 definitivamente tuts ils maletgs indexads e las registraziuns da cartellas.\n\nEs ti segir da vulair cuntinuar?",
+        "Indexed {count} images ({errors} skipped due to errors)":
+            "{count} maletgs indexads ({errors} sursiglids pervia d\u2019errurs)",
     },
 }
 # fmt: on
