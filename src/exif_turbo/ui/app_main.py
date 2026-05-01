@@ -27,6 +27,7 @@ from .models.search_list_model import SearchListModel
 from .models.settings_model import SettingsModel
 from .providers.preview_image_provider import PreviewImageProvider
 from .providers.raw_image_provider import RawImageProvider
+from .providers.thumb_image_provider import ThumbnailImageProvider
 from .view_models.app_controller import AppController
 
 
@@ -109,10 +110,12 @@ def main() -> None:
     search_model = SearchListModel(cache_dir=_cache_dir)
     exif_model = ExifListModel()
     folder_model = FolderListModel()
-    controller = AppController(db_path, search_model, exif_model, folder_model, settings, cache_dir=_cache_dir)
+    thumb_provider = ThumbnailImageProvider()
+    controller = AppController(db_path, search_model, exif_model, folder_model, settings, cache_dir=_cache_dir, thumb_provider=thumb_provider)
     engine = QQmlApplicationEngine()
     engine.addImageProvider("preview", PreviewImageProvider())
     engine.addImageProvider("raw", RawImageProvider())
+    engine.addImageProvider("thumb", thumb_provider)
     ctx = engine.rootContext()
     ctx.setContextProperty("controller", controller)
     ctx.setContextProperty("searchModel", search_model)

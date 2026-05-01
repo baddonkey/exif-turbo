@@ -19,6 +19,7 @@ from PySide6.QtCore import QThread, Signal
 from ...data.image_index_repository import ImageIndexRepository
 from ...indexing.image_utils import RAW_EXTENSIONS, orient_raw_thumb
 from ...utils.thumb_cache import thumb_cache_name_from_stamp, thumb_cache_path
+from ...utils.thumb_crypto import ThumbCrypto
 
 _THUMB_SIZE = (144, 144)
 
@@ -126,19 +127,28 @@ class ThumbWorker(QThread):
             self.cache_dir.mkdir(parents=True, exist_ok=True)
             cached = 0
 
+            # Create crypto helper once — PBKDF2 key derivation runs here.
+            crypto = ThumbCrypto(self._key, self.cache_dir)
+
             # Pre-scan cache dir once — O(1) set lookup replaces per-file exists().
             # A ".skip" sentinel (e.g. abc123.skip) is written when thumbnailing
             # fails permanently (unsupported format, file too large).  We store the
-            # corresponding ".png" name in `existing` so those images are excluded
+            # corresponding cache name in `existing` so those images are excluded
             # from `paths` on every subsequent run.
             existing: set[str] = set()
             try:
                 with os.scandir(self.cache_dir) as it:
                     for entry in it:
-                        if entry.name.endswith(".png"):
-                            existing.add(entry.name)
-                        elif entry.name.endswith(".skip"):
-                            existing.add(entry.name[:-5] + ".png")
+                        if crypto.is_active:
+                            if entry.name.endswith(".enc"):
+                                existing.add(entry.name)
+                            elif entry.name.endswith(".skip"):
+                                existing.add(entry.name[:-5] + ".enc")
+                        else:
+                            if entry.name.endswith(".png"):
+                                existing.add(entry.name)
+                            elif entry.name.endswith(".skip"):
+                                existing.add(entry.name[:-5] + ".png")
             except OSError:
                 pass
 
@@ -149,8 +159,12 @@ class ThumbWorker(QThread):
             def _expected_cache_name(path: str) -> str:
                 stamp = stamps.get(path)
                 if stamp is not None:
-                    return thumb_cache_name_from_stamp(path, stamp[0], stamp[1])
-                return thumb_cache_path(path, self.cache_dir).name
+                    name = thumb_cache_name_from_stamp(path, stamp[0], stamp[1])
+                else:
+                    name = thumb_cache_path(path, self.cache_dir).name
+                if crypto.is_active:
+                    return name[:-4] + ".enc"
+                return name
 
             total_all = len(stamps)
             already_cached = sum(
@@ -215,8 +229,15 @@ class ThumbWorker(QThread):
                 try:
                     img = _open_image(path)
                     img.thumbnail(_THUMB_SIZE, Image.LANCZOS)
-                    img.save(str(cache_path_obj), "PNG")
-                    existing.add(cache_path_obj.name)
+                    if crypto.is_active:
+                        buf = io.BytesIO()
+                        img.save(buf, "PNG")
+                        enc_path = cache_path_obj.with_suffix(".enc")
+                        enc_path.write_bytes(crypto.encrypt(buf.getvalue()))
+                        existing.add(enc_path.name)
+                    else:
+                        img.save(str(cache_path_obj), "PNG")
+                        existing.add(cache_path_obj.name)
                     return True
                 except (UnidentifiedImageError, OSError, Exception) as exc:
                     _mark_skip(cache_path_obj, f"{type(exc).__name__}: {exc} — {path}")

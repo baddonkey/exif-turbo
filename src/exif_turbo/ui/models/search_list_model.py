@@ -24,6 +24,7 @@ class SearchListModel(QAbstractListModel):
         self._cache_dir = cache_dir
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._max_thumb_bytes = 1024 * 1024 * 1024
+        self._encrypted: bool = False
         self._cached_files: set[str] = self._scan_cache_dir()
 
     @property
@@ -44,12 +45,13 @@ class SearchListModel(QAbstractListModel):
         }
 
     def _scan_cache_dir(self) -> set[str]:
-        """Return the set of PNG filenames currently in the cache directory."""
+        """Return the set of cache filenames currently in the cache directory."""
         result: set[str] = set()
+        suffix = ".enc" if self._encrypted else ".png"
         try:
             with os.scandir(self._cache_dir) as it:
                 for entry in it:
-                    if entry.name.endswith(".png"):
+                    if entry.name.endswith(suffix):
                         result.add(entry.name)
         except OSError:
             pass
@@ -62,8 +64,13 @@ class SearchListModel(QAbstractListModel):
         else:
             # Fallback for rows without mtime (legacy DB entries)
             name = thumb_cache_path(item.path, self._cache_dir).name
-        if name in self._cached_files:
-            return (self._cache_dir / name).as_uri()
+        if self._encrypted:
+            enc_name = name[:-4] + ".enc"
+            if enc_name in self._cached_files:
+                return f"image://thumb/{enc_name[:-4]}"
+        else:
+            if name in self._cached_files:
+                return (self._cache_dir / name).as_uri()
         return ""
 
     def set_rows(self, rows: List[SearchResult]) -> None:
@@ -111,6 +118,18 @@ class SearchListModel(QAbstractListModel):
         self._cached_files = self._scan_cache_dir()
         if self._rows:
             self._thumbnail_uris = [None] * len(self._rows)  # reset; recomputed lazily on next access
+            top_left = self.index(0, 0)
+            bottom_right = self.index(len(self._rows) - 1, 0)
+            self.dataChanged.emit(top_left, bottom_right, [self.ThumbnailSourceRole])
+
+    def set_encryption(self, encrypted: bool) -> None:
+        """Switch between plain PNG (``encrypted=False``) and encrypted .enc mode."""
+        if self._encrypted == encrypted:
+            return
+        self._encrypted = encrypted
+        self._cached_files = self._scan_cache_dir()
+        if self._rows:
+            self._thumbnail_uris = [None] * len(self._rows)
             top_left = self.index(0, 0)
             bottom_right = self.index(len(self._rows) - 1, 0)
             self.dataChanged.emit(top_left, bottom_right, [self.ThumbnailSourceRole])

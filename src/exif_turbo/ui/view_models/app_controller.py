@@ -9,7 +9,10 @@ import subprocess
 import time
 import urllib.parse
 from pathlib import Path
-from typing import List, Tuple
+from typing import TYPE_CHECKING, List, Tuple
+
+if TYPE_CHECKING:
+    from ..providers.thumb_image_provider import ThumbnailImageProvider
 
 import sqlcipher3
 from PySide6.QtCore import Property, QObject, QThread, QTimer, QUrl, Signal, Slot
@@ -71,11 +74,13 @@ class AppController(QObject):
         folder_model: FolderListModel,
         settings: SettingsModel | None = None,
         cache_dir: Path | None = None,
+        thumb_provider: "ThumbnailImageProvider | None" = None,
     ) -> None:
         super().__init__()
         self._db_path = db_path
         self._settings = settings
         self._cache_dir = cache_dir
+        self._thumb_provider = thumb_provider
         self._repo: ImageIndexRepository | None = None
         self._folder_repo: IndexedFolderRepository | None = None
         self._key = ""
@@ -304,6 +309,24 @@ class AppController(QObject):
             self._folder_filter = ""
             self._search_folder_filters = set()
             self._status_text = ""
+            # Wipe plain PNG thumbs on first unlock with a password (one-time migration
+            # to encrypted cache).  Thumbs are rebuilt as .enc by ThumbWorker.
+            cache_dir = self._search_model.cache_dir
+            if password and cache_dir.exists():
+                plain_pngs = [
+                    f for f in cache_dir.iterdir()
+                    if f.suffix in (".png", ".skip") or f.name == "thumbs_skipped.log"
+                ]
+                if plain_pngs:
+                    for f in plain_pngs:
+                        try:
+                            f.unlink()
+                        except OSError:
+                            pass
+            # Configure the thumbnail provider and search model encryption mode.
+            if self._thumb_provider is not None:
+                self._thumb_provider.set_key(password, cache_dir)
+            self._search_model.set_encryption(bool(password))
             self.isLockedChanged.emit()
             self.unlockErrorChanged.emit()
             self.statusTextChanged.emit()
