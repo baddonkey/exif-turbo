@@ -35,8 +35,6 @@ Fully generated using VS Code Copilot.
   selected simultaneously. The button label reflects the state: folder name
   (one selected), **N folders** (many), or **All folders** (no filter).
 
-![Folder filter popup](docs/screenshots/07_folder_filter.png)
-
 ### Multilanguage support
 
 - **i18n infrastructure** — Python `gettext` based translation system. Supported
