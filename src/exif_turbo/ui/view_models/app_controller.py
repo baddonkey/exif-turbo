@@ -482,6 +482,10 @@ class AppController(QObject):
 
     @Slot(int)
     def selectResult(self, row: int) -> None:
+        # A new selection supersedes any in-flight preview.  Resume workers
+        # immediately so card thumbnails can render during the debounce window.
+        self._preview_resume_timer.stop()
+        self._resume_thumb_for_preview()
         meta_json = self._search_model.get_metadata_json(row)
         path = self._search_model.get_path(row)
         if not meta_json:

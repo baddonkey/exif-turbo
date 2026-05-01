@@ -3,6 +3,8 @@
 Fast image EXIF metadata search and indexing tool with a PySide6 QML desktop UI.
 Fully generated using VS Code Copilot.
 
+![exif-turbo search tab](docs/screenshots/03_search_eagle.png)
+
 📖 **[User Manual](docs/user-manual.md)** ([PDF](docs/user-manual.pdf)) — full feature reference, keyboard shortcuts, and screenshots.
 
 ## Features
