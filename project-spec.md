@@ -350,6 +350,8 @@ Single source of truth: `src/exif_turbo/__init__.py` → `__version__ = "X.Y.Z"`
 
 ### Release workflow
 
+Write release notes.
+
 1. Update `__version__` in `__init__.py` and `version` in `pyproject.toml`
 2. Commit and push
 3. Run `pwsh scripts\build_windows.ps1` (Windows) / `bash scripts/build_macos.sh` (macOS)
