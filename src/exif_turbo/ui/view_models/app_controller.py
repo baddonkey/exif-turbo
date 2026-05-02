@@ -23,6 +23,7 @@ from ...data.indexed_folder_repository import IndexedFolderRepository
 from ...i18n import _
 from ...indexing.image_utils import RAW_EXTENSIONS
 from ...models.search_result import SearchResult
+from ..models.checked_filter_proxy_model import CheckedFilterProxyModel
 from ..models.exif_list_model import ExifListModel
 from ..models.folder_list_model import FolderListModel
 from ..models.search_list_model import SearchListModel
@@ -30,7 +31,7 @@ from ..models.settings_model import SettingsModel
 from ..workers.index_worker import IndexWorker
 from ..workers.thumb_worker import ThumbWorker
 
-_PAGE_SIZE = 10
+_PAGE_SIZE = 50
 _DEFAULT_WORKERS = max(1, (os.cpu_count() or 2) // 2)
 _log = logging.getLogger(__name__)
 
@@ -65,6 +66,9 @@ class AppController(QObject):
     indexedFoldersChanged = Signal()
     indexQueuePositionChanged = Signal()
     indexQueueTotalChanged = Signal()
+    checkedCountChanged = Signal()
+    checkedOnlyFilterChanged = Signal()
+    currentProxyResultRowChanged = Signal()
 
     def __init__(
         self,
@@ -129,6 +133,8 @@ class AppController(QObject):
         self._index_queue_total = 0
         self._app_closing = False
         self._pending_thumb_restart = False
+        self._filter_proxy: CheckedFilterProxyModel | None = None
+        self._checked_only_filter_active: bool = False
         # Timer: kick off a batch thumb build every 8 s while indexing runs
         self._thumb_batch_timer = QTimer(self)
         self._thumb_batch_timer.setInterval(8_000)
@@ -288,11 +294,133 @@ class AppController(QObject):
     def indexQueueTotal(self) -> int:
         return self._index_queue_total
 
+    @Property(int, notify=checkedCountChanged)
+    def checkedCount(self) -> int:
+        return self._search_model.checked_count
+
+    @Property(bool, notify=checkedOnlyFilterChanged)
+    def checkedOnlyFilter(self) -> bool:
+        return self._checked_only_filter_active
+
+    @Property(int, notify=currentProxyResultRowChanged)
+    def currentProxyResultRow(self) -> int:
+        if self._filter_proxy is None or self._current_result_row < 0:
+            return self._current_result_row
+        return self._filter_proxy.proxy_row_for(self._current_result_row)
+
+    def set_filter_proxy(self, proxy: CheckedFilterProxyModel) -> None:
+        self._filter_proxy = proxy
+        proxy.filterActiveChanged.connect(self._on_filter_active_changed)
+
+    def _on_filter_active_changed(self) -> None:
+        self.checkedOnlyFilterChanged.emit()
+        self.currentProxyResultRowChanged.emit()
+
+    def _load_marks(self) -> None:
+        """Restore marked image paths from the database into the in-memory set."""
+        if self._repo is None:
+            return
+        try:
+            paths = self._repo.get_marked_paths()
+            self._search_model.set_checked_paths(paths)
+            self.checkedCountChanged.emit()
+        except Exception as exc:
+            _log.warning("Failed to load marks from DB: %s", exc)
+
     # ── Slots ─────────────────────────────────────────────────────────────────
+
+    # ── Selection slots ───────────────────────────────────────────────────
+
+    @Slot(bool)
+    def setCheckedOnlyFilter(self, active: bool) -> None:
+        if self._checked_only_filter_active == active:
+            return
+        self._checked_only_filter_active = active
+        self.checkedOnlyFilterChanged.emit()
+        self._run_search()
+
+    def _current_path_filter(self) -> list[str] | None:
+        if self._folder_filter:
+            return [self._folder_filter]
+        if self._search_folder_filters:
+            return sorted(self._search_folder_filters)
+        return None
+
+    @Slot(int)
+    def toggleChecked(self, proxy_row: int) -> None:
+        row = self._filter_proxy.source_row_for(proxy_row) if self._filter_proxy else proxy_row
+        self._search_model.toggle_checked(row)
+        path = self._search_model.get_path(row)
+        if path is not None and self._repo is not None:
+            self._repo.mark_image(path, path in self._search_model._checked)
+        self.checkedCountChanged.emit()
+
+    @Slot()
+    def selectAll(self) -> None:
+        if self._repo is None:
+            return
+        all_paths = self._repo.get_matching_paths(
+            self._query_text,
+            ext_filter=self._ext_filter,
+            path_filter=self._current_path_filter(),
+            restrict_to_enabled_folders=(self._folder_repo is not None),
+            marked_only=self._checked_only_filter_active,
+        )
+        self._repo.mark_images(all_paths, True)
+        self._search_model.set_checked_paths(
+            self._repo.get_marked_paths()
+        )
+        self.checkedCountChanged.emit()
+
+    @Slot()
+    def deselectAll(self) -> None:
+        if self._repo is None:
+            return
+        all_paths = self._repo.get_matching_paths(
+            self._query_text,
+            ext_filter=self._ext_filter,
+            path_filter=self._current_path_filter(),
+            restrict_to_enabled_folders=(self._folder_repo is not None),
+            marked_only=self._checked_only_filter_active,
+        )
+        self._repo.mark_images(all_paths, False)
+        self._search_model.set_checked_paths(
+            self._repo.get_marked_paths()
+        )
+        self.checkedCountChanged.emit()
+
+    @Slot()
+    def invertSelection(self) -> None:
+        self._search_model.invert_selection_rows()
+        if self._repo is not None:
+            for i in range(self._search_model.rowCount()):
+                path = self._search_model.get_path(i)
+                if path is not None:
+                    self._repo.mark_image(path, path in self._search_model._checked)
+        self.checkedCountChanged.emit()
+
+    @Slot(str)
+    def exportMarkedMetadataJson(self, file_url: str) -> None:
+        from pathlib import Path as _Path
+
+        file_path = _Path(QUrl(file_url).toLocalFile())
+        records = self._search_model.get_checked_metadata()
+        if not records:
+            self._set_status(_("No marked images in current results to export."))
+            return
+        try:
+            with open(file_path, "w", encoding="utf-8") as fh:
+                json.dump(records, fh, ensure_ascii=False, indent=2)
+            self._set_status(
+                _("Exported {count} image(s) to {name}").format(
+                    count=len(records), name=file_path.name
+                )
+            )
+        except OSError as exc:
+            self._set_status(_("Export failed: {}").format(exc))
 
     @Slot(str)
     def unlock(self, password: str) -> None:
-        repo: ImageIndexRepository | None = None
         folder_repo: IndexedFolderRepository | None = None
         try:
             repo = ImageIndexRepository(self._db_path, key=password)
@@ -333,6 +461,7 @@ class AppController(QObject):
             self._load_formats()
             self._folder_tree_dirty = True  # loaded on demand when Browse tab is opened
             self._load_indexed_folders()
+            self._load_marks()
             self.search("")
             # Resume only folders whose scan was interrupted in a previous session
             # (status = 'queued' or 'scanning').  Do NOT re-queue folders that are
@@ -453,28 +582,25 @@ class AppController(QObject):
     def _run_search(self) -> None:
         if self._repo is None:
             return
-        path_filter: list[str] | None
-        if self._folder_filter:
-            path_filter = [self._folder_filter]
-        elif self._search_folder_filters:
-            path_filter = sorted(self._search_folder_filters)
-        else:
-            path_filter = None
+        path_filter = self._current_path_filter()
         rows = self._repo.search_images(
             self._query_text, _PAGE_SIZE, 0,
             sort_by=self._sort_by, ext_filter=self._ext_filter,
             path_filter=path_filter,
             restrict_to_enabled_folders=(self._folder_repo is not None),
+            marked_only=self._checked_only_filter_active,
         )
         results = [
             SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
             for r in rows
         ]
         self._search_model.set_rows(results)
+        self.checkedCountChanged.emit()
         total = self._repo.count_images(
             self._query_text, ext_filter=self._ext_filter,
             path_filter=path_filter,
             restrict_to_enabled_folders=(self._folder_repo is not None),
+            marked_only=self._checked_only_filter_active,
         )
         self._total_results = total
         self._loaded_results = len(results)
@@ -488,7 +614,7 @@ class AppController(QObject):
         )
         if results:
             row = self._current_result_row if 0 <= self._current_result_row < len(results) else 0
-            self.selectResult(row)
+            self._select_source_row(row)
         else:
             self._clear_details()
 
@@ -537,17 +663,12 @@ class AppController(QObject):
         if self._repo is None or self._loading or self._loaded_results >= self._total_results:
             return
         self._loading = True
-        if self._folder_filter:
-            _pf: list[str] | None = [self._folder_filter]
-        elif self._search_folder_filters:
-            _pf = sorted(self._search_folder_filters)
-        else:
-            _pf = None
         rows = self._repo.search_images(
             self._query_text, _PAGE_SIZE, self._loaded_results,
             sort_by=self._sort_by, ext_filter=self._ext_filter,
-            path_filter=_pf,
+            path_filter=self._current_path_filter(),
             restrict_to_enabled_folders=(self._folder_repo is not None),
+            marked_only=self._checked_only_filter_active,
         )
         results = [
             SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
@@ -559,7 +680,13 @@ class AppController(QObject):
         self._loading = False
 
     @Slot(int)
-    def selectResult(self, row: int) -> None:
+    def selectResult(self, proxy_row: int) -> None:
+        # Map proxy row → source row when the checked-only filter is active.
+        row = self._filter_proxy.source_row_for(proxy_row) if self._filter_proxy else proxy_row
+        self._select_source_row(row)
+
+    def _select_source_row(self, row: int) -> None:
+        """Select a result by its source-model row (no proxy mapping)."""
         # A new selection supersedes any in-flight preview.  Resume workers
         # immediately so card thumbnails can render during the debounce window.
         self._preview_resume_timer.stop()
@@ -582,6 +709,7 @@ class AppController(QObject):
         self._update_exif_table(meta_json)
         self._current_result_row = row
         self.currentResultRowChanged.emit()
+        self.currentProxyResultRowChanged.emit()
         # Show thumb placeholder immediately from local cache (instant, no disk I/O)
         thumb_uri = self._search_model.data(
             self._search_model.index(row, 0),

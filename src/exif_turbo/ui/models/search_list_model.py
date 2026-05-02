@@ -1,13 +1,52 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from PySide6.QtCore import QAbstractListModel, QModelIndex, Qt
 
 from ...models.search_result import SearchResult
 from ...utils.thumb_cache import thumb_cache_name_from_stamp, thumb_cache_path
+
+
+def _extract_display(metadata_json: str) -> Dict[str, str]:
+    """Parse metadata_json once and return the pre-formatted display strings."""
+    try:
+        exif = json.loads(metadata_json)
+    except Exception:
+        exif = {}
+
+    # Camera
+    make   = exif.get("EXIF:Make")  or exif.get("IFD0:Make")  or exif.get("XMP:Make")  or ""
+    model  = exif.get("EXIF:Model") or exif.get("IFD0:Model") or exif.get("XMP:Model") or ""
+    if make and model:
+        camera = model.strip() if model.startswith(make) else f"{make} {model}".strip()
+    else:
+        camera = (make or model).strip()
+
+    # Date
+    d = (exif.get("EXIF:DateTimeOriginal") or exif.get("EXIF:DateTime")
+         or exif.get("IFD0:ModifyDate") or "")
+    date = d.replace("T", " ").split(".")[0] if d else ""
+
+    # Dimensions
+    w = exif.get("EXIF:ExifImageWidth")  or exif.get("File:ImageWidth")  or exif.get("PNG:ImageWidth")  or ""
+    h = exif.get("EXIF:ExifImageHeight") or exif.get("File:ImageHeight") or exif.get("PNG:ImageHeight") or ""
+    dims = f"{w} × {h}" if (w and h) else ""
+
+    # Lens / exposure
+    fl  = exif.get("EXIF:FocalLength") or ""
+    fn  = exif.get("EXIF:FNumber")     or exif.get("EXIF:ApertureValue") or ""
+    iso = exif.get("EXIF:ISO")         or exif.get("EXIF:ISOSpeedRatings") or ""
+    parts = []
+    if fl:  parts.append(f"{fl} mm")
+    if fn:  parts.append(f"\u0192/{fn}")
+    if iso: parts.append(f"ISO {iso}")
+    lens = "  ".join(parts)
+
+    return {"camera": camera, "date": date, "dims": dims, "lens": lens}
 
 
 class SearchListModel(QAbstractListModel):
@@ -16,16 +55,23 @@ class SearchListModel(QAbstractListModel):
     MetadataJsonRole = Qt.UserRole + 3
     ThumbnailSourceRole = Qt.UserRole + 4
     FileSizeRole = Qt.UserRole + 5
+    CheckedRole = Qt.UserRole + 6
+    CameraRole = Qt.UserRole + 7
+    DateRole = Qt.UserRole + 8
+    DimsRole = Qt.UserRole + 9
+    LensRole = Qt.UserRole + 10
 
     def __init__(self, cache_dir: Path) -> None:
         super().__init__()
         self._rows: List[SearchResult] = []
         self._thumbnail_uris: List[Optional[str]] = []
+        self._display_cache: List[Optional[Dict[str, str]]] = []
         self._cache_dir = cache_dir
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._max_thumb_bytes = 1024 * 1024 * 1024
         self._encrypted: bool = False
         self._cached_files: set[str] = self._scan_cache_dir()
+        self._checked: set[str] = set()  # file paths — persists across searches
 
     @property
     def cache_dir(self) -> Path:
@@ -42,6 +88,11 @@ class SearchListModel(QAbstractListModel):
             self.MetadataJsonRole: b"metadataJson",
             self.ThumbnailSourceRole: b"thumbnailSource",
             self.FileSizeRole: b"fileSize",
+            self.CheckedRole: b"checked",
+            self.CameraRole: b"camera",
+            self.DateRole: b"date",
+            self.DimsRole: b"dims",
+            self.LensRole: b"lens",
         }
 
     def _scan_cache_dir(self) -> set[str]:
@@ -77,6 +128,8 @@ class SearchListModel(QAbstractListModel):
         self.beginResetModel()
         self._rows = rows
         self._thumbnail_uris = [None] * len(rows)  # computed lazily on first access
+        self._display_cache = [None] * len(rows)
+        # _checked is intentionally NOT cleared — marks persist across searches
         self.endResetModel()
 
     def append_rows(self, rows: List[SearchResult]) -> None:
@@ -87,6 +140,7 @@ class SearchListModel(QAbstractListModel):
         self.beginInsertRows(QModelIndex(), start, end)
         self._rows.extend(rows)
         self._thumbnail_uris.extend([None] * len(rows))  # computed lazily on first access
+        self._display_cache.extend([None] * len(rows))
         self.endInsertRows()
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
@@ -111,6 +165,17 @@ class SearchListModel(QAbstractListModel):
             return self._thumbnail_uris[row]
         if role == self.FileSizeRole:
             return item.size
+        if role == self.CheckedRole:
+            return item.path in self._checked
+        if role in (self.CameraRole, self.DateRole, self.DimsRole, self.LensRole):
+            if self._display_cache[row] is None:
+                self._display_cache[row] = _extract_display(item.metadata_json)
+            d = self._display_cache[row]
+            assert d is not None
+            if role == self.CameraRole: return d["camera"]
+            if role == self.DateRole:   return d["date"]
+            if role == self.DimsRole:   return d["dims"]
+            if role == self.LensRole:   return d["lens"]
         return None
 
     def refresh_thumbnails(self) -> None:
@@ -143,3 +208,79 @@ class SearchListModel(QAbstractListModel):
         if 0 <= row < len(self._rows):
             return self._rows[row].metadata_json
         return None
+
+    # ── Selection helpers ─────────────────────────────────────────────────
+
+    def toggle_checked(self, row: int) -> None:
+        if not (0 <= row < len(self._rows)):
+            return
+        path = self._rows[row].path
+        if path in self._checked:
+            self._checked.discard(path)
+        else:
+            self._checked.add(path)
+        idx = self.index(row, 0)
+        self.dataChanged.emit(idx, idx, [self.CheckedRole])
+
+    def select_all_rows(self) -> None:
+        if not self._rows:
+            return
+        new_paths = {r.path for r in self._rows}
+        if new_paths.issubset(self._checked):
+            return
+        self._checked |= new_paths
+        self._emit_checked_range()
+
+    def deselect_all_rows(self) -> None:
+        if not self._rows:
+            return
+        current_paths = {r.path for r in self._rows}
+        if not (current_paths & self._checked):
+            return
+        self._checked -= current_paths
+        self._emit_checked_range()
+
+    def invert_selection_rows(self) -> None:
+        if not self._rows:
+            return
+        for r in self._rows:
+            if r.path in self._checked:
+                self._checked.discard(r.path)
+            else:
+                self._checked.add(r.path)
+        self._emit_checked_range()
+
+    def _emit_checked_range(self) -> None:
+        if self._rows:
+            top_left = self.index(0, 0)
+            bottom_right = self.index(len(self._rows) - 1, 0)
+            self.dataChanged.emit(top_left, bottom_right, [self.CheckedRole])
+
+    @property
+    def checked_count(self) -> int:
+        """Total number of marked images (across all searches)."""
+        return len(self._checked)
+
+    def get_checked_paths(self) -> list[str]:
+        """Return all marked paths for persistence."""
+        return sorted(self._checked)
+
+    def set_checked_paths(self, paths: list[str]) -> None:
+        """Restore marks from persistence."""
+        self._checked = set(paths)
+        if self._rows:
+            self._emit_checked_range()
+
+    def get_checked_metadata(self) -> List[dict]:
+        """Return metadata dicts for marked rows in the current search results."""
+        import json as _json
+
+        result = []
+        for item in self._rows:
+            if item.path in self._checked:
+                try:
+                    meta = _json.loads(item.metadata_json or "{}")
+                except Exception:
+                    meta = {}
+                result.append({"path": item.path, "filename": item.filename, "metadata": meta})
+        return result

@@ -21,6 +21,7 @@ from PySide6.QtWebEngineQuick import QtWebEngineQuick
 
 from ..config import db_path_for_name, default_db_path, settings_path, thumb_cache_dir
 from .gettext_translator import GettextTranslator
+from .models.checked_filter_proxy_model import CheckedFilterProxyModel
 from .models.exif_list_model import ExifListModel
 from .models.folder_list_model import FolderListModel
 from .models.search_list_model import SearchListModel
@@ -112,6 +113,9 @@ def main() -> None:
     folder_model = FolderListModel()
     thumb_provider = ThumbnailImageProvider()
     controller = AppController(db_path, search_model, exif_model, folder_model, settings, cache_dir=_cache_dir, thumb_provider=thumb_provider)
+    filter_proxy = CheckedFilterProxyModel()
+    filter_proxy.setSourceModel(search_model)
+    controller.set_filter_proxy(filter_proxy)
     engine = QQmlApplicationEngine()
     engine.addImageProvider("preview", PreviewImageProvider())
     engine.addImageProvider("raw", RawImageProvider())
@@ -119,6 +123,7 @@ def main() -> None:
     ctx = engine.rootContext()
     ctx.setContextProperty("controller", controller)
     ctx.setContextProperty("searchModel", search_model)
+    ctx.setContextProperty("filteredSearchModel", filter_proxy)
     ctx.setContextProperty("exifModel", exif_model)
     ctx.setContextProperty("folderListModel", folder_model)
     ctx.setContextProperty("settingsModel", settings)

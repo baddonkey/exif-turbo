@@ -110,6 +110,7 @@ ApplicationWindow {
     readonly property int    _indexQueuePosition:  controller ? controller.indexQueuePosition  : 0
     readonly property int    _indexQueueTotal:     controller ? controller.indexQueueTotal     : 0
     readonly property string _detailsHtml:         controller ? controller.detailsHtml        : ""
+    readonly property bool   _checkedOnlyFilter:   controller ? controller.checkedOnlyFilter  : false
     readonly property string _sortBy:                  controller ? controller.sortBy              : ""
     readonly property string _extFilter:               controller ? controller.extFilter           : ""
     readonly property string _availableFormats:        controller ? controller.availableFormats    : "[]"
@@ -216,6 +217,37 @@ ApplicationWindow {
             }
         }
         Menu {
+            title: qsTr("&Select")
+            enabled: !_isLocked
+            Action {
+                text: qsTr("Select &All")
+                enabled: !_isLocked
+                onTriggered: controller.selectAll()
+            }
+            Action {
+                text: qsTr("&Deselect All")
+                enabled: !_isLocked
+                onTriggered: controller.deselectAll()
+            }
+            Action {
+                text: qsTr("&Invert Selection")
+                enabled: !_isLocked
+                onTriggered: controller.invertSelection()
+            }
+        }
+        Menu {
+            title: qsTr("&Action")
+            enabled: !_isLocked
+            Action {
+                readonly property int _cnt: controller ? controller.checkedCount : 0
+                text: _cnt > 0
+                      ? qsTr("Export Metadata as &JSON\u2026 (%1 selected)").arg(_cnt)
+                      : qsTr("Export Metadata as &JSON\u2026 (all results)")
+                enabled: !_isLocked
+                onTriggered: exportJsonDialog.open()
+            }
+        }
+        Menu {
             title: qsTr("&Help")
             Action {
                 text: qsTr("&User Manual")
@@ -231,6 +263,16 @@ ApplicationWindow {
                 onTriggered: aboutDialog.open()
             }
         }
+    }
+
+    // ── Export-metadata file dialog ───────────────────────────────────────
+    FileDialog {
+        id: exportJsonDialog
+        title: qsTr("Export Metadata as JSON")
+        fileMode: FileDialog.SaveFile
+        nameFilters: [qsTr("JSON files (*.json)"), qsTr("All files (*)")]
+        defaultSuffix: "json"
+        onAccepted: controller.exportMarkedMetadataJson(selectedFile)
     }
 
     // ── Toolbar (hidden — search moved into Search tab) ─────────────────
@@ -634,6 +676,39 @@ ApplicationWindow {
                                 visible: root._indexedFolderCount > 1
                             }
 
+                            // Checked-only filter chip
+                            Rectangle {
+                                id: checkedFilterChip
+                                visible: controller && (controller.checkedCount > 0 || controller.checkedOnlyFilter)
+                                implicitHeight: 22
+                                implicitWidth: _chipLabel.implicitWidth + 14
+                                radius: 11
+                                color: controller && controller.checkedOnlyFilter
+                                       ? root._accentColor
+                                       : Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.15)
+
+                                Label {
+                                    id: _chipLabel
+                                    anchors.centerIn: parent
+                                    text: "\u2611 " + (controller ? controller.checkedCount : 0)
+                                    font.pixelSize: 11
+                                    font.weight: controller && controller.checkedOnlyFilter ? Font.DemiBold : Font.Normal
+                                    color: controller && controller.checkedOnlyFilter ? "white" : Material.foreground
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    hoverEnabled: true
+                                    onClicked: controller.setCheckedOnlyFilter(!controller.checkedOnlyFilter)
+                                    ToolTip.text: controller && controller.checkedOnlyFilter
+                                                  ? qsTr("Show all results")
+                                                  : qsTr("Show only selected images")
+                                    ToolTip.visible: containsMouse
+                                    ToolTip.delay: 600
+                                }
+                            }
+
                             // Multi-select folder filter — checkbox popup inside a ComboBox shell
                             ComboBox {
                                 id: folderMultiCombo
@@ -809,14 +884,15 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
-                        model: searchModel
-                        currentIndex: controller ? controller.currentResultRow : -1
+                        model: filteredSearchModel
+                        currentIndex: controller ? controller.currentProxyResultRow : -1
                         ScrollBar.vertical: ScrollBar {}
 
                         WheelHandler {
                             onWheel: (event) => {
-                                var step = 210
-                                var delta = event.angleDelta.y < 0 ? step : -step
+                                var delta = event.pixelDelta.y !== 0
+                                    ? -event.pixelDelta.y
+                                    : -event.angleDelta.y / 120.0 * 210
                                 resultsList.contentY = Math.max(0,
                                     Math.min(resultsList.contentY + delta,
                                              Math.max(0, resultsList.contentHeight - resultsList.height)))
@@ -832,37 +908,6 @@ ApplicationWindow {
 
                             readonly property bool _isSelected: ListView.isCurrentItem
 
-                            // Parse EXIF once per delegate instantiation
-                            readonly property var _exif: {
-                                try { return JSON.parse(model.metadataJson) } catch(e) { return {} }
-                            }
-                            readonly property string _camera: {
-                                var make   = _exif["EXIF:Make"]   || _exif["IFD0:Make"]  || _exif["XMP:Make"]  || ""
-                                var model2 = _exif["EXIF:Model"]  || _exif["IFD0:Model"] || _exif["XMP:Model"] || ""
-                                if (make && model2) {
-                                    return model2.startsWith(make) ? model2.trim() : (make + " " + model2).trim()
-                                }
-                                return (make || model2).trim()
-                            }
-                            readonly property string _date: {
-                                var d = _exif["EXIF:DateTimeOriginal"] || _exif["EXIF:DateTime"] || _exif["IFD0:ModifyDate"] || ""
-                                return d ? d.replace("T", " ").split(".")[0] : ""
-                            }
-                            readonly property string _dims: {
-                                var w = _exif["EXIF:ExifImageWidth"]  || _exif["File:ImageWidth"]  || _exif["PNG:ImageWidth"]  || ""
-                                var h = _exif["EXIF:ExifImageHeight"] || _exif["File:ImageHeight"] || _exif["PNG:ImageHeight"] || ""
-                                return (w && h) ? (w + " × " + h) : ""
-                            }
-                            readonly property string _lens: {
-                                var fl  = _exif["EXIF:FocalLength"] || ""
-                                var fn  = _exif["EXIF:FNumber"]     || _exif["EXIF:ApertureValue"] || ""
-                                var iso = _exif["EXIF:ISO"]         || _exif["EXIF:ISOSpeedRatings"] || ""
-                                var parts = []
-                                if (fl)  parts.push(fl + " mm")
-                                if (fn)  parts.push("ƒ/" + fn)
-                                if (iso) parts.push("ISO " + iso)
-                                return parts.join("  ")
-                            }
                             readonly property string _sizeText: {
                                 var bytes = model.fileSize || 0
                                 if (bytes <= 0)  return ""
@@ -870,6 +915,10 @@ ApplicationWindow {
                                 if (bytes >= 1048576)    return (bytes / 1048576).toFixed(1) + " MB"
                                 return Math.round(bytes / 1024) + " KB"
                             }
+                            readonly property string _camera: model.camera ?? ""
+                            readonly property string _date:   model.date   ?? ""
+                            readonly property string _dims:   model.dims   ?? ""
+                            readonly property string _lens:   model.lens   ?? ""
 
                             // Card background with border
                             Rectangle {
@@ -949,10 +998,10 @@ ApplicationWindow {
                                     Repeater {
                                         model: [
                                             { label: qsTr("Camera"),     value: _camera   },
-                                            { label: qsTr("Date"),       value: _date      },
-                                            { label: qsTr("Dimensions"), value: _dims      },
-                                            { label: qsTr("Exposure"),   value: _lens      },
-                                            { label: qsTr("File size"),  value: _sizeText  },
+                                            { label: qsTr("Date"),       value: _date     },
+                                            { label: qsTr("Dimensions"), value: _dims     },
+                                            { label: qsTr("Exposure"),   value: _lens     },
+                                            { label: qsTr("File size"),  value: _sizeText },
                                         ]
                                         delegate: RowLayout {
                                             visible: modelData.value !== ""
@@ -988,6 +1037,23 @@ ApplicationWindow {
                                     if (mouse.x > 200) controller.openFolder(model.path)
                                     else               controller.openImage(model.path)
                                 }
+                            }
+
+                            // Selection checkbox — bottom-right corner, above MouseArea
+                            CheckBox {
+                                anchors {
+                                    right: parent.right
+                                    bottom: parent.bottom
+                                    rightMargin: 14
+                                    bottomMargin: 4
+                                }
+                                z: 2
+                                checked: model.checked
+                                padding: 4
+                                onToggled: controller.toggleChecked(index)
+                                ToolTip.text: checked ? qsTr("Deselect image") : qsTr("Select image")
+                                ToolTip.visible: hovered
+                                ToolTip.delay: 600
                             }
                         }
 
@@ -1565,9 +1631,21 @@ ApplicationWindow {
                         Layout.fillHeight: true
                         clip: true
                         visible: root._folderFilter !== ""
-                        model: root._folderFilter !== "" ? searchModel : null
-                        currentIndex: controller ? controller.currentResultRow : -1
+                        model: root._folderFilter !== "" ? filteredSearchModel : null
+                        currentIndex: controller ? controller.currentProxyResultRow : -1
                         ScrollBar.vertical: ScrollBar {}
+
+                        WheelHandler {
+                            onWheel: (event) => {
+                                var delta = event.pixelDelta.y !== 0
+                                    ? -event.pixelDelta.y
+                                    : -event.angleDelta.y / 120.0 * 210
+                                browseImageList.contentY = Math.max(0,
+                                    Math.min(browseImageList.contentY + delta,
+                                             Math.max(0, browseImageList.contentHeight - browseImageList.height)))
+                                event.accepted = true
+                            }
+                        }
 
                         delegate: Rectangle {
                             id: browseCardDelegate
@@ -1577,35 +1655,6 @@ ApplicationWindow {
 
                             readonly property bool _isSelected: ListView.isCurrentItem
 
-                            readonly property var _exif: {
-                                try { return JSON.parse(model.metadataJson) } catch(e) { return {} }
-                            }
-                            readonly property string _camera: {
-                                var make   = _exif["EXIF:Make"]  || _exif["IFD0:Make"]  || _exif["XMP:Make"]  || ""
-                                var model2 = _exif["EXIF:Model"] || _exif["IFD0:Model"] || _exif["XMP:Model"] || ""
-                                if (make && model2)
-                                    return model2.startsWith(make) ? model2.trim() : (make + " " + model2).trim()
-                                return (make || model2).trim()
-                            }
-                            readonly property string _date: {
-                                var d = _exif["EXIF:DateTimeOriginal"] || _exif["EXIF:DateTime"] || _exif["IFD0:ModifyDate"] || ""
-                                return d ? d.replace("T", " ").split(".")[0] : ""
-                            }
-                            readonly property string _dims: {
-                                var w = _exif["EXIF:ExifImageWidth"]  || _exif["File:ImageWidth"]  || _exif["PNG:ImageWidth"]  || ""
-                                var h = _exif["EXIF:ExifImageHeight"] || _exif["File:ImageHeight"] || _exif["PNG:ImageHeight"] || ""
-                                return (w && h) ? (w + " × " + h) : ""
-                            }
-                            readonly property string _lens: {
-                                var fl  = _exif["EXIF:FocalLength"] || ""
-                                var fn  = _exif["EXIF:FNumber"]     || _exif["EXIF:ApertureValue"] || ""
-                                var iso = _exif["EXIF:ISO"]         || _exif["EXIF:ISOSpeedRatings"] || ""
-                                var parts = []
-                                if (fl)  parts.push(fl + " mm")
-                                if (fn)  parts.push("ƒ/" + fn)
-                                if (iso) parts.push("ISO " + iso)
-                                return parts.join("  ")
-                            }
                             readonly property string _sizeText: {
                                 var bytes = model.fileSize || 0
                                 if (bytes <= 0)  return ""
@@ -1613,6 +1662,10 @@ ApplicationWindow {
                                 if (bytes >= 1048576)    return (bytes / 1048576).toFixed(1) + " MB"
                                 return Math.round(bytes / 1024) + " KB"
                             }
+                            readonly property string _camera: model.camera ?? ""
+                            readonly property string _date:   model.date   ?? ""
+                            readonly property string _dims:   model.dims   ?? ""
+                            readonly property string _lens:   model.lens   ?? ""
 
                             Rectangle {
                                 anchors { fill: parent; leftMargin: 6; rightMargin: 6; topMargin: 3; bottomMargin: 3 }
@@ -1675,10 +1728,10 @@ ApplicationWindow {
 
                                     Repeater {
                                         model: [
-                                            { label: qsTr("Camera"),     value: _camera  },
-                                            { label: qsTr("Date"),       value: _date    },
-                                            { label: qsTr("Dimensions"), value: _dims    },
-                                            { label: qsTr("Exposure"),   value: _lens    },
+                                            { label: qsTr("Camera"),     value: _camera   },
+                                            { label: qsTr("Date"),       value: _date     },
+                                            { label: qsTr("Dimensions"), value: _dims     },
+                                            { label: qsTr("Exposure"),   value: _lens     },
                                             { label: qsTr("File size"),  value: _sizeText },
                                         ]
                                         delegate: RowLayout {
@@ -1710,6 +1763,23 @@ ApplicationWindow {
                                     controller.selectResult(index)
                                 }
                                 onDoubleClicked: controller.openImage(model.path)
+                            }
+
+                            // Selection checkbox — bottom-right corner, above MouseArea
+                            CheckBox {
+                                anchors {
+                                    right: parent.right
+                                    bottom: parent.bottom
+                                    rightMargin: 14
+                                    bottomMargin: 4
+                                }
+                                z: 2
+                                checked: model.checked
+                                padding: 4
+                                onToggled: controller.toggleChecked(index)
+                                ToolTip.text: checked ? qsTr("Deselect image") : qsTr("Select image")
+                                ToolTip.visible: hovered
+                                ToolTip.delay: 600
                             }
                         }
 

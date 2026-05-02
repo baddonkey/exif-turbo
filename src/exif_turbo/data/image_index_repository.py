@@ -21,7 +21,8 @@ class ImageIndexRepository:
         self.conn.execute("PRAGMA journal_mode=WAL;")
         self.conn.execute("PRAGMA synchronous=NORMAL;")
         self.conn.execute("PRAGMA temp_store=MEMORY;")
-        self.conn.execute("PRAGMA cache_size=-4000;")
+        self.conn.execute("PRAGMA cache_size=-32000;")
+        self.conn.execute("PRAGMA mmap_size=268435456;")
         self.conn.execute("PRAGMA foreign_keys=ON;")
         self.conn.execute("PRAGMA busy_timeout=5000;")
         self.init_db()
@@ -54,6 +55,18 @@ class ImageIndexRepository:
             CREATE INDEX IF NOT EXISTS idx_image_folders_folder ON image_folders(folder_id);
             """
         )
+        # Add marked column for existing databases (one-time migration).
+        try:
+            self.conn.execute(
+                "ALTER TABLE images ADD COLUMN marked INTEGER NOT NULL DEFAULT 0"
+            )
+            self.conn.commit()
+        except Exception:
+            pass  # column already exists
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_images_marked ON images(marked)"
+        )
+        self.conn.commit()
         # Backfill image_folders for images indexed before this join table was
         # introduced (one-time migration, idempotent via INSERT OR IGNORE).
         cur = self.conn.execute(
@@ -210,6 +223,35 @@ class ImageIndexRepository:
                 )
             self.conn.execute("DROP TABLE IF EXISTS _keep_paths")
 
+    # ── Marks ────────────────────────────────────────────────────────────────
+
+    def mark_image(self, path: str, marked: bool) -> None:
+        """Set or clear the mark on a single image path."""
+        with self.conn:
+            self.conn.execute(
+                "UPDATE images SET marked = ? WHERE path = ?",
+                (1 if marked else 0, path),
+            )
+
+    def mark_images(self, paths: Iterable[str], marked: bool) -> None:
+        """Set or clear the mark on a collection of image paths."""
+        val = 1 if marked else 0
+        with self.conn:
+            self.conn.executemany(
+                "UPDATE images SET marked = ? WHERE path = ?",
+                ((val, p) for p in paths),
+            )
+
+    def get_marked_paths(self) -> List[str]:
+        """Return all currently marked image paths."""
+        cur = self.conn.execute("SELECT path FROM images WHERE marked = 1")
+        return [row[0] for row in cur.fetchall()]
+
+    def clear_all_marks(self) -> None:
+        """Remove all marks from every image in the database."""
+        with self.conn:
+            self.conn.execute("UPDATE images SET marked = 0")
+
     def clear_all(self) -> None:
         # DROP + recreate the FTS5 virtual table to fully purge its shadow tables
         # (images_fts_data, images_fts_idx, etc.).  A plain DELETE leaves
@@ -290,6 +332,7 @@ class ImageIndexRepository:
         ext_filter: str = "",
         path_filter: List[str] | None = None,
         restrict_to_enabled_folders: bool = False,
+        marked_only: bool = False,
     ) -> List[Tuple[int, str, str, str, int, float]]:
         order = self._SORT_MAP.get(sort_by, "images.filename COLLATE NOCASE ASC")
         ext_clause = ""
@@ -317,6 +360,7 @@ class ImageIndexRepository:
                 path_clause = f"AND ({parts})"
                 path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
 
+        marks_clause = "AND images.marked = 1" if marked_only else ""
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
 
         if query.strip():
@@ -327,7 +371,7 @@ class ImageIndexRepository:
                 "SELECT images.id, images.path, images.filename, images.metadata_json, images.size, images.mtime "
                 "FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {enabled_clause} "
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {marks_clause} {enabled_clause} "
                 f"{order_expr} "
                 "LIMIT ? OFFSET ?"
             )
@@ -336,7 +380,7 @@ class ImageIndexRepository:
             sql = (
                 "SELECT id, path, filename, metadata_json, size, mtime "
                 "FROM images "
-                f"WHERE 1=1 {ext_clause} {path_clause} {enabled_clause} "
+                f"WHERE 1=1 {ext_clause} {path_clause} {marks_clause} {enabled_clause} "
                 f"ORDER BY {order} "
                 "LIMIT ? OFFSET ?"
             )
@@ -351,6 +395,7 @@ class ImageIndexRepository:
         ext_filter: str = "",
         path_filter: List[str] | None = None,
         restrict_to_enabled_folders: bool = False,
+        marked_only: bool = False,
     ) -> int:
         ext_clause = ""
         ext_args: tuple = ()
@@ -376,6 +421,7 @@ class ImageIndexRepository:
                 path_clause = f"AND ({parts})"
                 path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
 
+        marks_clause = "AND images.marked = 1" if marked_only else ""
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
 
         if query.strip():
@@ -383,18 +429,72 @@ class ImageIndexRepository:
             sql = (
                 "SELECT COUNT(*) FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {enabled_clause}"
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {marks_clause} {enabled_clause}"
             )
             args = (fts_query,) + ext_args + path_args
         else:
             sql = (
                 f"SELECT COUNT(*) FROM images "
-                f"WHERE 1=1 {ext_clause} {path_clause} {enabled_clause}"
+                f"WHERE 1=1 {ext_clause} {path_clause} {marks_clause} {enabled_clause}"
             )
             args = ext_args + path_args
 
         cur = self.conn.execute(sql, args)
         return int(cur.fetchone()[0])
+
+    def get_matching_paths(
+        self,
+        query: str,
+        ext_filter: str = "",
+        path_filter: List[str] | None = None,
+        restrict_to_enabled_folders: bool = False,
+        marked_only: bool = False,
+    ) -> List[str]:
+        """Return all paths matching the current filter — no LIMIT."""
+        ext_clause = ""
+        ext_args: tuple = ()
+        if ext_filter:
+            canonical = ext_filter.lower().lstrip(".")
+            aliases = [
+                raw for raw, mapped in self._EXT_ALIASES.items() if mapped == canonical
+            ]
+            exts = [canonical] + aliases
+            placeholders = " OR ".join("LOWER(images.filename) LIKE ?" for _ in exts)
+            ext_clause = f"AND ({placeholders})"
+            ext_args = tuple(f"%.{e}" for e in exts)
+
+        path_clause = ""
+        path_args: tuple = ()
+        if path_filter:
+            if len(path_filter) == 1:
+                prefix = os.path.normpath(path_filter[0]) + os.sep
+                path_clause = "AND images.path LIKE ?"
+                path_args = (prefix + "%",)
+            else:
+                parts = " OR ".join("images.path LIKE ?" for _ in path_filter)
+                path_clause = f"AND ({parts})"
+                path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
+
+        marks_clause = "AND images.marked = 1" if marked_only else ""
+        enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
+
+        if query.strip():
+            fts_query = self._sanitize_fts_query(query)
+            sql = (
+                "SELECT images.path FROM images_fts "
+                "JOIN images ON images_fts.rowid = images.id "
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {marks_clause} {enabled_clause}"
+            )
+            args = (fts_query,) + ext_args + path_args
+        else:
+            sql = (
+                "SELECT path FROM images "
+                f"WHERE 1=1 {ext_clause} {path_clause} {marks_clause} {enabled_clause}"
+            )
+            args = ext_args + path_args
+
+        cur = self.conn.execute(sql, args)
+        return [row[0] for row in cur.fetchall()]
 
     # Extensions that should be merged into a single facet key.
     _EXT_ALIASES: Dict[str, str] = {"jpeg": "jpg"}
