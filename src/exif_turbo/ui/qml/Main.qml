@@ -211,9 +211,10 @@ ApplicationWindow {
 
                 onNavigationRequested: (request) => {
                     // navigationType 0 = LinkClickedNavigation
-                    if (request.navigationType === 0) {
+                    if (request.navigationType === WebEngineNavigationRequest.LinkClickedNavigation) {
                         Qt.openUrlExternally(request.url)
-                        request.reject()
+                        request.action = WebEngineNavigationRequest.IgnoreRequest
+                        request.accepted = false
                     }
                     // all other types (OtherNavigation = loadHtml) are allowed
                 }

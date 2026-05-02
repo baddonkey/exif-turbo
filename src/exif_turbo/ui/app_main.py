@@ -149,6 +149,16 @@ def main() -> None:
 
         import markdown as _md_lib
 
+        # Rewrite relative markdown links (e.g. "tests/sample-data/ATTRIBUTION.md")
+        # to absolute GitHub URLs so they open in the user's browser instead of
+        # the WebEngineView trying to navigate in-place and blanking the panel.
+        _repo_base = "https://github.com/baddonkey/exif-turbo/blob/main/"
+        _licenses_text = _re.sub(
+            r"\]\((?!https?://|mailto:|#)([^)]+)\)",
+            lambda m: f"]({_repo_base}{m.group(1).lstrip('/')})",
+            _licenses_text,
+        )
+
         _body = _md_lib.markdown(_licenses_text, extensions=["tables"])
         # Auto-link bare URLs that ended up as plain text inside <td> cells.
         _body = _re.sub(
