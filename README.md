@@ -23,8 +23,32 @@ Fully generated using VS Code Copilot.
 - EXIF orientation correction for thumbnails (all formats including RAW)
 - CLI indexer (`exif-turbo-index`) for scripted/headless use
 - Encrypted database at rest (SQLCipher); passphrase set on first launch, unlocked via the UI
+- **Mark / select images** — select all results (or deselect all) with a single menu action; individual checkbox per result row
+- **Export marked images as JSON** — exports EXIF metadata for all marked images to a JSON file, respecting the current UI sort order
+- **Bulk-op progress overlay** — modal overlay with a progress bar and live `X / Y` count during select-all, deselect-all, and export operations; cancelable at any time
+- **Unlock spinner** — animated indicator shown on the lock screen while the encrypted database is being opened
 
 ## Recent changes
+
+### Bulk operations, export, and UX polish
+
+- **Select All / Deselect All** — `Action → Select All` (or Deselect All) marks
+  every image matching the current search filters. Operations run on a
+  background thread in batches of 500 rows so the UI stays responsive.
+- **Export Metadata as JSON** — `Action → Export Metadata as JSON…` writes a
+  JSON array of EXIF records for all marked images to a file chosen via a
+  Save dialog. Export respects the current UI sort order (filename, path,
+  date, or size).
+- **Bulk-op progress overlay** — a modal overlay appears during any bulk
+  operation, showing a `ProgressBar` and a live `X / Y` record count.
+  A **Cancel** button aborts the operation cleanly at any batch boundary.
+- **Unlock spinner** — after entering the passphrase and pressing **Unlock**,
+  a `BusyIndicator` with an "Unlocking…" label appears immediately while the
+  encrypted database opens. The Unlock button is disabled during this time.
+  Implemented via `QTimer.singleShot(50ms)` so the QML repaint fires before
+  the blocking open call.
+- **Action menu width** — the Action menu is sized wide enough to show the
+  full dynamic label `"Export Metadata as JSON… (N selected)"` without clipping.
 
 ### Folder filter
 

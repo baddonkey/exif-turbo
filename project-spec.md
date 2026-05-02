@@ -78,7 +78,7 @@ Ports & adapters (hexagonal) structure. Domain logic has no dependency on PySide
 
 | Module | Purpose |
 |--------|---------|
-| `image_index_repository.py` | `ImageIndexRepository` — all DB access. Schema: `images` table + `images_fts` FTS5 virtual table. Encrypted via SQLCipher. Key methods: `upsert_image`, `search_fts`, `delete_missing(existing_paths, folder_roots=None)` (scoped delete), `clear_all()` (drops + recreates FTS5 table, VACUUM, WAL checkpoint). |
+| `image_index_repository.py` | `ImageIndexRepository` — all DB access. Schema: `images` table (with `marked` column) + `images_fts` FTS5 virtual table. Encrypted via SQLCipher. Key methods: `upsert_image`, `search_fts`, `delete_missing(existing_paths, folder_roots=None)` (scoped delete), `clear_all()` (drops + recreates FTS5 table, VACUUM, WAL checkpoint), `get_matching_paths(query, ...)` (returns paths matching current filter for bulk mark ops), `get_marked_paths()` (returns paths of all marked images), `get_marked_metadata(sort_by="path_asc")` (returns export records for all marked images ordered by `sort_by`), `mark_images(paths, value)`, `clear_all_marks()`. |
 | `indexed_folder_repository.py` | `IndexedFolderRepository` — manages the set of user-added folders: add, remove, enable/disable, status updates. `clear_all()` deletes all folder records. |
 
 **Schema:**
@@ -90,7 +90,8 @@ CREATE TABLE images (
     filename      TEXT NOT NULL,
     mtime         REAL NOT NULL,
     size          INTEGER NOT NULL,
-    metadata_json TEXT NOT NULL
+    metadata_json TEXT NOT NULL,
+    marked        INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE VIRTUAL TABLE images_fts
@@ -133,6 +134,7 @@ derive stable thumbnail cache names without a live `os.stat` call.
 | `models/settings_model.py` | `SettingsModel(QObject)` — exposes `workerCount`, `blacklist`, `language`, and `theme` to QML; per-DB settings persisted as JSON; language and theme stored globally via `i18n` module |
 | `workers/index_worker.py` | `QThread` — runs `IndexerService.build_index` off the GUI thread; emits progress signals; supports `pause()`/`resume()` via `threading.Event` to yield I/O bandwidth during preview loads |
 | `workers/thumb_worker.py` | `QThread` — generates thumbnail cache off the GUI thread; supports `pause()`/`resume()` via `threading.Event` |
+| `workers/bulk_op_worker.py` | `QThread` — executes select-all, deselect-all, and export-JSON bulk operations off the GUI thread. Accepts full filter state (query, ext_filter, path_filter, restrict_to_enabled_folders, marked_only) and a `sort_by` key for export ordering. Mark operations run in batches of 500 rows each emitting a progress tick; export writes one JSON record at a time. Signals: `progress(done, total)`, `finished`, `failed(message)`, `canceled`. |
 | `providers/preview_image_provider.py` | `PreviewImageProvider(QQuickImageProvider)` — serves full-resolution previews for all formats (JPEG/PNG/TIFF/RAW) as `image://preview/<encoded-path>`; `ForceAsynchronousImageLoading`, `HighPriority` thread; reads raw bytes via `open().read()` to release the GIL during network I/O, then decodes in-memory with Pillow `draft()` for fast JPEG subsampling |
 | `providers/raw_image_provider.py` | `RawImageProvider(QQuickImageProvider)` — legacy RAW-only provider (`image://raw/`); kept for backward compatibility |
 | `qml/Main.qml` | Main application window: tab bar (Search, Browse), split-pane layout, EXIF detail panel, Settings sheet, lock screen |
@@ -152,6 +154,18 @@ derive stable thumbnail cache names without a live `os.stat` call.
   construction time. The QML lock screen switches to a passphrase-creation
   mode (confirm field + security hint). Cleared to `False` after a
   successful `unlock()` call.
+- `isUnlocking` — bool property set to `True` the moment `unlock()` is
+  called; cleared once the DB opens (or fails). A `QTimer.singleShot(50ms)`
+  defers the blocking `open()` call so the QML repaint (spinner) executes
+  before the main thread stalls. The QML lock screen shows a `BusyIndicator`
+  + "Unlocking…" label and disables the Unlock button while `True`.
+- **Bulk operations** — `selectAll()`, `deselectAll()`, `invertSelection()`,
+  and `exportMarkedMetadataJson()` slots each launch a `BulkOpWorker` on a
+  background thread. While the worker runs, `isBusy` is `True` and a modal
+  overlay with a `ProgressBar` and `"X / Y"` count label blocks the UI.
+  `cancelBulkOp()` signals the worker to stop cleanly. Export respects the
+  current UI sort order (`_sort_by` passed as `sort_by` to the worker and
+  forwarded to `get_marked_metadata(sort_by=...)` → `ORDER BY`).
 - `currentResultRow` — `int` property tracking the currently selected result
   row. `_run_search()` restores it after a re-run (tab switch, filter change)
   so the selection survives navigation. Resets to `0` only when the query or
@@ -175,6 +189,10 @@ derive stable thumbnail cache names without a live `os.stat` call.
 | `isBuildingThumbsChanged` | Whether thumb generation is in progress |
 | `isLockedChanged` | Whether the DB lock screen is shown |
 | `isNewDatabaseChanged` | Whether the DB does not yet exist (passphrase-creation mode) |
+| `isUnlockingChanged` | Whether the DB is currently being opened (unlock spinner) |
+| `isBusyChanged` | Whether a bulk operation (select-all / export) is running |
+| `busyLabelChanged` | Label text for the bulk-op modal overlay |
+| `bulkProgressChanged` | Emits both `bulkProgress` (done) and `bulkProgressTotal` (total) |
 | `selectedImageSourceChanged` | QML `Image.source` for the preview pane || `selectedThumbSourceChanged` | QML `Image.source` for the low-res placeholder shown while full preview loads |
 | `currentResultRowChanged` | Currently selected result row index || `detailsHtmlChanged` | HTML for the EXIF detail panel |
 | `indexCurrentChanged / indexTotalChanged` | Indexing progress |

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-01 10:23+0200\n"
+"POT-Creation-Date: 2026-05-02 21:32+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: it\n"
@@ -18,48 +18,82 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:85
+#: src/exif_turbo/ui/view_models/app_controller.py:99
 msgid "Enter the database password to continue"
 msgstr "Inserisci la password del database per continuare"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:615
+#: src/exif_turbo/ui/view_models/app_controller.py:396
+msgid "Selecting all matching images…"
+msgstr "Selezione di tutte le immagini corrispondenti…"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:406
+msgid "Deselecting all matching images…"
+msgstr "Deselezione di tutte le immagini corrispondenti…"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:416
+msgid "Inverting selection…"
+msgstr "Inversione della selezione…"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:425
+msgid "No marked images to export."
+msgstr "Nessuna immagine contrassegnata da esportare."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:430
+msgid "Exporting metadata…"
+msgstr "Esportazione metadati…"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:500
+#, python-brace-format
+msgid "Exported {count} image(s) to {name}"
+msgstr "{count} immagine/i esportata/e in {name}"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:509
+#, python-brace-format
+msgid "Operation failed: {}"
+msgstr "Operazione fallita: {}"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:515
+msgid "Operation canceled."
+msgstr "Operazione annullata."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:873
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Cartella già monitorata: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:768
+#: src/exif_turbo/ui/view_models/app_controller.py:1027
 #, python-brace-format
 msgid "Indexing {}…"
 msgstr "Indicizzazione {}…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:799
+#: src/exif_turbo/ui/view_models/app_controller.py:1059
 #, python-brace-format
 msgid "Indexed {count} images ({errors} skipped due to errors)"
 msgstr "{count} immagini indicizzate ({errors} saltate a causa di errori)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:804
+#: src/exif_turbo/ui/view_models/app_controller.py:1064
 #, python-brace-format
 msgid "Indexed {} images"
 msgstr "{} immagini indicizzate"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:837
+#: src/exif_turbo/ui/view_models/app_controller.py:1097
 #, python-brace-format
 msgid "Index failed: {}"
 msgstr "Indicizzazione fallita: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:869
+#: src/exif_turbo/ui/view_models/app_controller.py:1129
 msgid "Index canceled"
 msgstr "Indicizzazione annullata"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:889
+#: src/exif_turbo/ui/view_models/app_controller.py:1149
 msgid "Canceling…"
 msgstr "Annullamento…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:940
+#: src/exif_turbo/ui/view_models/app_controller.py:1200
 msgid "Database reset"
 msgstr "Database ripristinato"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1024
+#: src/exif_turbo/ui/view_models/app_controller.py:1284
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indicizzazione… {} / {}"
@@ -77,12 +111,28 @@ msgid "&About"
 msgstr "&Informazioni"
 
 #: QML
+msgid "&Action"
+msgstr "&Azione"
+
+#: QML
+msgid "&Deselect All"
+msgstr "&Deseleziona tutto"
+
+#: QML
 msgid "&File"
 msgstr "&File"
 
 #: QML
 msgid "&Help"
 msgstr "A&iuto"
+
+#: QML
+msgid "&Invert Selection"
+msgstr "&Inverti selezione"
+
+#: QML
+msgid "&Select"
+msgstr "&Seleziona"
 
 #: QML
 msgid "&User Manual"
@@ -105,6 +155,10 @@ msgid "All"
 msgstr "Tutti"
 
 #: QML
+msgid "All files (*)"
+msgstr "Tutti i file (*)"
+
+#: QML
 msgid "All folders"
 msgstr "Tutte le cartelle"
 
@@ -119,6 +173,10 @@ msgstr "Creazione miniature"
 #: QML
 msgid "Camera"
 msgstr "Fotocamera"
+
+#: QML
+msgid "Cancel"
+msgstr "Annulla"
 
 #: QML
 msgid "Cancel Indexing"
@@ -157,6 +215,10 @@ msgid "Date"
 msgstr "Data"
 
 #: QML
+msgid "Deselect image"
+msgstr "Deseleziona immagine"
+
+#: QML
 msgid "Dimensions"
 msgstr "Dimensioni"
 
@@ -171,6 +233,18 @@ msgstr "TAG EXIF"
 #: QML
 msgid "Enter the database password"
 msgstr "Inserisci la password del database"
+
+#: QML
+msgid "Export Metadata as &JSON\\u2026 (%1 selected)"
+msgstr "Esporta metadati come &JSON\\u2026 (%1 selezionata/e)"
+
+#: QML
+msgid "Export Metadata as &JSON\\u2026 (all results)"
+msgstr "Esporta metadati come &JSON\\u2026 (tutti i risultati)"
+
+#: QML
+msgid "Export Metadata as JSON"
+msgstr "Esporta metadati come JSON"
 
 #: QML
 msgid "Exposure"
@@ -265,6 +339,10 @@ msgstr "Indicizzazione cartella %1 di %2"
 #: QML
 msgid "Indexing…"
 msgstr "Indicizzazione…"
+
+#: QML
+msgid "JSON files (*.json)"
+msgstr "File JSON (*.json)"
 
 #: QML
 msgid "Language"
@@ -445,6 +523,10 @@ msgid "Search EXIF metadata\\u2026"
 msgstr "Cerca nei metadati EXIF…"
 
 #: QML
+msgid "Select &All"
+msgstr "Seleziona &tutto"
+
+#: QML
 msgid "Select Folder to Manage"
 msgstr "Seleziona cartella da gestire"
 
@@ -457,8 +539,20 @@ msgid "Select an image to see metadata"
 msgstr "Seleziona un’immagine per vedere i metadati"
 
 #: QML
+msgid "Select image"
+msgstr "Seleziona immagine"
+
+#: QML
 msgid "Settings"
 msgstr "Impostazioni"
+
+#: QML
+msgid "Show all results"
+msgstr "Mostra tutti i risultati"
+
+#: QML
+msgid "Show only selected images"
+msgstr "Mostra solo le immagini selezionate"
 
 #: QML
 msgid "Sort"
@@ -505,6 +599,10 @@ msgstr ""
 #: QML
 msgid "Unlock"
 msgstr "Sblocca"
+
+#: QML
+msgid "Unlocking…"
+msgstr "Sblocco in corso…"
 
 #: QML
 msgid "Value"
