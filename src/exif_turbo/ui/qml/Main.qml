@@ -94,6 +94,16 @@ ApplicationWindow {
 
     // ── Null-safe proxies ─────────────────────────────────────────────────
     readonly property bool   _isLocked:            controller ? controller.isLocked           : true
+    // After unlock, reclaim window focus so macOS doesn't leave the menu bar focused.
+    Connections {
+        target: controller
+        function onIsLockedChanged() {
+            if (!controller.isLocked) {
+                root.requestActivate()
+                searchField.forceActiveFocus()
+            }
+        }
+    }
     readonly property bool   _isNewDatabase:       controller ? controller.isNewDatabase      : false
     readonly property bool   _isIndexing:          controller ? controller.isIndexing         : false
     readonly property bool   _isBuildingThumbs:    controller ? controller.isBuildingThumbs   : false
@@ -223,26 +233,24 @@ ApplicationWindow {
         }
         Menu {
             title: qsTr("&Select")
-            enabled: !_isLocked
             Action {
                 text: qsTr("Select &All")
                 enabled: !_isLocked
-                onTriggered: controller.selectAll()
+                onTriggered: if (!_isLocked) controller.selectAll()
             }
             Action {
                 text: qsTr("&Deselect All")
                 enabled: !_isLocked
-                onTriggered: controller.deselectAll()
+                onTriggered: if (!_isLocked) controller.deselectAll()
             }
             Action {
                 text: qsTr("&Invert Selection")
                 enabled: !_isLocked
-                onTriggered: controller.invertSelection()
+                onTriggered: if (!_isLocked) controller.invertSelection()
             }
         }
         Menu {
             title: qsTr("&Action")
-            enabled: !_isLocked
             implicitWidth: 380
             Action {
                 readonly property int _cnt: controller ? controller.checkedCount : 0
@@ -250,7 +258,7 @@ ApplicationWindow {
                       ? qsTr("Export Metadata as &JSON\u2026 (%1 selected)").arg(_cnt)
                       : qsTr("Export Metadata as &JSON\u2026 (all results)")
                 enabled: !_isLocked
-                onTriggered: exportJsonDialog.open()
+                onTriggered: if (!_isLocked) exportJsonDialog.open()
             }
         }
         Menu {
@@ -288,135 +296,144 @@ ApplicationWindow {
     }
 
     // ── Lock screen ───────────────────────────────────────────────────────
-    Pane {
-        id: lockScreen
+    // Use a Loader so the password TextFields are *destroyed* (not just hidden)
+    // after unlock. If they remain in the component tree with echoMode:Password,
+    // macOS AutoFill service detects them and injects an "AutoFill" entry into
+    // every native menu bar menu.
+    Loader {
         anchors.fill: parent
-        visible: _isLocked
         z: 100
+        active: _isLocked
+        sourceComponent: Component {
+            Pane {
+                id: lockOverlay
+                anchors.fill: parent
 
-        Pane {
-            anchors.centerIn: parent
-            width: 380
-            padding: 28
-            Material.elevation: 4
+                Pane {
+                    anchors.centerIn: parent
+                    width: 380
+                    padding: 28
+                    Material.elevation: 4
 
-            ColumnLayout {
-                width: parent.width
-                spacing: 16
+                    ColumnLayout {
+                        width: parent.width
+                        spacing: 16
 
-                Label {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: "exif-turbo"
-                    font.pixelSize: 28
-                    font.weight: Font.Bold
-                    color: Material.accent
-                }
+                        Label {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: "exif-turbo"
+                            font.pixelSize: 28
+                            font.weight: Font.Bold
+                            color: Material.accent
+                        }
 
-                Label {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: _appVersion ? "v" + _appVersion : ""
-                    font.pixelSize: 12
-                    opacity: 0.45
-                    visible: _appVersion !== ""
-                    Layout.topMargin: -10
-                }
+                        Label {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: _appVersion ? "v" + _appVersion : ""
+                            font.pixelSize: 12
+                            opacity: 0.45
+                            visible: _appVersion !== ""
+                            Layout.topMargin: -10
+                        }
 
-                Label {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: _isNewDatabase
-                          ? qsTr("Create a passphrase for your new database")
-                          : qsTr("Enter the database password")
-                    font.pixelSize: 14
-                    opacity: 0.7
-                    wrapMode: Text.WordWrap
-                    horizontalAlignment: Text.AlignHCenter
-                }
+                        Label {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: _isNewDatabase
+                                  ? qsTr("Create a passphrase for your new database")
+                                  : qsTr("Enter the database password")
+                            font.pixelSize: 14
+                            opacity: 0.7
+                            wrapMode: Text.WordWrap
+                            horizontalAlignment: Text.AlignHCenter
+                        }
 
-                // New-database hint banner
-                Label {
-                    Layout.fillWidth: true
-                    visible: _isNewDatabase
-                    text: qsTr("This passphrase encrypts your entire image index. Use at least 12 characters and a mix of letters, numbers, and symbols. There is no way to recover a lost passphrase.")
-                    font.pixelSize: 12
-                    wrapMode: Text.WordWrap
-                    opacity: 0.85
-                    topPadding: 8; bottomPadding: 8; leftPadding: 8; rightPadding: 8
-                    background: Rectangle {
-                        radius: 6
-                        color: Qt.rgba(Material.accentColor.r, Material.accentColor.g, Material.accentColor.b, 0.10)
-                        border.color: Qt.rgba(Material.accentColor.r, Material.accentColor.g, Material.accentColor.b, 0.30)
-                        border.width: 1
+                        // New-database hint banner
+                        Label {
+                            Layout.fillWidth: true
+                            visible: _isNewDatabase
+                            text: qsTr("This passphrase encrypts your entire image index. Use at least 12 characters and a mix of letters, numbers, and symbols. There is no way to recover a lost passphrase.")
+                            font.pixelSize: 12
+                            wrapMode: Text.WordWrap
+                            opacity: 0.85
+                            topPadding: 8; bottomPadding: 8; leftPadding: 8; rightPadding: 8
+                            background: Rectangle {
+                                radius: 6
+                                color: Qt.rgba(Material.accentColor.r, Material.accentColor.g, Material.accentColor.b, 0.10)
+                                border.color: Qt.rgba(Material.accentColor.r, Material.accentColor.g, Material.accentColor.b, 0.30)
+                                border.width: 1
+                            }
+                        }
+
+                        TextField {
+                            id: passwordField
+                            Layout.fillWidth: true
+                            placeholderText: _isNewDatabase ? qsTr("New passphrase") : qsTr("Password")
+                            echoMode: TextInput.Password
+                            font.pixelSize: 14
+                            Keys.onReturnPressed: _isNewDatabase ? confirmField.forceActiveFocus() : controller.unlock(text)
+                            Component.onCompleted: forceActiveFocus()
+                        }
+
+                        TextField {
+                            id: confirmField
+                            Layout.fillWidth: true
+                            visible: _isNewDatabase
+                            placeholderText: qsTr("Confirm passphrase")
+                            echoMode: TextInput.Password
+                            font.pixelSize: 14
+                            Keys.onReturnPressed: lockOverlay._tryCreate()
+                        }
+
+                        // Mismatch / error label
+                        Label {
+                            Layout.fillWidth: true
+                            text: _unlockError !== "" ? _unlockError
+                                  : (_isNewDatabase && confirmField.text.length > 0 && passwordField.text !== confirmField.text
+                                     ? qsTr("Passphrases do not match") : "")
+                            color: "#f44336"
+                            font.pixelSize: 12
+                            visible: text !== ""
+                            wrapMode: Text.WordWrap
+                        }
+
+                        Button {
+                            Layout.fillWidth: true
+                            text: _isNewDatabase ? qsTr("Create Database") : qsTr("Unlock")
+                            highlighted: true
+                            implicitHeight: 44
+                            font.pixelSize: 14
+                            enabled: !_isUnlocking && (_isNewDatabase
+                                     ? (passwordField.text.length >= 1 && passwordField.text === confirmField.text)
+                                     : passwordField.text.length >= 1)
+                            onClicked: _isNewDatabase ? lockOverlay._tryCreate() : controller.unlock(passwordField.text)
+                        }
+
+                        // Unlock-in-progress indicator
+                        RowLayout {
+                            Layout.alignment: Qt.AlignHCenter
+                            visible: _isUnlocking
+                            spacing: 10
+
+                            BusyIndicator {
+                                running: _isUnlocking
+                                implicitWidth: 28
+                                implicitHeight: 28
+                            }
+
+                            Label {
+                                text: qsTr("Unlocking…")
+                                font.pixelSize: 13
+                                opacity: 0.75
+                            }
+                        }
                     }
                 }
 
-                TextField {
-                    id: passwordField
-                    Layout.fillWidth: true
-                    placeholderText: _isNewDatabase ? qsTr("New passphrase") : qsTr("Password")
-                    echoMode: TextInput.Password
-                    font.pixelSize: 14
-                    Keys.onReturnPressed: _isNewDatabase ? confirmField.forceActiveFocus() : controller.unlock(text)
-                    Component.onCompleted: forceActiveFocus()
-                }
-
-                TextField {
-                    id: confirmField
-                    Layout.fillWidth: true
-                    visible: _isNewDatabase
-                    placeholderText: qsTr("Confirm passphrase")
-                    echoMode: TextInput.Password
-                    font.pixelSize: 14
-                    Keys.onReturnPressed: lockScreen._tryCreate()
-                }
-
-                // Mismatch / error label
-                Label {
-                    Layout.fillWidth: true
-                    text: _unlockError !== "" ? _unlockError
-                          : (_isNewDatabase && confirmField.text.length > 0 && passwordField.text !== confirmField.text
-                             ? qsTr("Passphrases do not match") : "")
-                    color: "#f44336"
-                    font.pixelSize: 12
-                    visible: text !== ""
-                    wrapMode: Text.WordWrap
-                }
-
-                Button {
-                    Layout.fillWidth: true
-                    text: _isNewDatabase ? qsTr("Create Database") : qsTr("Unlock")
-                    highlighted: true
-                    implicitHeight: 44
-                    font.pixelSize: 14
-                    enabled: !_isUnlocking && (_isNewDatabase
-                             ? (passwordField.text.length >= 1 && passwordField.text === confirmField.text)
-                             : passwordField.text.length >= 1)
-                    onClicked: _isNewDatabase ? lockScreen._tryCreate() : controller.unlock(passwordField.text)
-                }
-
-                // Unlock-in-progress indicator
-                RowLayout {
-                    Layout.alignment: Qt.AlignHCenter
-                    visible: _isUnlocking
-                    spacing: 10
-
-                    BusyIndicator {
-                        running: _isUnlocking
-                        implicitWidth: 28
-                        implicitHeight: 28
-                    }
-
-                    Label {
-                        text: qsTr("Unlocking…")
-                        font.pixelSize: 13
-                        opacity: 0.75
-                    }
+                function _tryCreate() {
+                    if (passwordField.text !== confirmField.text) return
+                    controller.unlock(passwordField.text)
                 }
             }
-        }
-
-        function _tryCreate() {
-            if (passwordField.text !== confirmField.text) return
-            controller.unlock(passwordField.text)
         }
     }
 

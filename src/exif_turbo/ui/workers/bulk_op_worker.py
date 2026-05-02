@@ -73,6 +73,8 @@ class BulkOpWorker(QThread):
             repo = ImageIndexRepository(self._db_path, key=self._key)
             if self._operation in ("select_all", "deselect_all"):
                 self._run_mark(repo)
+            elif self._operation == "invert":
+                self._run_invert(repo)
             elif self._operation == "export_json":
                 self._run_export(repo)
             else:
@@ -114,6 +116,47 @@ class BulkOpWorker(QThread):
                 repo.conn.executemany(
                     "UPDATE images SET marked = ? WHERE path = ?",
                     ((val, p) for p in batch),
+                )
+                done += len(batch)
+                self.progress.emit(done, total)
+
+        # Step 3: read back full marked set
+        self.result_paths = repo.get_marked_paths()
+        self.finished.emit()
+
+    def _run_invert(self, repo: ImageIndexRepository) -> None:
+        if self._is_canceled():
+            self.canceled.emit()
+            return
+        # Step 1: discover matching paths (total unknown yet → indeterminate)
+        self.progress.emit(0, 0)
+
+        paths = repo.get_matching_paths(
+            self._query,
+            ext_filter=self._ext_filter,
+            path_filter=self._path_filter,
+            restrict_to_enabled_folders=self._restrict_to_enabled_folders,
+            marked_only=self._marked_only,
+        )
+
+        if self._is_canceled():
+            self.canceled.emit()
+            return
+
+        total = len(paths)
+        self.progress.emit(0, total)
+
+        # Step 2: flip each row's marked bit in batches
+        done = 0
+        with repo.conn:
+            for i in range(0, total, _BATCH_SIZE):
+                if self._is_canceled():
+                    self.canceled.emit()
+                    return
+                batch = paths[i : i + _BATCH_SIZE]
+                repo.conn.executemany(
+                    "UPDATE images SET marked = 1 - marked WHERE path = ?",
+                    ((p,) for p in batch),
                 )
                 done += len(batch)
                 self.progress.emit(done, total)

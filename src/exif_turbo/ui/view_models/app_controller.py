@@ -409,13 +409,12 @@ class AppController(QObject):
 
     @Slot()
     def invertSelection(self) -> None:
-        self._search_model.invert_selection_rows()
-        if self._repo is not None:
-            for i in range(self._search_model.rowCount()):
-                path = self._search_model.get_path(i)
-                if path is not None:
-                    self._repo.mark_image(path, path in self._search_model._checked)
-        self.checkedCountChanged.emit()
+        if self._repo is None:
+            return
+        self._start_bulk_op(
+            "invert",
+            _("Inverting selection\u2026"),
+        )
 
     @Slot(str)
     def exportMarkedMetadataJson(self, file_url: str) -> None:
@@ -490,7 +489,7 @@ class AppController(QObject):
         self.isBusyChanged.emit()
         if worker is None:
             return
-        if worker._operation in ("select_all", "deselect_all"):
+        if worker._operation in ("select_all", "deselect_all", "invert"):
             self._search_model.set_checked_paths(worker.result_paths)
             self.checkedCountChanged.emit()
         elif worker._operation == "export_json":
