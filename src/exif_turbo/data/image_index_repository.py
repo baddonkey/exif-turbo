@@ -247,6 +247,21 @@ class ImageIndexRepository:
         cur = self.conn.execute("SELECT path FROM images WHERE marked = 1")
         return [row[0] for row in cur.fetchall()]
 
+    def get_marked_metadata(self, sort_by: str = "path_asc") -> List[dict]:
+        """Return export records for all marked images in the requested order."""
+        order = self._SORT_MAP.get(sort_by, "images.path COLLATE NOCASE ASC")
+        cur = self.conn.execute(
+            f"SELECT path, filename, metadata_json FROM images WHERE marked = 1 ORDER BY {order}"
+        )
+        result: List[dict] = []
+        for path, filename, metadata_json in cur.fetchall():
+            try:
+                meta = json.loads(metadata_json or "{}")
+            except Exception:
+                meta = {}
+            result.append({"path": path, "filename": filename, "metadata": meta})
+        return result
+
     def clear_all_marks(self) -> None:
         """Remove all marks from every image in the database."""
         with self.conn:

@@ -121,6 +121,11 @@ ApplicationWindow {
     readonly property int    _indexedFolderCount:      controller ? controller.indexedFolderCount  : 0
     readonly property int    _totalResults:       controller ? controller.totalResults        : 0
     readonly property string _appVersion:         controller ? controller.appVersion          : ""
+    readonly property bool   _isBusy:             controller ? controller.isBusy             : false
+    readonly property string _busyLabel:          controller ? controller.busyLabel          : ""
+    readonly property int    _bulkProgress:       controller ? controller.bulkProgress       : 0
+    readonly property int    _bulkProgressTotal:  controller ? controller.bulkProgressTotal  : 0
+    readonly property bool   _isUnlocking:        controller ? controller.isUnlocking        : false
 
     // Settings model null-safe proxies
     readonly property int    _workerCount:         settingsModel ? settingsModel.workerCount   : 4
@@ -238,6 +243,7 @@ ApplicationWindow {
         Menu {
             title: qsTr("&Action")
             enabled: !_isLocked
+            implicitWidth: 380
             Action {
                 readonly property int _cnt: controller ? controller.checkedCount : 0
                 text: _cnt > 0
@@ -381,10 +387,29 @@ ApplicationWindow {
                     highlighted: true
                     implicitHeight: 44
                     font.pixelSize: 14
-                    enabled: _isNewDatabase
+                    enabled: !_isUnlocking && (_isNewDatabase
                              ? (passwordField.text.length >= 1 && passwordField.text === confirmField.text)
-                             : passwordField.text.length >= 1
+                             : passwordField.text.length >= 1)
                     onClicked: _isNewDatabase ? lockScreen._tryCreate() : controller.unlock(passwordField.text)
+                }
+
+                // Unlock-in-progress indicator
+                RowLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    visible: _isUnlocking
+                    spacing: 10
+
+                    BusyIndicator {
+                        running: _isUnlocking
+                        implicitWidth: 28
+                        implicitHeight: 28
+                    }
+
+                    Label {
+                        text: qsTr("Unlocking…")
+                        font.pixelSize: 13
+                        opacity: 0.75
+                    }
                 }
             }
         }
@@ -476,6 +501,71 @@ ApplicationWindow {
                 implicitHeight: 36
                 implicitWidth: 160
                 onClicked: _isIndexing ? controller.cancelIndex() : controller.cancelThumbnails()
+            }
+        }
+    }
+
+    // ── Tab bar background (full-width row behind the buttons) ───────────
+    // ── Busy overlay (blocks UI during bulk operations) ───────────────────
+    Rectangle {
+        id: busyOverlay
+        anchors.fill: parent
+        z: 60
+        visible: _isBusy
+        color: Qt.rgba(0, 0, 0, 0.45)
+
+        // Swallow all mouse/touch events so the UI is fully blocked
+        MouseArea { anchors.fill: parent; hoverEnabled: true }
+
+        Pane {
+            anchors.centerIn: parent
+            width: 320
+            Material.elevation: 8
+            padding: 28
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 18
+
+                BusyIndicator {
+                    Layout.alignment: Qt.AlignHCenter
+                    running: _isBusy
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    text: _busyLabel
+                    font.pixelSize: 14
+                    font.weight: Font.Medium
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                }
+
+                ProgressBar {
+                    Layout.fillWidth: true
+                    indeterminate: _bulkProgressTotal === 0
+                    from: 0
+                    to: Math.max(1, _bulkProgressTotal)
+                    value: _bulkProgress
+                }
+
+                Label {
+                    Layout.alignment: Qt.AlignHCenter
+                    visible: _bulkProgressTotal > 0
+                    text: _bulkProgress + " / " + _bulkProgressTotal
+                    font.pixelSize: 12
+                    opacity: 0.7
+                }
+
+                Button {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: qsTr("Cancel")
+                    highlighted: true
+                    Material.accent: Material.Red
+                    implicitWidth: 120
+                    implicitHeight: 36
+                    onClicked: controller.cancelBulkOp()
+                }
             }
         }
     }

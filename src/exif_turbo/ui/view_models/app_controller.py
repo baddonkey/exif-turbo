@@ -28,6 +28,7 @@ from ..models.exif_list_model import ExifListModel
 from ..models.folder_list_model import FolderListModel
 from ..models.search_list_model import SearchListModel
 from ..models.settings_model import SettingsModel
+from ..workers.bulk_op_worker import BulkOpWorker
 from ..workers.index_worker import IndexWorker
 from ..workers.thumb_worker import ThumbWorker
 
@@ -69,6 +70,10 @@ class AppController(QObject):
     checkedCountChanged = Signal()
     checkedOnlyFilterChanged = Signal()
     currentProxyResultRowChanged = Signal()
+    isBusyChanged = Signal()
+    busyLabelChanged = Signal()
+    bulkProgressChanged = Signal()
+    isUnlockingChanged = Signal()
 
     def __init__(
         self,
@@ -135,6 +140,13 @@ class AppController(QObject):
         self._pending_thumb_restart = False
         self._filter_proxy: CheckedFilterProxyModel | None = None
         self._checked_only_filter_active: bool = False
+        self._is_busy: bool = False
+        self._busy_label: str = ""
+        self._bulk_progress: int = 0
+        self._bulk_progress_total: int = 0
+        self._bulk_worker: BulkOpWorker | None = None
+        self._pending_export_path: Path | None = None
+        self._is_unlocking: bool = False
         # Timer: kick off a batch thumb build every 8 s while indexing runs
         self._thumb_batch_timer = QTimer(self)
         self._thumb_batch_timer.setInterval(8_000)
@@ -308,6 +320,26 @@ class AppController(QObject):
             return self._current_result_row
         return self._filter_proxy.proxy_row_for(self._current_result_row)
 
+    @Property(bool, notify=isBusyChanged)
+    def isBusy(self) -> bool:
+        return self._is_busy
+
+    @Property(str, notify=busyLabelChanged)
+    def busyLabel(self) -> str:
+        return self._busy_label
+
+    @Property(int, notify=bulkProgressChanged)
+    def bulkProgress(self) -> int:
+        return self._bulk_progress
+
+    @Property(int, notify=bulkProgressChanged)
+    def bulkProgressTotal(self) -> int:
+        return self._bulk_progress_total
+
+    @Property(bool, notify=isUnlockingChanged)
+    def isUnlocking(self) -> bool:
+        return self._is_unlocking
+
     def set_filter_proxy(self, proxy: CheckedFilterProxyModel) -> None:
         self._filter_proxy = proxy
         proxy.filterActiveChanged.connect(self._on_filter_active_changed)
@@ -359,35 +391,21 @@ class AppController(QObject):
     def selectAll(self) -> None:
         if self._repo is None:
             return
-        all_paths = self._repo.get_matching_paths(
-            self._query_text,
-            ext_filter=self._ext_filter,
-            path_filter=self._current_path_filter(),
-            restrict_to_enabled_folders=(self._folder_repo is not None),
-            marked_only=self._checked_only_filter_active,
+        self._start_bulk_op(
+            "select_all",
+            _("Selecting all matching images\u2026"),
+            mark_value=True,
         )
-        self._repo.mark_images(all_paths, True)
-        self._search_model.set_checked_paths(
-            self._repo.get_marked_paths()
-        )
-        self.checkedCountChanged.emit()
 
     @Slot()
     def deselectAll(self) -> None:
         if self._repo is None:
             return
-        all_paths = self._repo.get_matching_paths(
-            self._query_text,
-            ext_filter=self._ext_filter,
-            path_filter=self._current_path_filter(),
-            restrict_to_enabled_folders=(self._folder_repo is not None),
-            marked_only=self._checked_only_filter_active,
+        self._start_bulk_op(
+            "deselect_all",
+            _("Deselecting all matching images\u2026"),
+            mark_value=False,
         )
-        self._repo.mark_images(all_paths, False)
-        self._search_model.set_checked_paths(
-            self._repo.get_marked_paths()
-        )
-        self.checkedCountChanged.emit()
 
     @Slot()
     def invertSelection(self) -> None:
@@ -401,26 +419,118 @@ class AppController(QObject):
 
     @Slot(str)
     def exportMarkedMetadataJson(self, file_url: str) -> None:
-        from pathlib import Path as _Path
-
-        file_path = _Path(QUrl(file_url).toLocalFile())
-        records = self._search_model.get_checked_metadata()
-        if not records:
-            self._set_status(_("No marked images in current results to export."))
+        file_path = Path(QUrl(file_url).toLocalFile())
+        if self._repo is None:
             return
-        try:
-            with open(file_path, "w", encoding="utf-8") as fh:
-                json.dump(records, fh, ensure_ascii=False, indent=2)
-            self._set_status(
-                _("Exported {count} image(s) to {name}").format(
-                    count=len(records), name=file_path.name
+        if self._search_model.checked_count == 0:
+            self._set_status(_("No marked images to export."))
+            return
+        self._pending_export_path = file_path
+        self._start_bulk_op(
+            "export_json",
+            _("Exporting metadata\u2026"),
+            file_path=file_path,
+            sort_by=self._sort_by,
+        )
+
+    @Slot()
+    def cancelBulkOp(self) -> None:
+        if self._bulk_worker is not None:
+            self._bulk_worker.cancel()
+
+    # ── Bulk-op worker helpers ────────────────────────────────────────────
+
+    def _start_bulk_op(
+        self,
+        operation: str,
+        label: str,
+        *,
+        mark_value: bool = True,
+        file_path: Path | None = None,
+        sort_by: str = "path_asc",
+    ) -> None:
+        """Spawn a BulkOpWorker and show the busy overlay."""
+        if self._is_busy:
+            return
+        self._bulk_worker = BulkOpWorker(
+            self._db_path,
+            self._key,
+            operation,
+            query=self._query_text,
+            ext_filter=self._ext_filter,
+            path_filter=self._current_path_filter(),
+            restrict_to_enabled_folders=(self._folder_repo is not None),
+            marked_only=self._checked_only_filter_active,
+            mark_value=mark_value,
+            file_path=file_path,
+            sort_by=sort_by,
+        )
+        self._bulk_worker.progress.connect(self._on_bulk_progress)
+        self._bulk_worker.finished.connect(self._on_bulk_finished)
+        self._bulk_worker.failed.connect(self._on_bulk_failed)
+        self._bulk_worker.canceled.connect(self._on_bulk_canceled)
+        self._bulk_progress = 0
+        self._bulk_progress_total = 0
+        self._busy_label = label
+        self._is_busy = True
+        self.isBusyChanged.emit()
+        self.busyLabelChanged.emit()
+        self.bulkProgressChanged.emit()
+        self._bulk_worker.start()
+
+    def _on_bulk_progress(self, done: int, total: int) -> None:
+        self._bulk_progress = done
+        self._bulk_progress_total = total
+        self.bulkProgressChanged.emit()
+
+    def _on_bulk_finished(self) -> None:
+        worker = self._bulk_worker
+        self._is_busy = False
+        self._bulk_worker = None
+        self.isBusyChanged.emit()
+        if worker is None:
+            return
+        if worker._operation in ("select_all", "deselect_all"):
+            self._search_model.set_checked_paths(worker.result_paths)
+            self.checkedCountChanged.emit()
+        elif worker._operation == "export_json":
+            fp = self._pending_export_path
+            self._pending_export_path = None
+            if fp is not None:
+                self._set_status(
+                    _("Exported {count} image(s) to {name}").format(
+                        count=worker.result_export_count, name=fp.name
+                    )
                 )
-            )
-        except OSError as exc:
-            self._set_status(_("Export failed: {}").format(exc))
+
+    def _on_bulk_failed(self, msg: str) -> None:
+        self._is_busy = False
+        self._bulk_worker = None
+        self.isBusyChanged.emit()
+        self._set_status(_("Operation failed: {}").format(msg))
+
+    def _on_bulk_canceled(self) -> None:
+        self._is_busy = False
+        self._bulk_worker = None
+        self.isBusyChanged.emit()
+        self._set_status(_("Operation canceled."))
+
 
     @Slot(str)
     def unlock(self, password: str) -> None:
+        """Show the unlock spinner, then run the actual DB open after one paint frame."""
+        if self._is_unlocking:
+            return
+        self._is_unlocking = True
+        self._unlock_error = ""
+        self.isUnlockingChanged.emit()
+        self.unlockErrorChanged.emit()
+        # Defer the blocking DB open by 50 ms so QML can repaint with the
+        # spinner before the main thread is occupied with key derivation.
+        QTimer.singleShot(50, lambda: self._do_unlock(password))
+
+    def _do_unlock(self, password: str) -> None:
+        repo: ImageIndexRepository | None = None
         folder_repo: IndexedFolderRepository | None = None
         try:
             repo = ImageIndexRepository(self._db_path, key=password)
@@ -437,6 +547,8 @@ class AppController(QObject):
             self._folder_filter = ""
             self._search_folder_filters = set()
             self._status_text = ""
+            self._is_unlocking = False
+            self.isUnlockingChanged.emit()
             # Wipe plain PNG thumbs on first unlock with a password (one-time migration
             # to encrypted cache).  Thumbs are rebuilt as .enc by ThumbWorker.
             cache_dir = self._search_model.cache_dir
@@ -477,23 +589,25 @@ class AppController(QObject):
                 self._start_auto_thumbs()
         except sqlcipher3.DatabaseError:
             self._unlock_error = "Wrong password — please try again."
+            self._is_unlocking = False
+            self.isUnlockingChanged.emit()
             self.unlockErrorChanged.emit()
             if repo is not None:
                 repo.close()
             if folder_repo is not None:
                 folder_repo.close()
-            # Ensure self refs never point to closed connections
             self._repo = None
             self._folder_repo = None
             self._is_locked = True
         except Exception as exc:
             self._unlock_error = f"Failed to open database: {exc}"
+            self._is_unlocking = False
+            self.isUnlockingChanged.emit()
             self.unlockErrorChanged.emit()
             if repo is not None:
                 repo.close()
             if folder_repo is not None:
                 folder_repo.close()
-            # Ensure self refs never point to closed connections
             self._repo = None
             self._folder_repo = None
             self._is_locked = True
