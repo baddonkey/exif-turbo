@@ -27,6 +27,32 @@ class ImageIndexRepository:
         self.conn.execute("PRAGMA busy_timeout=5000;")
         self.init_db()
 
+    def change_password(self, new_password: str) -> None:
+        """Re-encrypt the SQLCipher database under *new_password*.
+
+        The repository must already be unlocked (i.e. opened with the
+        correct current key in :py:meth:`__init__`).  Raises
+        :class:`sqlcipher3.DatabaseError` if SQLCipher refuses the rekey.
+
+        SQLCipher silently no-ops ``PRAGMA rekey`` while the database is in
+        WAL journal mode, so we checkpoint, switch to DELETE, rekey, and
+        switch back to WAL.  We also verify the new key is in effect by
+        running a query under it before returning.
+        """
+        if not new_password:
+            raise ValueError("new_password must not be empty")
+        new_hex = binascii.hexlify(new_password.encode("utf-8")).decode("ascii")
+        # Drain & remove the WAL so rekey can rewrite every page.
+        self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        self.conn.execute("PRAGMA journal_mode=DELETE")
+        self.conn.execute(f"PRAGMA rekey=\"x'{new_hex}'\"")
+        self.conn.commit()
+        # Restore WAL for normal operation on the now-rekeyed database.
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        # Sanity check: a query must succeed under the new key.  If the rekey
+        # silently failed this will raise sqlcipher3.DatabaseError.
+        self.conn.execute("SELECT count(*) FROM sqlite_master").fetchone()
+
     def init_db(self) -> None:
         self.conn.executescript(
             """

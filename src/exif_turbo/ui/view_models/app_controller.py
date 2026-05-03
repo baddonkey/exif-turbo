@@ -30,6 +30,7 @@ from ..models.search_list_model import SearchListModel
 from ..models.settings_model import SettingsModel
 from ..workers.bulk_op_worker import BulkOpWorker
 from ..workers.index_worker import IndexWorker
+from ..workers.password_change_worker import PasswordChangeWorker
 from ..workers.thumb_worker import ThumbWorker
 
 _PAGE_SIZE = 50
@@ -74,6 +75,8 @@ class AppController(QObject):
     busyLabelChanged = Signal()
     bulkProgressChanged = Signal()
     isUnlockingChanged = Signal()
+    passwordChangeFinished = Signal(bool, str)  # (success, message)
+    busyCancelableChanged = Signal()
 
     def __init__(
         self,
@@ -141,12 +144,16 @@ class AppController(QObject):
         self._filter_proxy: CheckedFilterProxyModel | None = None
         self._checked_only_filter_active: bool = False
         self._is_busy: bool = False
+        self._busy_cancelable: bool = True
         self._busy_label: str = ""
         self._bulk_progress: int = 0
         self._bulk_progress_total: int = 0
         self._bulk_worker: BulkOpWorker | None = None
         self._pending_export_path: Path | None = None
         self._is_unlocking: bool = False
+        self._password_change_worker: PasswordChangeWorker | None = None
+        self._password_change_old: str = ""
+        self._password_change_new: str = ""
         # Timer: kick off a batch thumb build every 8 s while indexing runs
         self._thumb_batch_timer = QTimer(self)
         self._thumb_batch_timer.setInterval(8_000)
@@ -328,6 +335,10 @@ class AppController(QObject):
     def busyLabel(self) -> str:
         return self._busy_label
 
+    @Property(bool, notify=busyCancelableChanged)
+    def busyCancelable(self) -> bool:
+        return self._busy_cancelable
+
     @Property(int, notify=bulkProgressChanged)
     def bulkProgress(self) -> int:
         return self._bulk_progress
@@ -471,9 +482,11 @@ class AppController(QObject):
         self._bulk_progress = 0
         self._bulk_progress_total = 0
         self._busy_label = label
+        self._busy_cancelable = True
         self._is_busy = True
         self.isBusyChanged.emit()
         self.busyLabelChanged.emit()
+        self.busyCancelableChanged.emit()
         self.bulkProgressChanged.emit()
         self._bulk_worker.start()
 
@@ -610,6 +623,161 @@ class AppController(QObject):
             self._repo = None
             self._folder_repo = None
             self._is_locked = True
+
+    @Slot(str, str)
+    def changePassword(self, old_password: str, new_password: str) -> None:
+        """Re-encrypt the SQLCipher database under *new_password*.
+
+        SQLCipher's ``PRAGMA rekey`` rewrites every page of the database
+        and can take several seconds on a large index, so the work runs on
+        a :class:`PasswordChangeWorker` background thread.  While it runs
+        the busy overlay blocks all GUI interaction (no Cancel button —
+        rekey cannot be safely interrupted mid-flight).
+
+        Emits :py:attr:`passwordChangeFinished` ``(success, message)`` on
+        completion.
+        """
+        if self._is_locked or self._repo is None:
+            self.passwordChangeFinished.emit(False, _("Database is locked."))
+            return
+        if self._is_indexing or self._is_building_thumbs or self._is_busy:
+            self.passwordChangeFinished.emit(
+                False,
+                _("Cannot change password while indexing or thumb-building is running."),
+            )
+            return
+        if old_password != self._key:
+            self.passwordChangeFinished.emit(False, _("Current password is incorrect."))
+            return
+        if not new_password:
+            self.passwordChangeFinished.emit(False, _("New password must not be empty."))
+            return
+        if new_password == old_password:
+            self.passwordChangeFinished.emit(
+                False, _("New password must differ from the current password.")
+            )
+            return
+        # Close our long-lived connections so the worker is the sole writer
+        # while the rekey is in flight.
+        if self._folder_repo is not None:
+            try:
+                self._folder_repo.close()
+            except Exception:  # noqa: BLE001
+                _log.exception("Failed to close folder repository before rekey")
+            self._folder_repo = None
+        try:
+            self._repo.close()
+        except Exception:  # noqa: BLE001
+            _log.exception("Failed to close image repository before rekey")
+        self._repo = None
+        # Configure busy overlay (non-cancelable).
+        cache_dir = self._search_model.cache_dir
+        self._busy_label = _("Changing password\u2026")
+        self._busy_cancelable = False
+        self._bulk_progress = 0
+        self._bulk_progress_total = 0
+        self._is_busy = True
+        self.busyLabelChanged.emit()
+        self.busyCancelableChanged.emit()
+        self.bulkProgressChanged.emit()
+        self.isBusyChanged.emit()
+        # Spawn the worker.  Stash inputs on the controller for the result
+        # handlers — keep separate fields so a concurrent bulk op can't
+        # clobber them.
+        self._password_change_worker = PasswordChangeWorker(
+            self._db_path, old_password, new_password, cache_dir
+        )
+        self._password_change_old = old_password
+        self._password_change_new = new_password
+        self._password_change_worker.finished.connect(self._on_password_change_finished)
+        self._password_change_worker.failed.connect(self._on_password_change_failed)
+        self._password_change_worker.start()
+
+    def _clear_busy_after_password_change(self) -> None:
+        self._is_busy = False
+        self._busy_cancelable = True
+        self._busy_label = ""
+        self.isBusyChanged.emit()
+        self.busyCancelableChanged.emit()
+        self.busyLabelChanged.emit()
+
+    def _on_password_change_finished(self) -> None:
+        new_password = self._password_change_new
+        # Re-open the long-lived connections under the new key.
+        try:
+            self._repo = ImageIndexRepository(self._db_path, key=new_password)
+            self._folder_repo = IndexedFolderRepository(self._db_path, key=new_password)
+        except Exception as exc:  # noqa: BLE001
+            _log.exception("Failed to reopen database after rekey")
+            self._password_change_worker = None
+            self._clear_busy_after_password_change()
+            self.passwordChangeFinished.emit(
+                False,
+                _("Database password changed, but reopening failed: {error}").format(error=str(exc)),
+            )
+            return
+        self._key = new_password
+        if self._thumb_provider is not None:
+            self._thumb_provider.set_key(new_password, self._search_model.cache_dir)
+        self._password_change_worker = None
+        self._clear_busy_after_password_change()
+        self.passwordChangeFinished.emit(True, _("Password changed successfully."))
+
+    def _on_password_change_failed(self, message: str) -> None:
+        old_password = self._password_change_old
+        # Best-effort: try to reopen with the OLD key so the app stays usable.
+        # If the failure was during rewrap (DB rekey already succeeded),
+        # reopening with the old key will fail too — fall back to new key
+        # and clear the thumb cache.
+        reopened_key = old_password
+        try:
+            self._repo = ImageIndexRepository(self._db_path, key=old_password)
+            self._repo.count_images("")  # verify
+            self._folder_repo = IndexedFolderRepository(self._db_path, key=old_password)
+        except Exception:  # noqa: BLE001
+            _log.warning("Reopening with old key failed; trying new key (rewrap stage)")
+            try:
+                if self._repo is not None:
+                    self._repo.close()
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                new_password = self._password_change_new
+                self._repo = ImageIndexRepository(self._db_path, key=new_password)
+                self._folder_repo = IndexedFolderRepository(self._db_path, key=new_password)
+                self._key = new_password
+                reopened_key = new_password
+                # Thumb cache may now be unreadable — clear it.
+                cache_dir = self._search_model.cache_dir
+                self._purge_thumb_cache(cache_dir)
+                if self._thumb_provider is not None:
+                    self._thumb_provider.set_key(new_password, cache_dir)
+            except Exception:  # noqa: BLE001
+                _log.exception("Failed to reopen database with either key")
+                self._repo = None
+                self._folder_repo = None
+        self._password_change_worker = None
+        self._clear_busy_after_password_change()
+        if reopened_key == old_password:
+            self.passwordChangeFinished.emit(
+                False, _("Failed to change password: {error}").format(error=message)
+            )
+        else:
+            self.passwordChangeFinished.emit(
+                False,
+                _("Password changed but thumbnail cache could not be re-wrapped ({error}). The cache has been cleared and will be rebuilt.").format(error=message),
+            )
+
+    @staticmethod
+    def _purge_thumb_cache(cache_dir: Path) -> None:
+        if not cache_dir.exists():
+            return
+        for entry in cache_dir.iterdir():
+            if entry.is_file():
+                try:
+                    entry.unlink()
+                except OSError:
+                    pass
 
     @Slot(str)
     def search(self, query: str) -> None:

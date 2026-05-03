@@ -582,6 +582,7 @@ ApplicationWindow {
                     Material.accent: Material.Red
                     implicitWidth: 120
                     implicitHeight: 36
+                    visible: controller ? controller.busyCancelable : true
                     onClicked: controller.cancelBulkOp()
                 }
             }
@@ -2343,6 +2344,34 @@ ApplicationWindow {
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
 
+                    // ── Change password ───────────────────────────────────
+                    Label {
+                        text: qsTr("Change Password")
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                        Layout.bottomMargin: 6
+                    }
+                    Label {
+                        text: qsTr("Re-encrypts the database under a new password. Existing thumbnails are preserved.")
+                        font.pixelSize: 12
+                        opacity: 0.6
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 14
+                    }
+                    Button {
+                        id: changePasswordButton
+                        text: qsTr("Change Password\u2026")
+                        enabled: !_isIndexing && !_isLocked
+                        Layout.bottomMargin: 40
+                        onClicked: {
+                            changePasswordDialog.resetFields()
+                            changePasswordDialog.open()
+                        }
+                    }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
+
                     // ── Reset database ────────────────────────────────────
                     Label {
                         text: qsTr("Reset Database")
@@ -2399,6 +2428,163 @@ ApplicationWindow {
         }
 
         onAccepted: controller.resetDatabase()
+    }
+
+    // ── Change password dialog ────────────────────────────────────────────
+    Dialog {
+        id: changePasswordDialog
+        title: qsTr("Change Password")
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        width: 460
+        closePolicy: changePasswordDialog.busy ? Popup.NoAutoClose : Popup.CloseOnEscape
+
+        property bool busy: false
+
+        function resetFields() {
+            oldPwField.text = ""
+            newPwField.text = ""
+            confirmPwField.text = ""
+            errorLabel.text = ""
+            changePasswordDialog.busy = false
+            confirmButton.enabled = true
+            oldPwField.focus = true
+        }
+
+        Connections {
+            target: controller
+            function onPasswordChangeFinished(success, message) {
+                changePasswordDialog.busy = false
+                confirmButton.enabled = true
+                if (success) {
+                    changePasswordDialog.close()
+                    passwordChangedDialog.message = message
+                    passwordChangedDialog.open()
+                } else {
+                    errorLabel.color = Material.color(Material.Red)
+                    errorLabel.text = message
+                }
+            }
+        }
+
+        ColumnLayout {
+            width: parent.width
+            spacing: 12
+
+            Label {
+                text: qsTr("Enter your current password and choose a new one.")
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+
+            Label { text: qsTr("Current password"); font.pixelSize: 12; opacity: 0.7 }
+            TextField {
+                id: oldPwField
+                Layout.fillWidth: true
+                echoMode: TextInput.Password
+                enabled: !changePasswordDialog.busy
+                onTextChanged: errorLabel.text = ""
+            }
+
+            Label { text: qsTr("New password"); font.pixelSize: 12; opacity: 0.7 }
+            TextField {
+                id: newPwField
+                Layout.fillWidth: true
+                echoMode: TextInput.Password
+                enabled: !changePasswordDialog.busy
+                onTextChanged: errorLabel.text = ""
+            }
+
+            Label { text: qsTr("Confirm new password"); font.pixelSize: 12; opacity: 0.7 }
+            TextField {
+                id: confirmPwField
+                Layout.fillWidth: true
+                echoMode: TextInput.Password
+                enabled: !changePasswordDialog.busy
+                onTextChanged: errorLabel.text = ""
+                onAccepted: confirmButton.clicked()
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                visible: changePasswordDialog.busy
+                spacing: 10
+                BusyIndicator {
+                    running: changePasswordDialog.busy
+                    Layout.preferredWidth: 22
+                    Layout.preferredHeight: 22
+                }
+                Label {
+                    text: qsTr("Changing password\u2026 This may take a moment.")
+                    font.pixelSize: 12
+                    Layout.fillWidth: true
+                }
+            }
+
+            Label {
+                id: errorLabel
+                text: ""
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+                visible: text !== ""
+                font.pixelSize: 12
+            }
+        }
+
+        footer: DialogButtonBox {
+            Button {
+                text: qsTr("Cancel")
+                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
+                enabled: !changePasswordDialog.busy
+                onClicked: changePasswordDialog.close()
+            }
+            Button {
+                id: confirmButton
+                text: qsTr("Change Password")
+                // ApplyRole does NOT auto-close the dialog — we close it
+                // ourselves only after the controller reports success.
+                DialogButtonBox.buttonRole: DialogButtonBox.ApplyRole
+                highlighted: true
+                enabled: !changePasswordDialog.busy
+                onClicked: {
+                    if (newPwField.text === "") {
+                        errorLabel.color = Material.color(Material.Red)
+                        errorLabel.text = qsTr("New password must not be empty.")
+                        return
+                    }
+                    if (newPwField.text !== confirmPwField.text) {
+                        errorLabel.color = Material.color(Material.Red)
+                        errorLabel.text = qsTr("New password and confirmation do not match.")
+                        return
+                    }
+                    errorLabel.text = ""
+                    changePasswordDialog.busy = true
+                    controller.changePassword(oldPwField.text, newPwField.text)
+                }
+            }
+        }
+
+        onClosed: {
+            busy = false
+            confirmButton.enabled = true
+        }
+    }
+
+    // ── Password changed confirmation dialog ──────────────────────────────
+    Dialog {
+        id: passwordChangedDialog
+        property string message: ""
+        title: qsTr("Password Changed")
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        width: 380
+        standardButtons: Dialog.Ok
+
+        Label {
+            width: 320
+            wrapMode: Text.WordWrap
+            text: passwordChangedDialog.message
+        }
     }
 
     // ── Status bar ────────────────────────────────────────────────────────
