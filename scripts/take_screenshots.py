@@ -58,12 +58,14 @@ from PySide6.QtQuickControls2 import QQuickStyle  # noqa: E402
 from exif_turbo.data.image_index_repository import ImageIndexRepository  # noqa: E402
 from exif_turbo.data.indexed_folder_repository import IndexedFolderRepository  # noqa: E402
 from exif_turbo.indexing.indexer_service import IndexerService  # noqa: E402
+from exif_turbo.ui.models.checked_filter_proxy_model import CheckedFilterProxyModel  # noqa: E402
 from exif_turbo.ui.models.exif_list_model import ExifListModel  # noqa: E402
 from exif_turbo.ui.models.folder_list_model import FolderListModel  # noqa: E402
 from exif_turbo.ui.models.search_list_model import SearchListModel  # noqa: E402
 from exif_turbo.ui.models.settings_model import SettingsModel  # noqa: E402
 from exif_turbo.ui.providers.preview_image_provider import PreviewImageProvider  # noqa: E402
 from exif_turbo.ui.providers.raw_image_provider import RawImageProvider  # noqa: E402
+from exif_turbo.ui.providers.thumb_image_provider import ThumbnailImageProvider  # noqa: E402
 from exif_turbo.ui.view_models.app_controller import AppController  # noqa: E402
 
 _STEPS = [
@@ -234,14 +236,28 @@ def _run_gui() -> None:
     exif_model = ExifListModel()
     folder_model = FolderListModel()
     settings = SettingsModel(DB_PATH.parent / "settings.json")
-    ctrl = AppController(DB_PATH, search_model, exif_model, folder_model, settings)
+    thumb_provider = ThumbnailImageProvider()
+    ctrl = AppController(
+        DB_PATH,
+        search_model,
+        exif_model,
+        folder_model,
+        settings,
+        cache_dir=THUMB_CACHE,
+        thumb_provider=thumb_provider,
+    )
+    filter_proxy = CheckedFilterProxyModel()
+    filter_proxy.setSourceModel(search_model)
+    ctrl.set_filter_proxy(filter_proxy)
 
     engine = QQmlApplicationEngine()
     engine.addImageProvider("preview", PreviewImageProvider())
     engine.addImageProvider("raw", RawImageProvider())
+    engine.addImageProvider("thumb", thumb_provider)
     ctx = engine.rootContext()
     ctx.setContextProperty("controller", ctrl)
     ctx.setContextProperty("searchModel", search_model)
+    ctx.setContextProperty("filteredSearchModel", filter_proxy)
     ctx.setContextProperty("exifModel", exif_model)
     ctx.setContextProperty("folderListModel", folder_model)
     ctx.setContextProperty("settingsModel", settings)
