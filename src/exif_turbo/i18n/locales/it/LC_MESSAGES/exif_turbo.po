@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-02 21:32+0200\n"
+"POT-Creation-Date: 2026-05-03 19:41+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: it\n"
@@ -18,82 +18,131 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:99
+#: src/exif_turbo/ui/view_models/app_controller.py:102
 msgid "Enter the database password to continue"
 msgstr "Inserisci la password del database per continuare"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:396
+#: src/exif_turbo/ui/view_models/app_controller.py:407
 msgid "Selecting all matching images…"
 msgstr "Selezione di tutte le immagini corrispondenti…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:406
+#: src/exif_turbo/ui/view_models/app_controller.py:417
 msgid "Deselecting all matching images…"
 msgstr "Deselezione di tutte le immagini corrispondenti…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:416
+#: src/exif_turbo/ui/view_models/app_controller.py:427
 msgid "Inverting selection…"
 msgstr "Inversione della selezione…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:425
+#: src/exif_turbo/ui/view_models/app_controller.py:436
 msgid "No marked images to export."
 msgstr "Nessuna immagine contrassegnata da esportare."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:430
+#: src/exif_turbo/ui/view_models/app_controller.py:441
 msgid "Exporting metadata…"
 msgstr "Esportazione metadati…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:500
+#: src/exif_turbo/ui/view_models/app_controller.py:513
 #, python-brace-format
 msgid "Exported {count} image(s) to {name}"
 msgstr "{count} immagine/i esportata/e in {name}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:509
+#: src/exif_turbo/ui/view_models/app_controller.py:522
 #, python-brace-format
 msgid "Operation failed: {}"
 msgstr "Operazione fallita: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:515
+#: src/exif_turbo/ui/view_models/app_controller.py:528
 msgid "Operation canceled."
 msgstr "Operazione annullata."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:873
+#: src/exif_turbo/ui/view_models/app_controller.py:641
+msgid "Database is locked."
+msgstr "Il database è bloccato."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:646
+msgid "Cannot change password while indexing or thumb-building is running."
+msgstr ""
+"Impossibile cambiare la password mentre è in corso l’indicizzazione o la "
+"creazione delle miniature."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:650
+msgid "Current password is incorrect."
+msgstr "La password attuale non è corretta."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:653
+msgid "New password must not be empty."
+msgstr "La nuova password non può essere vuota."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:657
+msgid "New password must differ from the current password."
+msgstr "La nuova password deve essere diversa da quella attuale."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:675
+msgid "Changing password…"
+msgstr "Modifica password in corso…"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:716
+#, python-brace-format
+msgid "Database password changed, but reopening failed: {error}"
+msgstr "Password del database modificata, ma la riapertura non è riuscita: {error}"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:724
+msgid "Password changed successfully."
+msgstr "Password modificata correttamente."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:763
+#, python-brace-format
+msgid "Failed to change password: {error}"
+msgstr "Modifica password non riuscita: {error}"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:768
+#, python-brace-format
+msgid ""
+"Password changed but thumbnail cache could not be re-wrapped ({error}). "
+"The cache has been cleared and will be rebuilt."
+msgstr ""
+"La password è stata modificata ma la cache delle miniature non è stata "
+"ricifrata ({error}). La cache è stata svuotata e verrà ricostruita."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:1041
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Cartella già monitorata: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1027
+#: src/exif_turbo/ui/view_models/app_controller.py:1214
 #, python-brace-format
 msgid "Indexing {}…"
 msgstr "Indicizzazione {}…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1059
+#: src/exif_turbo/ui/view_models/app_controller.py:1246
 #, python-brace-format
 msgid "Indexed {count} images ({errors} skipped due to errors)"
 msgstr "{count} immagini indicizzate ({errors} saltate a causa di errori)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1064
+#: src/exif_turbo/ui/view_models/app_controller.py:1251
 #, python-brace-format
 msgid "Indexed {} images"
 msgstr "{} immagini indicizzate"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1097
+#: src/exif_turbo/ui/view_models/app_controller.py:1284
 #, python-brace-format
 msgid "Index failed: {}"
 msgstr "Indicizzazione fallita: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1129
+#: src/exif_turbo/ui/view_models/app_controller.py:1316
 msgid "Index canceled"
 msgstr "Indicizzazione annullata"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1149
+#: src/exif_turbo/ui/view_models/app_controller.py:1336
 msgid "Canceling…"
 msgstr "Annullamento…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1200
+#: src/exif_turbo/ui/view_models/app_controller.py:1387
 msgid "Database reset"
 msgstr "Database ripristinato"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1284
+#: src/exif_turbo/ui/view_models/app_controller.py:1471
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indicizzazione… {} / {}"
@@ -191,6 +240,22 @@ msgid "Canceling\\u2026"
 msgstr "Annullamento…"
 
 #: QML
+msgid "Change Password"
+msgstr "Cambia password"
+
+#: QML
+msgid "Change Password\\u2026"
+msgstr "Cambia password…"
+
+#: QML
+msgid "Changing password\\u2026 This may take a moment."
+msgstr "Modifica password in corso… Può richiedere qualche istante."
+
+#: QML
+msgid "Confirm new password"
+msgstr "Conferma nuova password"
+
+#: QML
 msgid "Confirm passphrase"
 msgstr "Conferma passphrase"
 
@@ -209,6 +274,10 @@ msgid ""
 msgstr ""
 "Strumento multipiattaforma per la ricerca\n"
 "e l’indicizzazione di metadati EXIF."
+
+#: QML
+msgid "Current password"
+msgstr "Password attuale"
 
 #: QML
 msgid "Date"
@@ -233,6 +302,10 @@ msgstr "TAG EXIF"
 #: QML
 msgid "Enter the database password"
 msgstr "Inserisci la password del database"
+
+#: QML
+msgid "Enter your current password and choose a new one."
+msgstr "Inserisci la password attuale e scegline una nuova."
 
 #: QML
 msgid "Export Metadata as &JSON\\u2026 (%1 selected)"
@@ -377,6 +450,14 @@ msgid "New passphrase"
 msgstr "Nuova passphrase"
 
 #: QML
+msgid "New password"
+msgstr "Nuova password"
+
+#: QML
+msgid "New password and confirmation do not match."
+msgstr "La nuova password e la conferma non corrispondono."
+
+#: QML
 msgid "New pattern, e.g.  @eaDir  or  *.tmp"
 msgstr "Nuovo modello, es.  @eaDir  o  *.tmp"
 
@@ -426,6 +507,10 @@ msgid "Password"
 msgstr "Password"
 
 #: QML
+msgid "Password Changed"
+msgstr "Password modificata"
+
+#: QML
 msgid "Path A→Z"
 msgstr "Percorso A→Z"
 
@@ -461,6 +546,14 @@ msgstr "Corrispondenza precedente"
 #: QML
 msgid "RESULTS"
 msgstr "RISULTATI"
+
+#: QML
+msgid ""
+"Re-encrypts the database under a new password. Existing thumbnails are "
+"preserved."
+msgstr ""
+"Ricifra il database con una nuova password. Le miniature esistenti "
+"vengono conservate."
 
 #: QML
 msgid "Re-index this folder (incremental)"

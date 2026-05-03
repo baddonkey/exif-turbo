@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-02 21:32+0200\n"
+"POT-Creation-Date: 2026-05-03 19:41+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: rm\n"
@@ -18,82 +18,133 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:99
+#: src/exif_turbo/ui/view_models/app_controller.py:102
 msgid "Enter the database password to continue"
 msgstr "Endatar la pled-clav da la banca da datas per cuntinuar"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:396
+#: src/exif_turbo/ui/view_models/app_controller.py:407
 msgid "Selecting all matching images…"
 msgstr "Seleziun da tuts ils maletgs correspundentas…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:406
+#: src/exif_turbo/ui/view_models/app_controller.py:417
 msgid "Deselecting all matching images…"
 msgstr "Deseleziun da tuts ils maletgs correspundentas…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:416
+#: src/exif_turbo/ui/view_models/app_controller.py:427
 msgid "Inverting selection…"
 msgstr "Inversiun da la selecziun…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:425
+#: src/exif_turbo/ui/view_models/app_controller.py:436
 msgid "No marked images to export."
 msgstr "Nagins maletgs marcads per exportar."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:430
+#: src/exif_turbo/ui/view_models/app_controller.py:441
 msgid "Exporting metadata…"
 msgstr "Exportaziun da metadata…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:500
+#: src/exif_turbo/ui/view_models/app_controller.py:513
 #, python-brace-format
 msgid "Exported {count} image(s) to {name}"
 msgstr "{count} maletg(s) exportad(s) en {name}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:509
+#: src/exif_turbo/ui/view_models/app_controller.py:522
 #, python-brace-format
 msgid "Operation failed: {}"
 msgstr "Operaziun buca reussida: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:515
+#: src/exif_turbo/ui/view_models/app_controller.py:528
 msgid "Operation canceled."
 msgstr "Operaziun annullada."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:873
+#: src/exif_turbo/ui/view_models/app_controller.py:641
+msgid "Database is locked."
+msgstr "La banca da datas è serrada."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:646
+msgid "Cannot change password while indexing or thumb-building is running."
+msgstr ""
+"Impussibel da midar la pled-clav durant l’indexaziun u la creaziun da "
+"miniaturas."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:650
+msgid "Current password is incorrect."
+msgstr "La pled-clav actuala n’è betg correcta."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:653
+msgid "New password must not be empty."
+msgstr "La nova pled-clav na dastga betg esser vida."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:657
+msgid "New password must differ from the current password."
+msgstr "La nova pled-clav sto esser differenta da quella actuala."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:675
+msgid "Changing password…"
+msgstr "Pled-clav vegn midada…"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:716
+#, python-brace-format
+msgid "Database password changed, but reopening failed: {error}"
+msgstr ""
+"La pled-clav da la banca da datas è vegnida midada, ma la reaviertura n’è"
+" betg reussida: {error}"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:724
+msgid "Password changed successfully."
+msgstr "Pled-clav midada cun success."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:763
+#, python-brace-format
+msgid "Failed to change password: {error}"
+msgstr "Midada da la pled-clav betg reussida: {error}"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:768
+#, python-brace-format
+msgid ""
+"Password changed but thumbnail cache could not be re-wrapped ({error}). "
+"The cache has been cleared and will be rebuilt."
+msgstr ""
+"La pled-clav è vegnida midada, ma il cache da miniaturas n’è betg pudida "
+"vegnir cifrada da nov ({error}). Il cache è vegnì stizzad e vegn rebatgì."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:1041
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Cartella gia trackata: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1027
+#: src/exif_turbo/ui/view_models/app_controller.py:1214
 #, python-brace-format
 msgid "Indexing {}…"
 msgstr "Indexaziun {}…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1059
+#: src/exif_turbo/ui/view_models/app_controller.py:1246
 #, python-brace-format
 msgid "Indexed {count} images ({errors} skipped due to errors)"
 msgstr "{count} maletgs indexads ({errors} sursiglids pervia d’errurs)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1064
+#: src/exif_turbo/ui/view_models/app_controller.py:1251
 #, python-brace-format
 msgid "Indexed {} images"
 msgstr "{} maletgs indexads"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1097
+#: src/exif_turbo/ui/view_models/app_controller.py:1284
 #, python-brace-format
 msgid "Index failed: {}"
 msgstr "Indexaziun buca reussida: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1129
+#: src/exif_turbo/ui/view_models/app_controller.py:1316
 msgid "Index canceled"
 msgstr "Indexaziun interrutta"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1149
+#: src/exif_turbo/ui/view_models/app_controller.py:1336
 msgid "Canceling…"
 msgstr "Interruziun…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1200
+#: src/exif_turbo/ui/view_models/app_controller.py:1387
 msgid "Database reset"
 msgstr "Banca da datas resettada"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1284
+#: src/exif_turbo/ui/view_models/app_controller.py:1471
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indexaziun… {} / {}"
@@ -191,6 +242,22 @@ msgid "Canceling\\u2026"
 msgstr "Interruziun…"
 
 #: QML
+msgid "Change Password"
+msgstr "Midar pled-clav"
+
+#: QML
+msgid "Change Password\\u2026"
+msgstr "Midar pled-clav…"
+
+#: QML
+msgid "Changing password\\u2026 This may take a moment."
+msgstr "Pled-clav vegn midada… Quai po durar in mument."
+
+#: QML
+msgid "Confirm new password"
+msgstr "Confermar la nova pled-clav"
+
+#: QML
 msgid "Confirm passphrase"
 msgstr "Confermar la pled-clav"
 
@@ -209,6 +276,10 @@ msgid ""
 msgstr ""
 "Instrument multiplatforma per tschertgar\n"
 "e indexar metadata EXIF."
+
+#: QML
+msgid "Current password"
+msgstr "Pled-clav actuala"
 
 #: QML
 msgid "Date"
@@ -233,6 +304,10 @@ msgstr "TAGS EXIF"
 #: QML
 msgid "Enter the database password"
 msgstr "Endatar la pled-clav da la banca da datas"
+
+#: QML
+msgid "Enter your current password and choose a new one."
+msgstr "Endatai la pled-clav actuala e tscherni in’autra."
 
 #: QML
 msgid "Export Metadata as &JSON\\u2026 (%1 selected)"
@@ -379,6 +454,14 @@ msgid "New passphrase"
 msgstr "Nova pled-clav"
 
 #: QML
+msgid "New password"
+msgstr "Nova pled-clav"
+
+#: QML
+msgid "New password and confirmation do not match."
+msgstr "La nova pled-clav e la conferma na correspundan betg."
+
+#: QML
 msgid "New pattern, e.g.  @eaDir  or  *.tmp"
 msgstr "Nov schema, p.ex.  @eaDir  u  *.tmp"
 
@@ -427,6 +510,10 @@ msgid "Password"
 msgstr "Pled-clav"
 
 #: QML
+msgid "Password Changed"
+msgstr "Pled-clav midada"
+
+#: QML
 msgid "Path A→Z"
 msgstr "Traject A→Z"
 
@@ -462,6 +549,14 @@ msgstr "Resultaten precedent"
 #: QML
 msgid "RESULTS"
 msgstr "RESULTATS"
+
+#: QML
+msgid ""
+"Re-encrypts the database under a new password. Existing thumbnails are "
+"preserved."
+msgstr ""
+"Cifrescha la banca da datas dad nov cun ina nova pled-clav. Las "
+"miniaturas existentas vegnan mantegnidas."
 
 #: QML
 msgid "Re-index this folder (incremental)"
