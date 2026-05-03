@@ -915,11 +915,15 @@ ApplicationWindow {
                         }
                     }
 
-                    // Format facet chips — hidden when only one format or none
+                    // Format facet chips — hidden when only one format and
+                    // no active filter. We keep the row visible whenever an
+                    // ext filter is active so the user can always switch back
+                    // to "All" or to another available format.
                     Rectangle {
                         Layout.fillWidth: true
-                        implicitHeight: root._formats.length > 1 ? 36 : 0
-                        visible: root._formats.length > 1
+                        readonly property bool _showChips: root._formats.length > 1 || root._extFilter !== ""
+                        implicitHeight: _showChips ? 36 : 0
+                        visible: _showChips
                         color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.04)
 
                         Flickable {

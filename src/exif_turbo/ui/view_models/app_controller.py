@@ -913,9 +913,14 @@ class AppController(QObject):
             path_filter=path_filter,
             restrict_to_enabled_folders=restrict_to_enabled_folders,
         )
-        self._available_formats = _json.dumps(
-            [{"ext": ext, "count": cnt} for ext, cnt in counts]
-        )
+        # Always include the currently selected ext filter — even if the
+        # current scope (query + path filter) yields zero matches for it —
+        # so the UI can still render and unselect it. Otherwise the user
+        # gets "stuck" on a filter that has been hidden from the chip row.
+        items = [{"ext": ext, "count": cnt} for ext, cnt in counts]
+        if self._ext_filter and not any(it["ext"] == self._ext_filter for it in items):
+            items.append({"ext": self._ext_filter, "count": 0})
+        self._available_formats = _json.dumps(items)
         self.availableFormatsChanged.emit()
 
     def _invalidate_folder_tree(self) -> None:
