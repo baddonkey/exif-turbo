@@ -414,6 +414,36 @@ The theme changes immediately.
 Select the display language from the dropdown. A restart is required for the
 language change to take full effect.
 
+### Change Password
+
+Click **Change Password…** to re-encrypt the SQLCipher database under a new
+password. The dialog asks for:
+
+- **Current password** — must match the password the database is currently
+  encrypted with.
+- **New password** — your new passphrase. Cannot be empty and must differ
+  from the current one.
+- **Confirm new password** — must match the new password exactly.
+
+Click **Change Password** to apply. A busy indicator and the message
+**“Changing password… This may take a moment.”** are shown while exif-turbo
+re-encrypts every page of the database. Existing **thumbnails are preserved**
+— exif-turbo uses a wrapped-key model, so only the wrapping key (which
+protects the thumbnail key) is re-encrypted under the new password; the
+thumbnail cache on disk does not have to be rebuilt.
+
+Once the operation finishes successfully the dialog closes and a confirmation
+appears. The new password is required the next time you unlock the database.
+
+If the current password is wrong, an inline red error message
+(“Current password is incorrect.”) is shown and the dialog stays open. The
+**Change Password…** button is disabled while indexing or thumbnail building
+is in progress, and while the database is locked.
+
+> **There is no recovery if you forget the new password.** Make sure you
+> remember it (or store it in a password manager) before clicking
+> **Change Password**.
+
 ### Reset Database
 
 At the bottom of the Settings tab, a divider separates the standard settings
@@ -479,8 +509,10 @@ ORF, RW2, PEF, RAF, RWL, SRW (and any other format that ExifTool can read).
 A: By default at `~/.exif-turbo/data/index/index.db` on all platforms.
 
 **Q: How do I change the database password?**  
-A: There is no in-app password change yet. Re-create the database by deleting
-the `.db` file and re-indexing your folders with a new password.
+A: Open the **Settings** tab and click **Change Password…**. Enter your
+current password and a new one — exif-turbo will re-encrypt the database in
+place. Thumbnails are preserved (no re-indexing required). See
+[Change Password](#change-password) for details.
 
 **Q: Thumbnails are not showing / are slow to appear.**  
 A: Thumbnails are generated in a background thread after indexing. Depending
