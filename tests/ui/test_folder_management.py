@@ -251,3 +251,95 @@ def test_remove_indexed_folder_removes_from_model(
     ids = [folder_model.data(folder_model.index(i), FolderListModel.FolderIdRole)
            for i in range(folder_model.rowCount())]
     assert alpha_id not in ids
+
+
+def test_remove_indexed_folder_clears_active_search_filter(
+    qtbot: QtBot,
+    folder_window: tuple[AppController, SearchListModel, FolderListModel, Path, Path],
+) -> None:
+    """Removing the folder currently used as the search filter should clear
+    the filter so all images become visible again."""
+    import json as _json
+
+    # Arrange — add both folders, then filter the search to alpha only
+    controller, _, folder_model, alpha_dir, beta_dir = folder_window
+
+    with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
+        controller.addIndexedFolder(QUrl.fromLocalFile(str(alpha_dir)).toString())
+    qtbot.wait(_PAUSE_MS)
+    with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
+        controller.addIndexedFolder(QUrl.fromLocalFile(str(beta_dir)).toString())
+    qtbot.wait(_PAUSE_MS)
+
+    # Find alpha id and path
+    alpha_id = None
+    alpha_path = None
+    for i in range(folder_model.rowCount()):
+        import os
+        path = folder_model.data(folder_model.index(i), FolderListModel.PathRole)
+        if os.path.normpath(path) == os.path.normpath(str(alpha_dir)):
+            alpha_id = folder_model.data(folder_model.index(i), FolderListModel.FolderIdRole)
+            alpha_path = path
+            break
+    assert alpha_id is not None and alpha_path is not None
+
+    # Set search folder filter to alpha — should narrow results to 3 Canon images
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.setSearchFolderFilter(alpha_path)
+    qtbot.wait(_PAUSE_MS)
+    assert controller.totalResults == 3
+    assert _json.loads(controller.searchFolderFilters) == [alpha_path]
+
+    # Act — remove the alpha folder
+    with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
+        controller.removeIndexedFolder(alpha_id)
+    qtbot.wait(_PAUSE_MS)
+
+    # Assert — search filter is cleared and the remaining beta images are shown
+    assert _json.loads(controller.searchFolderFilters) == []
+    assert controller.totalResults == 2
+
+
+def test_disable_indexed_folder_clears_active_search_filter(
+    qtbot: QtBot,
+    folder_window: tuple[AppController, SearchListModel, FolderListModel, Path, Path],
+) -> None:
+    """Disabling the folder currently used as the search filter should clear
+    the filter so the remaining enabled folders' images become visible."""
+    import json as _json
+
+    # Arrange — add both folders, then filter the search to alpha only
+    controller, _, folder_model, alpha_dir, beta_dir = folder_window
+
+    with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
+        controller.addIndexedFolder(QUrl.fromLocalFile(str(alpha_dir)).toString())
+    qtbot.wait(_PAUSE_MS)
+    with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
+        controller.addIndexedFolder(QUrl.fromLocalFile(str(beta_dir)).toString())
+    qtbot.wait(_PAUSE_MS)
+
+    alpha_id = None
+    alpha_path = None
+    for i in range(folder_model.rowCount()):
+        import os
+        path = folder_model.data(folder_model.index(i), FolderListModel.PathRole)
+        if os.path.normpath(path) == os.path.normpath(str(alpha_dir)):
+            alpha_id = folder_model.data(folder_model.index(i), FolderListModel.FolderIdRole)
+            alpha_path = path
+            break
+    assert alpha_id is not None and alpha_path is not None
+
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.setSearchFolderFilter(alpha_path)
+    qtbot.wait(_PAUSE_MS)
+    assert controller.totalResults == 3
+    assert _json.loads(controller.searchFolderFilters) == [alpha_path]
+
+    # Act — disable the alpha folder
+    with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
+        controller.setFolderEnabled(alpha_id, False)
+    qtbot.wait(_PAUSE_MS)
+
+    # Assert — search filter is cleared and beta images are shown
+    assert _json.loads(controller.searchFolderFilters) == []
+    assert controller.totalResults == 2

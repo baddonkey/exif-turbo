@@ -892,6 +892,15 @@ class AppController(QObject):
         self._folder_model.remove_folder(folder_id)
         self._repo.delete_folder_associations(folder_id)
         self._repo.delete_orphans_under_prefix(folder.path)
+        # Drop the removed folder from the active search-filter selection
+        # so the search reverts to "all folders" instead of filtering on a
+        # path that no longer exists.
+        if folder.path in self._search_folder_filters:
+            self._search_folder_filters.discard(folder.path)
+            self.searchFolderFiltersChanged.emit()
+        if self._folder_filter == folder.path:
+            self._folder_filter = ""
+            self.folderFilterChanged.emit()
         self.indexedFoldersChanged.emit()
         self._invalidate_folder_tree()
         self._load_formats()
@@ -910,6 +919,16 @@ class AppController(QObject):
         updated = self._folder_repo.get_by_id(folder_id)
         if updated:
             self._folder_model.update_folder(updated)
+        # If the folder being disabled is the current search/browse filter,
+        # drop the filter so the search reverts to "all enabled folders"
+        # instead of producing 0 results for an excluded path.
+        if not enabled and updated is not None:
+            if updated.path in self._search_folder_filters:
+                self._search_folder_filters.discard(updated.path)
+                self.searchFolderFiltersChanged.emit()
+            if self._folder_filter == updated.path:
+                self._folder_filter = ""
+                self.folderFilterChanged.emit()
         self.indexedFoldersChanged.emit()
         self._run_search()
 

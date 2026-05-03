@@ -43,18 +43,35 @@ The user has provided (or will confirm) the new version: **$ARGUMENTS**
    - Run: `git push origin main`  *(includes the version bump and the auto-committed version_info.py)*
    - Run: `git push origin v<version>`
 
-8. **Publish a GitHub Release with the binaries**
-   - Use the `gh` CLI to create the release and upload the installer.
+8. **Generate release notes (REQUIRED — never skip)**
+   - Find the previous release tag: `git describe --tags --abbrev=0 v<version>^`
+   - Collect the commit log between the previous tag and the new tag:
+     `git log <previous-tag>..v<version> --pretty=format:"- %s"`
+   - Write release notes to a temporary file `dist\RELEASE_NOTES_v<version>.md` containing:
+     - A heading `## What's changed in v<version>`
+     - The grouped commit list (group by conventional-commit prefix when present:
+       `feat:` → "Features", `fix:` → "Bug fixes", `chore:`/`docs:`/`refactor:`/`test:` → "Other changes").
+       Strip the prefix from the bullet text. Drop noise commits like
+       `chore: bump version to ...` and the auto-generated `version_info.py` commit.
+     - A trailing line: `**Full changelog**: https://github.com/baddonkey/exif-turbo/compare/<previous-tag>...v<version>`
+   - Show the generated notes to the user before publishing.
+
+9. **Publish a GitHub Release with the binaries**
+   - Use the `gh` CLI to create the release and upload the installer, passing the
+     release-notes file produced in step 8 via `--notes-file` (NEVER use `--notes`
+     with a placeholder string — the release MUST have real notes).
    - On **Windows**:
      ```
-     gh release create v<version> --title "exif-turbo v<version>" --notes "Release v<version>" dist\exif-turbo-<version>-windows.msi
+     gh release create v<version> --title "exif-turbo v<version>" --notes-file dist\RELEASE_NOTES_v<version>.md dist\exif-turbo-<version>-windows.msi
      ```
    - On **macOS**, also attach the DMG:
      ```
-     gh release create v<version> --title "exif-turbo v<version>" --notes "Release v<version>" dist/exif-turbo-<version>-macos.dmg
+     gh release create v<version> --title "exif-turbo v<version>" --notes-file dist/RELEASE_NOTES_v<version>.md dist/exif-turbo-<version>-macos.dmg
      ```
-   - If `gh` is not available, print the direct URL to the GitHub Releases page:
+   - If `gh` is not available, print the direct URL to the GitHub Releases page
+     and the path to the generated notes file so the user can paste them in:
      `https://github.com/baddonkey/exif-turbo/releases/new?tag=v<version>`
 
-9. **Summary**
-   - Confirm the tag was pushed, the GitHub Release was created, and list all uploaded artifacts.
+10. **Summary**
+    - Confirm the tag was pushed, the GitHub Release was created **with the
+      generated release notes attached**, and list all uploaded artifacts.
