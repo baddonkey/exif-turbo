@@ -143,6 +143,7 @@ class AppController(QObject):
         self._pending_thumb_restart = False
         self._filter_proxy: CheckedFilterProxyModel | None = None
         self._checked_only_filter_active: bool = False
+        self._checked_in_results_count: int = 0
         self._is_busy: bool = False
         self._busy_cancelable: bool = True
         self._busy_label: str = ""
@@ -317,6 +318,10 @@ class AppController(QObject):
     def checkedCount(self) -> int:
         return self._search_model.checked_count
 
+    @Property(int, notify=checkedCountChanged)
+    def checkedInResultsCount(self) -> int:
+        return self._checked_in_results_count
+
     @Property(bool, notify=checkedOnlyFilterChanged)
     def checkedOnlyFilter(self) -> bool:
         return self._checked_only_filter_active
@@ -359,6 +364,22 @@ class AppController(QObject):
         self.checkedOnlyFilterChanged.emit()
         self.currentProxyResultRowChanged.emit()
 
+    def _recompute_checked_in_results(self) -> None:
+        """Recompute how many marks fall within the current filtered result set."""
+        if self._repo is None:
+            self._checked_in_results_count = 0
+            return
+        if self._search_model.checked_count == 0:
+            self._checked_in_results_count = 0
+            return
+        path_filter = self._current_path_filter()
+        self._checked_in_results_count = self._repo.count_images(
+            self._query_text, ext_filter=self._ext_filter,
+            path_filter=path_filter,
+            restrict_to_enabled_folders=(self._folder_repo is not None),
+            marked_only=True,
+        )
+
     def _load_marks(self) -> None:
         """Restore marked image paths from the database into the in-memory set."""
         if self._repo is None:
@@ -366,6 +387,7 @@ class AppController(QObject):
         try:
             paths = self._repo.get_marked_paths()
             self._search_model.set_checked_paths(paths)
+            self._recompute_checked_in_results()
             self.checkedCountChanged.emit()
         except Exception as exc:
             _log.warning("Failed to load marks from DB: %s", exc)
@@ -394,8 +416,15 @@ class AppController(QObject):
         row = self._filter_proxy.source_row_for(proxy_row) if self._filter_proxy else proxy_row
         self._search_model.toggle_checked(row)
         path = self._search_model.get_path(row)
+        is_checked_now = path is not None and path in self._search_model._checked
         if path is not None and self._repo is not None:
-            self._repo.mark_image(path, path in self._search_model._checked)
+            self._repo.mark_image(path, is_checked_now)
+        # The toggled row is by definition in the current result set, so we can
+        # adjust the cached count incrementally without re-querying.
+        if is_checked_now:
+            self._checked_in_results_count += 1
+        else:
+            self._checked_in_results_count = max(0, self._checked_in_results_count - 1)
         self.checkedCountChanged.emit()
 
     @Slot()
@@ -504,6 +533,7 @@ class AppController(QObject):
             return
         if worker._operation in ("select_all", "deselect_all", "invert"):
             self._search_model.set_checked_paths(worker.result_paths)
+            self._recompute_checked_in_results()
             self.checkedCountChanged.emit()
         elif worker._operation == "export_json":
             fp = self._pending_export_path
@@ -876,13 +906,20 @@ class AppController(QObject):
             for r in rows
         ]
         self._search_model.set_rows(results)
-        self.checkedCountChanged.emit()
         total = self._repo.count_images(
             self._query_text, ext_filter=self._ext_filter,
             path_filter=path_filter,
             restrict_to_enabled_folders=(self._folder_repo is not None),
             marked_only=self._checked_only_filter_active,
         )
+        # When the "checked only" filter is active, every row is marked,
+        # so total == checked-in-results. Otherwise recompute against the
+        # full filtered set (not just the loaded page).
+        if self._checked_only_filter_active:
+            self._checked_in_results_count = total
+        else:
+            self._recompute_checked_in_results()
+        self.checkedCountChanged.emit()
         self._total_results = total
         self._loaded_results = len(results)
         self._loading = False

@@ -799,7 +799,14 @@ ApplicationWindow {
                                 Label {
                                     id: _chipLabel
                                     anchors.centerIn: parent
-                                    text: "\u2611 " + (controller ? controller.checkedCount : 0)
+                                    text: {
+                                        if (!controller) return "\u2611 0"
+                                        var total = controller.checkedCount
+                                        var here = controller.checkedInResultsCount
+                                        return here === total
+                                            ? "\u2611 " + total
+                                            : "\u2611 " + here + "/" + total
+                                    }
                                     font.pixelSize: 11
                                     font.weight: controller && controller.checkedOnlyFilter ? Font.DemiBold : Font.Normal
                                     color: controller && controller.checkedOnlyFilter ? "white" : Material.foreground
