@@ -30,7 +30,7 @@ The user has provided (or will confirm) the new version: **$ARGUMENTS**
    - Run: `git tag -a v<version> -m "Release v<version>"`
    - Show the tag details to the user.
 
-5. **Confirm before building**
+5. Skip for the moment: **Confirm before building**
    - Ask the user: "Ready to build the binaries? This will run PyInstaller and (on Windows) WiX."
 
 6. **Build the release binaries**
