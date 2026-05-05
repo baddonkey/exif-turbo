@@ -1,49 +1,40 @@
 from __future__ import annotations
 
-import io
 import logging
 import urllib.parse
+from io import BytesIO
 from pathlib import Path
 
-_log = logging.getLogger(__name__)
-
-try:
-    import rawpy
-    _RAWPY_AVAILABLE = True
-except ImportError:
-    _RAWPY_AVAILABLE = False
-
-from PIL import Image, ImageFile, ImageOps, UnidentifiedImageError
+from PIL import Image
 from PySide6.QtCore import QSize, QThread
 from PySide6.QtGui import QImage
 from PySide6.QtQuick import QQuickImageProvider
 
-from ...indexing.image_utils import RAW_EXTENSIONS, orient_raw_thumb
+from ...utils.preview_cache import preview_cache_path, preview_dir
+from ...utils.preview_render import MAX_PREVIEW_PX, render_preview
+from ...utils.thumb_crypto import ThumbCrypto
 
-# Cap preview decoding at this size — avoids allocating 200 MB for a 50 MP image
-# while still looking sharp on any monitor up to 4K.
-_MAX_PREVIEW_PX = 2048
+_log = logging.getLogger(__name__)
+
+# Default cap when QML doesn't pass an explicit requested size.
+_DEFAULT_TARGET_PX = 2048
 
 
 class PreviewImageProvider(QQuickImageProvider):
-    """
-    Async QML image provider for all image types (JPEG, PNG, TIFF, RAW, …).
+    """Async QML image provider for full-image previews.
 
-    Unlike Qt's built-in ``file://`` loading:
-    - Runs on a dedicated background thread controlled by Qt's async image pool.
-    - Boosts that thread to HighPriority so the OS scheduler prefers it over
-      the background indexing and thumbnail workers.
-    - Uses PIL's ``draft()`` mode for JPEG files: libjpeg decodes at the
-      smallest subsampled resolution that still fits the display panel, giving
-      up to 8× faster decode for large camera JPEGs.
-    - Downsamples all formats to ``_MAX_PREVIEW_PX`` before building a QImage,
-      so we never allocate a 200 MB RGBA buffer for a 50 MP full-res image.
+    Fast path: if a rendered preview exists in the on-disk preview cache
+    (built per-folder via the FoldersPanel "Build Previews" action), the
+    cached JPEG is loaded and returned directly — typically <50 ms even
+    for huge RAW originals.
+
+    Slow path (cache miss): the source file is decoded live via the shared
+    ``render_preview()`` helper; same code path the cache builder uses, so
+    the on-screen result is identical.
 
     QML usage::
 
         Image { source: "image://preview/" + encodeURIComponent(filePath) }
-
-    The provider ID is ``"preview"``.
     """
 
     def __init__(self) -> None:
@@ -51,116 +42,82 @@ class PreviewImageProvider(QQuickImageProvider):
             QQuickImageProvider.ImageType.Image,
             QQuickImageProvider.Flag.ForceAsynchronousImageLoading,
         )
+        self._cache_dir: Path | None = None
+        self._crypto: ThumbCrypto | None = None
+
+    # ── Configuration (called from AppController on unlock) ──────────────
+
+    def set_cache(self, cache_dir: Path, key: str) -> None:
+        """Configure the on-disk preview cache directory and encryption key."""
+        self._cache_dir = cache_dir
+        if key:
+            preview_dir(cache_dir).mkdir(parents=True, exist_ok=True)
+            self._crypto = ThumbCrypto(key, cache_dir)
+        else:
+            self._crypto = None
+
+    # ── QQuickImageProvider override ─────────────────────────────────────
 
     def requestImage(  # type: ignore[override]
         self, id: str, size: QSize, requestedSize: QSize
     ) -> QImage:
-        # Boost the calling thread so the OS prefers it over background workers.
         QThread.currentThread().setPriority(QThread.Priority.HighPriority)
-
         path = urllib.parse.unquote(id)
         target = _effective_target(requestedSize)
         try:
-            img = _load_image(path, target)
-        except Exception as exc:
+            img = self._load_cached_or_live(path, target)
+        except Exception as exc:  # noqa: BLE001
             _log.error("Preview failed for %r: %s", path, exc)
             img = QImage()
-
         size.setWidth(img.width())
         size.setHeight(img.height())
         return img
 
+    # ── Internal ─────────────────────────────────────────────────────────
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+    def _load_cached_or_live(self, path: str, target: int) -> QImage:
+        cached = self._try_load_cached(path)
+        if cached is not None:
+            return _pil_to_qimage(cached)
+        pil_img = render_preview(path, target)
+        return _pil_to_qimage(pil_img)
+
+    def _try_load_cached(self, path: str) -> Image.Image | None:
+        if self._cache_dir is None:
+            return None
+        cache_path = preview_cache_path(path, self._cache_dir)
+        try:
+            if self._crypto is not None and self._crypto.is_active:
+                enc_path = cache_path.with_suffix(".jpg.enc")
+                if not enc_path.exists():
+                    return None
+                blob = enc_path.read_bytes()
+                data = self._crypto.decrypt(blob)
+                img = Image.open(BytesIO(data))
+                img.load()
+                return img
+            if not cache_path.exists():
+                return None
+            img = Image.open(cache_path)
+            img.load()
+            return img
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("Cached preview unreadable for %r: %s", path, exc)
+            return None
 
 
-def _effective_target(requested: QSize) -> tuple[int, int]:
-    """Return the decode target size, capped at _MAX_PREVIEW_PX."""
+# ── helpers ──────────────────────────────────────────────────────────────
+
+
+def _effective_target(requested: QSize) -> int:
     if requested.isValid() and not requested.isEmpty():
-        return (
-            min(requested.width(), _MAX_PREVIEW_PX),
-            min(requested.height(), _MAX_PREVIEW_PX),
-        )
-    return (_MAX_PREVIEW_PX, _MAX_PREVIEW_PX)
+        return min(max(requested.width(), requested.height()), MAX_PREVIEW_PX)
+    return _DEFAULT_TARGET_PX
 
 
-def _load_image(path: str, target: tuple[int, int]) -> QImage:
-    ext = Path(path).suffix.lower()
-    if ext in RAW_EXTENSIONS and _RAWPY_AVAILABLE:
-        pil_img = _load_raw(path, target)
-    else:
-        pil_img = _load_standard(path, target)
+def _pil_to_qimage(pil_img: Image.Image) -> QImage:
     pil_img = pil_img.convert("RGBA")
     data = bytes(pil_img.tobytes("raw", "RGBA"))
-    # .copy() detaches the QImage from the Python-owned buffer.
     return QImage(
         data, pil_img.width, pil_img.height, QImage.Format.Format_RGBA8888
     ).copy()
-
-
-def _load_standard(path: str, target: tuple[int, int]) -> Image.Image:
-    """Load any PIL-supported format. Uses draft() for JPEG for faster decode.
-
-    We read the raw bytes first via Python's open() so that the network I/O
-    happens while the GIL is *released* (CPython's ReadFile() syscall path
-    calls Py_BEGIN_ALLOW_THREADS before entering the kernel).  If we instead
-    passed the path directly to PIL, its C decoders would call fp.read() via
-    the Python C API without ever releasing the GIL — holding it for the full
-    NAS transfer duration and freezing Qt's event loop completely.
-    """
-    with open(path, "rb") as f:
-        data = f.read()  # GIL released during ReadFile() → Qt events flow freely
-    buf = io.BytesIO(data)
-    try:
-        img = Image.open(buf)
-    except UnidentifiedImageError:
-        # Pillow 12 treats some valid-but-unusual files (e.g. 16-bit RGBA PNGs
-        # with large metadata chunks) as truncated.  Retry with the flag set.
-        ImageFile.LOAD_TRUNCATED_IMAGES = True
-        try:
-            buf.seek(0)
-            img = Image.open(buf)
-        finally:
-            ImageFile.LOAD_TRUNCATED_IMAGES = False
-    # draft() instructs libjpeg to decode at a subsampled resolution
-    # (1/2, 1/4 or 1/8) — only effective for JPEG, no-op for other formats.
-    img.draft("RGB", target)
-    img.load()  # decodes from in-memory BytesIO — fast, GIL held only briefly
-    img = ImageOps.exif_transpose(img)
-    img.thumbnail(target, Image.LANCZOS)
-    return img
-
-
-def _load_raw(path: str, target: tuple[int, int]) -> Image.Image:
-    """Load a RAW file via rawpy, preferring the embedded JPEG thumbnail."""
-    with rawpy.imread(path) as raw:
-        raw_flip = raw.sizes.flip  # orientation from the RAW file's IFD
-        try:
-            thumb = raw.extract_thumb()
-            if thumb.format == rawpy.ThumbFormat.JPEG:
-                data = bytes(thumb.data)
-                img: Image.Image = Image.open(io.BytesIO(data))
-                try:
-                    # draft() tells libjpeg to decode at a subsampled size —
-                    # up to 8× faster for large embedded previews (e.g. Sony ARW
-                    # full-res JPEGs).  Some JPEG variants (unusual sampling
-                    # factors, CMYK) cause libjpeg to reject the draft hint and
-                    # raise during img.load(); retry without draft in that case.
-                    img.draft("RGB", target)
-                    img.load()
-                except Exception:
-                    img = Image.open(io.BytesIO(data))
-                    img.load()
-            else:
-                img = Image.fromarray(thumb.data)
-        except rawpy.LibRawError:
-            # No thumbnail, unsupported thumbnail format, or any other libraw
-            # error — fall back to half-size demosaic.
-            # rawpy.postprocess() applies orientation automatically.
-            rgb = raw.postprocess(use_camera_wb=True, half_size=True)
-            img = Image.fromarray(rgb)
-            img.thumbnail(target, Image.LANCZOS)
-            return img
-    img = orient_raw_thumb(img, raw_flip)
-    img.thumbnail(target, Image.LANCZOS)
-    return img

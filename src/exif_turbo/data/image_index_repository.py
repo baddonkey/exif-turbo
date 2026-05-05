@@ -746,6 +746,27 @@ class ImageIndexRepository:
                 result[row[0]] = (row[1], row[2])
         return result
 
+    def get_folder_stamps(self, folder_id: int) -> dict[str, tuple[float, int]]:
+        """Return {path: (mtime, size)} for every image associated with *folder_id*.
+
+        Used by the preview-cache builder to render previews for a single
+        managed folder rather than the full DB.
+        """
+        result: dict[str, tuple[float, int]] = {}
+        cur = self.conn.execute(
+            "SELECT i.path, i.mtime, i.size FROM images i "
+            "JOIN image_folders imf ON imf.image_id = i.id "
+            "WHERE imf.folder_id = ?",
+            (folder_id,),
+        )
+        while True:
+            rows = cur.fetchmany(2000)
+            if not rows:
+                break
+            for row in rows:
+                result[row[0]] = (row[1], row[2])
+        return result
+
     def delete_folder_associations(self, folder_id: int) -> None:
         """Remove all image_folders rows for the given folder_id."""
         with self.conn:

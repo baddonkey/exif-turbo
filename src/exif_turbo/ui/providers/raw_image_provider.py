@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import io
+import os
 import urllib.parse
 
 try:
@@ -48,32 +48,26 @@ class RawImageProvider(QQuickImageProvider):
 
 
 def _decode_raw(path: str, requested_size: QSize) -> QImage:
-    """Decode a RAW file to QImage via rawpy → Pillow."""
-    if not _RAWPY_AVAILABLE:
-        return QImage()
+    """Decode the source image at full resolution for the "Raw" toggle.
 
-    with rawpy.imread(path) as raw:
-        try:
-            thumb = raw.extract_thumb()
-            if thumb.format == rawpy.ThumbFormat.JPEG:
-                img: Image.Image = Image.open(io.BytesIO(thumb.data))
-                img.load()
-            else:
-                img = Image.fromarray(thumb.data)
-        except rawpy.LibRawNoThumbnailError:
-            # No embedded preview — fall back to half-size demosaic (faster)
-            rgb = raw.postprocess(use_camera_wb=True, half_size=True)
-            img = Image.fromarray(rgb)
+    The toggle's job is to escape the cached preview and show the actual
+    pixels of the source file when the user zooms in. For RAW formats we
+    run a full demosaic via ``rawpy.postprocess``; for everything else
+    (JPEG, TIFF, PNG, HEIC, …) we just decode the original file with
+    Pillow. Either way the returned image is at full source resolution —
+    QML scales it down to fit, and zooming past 100 % then reveals real
+    pixels instead of the upscaled thumb.
+
+    ``requested_size`` is intentionally ignored.
+    """
+    del requested_size  # full-resolution by design — see docstring
+
+    img = _load_full_resolution(path)
+    if img is None:
+        return QImage()
 
     # Apply EXIF orientation (embedded JPEG thumbs often carry an Orientation tag)
     img = ImageOps.exif_transpose(img)
-
-    # Resize to fit the requested size while preserving aspect ratio
-    if requested_size.isValid() and not requested_size.isEmpty():
-        img.thumbnail(
-            (requested_size.width(), requested_size.height()),
-            Image.LANCZOS,
-        )
 
     # Convert to RGBA for a predictable QImage byte layout
     img = img.convert("RGBA")
@@ -81,3 +75,30 @@ def _decode_raw(path: str, requested_size: QSize) -> QImage:
     qimg = QImage(data, img.width, img.height, img.width * 4, QImage.Format.Format_RGBA8888)
     # Deep-copy so QImage owns its buffer (data goes out of scope after return)
     return qimg.copy()
+
+
+# File extensions that ``rawpy`` (LibRaw) can decode. Anything else is
+# handed straight to Pillow as a regular image file.
+_RAW_EXTS = frozenset({
+    ".3fr", ".arw", ".cr2", ".cr3", ".crw", ".dcr", ".dng", ".erf",
+    ".kdc", ".mef", ".mos", ".mrw", ".nef", ".nrw", ".orf", ".pef",
+    ".raf", ".raw", ".rw2", ".rwl", ".sr2", ".srf", ".srw", ".x3f",
+})
+
+
+def _load_full_resolution(path: str) -> Image.Image | None:
+    """Return the source image at full resolution, or ``None`` on failure."""
+    ext = os.path.splitext(path)[1].lower()
+    if ext in _RAW_EXTS and _RAWPY_AVAILABLE:
+        try:
+            with rawpy.imread(path) as raw:
+                rgb = raw.postprocess(use_camera_wb=True)
+            return Image.fromarray(rgb)
+        except Exception:
+            return None
+    try:
+        img = Image.open(path)
+        img.load()
+        return img
+    except Exception:
+        return None

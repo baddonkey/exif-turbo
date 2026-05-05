@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, List, Tuple
 
 if TYPE_CHECKING:
+    from ..providers.preview_image_provider import PreviewImageProvider
     from ..providers.thumb_image_provider import ThumbnailImageProvider
 
 import sqlcipher3
@@ -23,6 +24,11 @@ from ...data.indexed_folder_repository import IndexedFolderRepository
 from ...i18n import _
 from ...indexing.image_utils import RAW_EXTENSIONS
 from ...models.search_result import SearchResult
+from ...utils.preview_cache import (
+    clear_cached_previews_for,
+    count_cached_previews,
+    list_existing_previews,
+)
 from ..models.checked_filter_proxy_model import CheckedFilterProxyModel
 from ..models.exif_list_model import ExifListModel
 from ..models.folder_list_model import FolderListModel
@@ -31,6 +37,7 @@ from ..models.settings_model import SettingsModel
 from ..workers.bulk_op_worker import BulkOpWorker
 from ..workers.index_worker import IndexWorker
 from ..workers.password_change_worker import PasswordChangeWorker
+from ..workers.preview_build_worker import PreviewBuildWorker
 from ..workers.thumb_worker import ThumbWorker
 
 _PAGE_SIZE = 50
@@ -42,6 +49,12 @@ class AppController(QObject):
     statusTextChanged = Signal()
     isIndexingChanged = Signal()
     isBuildingThumbsChanged = Signal()
+    isBuildingPreviewsChanged = Signal()
+    previewBuildFolderIdChanged = Signal()
+    previewCurrentChanged = Signal()
+    previewTotalChanged = Signal()
+    previewCurrentFileChanged = Signal()
+    useRawPreviewChanged = Signal()
     isCancelingChanged = Signal()
     detailsHtmlChanged = Signal()
     findScrollFractionChanged = Signal()
@@ -87,12 +100,14 @@ class AppController(QObject):
         settings: SettingsModel | None = None,
         cache_dir: Path | None = None,
         thumb_provider: "ThumbnailImageProvider | None" = None,
+        preview_provider: "PreviewImageProvider | None" = None,
     ) -> None:
         super().__init__()
         self._db_path = db_path
         self._settings = settings
         self._cache_dir = cache_dir
         self._thumb_provider = thumb_provider
+        self._preview_provider = preview_provider
         self._repo: ImageIndexRepository | None = None
         self._folder_repo: IndexedFolderRepository | None = None
         self._key = ""
@@ -135,6 +150,13 @@ class AppController(QObject):
         self._pending_preview_path: str = ""
         self._index_worker: IndexWorker | None = None
         self._thumb_worker: ThumbWorker | None = None
+        self._preview_worker: PreviewBuildWorker | None = None
+        self._is_building_previews: bool = False
+        self._preview_build_folder_id: int = 0
+        self._preview_current: int = 0
+        self._preview_total: int = 0
+        self._preview_current_file: str = ""
+        self._use_raw_preview: bool = False
         self._scanning_folder_id: int | None = None
         self._scan_queue: list[tuple[int, bool]] = []
         self._index_queue_position = 0
@@ -213,6 +235,32 @@ class AppController(QObject):
     @Property(bool, notify=isBuildingThumbsChanged)
     def isBuildingThumbs(self) -> bool:
         return self._is_building_thumbs
+
+    # ── Preview cache build state ──────────────────────────────────────────────
+
+    @Property(bool, notify=isBuildingPreviewsChanged)
+    def isBuildingPreviews(self) -> bool:
+        return self._is_building_previews
+
+    @Property(int, notify=previewBuildFolderIdChanged)
+    def previewBuildFolderId(self) -> int:
+        return self._preview_build_folder_id
+
+    @Property(int, notify=previewCurrentChanged)
+    def previewCurrent(self) -> int:
+        return self._preview_current
+
+    @Property(int, notify=previewTotalChanged)
+    def previewTotal(self) -> int:
+        return self._preview_total
+
+    @Property(str, notify=previewCurrentFileChanged)
+    def previewCurrentFile(self) -> str:
+        return self._preview_current_file
+
+    @Property(bool, notify=useRawPreviewChanged)
+    def useRawPreview(self) -> bool:
+        return self._use_raw_preview
 
     @Property(bool, notify=isCancelingChanged)
     def isCanceling(self) -> bool:
@@ -607,6 +655,8 @@ class AppController(QObject):
             # Configure the thumbnail provider and search model encryption mode.
             if self._thumb_provider is not None:
                 self._thumb_provider.set_key(password, cache_dir)
+            if self._preview_provider is not None:
+                self._preview_provider.set_cache(cache_dir, password)
             self._search_model.set_encryption(bool(password))
             self.isLockedChanged.emit()
             self.unlockErrorChanged.emit()
@@ -748,6 +798,8 @@ class AppController(QObject):
         self._key = new_password
         if self._thumb_provider is not None:
             self._thumb_provider.set_key(new_password, self._search_model.cache_dir)
+        if self._preview_provider is not None:
+            self._preview_provider.set_cache(self._search_model.cache_dir, new_password)
         self._password_change_worker = None
         self._clear_busy_after_password_change()
         self.passwordChangeFinished.emit(True, _("Password changed successfully."))
@@ -781,6 +833,8 @@ class AppController(QObject):
                 self._purge_thumb_cache(cache_dir)
                 if self._thumb_provider is not None:
                     self._thumb_provider.set_key(new_password, cache_dir)
+                if self._preview_provider is not None:
+                    self._preview_provider.set_cache(cache_dir, new_password)
             except Exception:  # noqa: BLE001
                 _log.exception("Failed to reopen database with either key")
                 self._repo = None
@@ -1042,6 +1096,11 @@ class AppController(QObject):
         # Debounce the full preview load — lets visible card thumbnails in the
         # list render before the heavier preview decode starts.
         self._pending_preview_path = path or ""
+        # Selecting a new image always falls back to the cached preview
+        # (per-image scope for the toggle).
+        if self._use_raw_preview:
+            self._use_raw_preview = False
+            self.useRawPreviewChanged.emit()
         self._preview_delay_timer.start()  # resets if already running
 
     @Slot(str)
@@ -1097,6 +1156,18 @@ class AppController(QObject):
         self._scan_queue = [(fid, f) for fid, f in self._scan_queue if fid != folder_id]
         if self._scanning_folder_id == folder_id and self._index_worker:
             self._index_worker.cancel()
+        # Drop any preview-cache files belonging to this folder before its
+        # rows leave the database, otherwise we lose the stamps needed to
+        # locate the cached files.
+        try:
+            stamps = self._repo.get_folder_stamps(folder_id)
+            clear_cached_previews_for(
+                self._search_model.cache_dir,
+                stamps,
+                encrypted=bool(self._key),
+            )
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("Failed to clean preview cache on folder removal: %s", exc)
         self._folder_repo.remove(folder_id)
         self._folder_model.remove_folder(folder_id)
         self._repo.delete_folder_associations(folder_id)
@@ -1180,7 +1251,41 @@ class AppController(QObject):
             return
         folders = self._folder_repo.get_all()
         self._folder_model.set_rows(folders)
+        self._refresh_all_preview_counts()
         self.indexedFoldersChanged.emit()
+
+    def _refresh_all_preview_counts(self) -> None:
+        """Recount cached previews for every folder currently in the model."""
+        if self._repo is None:
+            return
+        cache_dir = self._search_model.cache_dir
+        encrypted = bool(self._key)
+        try:
+            existing = list_existing_previews(cache_dir, encrypted=encrypted)
+        except Exception:  # noqa: BLE001
+            existing = set()
+        for f in list(self._folder_model._rows):
+            try:
+                stamps = self._repo.get_folder_stamps(f.id)
+            except Exception:  # noqa: BLE001
+                stamps = {}
+            cached = count_cached_previews(
+                cache_dir, stamps, encrypted=encrypted, existing=existing
+            )
+            self._folder_model.set_preview_count(f.id, cached, len(stamps))
+
+    def _refresh_preview_count(self, folder_id: int) -> None:
+        """Recount cached previews for a single folder."""
+        if self._repo is None or folder_id <= 0:
+            return
+        cache_dir = self._search_model.cache_dir
+        encrypted = bool(self._key)
+        try:
+            stamps = self._repo.get_folder_stamps(folder_id)
+        except Exception:  # noqa: BLE001
+            stamps = {}
+        cached = count_cached_previews(cache_dir, stamps, encrypted=encrypted)
+        self._folder_model.set_preview_count(folder_id, cached, len(stamps))
 
     def _start_managed_folder_indexing(self, folder_obj, *, force: bool = False) -> None:
         """Enqueue a folder for indexing and start the queue if idle."""
@@ -1396,12 +1501,146 @@ class AppController(QObject):
             self._index_worker.cancel()
         if self._thumb_worker and self._thumb_worker.isRunning():
             self._thumb_worker.cancel()
+        if self._preview_worker and self._preview_worker.isRunning():
+            self._preview_worker.cancel()
         self._scan_queue.clear()
 
     @Slot()
     def cancelThumbnails(self) -> None:
         if self._thumb_worker and self._thumb_worker.isRunning():
             self._thumb_worker.cancel()
+
+    # ── Preview-cache build ───────────────────────────────────────────────
+
+    @Slot(int)
+    def buildPreviewsForFolder(self, folder_id: int) -> None:
+        """Render the preview-cache for every image in *folder_id*.
+
+        No-op while another preview build is already running — the user must
+        cancel it first.  Runs independently of the thumbnail worker; both
+        may be active at once.
+        """
+        if self._repo is None or self._is_building_previews:
+            return
+        cache_dir = self._search_model.cache_dir
+        target = self._settings.previewMaxSize if self._settings else 2048
+        workers = self._settings.workerCount if self._settings else _DEFAULT_WORKERS
+        self._preview_worker = PreviewBuildWorker(
+            self._db_path,
+            cache_dir,
+            folder_id,
+            target,
+            workers=workers,
+            key=self._key,
+        )
+        self._preview_worker.progress.connect(self._on_preview_progress)
+        self._preview_worker.finished.connect(self._on_preview_done)
+        self._preview_worker.failed.connect(self._on_preview_failed)
+        self._preview_worker.canceled.connect(self._on_preview_canceled)
+        self._is_building_previews = True
+        self._preview_build_folder_id = folder_id
+        self._preview_current = 0
+        self._preview_total = 0
+        self._preview_current_file = ""
+        self.isBuildingPreviewsChanged.emit()
+        self.previewBuildFolderIdChanged.emit()
+        self.previewCurrentChanged.emit()
+        self.previewTotalChanged.emit()
+        self.previewCurrentFileChanged.emit()
+        self._preview_worker.start(QThread.Priority.LowPriority)
+
+    @Slot()
+    def cancelPreviewBuild(self) -> None:
+        if self._preview_worker and self._preview_worker.isRunning():
+            self._preview_worker.cancel()
+
+    def _on_preview_progress(self, done: int, total: int, path: str) -> None:
+        self._preview_current = done
+        self._preview_total = total
+        self._preview_current_file = path
+        self.previewCurrentChanged.emit()
+        self.previewTotalChanged.emit()
+        self.previewCurrentFileChanged.emit()
+
+    def _clear_preview_build_state(self) -> None:
+        self._is_building_previews = False
+        self._preview_build_folder_id = 0
+        self.isBuildingPreviewsChanged.emit()
+        self.previewBuildFolderIdChanged.emit()
+
+    def _on_preview_done(self, built: int, total: int) -> None:
+        folder_id = self._preview_build_folder_id
+        self._clear_preview_build_state()
+        if folder_id > 0:
+            self._refresh_preview_count(folder_id)
+        self._set_status(
+            _("Built {built} preview(s) of {total}.").format(built=built, total=total)
+        )
+
+    def _on_preview_failed(self, error: str) -> None:
+        folder_id = self._preview_build_folder_id
+        self._clear_preview_build_state()
+        if folder_id > 0:
+            self._refresh_preview_count(folder_id)
+        self._set_status(_("Preview build failed: {error}").format(error=error))
+
+    def _on_preview_canceled(self, built: int, total: int) -> None:
+        folder_id = self._preview_build_folder_id
+        self._clear_preview_build_state()
+        if folder_id > 0:
+            self._refresh_preview_count(folder_id)
+        self._set_status(
+            _("Preview build canceled ({built} of {total} done).").format(
+                built=built, total=total
+            )
+        )
+
+    @Slot(int)
+    def clearPreviewsForFolder(self, folder_id: int) -> None:
+        """Delete every cached preview belonging to *folder_id*."""
+        if self._repo is None or folder_id <= 0:
+            return
+        if self._is_building_previews and self._preview_build_folder_id == folder_id:
+            # Don't race the worker — make the user cancel first.
+            self._set_status(
+                _("Cancel the running preview build before clearing the cache.")
+            )
+            return
+        cache_dir = self._search_model.cache_dir
+        encrypted = bool(self._key)
+        try:
+            stamps = self._repo.get_folder_stamps(folder_id)
+        except Exception as exc:  # noqa: BLE001
+            self._set_status(
+                _("Failed to clear preview cache: {error}").format(error=str(exc))
+            )
+            return
+        removed = clear_cached_previews_for(cache_dir, stamps, encrypted=encrypted)
+        self._refresh_preview_count(folder_id)
+        self._set_status(
+            _("Removed {n} cached preview(s).").format(n=removed)
+        )
+
+    # ── Preview source toggle ─────────────────────────────────────────────
+
+    @Slot(bool)
+    def setUseRawPreview(self, use_raw: bool) -> None:
+        """Switch the big preview between cached preview and full-res raw."""
+        if self._use_raw_preview == use_raw:
+            return
+        self._use_raw_preview = use_raw
+        self.useRawPreviewChanged.emit()
+        # Re-resolve the source so the QML Image picks up the new scheme.
+        self._refresh_selected_image_source()
+
+    def _refresh_selected_image_source(self) -> None:
+        path = self._pending_preview_path
+        if not path:
+            return
+        encoded = urllib.parse.quote(path, safe="")
+        scheme = "raw" if self._use_raw_preview else "preview"
+        self._selected_image_source = f"image://{scheme}/{encoded}"
+        self.selectedImageSourceChanged.emit()
 
     @Slot()
     def resetDatabase(self) -> None:
@@ -1560,7 +1799,8 @@ class AppController(QObject):
         path = self._pending_preview_path
         if path:
             encoded = urllib.parse.quote(path, safe="")
-            self._selected_image_source = f"image://preview/{encoded}"
+            scheme = "raw" if self._use_raw_preview else "preview"
+            self._selected_image_source = f"image://{scheme}/{encoded}"
         else:
             self._selected_image_source = ""
         self.selectedImageSourceChanged.emit()
