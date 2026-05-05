@@ -36,6 +36,7 @@ from exif_turbo.ui.models.settings_model import SettingsModel
 from exif_turbo.ui.providers.preview_image_provider import PreviewImageProvider
 from exif_turbo.ui.providers.raw_image_provider import RawImageProvider, _decode_raw
 from exif_turbo.ui.view_models.app_controller import AppController
+from exif_turbo.utils.preview_cache import preview_cache_path
 
 _QML_PATH = (
     Path(__file__).resolve().parents[2]
@@ -66,6 +67,15 @@ def indexed_db(tmp_path: Path) -> tuple[Path, Path]:
     )
     repo.commit()
     repo.close()
+
+    # Pre-populate the preview cache so the controller defaults to the
+    # cached preview (toggle visible).  Without a cached preview the
+    # controller transparently switches to "Show Original" instead.
+    cache_dir = tmp_path / "thumbs"
+    cache_path = preview_cache_path(str(img_path), cache_dir)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (32, 32), color=(120, 80, 40)).save(str(cache_path), "JPEG")
+
     return tmp_path / "demo.db", tmp_path
 
 
@@ -79,7 +89,9 @@ def window(
     exif_model = ExifListModel()
     folder_model = FolderListModel()
     settings_model = SettingsModel(base / "settings.json")
-    controller = AppController(db_path, search_model, exif_model, folder_model)
+    controller = AppController(
+        db_path, search_model, exif_model, folder_model, cache_dir=base / "thumbs"
+    )
 
     engine = QQmlApplicationEngine()
     engine.addImageProvider("preview", PreviewImageProvider())

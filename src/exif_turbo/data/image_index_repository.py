@@ -316,6 +316,7 @@ class ImageIndexRepository:
         "date_desc":     "images.mtime DESC",
         "date_asc":      "images.mtime ASC",
         "size_desc":     "images.size DESC",
+        "size_asc":      "images.size ASC",
     }
 
     _DEFAULT_SORT_SQL = "images.filename COLLATE NOCASE ASC"

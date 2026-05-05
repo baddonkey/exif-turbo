@@ -926,6 +926,7 @@ ApplicationWindow {
                                     { text: qsTr("Newest first"),  value: "date_desc"     },
                                     { text: qsTr("Oldest first"),  value: "date_asc"      },
                                     { text: qsTr("Largest"),       value: "size_desc"     },
+                                    { text: qsTr("Smallest"),      value: "size_asc"      },
                                 ]
 
                                 model: _opts
@@ -1225,6 +1226,59 @@ ApplicationWindow {
                             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                             text: qsTr("PREVIEW")
                         }
+
+                        // Preview / Raw source toggle — lets the user override
+                        // the cached preview to load the full-resolution raw
+                        // file when zooming in for detail.
+                        Rectangle {
+                            id: previewSourceToggle
+                            anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                            width: previewSourceLabel.implicitWidth + 28
+                            height: 22
+                            radius: 11
+                            color: Qt.rgba(0, 0, 0, sourceToggleArea.containsMouse ? 0.75 : 0.45)
+                            border.color: Qt.rgba(1, 1, 1, 0.25)
+                            border.width: 1
+                            visible: _selectedImageSource !== "" && controller && controller.selectedHasPreview
+                            opacity: sourceToggleArea.containsMouse ? 1.0 : 0.5
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
+
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 6
+                                Rectangle {
+                                    width: 8; height: 8; radius: 4
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    color: (controller && controller.useRawPreview) ? "#ff9800" : "#4caf50"
+                                }
+                                Label {
+                                    id: previewSourceLabel
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: (controller && controller.useRawPreview) ? qsTr("Show Original") : qsTr("Show Preview")
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                    color: "#ffffff"
+                                }
+                            }
+
+                            MouseArea {
+                                id: sourceToggleArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (controller)
+                                        controller.setUseRawPreview(!controller.useRawPreview)
+                                }
+                            }
+
+                            ToolTip.text: (controller && controller.useRawPreview)
+                                          ? qsTr("Showing full-resolution source. Click to use cached preview.")
+                                          : qsTr("Showing cached preview. Click to load the full-resolution source.")
+                            ToolTip.visible: sourceToggleArea.containsMouse
+                            ToolTip.delay: 400
+                        }
                     }
 
                     // Preview: show cached thumbnail instantly as placeholder,
@@ -1436,56 +1490,6 @@ ApplicationWindow {
                             }
                         }
 
-                        // Preview / Raw source toggle (bottom-left, semi-transparent).
-                        // Lets the user override the cached preview to load the
-                        // full-resolution raw file when zooming in for detail.
-                        Rectangle {
-                            id: previewSourceToggle
-                            anchors { bottom: parent.bottom; left: parent.left; margins: 8 }
-                            width: previewSourceLabel.implicitWidth + 28
-                            height: 26
-                            radius: 13
-                            color: Qt.rgba(0, 0, 0, sourceToggleArea.containsMouse ? 0.75 : 0.45)
-                            border.color: Qt.rgba(1, 1, 1, 0.25)
-                            border.width: 1
-                            visible: _selectedImageSource !== ""
-                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                            Row {
-                                anchors.centerIn: parent
-                                spacing: 6
-                                Rectangle {
-                                    width: 8; height: 8; radius: 4
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    color: (controller && controller.useRawPreview) ? "#ff9800" : "#4caf50"
-                                }
-                                Label {
-                                    id: previewSourceLabel
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: (controller && controller.useRawPreview) ? qsTr("Original") : qsTr("Preview")
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
-                                    color: "#ffffff"
-                                }
-                            }
-
-                            MouseArea {
-                                id: sourceToggleArea
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (controller)
-                                        controller.setUseRawPreview(!controller.useRawPreview)
-                                }
-                            }
-
-                            ToolTip.text: (controller && controller.useRawPreview)
-                                          ? qsTr("Showing full-resolution source. Click to use cached preview.")
-                                          : qsTr("Showing cached preview. Click to load the full-resolution source.")
-                            ToolTip.visible: sourceToggleArea.containsMouse
-                            ToolTip.delay: 400
-                        }
                     }
                 }
             }

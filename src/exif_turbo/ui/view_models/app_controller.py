@@ -28,6 +28,7 @@ from ...utils.preview_cache import (
     clear_cached_previews_for,
     count_cached_previews,
     list_existing_previews,
+    preview_cache_path,
 )
 from ..models.checked_filter_proxy_model import CheckedFilterProxyModel
 from ..models.exif_list_model import ExifListModel
@@ -60,6 +61,7 @@ class AppController(QObject):
     findScrollFractionChanged = Signal()
     selectedImageSourceChanged = Signal()
     selectedThumbSourceChanged = Signal()
+    selectedHasPreviewChanged = Signal()
     totalResultsChanged = Signal()
     loadedResultsChanged = Signal()
     isLockedChanged = Signal()
@@ -131,6 +133,7 @@ class AppController(QObject):
         self._find_scroll_fraction = 0.0
         self._selected_image_source = ""
         self._selected_thumb_source = ""
+        self._selected_has_preview = False
         self._current_result_row: int = -1
         self._total_results = 0
         self._loaded_results = 0
@@ -281,6 +284,10 @@ class AppController(QObject):
     @Property(str, notify=selectedThumbSourceChanged)
     def selectedThumbSource(self) -> str:
         return self._selected_thumb_source
+
+    @Property(bool, notify=selectedHasPreviewChanged)
+    def selectedHasPreview(self) -> bool:
+        return self._selected_has_preview
 
     @Property(int, notify=currentResultRowChanged)
     def currentResultRow(self) -> int:
@@ -1097,9 +1104,16 @@ class AppController(QObject):
         # list render before the heavier preview decode starts.
         self._pending_preview_path = path or ""
         # Selecting a new image always falls back to the cached preview
-        # (per-image scope for the toggle).
-        if self._use_raw_preview:
-            self._use_raw_preview = False
+        # (per-image scope for the toggle).  When no cached preview exists
+        # for this image we transparently switch to the original instead;
+        # the toggle is hidden in that case (see selectedHasPreview).
+        has_preview = self._compute_has_preview(self._pending_preview_path)
+        if has_preview != self._selected_has_preview:
+            self._selected_has_preview = has_preview
+            self.selectedHasPreviewChanged.emit()
+        desired_raw = not has_preview
+        if self._use_raw_preview != desired_raw:
+            self._use_raw_preview = desired_raw
             self.useRawPreviewChanged.emit()
         self._preview_delay_timer.start()  # resets if already running
 
@@ -1700,6 +1714,22 @@ class AppController(QObject):
         self.selectedImageSourceChanged.emit()
         self.selectedThumbSourceChanged.emit()
         self.currentResultRowChanged.emit()
+        if self._selected_has_preview:
+            self._selected_has_preview = False
+            self.selectedHasPreviewChanged.emit()
+
+    def _compute_has_preview(self, path: str) -> bool:
+        """Return True when a rendered preview exists in the on-disk cache."""
+        if not path or self._cache_dir is None:
+            return False
+        try:
+            cache_path = preview_cache_path(path, self._cache_dir)
+        except Exception:
+            return False
+        if cache_path.exists():
+            return True
+        # Encrypted variant used when a DB key is set.
+        return cache_path.with_suffix(".jpg.enc").exists()
 
     def _update_exif_table(self, meta_json: str) -> None:
         try:

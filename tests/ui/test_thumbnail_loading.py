@@ -201,9 +201,12 @@ def test_search_and_select_loads_preview(
     with qtbot.waitSignal(ctrl.selectedImageSourceChanged, timeout=2000):
         ctrl.selectResult(0)
 
-    # Assert — the full-size preview source is set to an image://preview/ URI
-    assert ctrl.selectedImageSource.startswith("image://preview/"), (
-        f"Expected a preview URI, got: {ctrl.selectedImageSource!r}"
+    # Assert — the full-size preview source is set to an image:// URI.
+    # Scheme depends on whether a preview is cached for this image; with
+    # ctrl_empty_cache none is, so the controller falls back to "raw".
+    src = ctrl.selectedImageSource
+    assert src.startswith("image://preview/") or src.startswith("image://raw/"), (
+        f"Expected an image:// URI, got: {src!r}"
     )
 
 
