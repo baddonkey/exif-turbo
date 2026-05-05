@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import binascii
 import json
 import os
 from os.path import commonpath
@@ -9,22 +8,18 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 import sqlcipher3
 
+from ._connection import open_encrypted_connection, rekey_connection
+
 
 class ImageIndexRepository:
     def __init__(self, db_path: Path, key: str = "") -> None:
         self.db_path = db_path
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlcipher3.connect(str(self.db_path))
-        if key:
-            hex_key = binascii.hexlify(key.encode("utf-8")).decode("ascii")
-            self.conn.execute(f"PRAGMA key=\"x'{hex_key}'\"")
-        self.conn.execute("PRAGMA journal_mode=WAL;")
-        self.conn.execute("PRAGMA synchronous=NORMAL;")
-        self.conn.execute("PRAGMA temp_store=MEMORY;")
-        self.conn.execute("PRAGMA cache_size=-32000;")
-        self.conn.execute("PRAGMA mmap_size=268435456;")
-        self.conn.execute("PRAGMA foreign_keys=ON;")
-        self.conn.execute("PRAGMA busy_timeout=5000;")
+        self.conn = open_encrypted_connection(
+            db_path,
+            key,
+            cache_size_kb=32_000,
+            extra_pragmas=("PRAGMA mmap_size=268435456;",),
+        )
         self.init_db()
 
     def change_password(self, new_password: str) -> None:
@@ -41,11 +36,10 @@ class ImageIndexRepository:
         """
         if not new_password:
             raise ValueError("new_password must not be empty")
-        new_hex = binascii.hexlify(new_password.encode("utf-8")).decode("ascii")
         # Drain & remove the WAL so rekey can rewrite every page.
         self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         self.conn.execute("PRAGMA journal_mode=DELETE")
-        self.conn.execute(f"PRAGMA rekey=\"x'{new_hex}'\"")
+        rekey_connection(self.conn, new_password)
         self.conn.commit()
         # Restore WAL for normal operation on the now-rekeyed database.
         self.conn.execute("PRAGMA journal_mode=WAL")
@@ -82,13 +76,15 @@ class ImageIndexRepository:
             """
         )
         # Add marked column for existing databases (one-time migration).
-        try:
+        existing_cols = {
+            row[1]
+            for row in self.conn.execute("PRAGMA table_info(images)").fetchall()
+        }
+        if "marked" not in existing_cols:
             self.conn.execute(
                 "ALTER TABLE images ADD COLUMN marked INTEGER NOT NULL DEFAULT 0"
             )
             self.conn.commit()
-        except Exception:
-            pass  # column already exists
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_images_marked ON images(marked)"
         )
@@ -275,7 +271,7 @@ class ImageIndexRepository:
 
     def get_marked_metadata(self, sort_by: str = "path_asc") -> List[dict]:
         """Return export records for all marked images in the requested order."""
-        order = self._SORT_MAP.get(sort_by, "images.path COLLATE NOCASE ASC")
+        order = self._resolve_sort(sort_by, "images.path COLLATE NOCASE ASC")
         cur = self.conn.execute(
             f"SELECT path, filename, metadata_json FROM images WHERE marked = 1 ORDER BY {order}"
         )
@@ -321,6 +317,19 @@ class ImageIndexRepository:
         "date_asc":      "images.mtime ASC",
         "size_desc":     "images.size DESC",
     }
+
+    _DEFAULT_SORT_SQL = "images.filename COLLATE NOCASE ASC"
+
+    @classmethod
+    def _resolve_sort(cls, sort_by: str, default: str | None = None) -> str:
+        """Return a known-safe ``ORDER BY`` SQL fragment for *sort_by*.
+
+        Only values present in :pyattr:`_SORT_MAP` are accepted.  Anything
+        else falls back to *default* (or ``_DEFAULT_SORT_SQL``), which makes
+        SQL injection through the ``sort_by`` parameter impossible by
+        construction.
+        """
+        return cls._SORT_MAP.get(sort_by, default or cls._DEFAULT_SORT_SQL)
 
     # SQL fragment used when restrict_to_enabled_folders=True.
     # Short-circuits to "show all" when image_folders is empty (CLI-indexed DBs
@@ -375,7 +384,7 @@ class ImageIndexRepository:
         restrict_to_enabled_folders: bool = False,
         marked_only: bool = False,
     ) -> List[Tuple[int, str, str, str, int, float]]:
-        order = self._SORT_MAP.get(sort_by, "images.filename COLLATE NOCASE ASC")
+        order = self._resolve_sort(sort_by)
         ext_clause = ""
         ext_args: tuple = ()
         if ext_filter:

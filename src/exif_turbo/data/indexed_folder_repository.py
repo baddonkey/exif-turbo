@@ -1,30 +1,18 @@
 from __future__ import annotations
 
-import binascii
 import os
 import time
 from pathlib import Path
 from typing import List
 
-import sqlcipher3
-
 from ..models.indexed_folder import IndexedFolder
+from ._connection import open_encrypted_connection
 
 
 class IndexedFolderRepository:
     def __init__(self, db_path: Path, key: str = "") -> None:
         self.db_path = db_path
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlcipher3.connect(str(self.db_path))
-        if key:
-            hex_key = binascii.hexlify(key.encode("utf-8")).decode("ascii")
-            self.conn.execute(f"PRAGMA key=\"x'{hex_key}'\"")
-        self.conn.execute("PRAGMA journal_mode=WAL;")
-        self.conn.execute("PRAGMA synchronous=NORMAL;")
-        self.conn.execute("PRAGMA temp_store=MEMORY;")
-        self.conn.execute("PRAGMA cache_size=-4000;")
-        self.conn.execute("PRAGMA foreign_keys=ON;")
-        self.conn.execute("PRAGMA busy_timeout=5000;")
+        self.conn = open_encrypted_connection(db_path, key, cache_size_kb=4_000)
         self._init_schema()
 
     def _init_schema(self) -> None:

@@ -414,9 +414,8 @@ class AppController(QObject):
     @Slot(int)
     def toggleChecked(self, proxy_row: int) -> None:
         row = self._filter_proxy.source_row_for(proxy_row) if self._filter_proxy else proxy_row
-        self._search_model.toggle_checked(row)
+        is_checked_now = self._search_model.toggle_checked(row)
         path = self._search_model.get_path(row)
-        is_checked_now = path is not None and path in self._search_model._checked
         if path is not None and self._repo is not None:
             self._repo.mark_image(path, is_checked_now)
         # The toggled row is by definition in the current result set, so we can

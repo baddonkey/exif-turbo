@@ -13,13 +13,20 @@ try:
 except ImportError:
     _RAWPY_AVAILABLE = False
 
-from PIL import Image, ImageFile, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageFile, ImageOps
 from PySide6.QtCore import QThread, Signal
 
 from ...data.image_index_repository import ImageIndexRepository
 from ...indexing.image_utils import RAW_EXTENSIONS, orient_raw_thumb
 from ...utils.thumb_cache import thumb_cache_name_from_stamp, thumb_cache_path
 from ...utils.thumb_crypto import ThumbCrypto
+
+# Pillow 12 treats some valid-but-unusual files (e.g. 16-bit RGBA PNGs with
+# large metadata chunks) as truncated.  Allow truncated reads globally so
+# thumbnail generation produces output rather than silently skipping such
+# files.  This must be set at module import — toggling it from worker threads
+# is racy because Pillow reads the flag from a single shared module global.
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 _THUMB_SIZE = (144, 144)
 
@@ -52,20 +59,8 @@ def _open_image(path: str) -> Image.Image:
     with open(path, "rb") as f:
         data = f.read()
     buf = io.BytesIO(data)
-    try:
-        img = Image.open(buf)
-        img.load()
-    except UnidentifiedImageError:
-        # Pillow 12 treats some valid-but-unusual files (e.g. 16-bit RGBA PNGs
-        # with large metadata chunks) as truncated.  Retry with the truncated-
-        # image flag so we still produce a thumbnail rather than silently skip.
-        ImageFile.LOAD_TRUNCATED_IMAGES = True
-        try:
-            buf.seek(0)
-            img = Image.open(buf)
-            img.load()
-        finally:
-            ImageFile.LOAD_TRUNCATED_IMAGES = False
+    img = Image.open(buf)
+    img.load()
     img = ImageOps.exif_transpose(img)
     # Convert 16-bit / raw-mode images (e.g. mode "I;16" from 16-bit TIFFs) to
     # RGB before resampling.  LANCZOS on Pillow's integer/float modes is
@@ -239,7 +234,7 @@ class ThumbWorker(QThread):
                         img.save(str(cache_path_obj), "PNG")
                         existing.add(cache_path_obj.name)
                     return True
-                except (UnidentifiedImageError, OSError, Exception) as exc:
+                except Exception as exc:
                     _mark_skip(cache_path_obj, f"{type(exc).__name__}: {exc} — {path}")
                     return False
 

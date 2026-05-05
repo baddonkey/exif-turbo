@@ -211,16 +211,27 @@ class SearchListModel(QAbstractListModel):
 
     # ── Selection helpers ─────────────────────────────────────────────────
 
-    def toggle_checked(self, row: int) -> None:
+    def toggle_checked(self, row: int) -> bool:
+        """Flip the mark on *row* and return the new checked state.
+
+        Returns ``False`` for an out-of-range row (no change applied).
+        """
         if not (0 <= row < len(self._rows)):
-            return
+            return False
         path = self._rows[row].path
         if path in self._checked:
             self._checked.discard(path)
+            now_checked = False
         else:
             self._checked.add(path)
+            now_checked = True
         idx = self.index(row, 0)
         self.dataChanged.emit(idx, idx, [self.CheckedRole])
+        return now_checked
+
+    def is_path_checked(self, path: str) -> bool:
+        """Return whether *path* is currently marked."""
+        return path in self._checked
 
     def select_all_rows(self) -> None:
         if not self._rows:
