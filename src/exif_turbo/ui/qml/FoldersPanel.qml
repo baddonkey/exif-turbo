@@ -191,6 +191,42 @@ Item {
                                 opacity: 0.7
                             }
                         }
+
+                        // Preview-cache badge
+                        Rectangle {
+                            visible: model.previewCachedCount > 0
+                            height: 16
+                            width: prevLabel.implicitWidth + 14
+                            radius: 8
+                            color: (model.previewTotalCount > 0 && model.previewCachedCount >= model.previewTotalCount)
+                                   ? Qt.rgba(0.30, 0.69, 0.31, 0.22)   // green-ish when full
+                                   : Qt.rgba(1.00, 0.60, 0.00, 0.22)   // amber when partial
+                            Layout.alignment: Qt.AlignRight
+                            ToolTip.text: (model.previewTotalCount > 0 && model.previewCachedCount >= model.previewTotalCount)
+                                          ? qsTr("All %1 previews are cached").arg(model.previewTotalCount)
+                                          : qsTr("%1 of %2 previews cached").arg(model.previewCachedCount).arg(model.previewTotalCount)
+                            ToolTip.visible: previewBadgeMA.containsMouse
+
+                            MouseArea {
+                                id: previewBadgeMA
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                acceptedButtons: Qt.NoButton
+                            }
+
+                            Label {
+                                id: prevLabel
+                                anchors.centerIn: parent
+                                text: "\u2713 " + model.previewCachedCount
+                                      + (model.previewTotalCount > 0
+                                         ? "/" + model.previewTotalCount
+                                         : "")
+                                      + " " + qsTr("previews")
+                                font.pixelSize: 9
+                                color: Material.foreground
+                                opacity: 0.85
+                            }
+                        }
                     }
 
                     // Rescan button
@@ -215,6 +251,58 @@ Item {
                         ToolTip.text: qsTr("Force re-extract EXIF for every file in this folder")
                         ToolTip.visible: hovered
                         onClicked: controller.fullRescanFolder(model.folderId)
+                    }
+
+                    // Build Previews button (folder-scoped preview-cache build)
+                    Button {
+                        flat: true
+                        text: (controller && controller.isBuildingPreviews && controller.previewBuildFolderId === model.folderId)
+                              ? qsTr("Cancel Previews")
+                              : qsTr("Build Previews")
+                        font.pixelSize: 11
+                        implicitHeight: 30
+                        enabled: model.enabled && model.imageCount > 0 &&
+                                 (!controller.isBuildingPreviews || controller.previewBuildFolderId === model.folderId)
+                        ToolTip.text: (controller && controller.isBuildingPreviews && controller.previewBuildFolderId === model.folderId)
+                                      ? qsTr("Cancel the running preview build")
+                                      : qsTr("Render preview-cache JPEGs for this folder")
+                        ToolTip.visible: hovered
+                        onClicked: {
+                            if (controller.isBuildingPreviews && controller.previewBuildFolderId === model.folderId)
+                                controller.cancelPreviewBuild()
+                            else
+                                controller.buildPreviewsForFolder(model.folderId)
+                        }
+                    }
+
+                    // Clear Previews button — only when something is cached
+                    Button {
+                        flat: true
+                        text: qsTr("Clear Previews")
+                        font.pixelSize: 11
+                        implicitHeight: 30
+                        visible: model.previewCachedCount > 0
+                        enabled: !controller.isBuildingPreviews
+                                 || controller.previewBuildFolderId !== model.folderId
+                        ToolTip.text: qsTr("Delete all cached previews for this folder")
+                        ToolTip.visible: hovered
+                        onClicked: clearPreviewsConfirmDialog.open()
+
+                        Dialog {
+                            id: clearPreviewsConfirmDialog
+                            title: qsTr("Clear Preview Cache")
+                            standardButtons: Dialog.Ok | Dialog.Cancel
+                            anchors.centerIn: Overlay.overlay
+                            width: 420
+                            Label {
+                                text: qsTr("Delete %1 cached preview(s) for \"%2\"?\nThumbnails are unaffected.")
+                                        .arg(model.previewCachedCount)
+                                        .arg(model.displayName)
+                                wrapMode: Text.WordWrap
+                                width: 340
+                            }
+                            onAccepted: controller.clearPreviewsForFolder(model.folderId)
+                        }
                     }
 
                     // Remove button

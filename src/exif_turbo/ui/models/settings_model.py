@@ -24,6 +24,12 @@ _DEFAULT_BLACKLIST: List[str] = [
     ".DS_Store",    # macOS metadata
 ]
 
+# Allowed long-edge sizes for the on-disk preview cache.  Anything larger than
+# 4K is rarely useful as a preview — if the user wants 1:1 they can flip the
+# in-preview toggle to fall back to the full-resolution raw provider.
+_PREVIEW_SIZE_CHOICES: List[int] = [1280, 1600, 2048, 2560, 3840]
+_DEFAULT_PREVIEW_SIZE = 2048
+
 
 class SettingsModel(QObject):
     """Persistent settings stored per-database as JSON.
@@ -39,6 +45,7 @@ class SettingsModel(QObject):
     themeChanged = Signal()
     languageChanged = Signal()
     retranslateRequested = Signal()
+    previewMaxSizeChanged = Signal()
 
     def __init__(self, settings_path: Path, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -47,6 +54,7 @@ class SettingsModel(QObject):
         self._blacklist: List[str] = list(_DEFAULT_BLACKLIST)
         self._theme: str = current_theme()
         self._language: str = current_language()
+        self._preview_max_size: int = _DEFAULT_PREVIEW_SIZE
         self._load()
 
     # ── Properties ───────────────────────────────────────────────────────────
@@ -74,6 +82,26 @@ class SettingsModel(QObject):
     @Property("QVariantList", notify=blacklistChanged)
     def blacklist(self) -> List[str]:
         return list(self._blacklist)
+
+    # ── Preview cache ──────────────────────────────────────────────────────────
+
+    @Property(int, notify=previewMaxSizeChanged)
+    def previewMaxSize(self) -> int:
+        return self._preview_max_size
+
+    @Property("QVariantList", constant=True)
+    def previewSizeChoices(self) -> List[int]:
+        return list(_PREVIEW_SIZE_CHOICES)
+
+    @Slot(int)
+    def setPreviewMaxSize(self, value: int) -> None:
+        if value not in _PREVIEW_SIZE_CHOICES:
+            return
+        if self._preview_max_size == value:
+            return
+        self._preview_max_size = value
+        self.previewMaxSizeChanged.emit()
+        self._save()
 
     # ── Theme ─────────────────────────────────────────────────────────────────
 
@@ -160,6 +188,8 @@ class SettingsModel(QObject):
                 self._worker_count = max(_MIN_WORKERS, min(_MAX_WORKERS, data["workerCount"]))
             if isinstance(data.get("blacklist"), list):
                 self._blacklist = [str(p) for p in data["blacklist"] if p]
+            if isinstance(data.get("previewMaxSize"), int) and data["previewMaxSize"] in _PREVIEW_SIZE_CHOICES:
+                self._preview_max_size = data["previewMaxSize"]
         except Exception:
             pass  # corrupt/missing file — use defaults
 
@@ -168,7 +198,11 @@ class SettingsModel(QObject):
             self._path.parent.mkdir(parents=True, exist_ok=True)
             self._path.write_text(
                 json.dumps(
-                    {"workerCount": self._worker_count, "blacklist": self._blacklist},
+                    {
+                        "workerCount": self._worker_count,
+                        "blacklist": self._blacklist,
+                        "previewMaxSize": self._preview_max_size,
+                    },
                     indent=2,
                 ),
                 encoding="utf-8",

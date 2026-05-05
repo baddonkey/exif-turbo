@@ -16,10 +16,14 @@ class FolderListModel(QAbstractListModel):
     StatusRole = Qt.UserRole + 6
     ImageCountRole = Qt.UserRole + 7
     ErrorMessageRole = Qt.UserRole + 8
+    PreviewCachedCountRole = Qt.UserRole + 9
+    PreviewTotalCountRole = Qt.UserRole + 10
 
     def __init__(self) -> None:
         super().__init__()
         self._rows: List[IndexedFolder] = []
+        # folder_id -> (cached_count, total_count)
+        self._preview_counts: dict[int, tuple[int, int]] = {}
 
     def roleNames(self) -> dict:
         return {
@@ -31,6 +35,8 @@ class FolderListModel(QAbstractListModel):
             self.StatusRole:      b"status",
             self.ImageCountRole:  b"imageCount",
             self.ErrorMessageRole: b"errorMessage",
+            self.PreviewCachedCountRole: b"previewCachedCount",
+            self.PreviewTotalCountRole:  b"previewTotalCount",
         }
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
@@ -58,6 +64,10 @@ class FolderListModel(QAbstractListModel):
             return f.image_count
         if role == self.ErrorMessageRole:
             return f.error_message or ""
+        if role == self.PreviewCachedCountRole:
+            return self._preview_counts.get(f.id, (0, 0))[0]
+        if role == self.PreviewTotalCountRole:
+            return self._preview_counts.get(f.id, (0, 0))[1]
         return None
 
     def set_rows(self, folders: List[IndexedFolder]) -> None:
@@ -85,4 +95,17 @@ class FolderListModel(QAbstractListModel):
                 self.beginRemoveRows(QModelIndex(), i, i)
                 del self._rows[i]
                 self.endRemoveRows()
+                self._preview_counts.pop(folder_id, None)
+                return
+
+    def set_preview_count(self, folder_id: int, cached: int, total: int) -> None:
+        """Update the cached/total preview counters for *folder_id*."""
+        self._preview_counts[folder_id] = (cached, total)
+        for i, f in enumerate(self._rows):
+            if f.id == folder_id:
+                idx = self.index(i)
+                self.dataChanged.emit(
+                    idx, idx,
+                    [self.PreviewCachedCountRole, self.PreviewTotalCountRole],
+                )
                 return

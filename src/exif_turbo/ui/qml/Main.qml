@@ -107,6 +107,10 @@ ApplicationWindow {
     readonly property bool   _isNewDatabase:       controller ? controller.isNewDatabase      : false
     readonly property bool   _isIndexing:          controller ? controller.isIndexing         : false
     readonly property bool   _isBuildingThumbs:    controller ? controller.isBuildingThumbs   : false
+    readonly property bool   _isBuildingPreviews:  controller ? controller.isBuildingPreviews : false
+    readonly property int    _previewCurrent:      controller ? controller.previewCurrent     : 0
+    readonly property int    _previewTotal:        controller ? controller.previewTotal       : 0
+    readonly property string _previewCurrentFile:  controller ? controller.previewCurrentFile : ""
     readonly property string _unlockError:         controller ? controller.unlockError        : ""
     readonly property string _statusText:          controller ? controller.statusText         : ""
     readonly property int    _indexCurrent:        controller ? controller.indexCurrent       : 0
@@ -443,7 +447,7 @@ ApplicationWindow {
         id: progressPanel
         anchors { right: parent.right; bottom: parent.bottom; margins: 16 }
         width: 380
-        visible: !_isLocked && (_isIndexing || _isBuildingThumbs) && mainTabBar.currentIndex === 2
+        visible: !_isLocked && (_isIndexing || _isBuildingThumbs || _isBuildingPreviews) && mainTabBar.currentIndex === 2
         z: 20
         Material.elevation: 6
         padding: 16
@@ -461,6 +465,7 @@ ApplicationWindow {
                             ? qsTr("Indexing folder %1 of %2").arg(_indexQueuePosition).arg(_indexQueueTotal)
                             : qsTr("Indexing")
                     }
+                    if (_isBuildingPreviews) return qsTr("Building Previews")
                     return qsTr("Building Thumbnails")
                 }
                 font.pixelSize: 14
@@ -473,10 +478,15 @@ ApplicationWindow {
                 from: 0
                 to: {
                     if (_isIndexing) return _indexTotal > 0 ? _indexTotal : 1
+                    if (_isBuildingPreviews) return _previewTotal > 0 ? _previewTotal : 1
                     return _thumbTotal > 0 ? _thumbTotal : 1
                 }
-                value: _isIndexing ? _indexCurrent : _thumbCurrent
-                indeterminate: _isIndexing ? _indexTotal === 0 : _thumbTotal === 0
+                value: _isIndexing
+                       ? _indexCurrent
+                       : (_isBuildingPreviews ? _previewCurrent : _thumbCurrent)
+                indeterminate: _isIndexing
+                       ? _indexTotal === 0
+                       : (_isBuildingPreviews ? _previewTotal === 0 : _thumbTotal === 0)
             }
 
             // Count label
@@ -487,6 +497,10 @@ ApplicationWindow {
                         return _indexTotal > 0
                             ? _indexCurrent + " / " + _indexTotal + " " + qsTr("files")
                             : qsTr("Scanning for images\u2026")
+                    if (_isBuildingPreviews)
+                        return _previewTotal > 0
+                            ? _previewCurrent + " / " + _previewTotal + " " + qsTr("images")
+                            : qsTr("Preparing\u2026")
                     return _thumbTotal > 0
                         ? _thumbCurrent + " / " + _thumbTotal + " " + qsTr("images")
                         : qsTr("Preparing\u2026")
@@ -498,7 +512,9 @@ ApplicationWindow {
             // Current file path
             Label {
                 Layout.fillWidth: true
-                text: _isIndexing ? _indexCurrentFile : _thumbCurrentFile
+                text: _isIndexing
+                      ? _indexCurrentFile
+                      : (_isBuildingPreviews ? _previewCurrentFile : _thumbCurrentFile)
                 font.pixelSize: 10
                 opacity: 0.5
                 elide: Text.ElideMiddle
@@ -511,6 +527,7 @@ ApplicationWindow {
                 text: {
                     var canceling = controller ? controller.isCanceling : false
                     if (_isIndexing) return canceling ? qsTr("Canceling\u2026") : qsTr("Cancel Indexing")
+                    if (_isBuildingPreviews) return qsTr("Cancel Previews")
                     return canceling ? qsTr("Canceling\u2026") : qsTr("Cancel Thumbnails")
                 }
                 enabled: !(controller ? controller.isCanceling : false)
@@ -518,7 +535,11 @@ ApplicationWindow {
                 Material.accent: Material.Red
                 implicitHeight: 36
                 implicitWidth: 160
-                onClicked: _isIndexing ? controller.cancelIndex() : controller.cancelThumbnails()
+                onClicked: {
+                    if (_isIndexing) controller.cancelIndex()
+                    else if (_isBuildingPreviews) controller.cancelPreviewBuild()
+                    else controller.cancelThumbnails()
+                }
             }
         }
     }
@@ -1228,14 +1249,17 @@ ApplicationWindow {
                             boundsBehavior: Flickable.StopAtBounds
                             clip: true
 
-                            // Low-res thumbnail placeholder — visible from cache immediately
+                            // Low-res thumbnail placeholder — visible from
+                            // cache immediately and stays put underneath while
+                            // the full preview / raw image fades in on top.
                             Image {
+                                id: thumbPreview
                                 width:  previewFlick.contentWidth
                                 height: previewFlick.contentHeight
                                 source: _selectedThumbSource
                                 fillMode: Image.PreserveAspectFit
                                 smooth: true
-                                visible: _selectedThumbSource !== "" && fullPreview.status !== Image.Ready
+                                visible: _selectedThumbSource !== ""
                             }
 
                             // Full-resolution image — fades in when loaded
@@ -1251,7 +1275,7 @@ ApplicationWindow {
                                 asynchronous: true
                                 cache: false
                                 opacity: status === Image.Ready ? 1.0 : 0.0
-                                Behavior on opacity { NumberAnimation { duration: 150 } }
+                                Behavior on opacity { NumberAnimation { duration: 200 } }
                                 onSourceChanged: {
                                     previewHost._zoom = 1.0
                                     previewFlick.contentX = 0
@@ -1376,6 +1400,91 @@ ApplicationWindow {
                                 font.pixelSize: 11
                                 color: "#ffffff"
                             }
+                        }
+
+                        // Loading overlay — shown while the full preview / original
+                        // image is decoding (full-resolution originals can take a
+                        // few seconds, especially for raws and large JPEGs).
+                        Rectangle {
+                            id: previewLoadingOverlay
+                            anchors.centerIn: parent
+                            width: previewLoadingRow.implicitWidth + 24
+                            height: previewLoadingRow.implicitHeight + 14
+                            radius: 6
+                            color: Qt.rgba(0, 0, 0, 0.55)
+                            visible: opacity > 0.0
+                            opacity: fullPreview.status === Image.Loading ? 1.0 : 0.0
+                            Behavior on opacity { NumberAnimation { duration: 150 } }
+
+                            Row {
+                                id: previewLoadingRow
+                                anchors.centerIn: parent
+                                spacing: 8
+                                BusyIndicator {
+                                    width: 18; height: 18
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    running: previewLoadingOverlay.visible
+                                }
+                                Label {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: (controller && controller.useRawPreview)
+                                          ? qsTr("Loading original\u2026")
+                                          : qsTr("Loading preview\u2026")
+                                    font.pixelSize: 12
+                                    color: "#ffffff"
+                                }
+                            }
+                        }
+
+                        // Preview / Raw source toggle (bottom-left, semi-transparent).
+                        // Lets the user override the cached preview to load the
+                        // full-resolution raw file when zooming in for detail.
+                        Rectangle {
+                            id: previewSourceToggle
+                            anchors { bottom: parent.bottom; left: parent.left; margins: 8 }
+                            width: previewSourceLabel.implicitWidth + 28
+                            height: 26
+                            radius: 13
+                            color: Qt.rgba(0, 0, 0, sourceToggleArea.containsMouse ? 0.75 : 0.45)
+                            border.color: Qt.rgba(1, 1, 1, 0.25)
+                            border.width: 1
+                            visible: _selectedImageSource !== ""
+                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 6
+                                Rectangle {
+                                    width: 8; height: 8; radius: 4
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    color: (controller && controller.useRawPreview) ? "#ff9800" : "#4caf50"
+                                }
+                                Label {
+                                    id: previewSourceLabel
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: (controller && controller.useRawPreview) ? qsTr("Original") : qsTr("Preview")
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                    color: "#ffffff"
+                                }
+                            }
+
+                            MouseArea {
+                                id: sourceToggleArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (controller)
+                                        controller.setUseRawPreview(!controller.useRawPreview)
+                                }
+                            }
+
+                            ToolTip.text: (controller && controller.useRawPreview)
+                                          ? qsTr("Showing full-resolution source. Click to use cached preview.")
+                                          : qsTr("Showing cached preview. Click to load the full-resolution source.")
+                            ToolTip.visible: sourceToggleArea.containsMouse
+                            ToolTip.delay: 400
                         }
                     }
                 }
@@ -2159,6 +2268,50 @@ ApplicationWindow {
                         font.pixelSize: 11
                         opacity: 0.45
                         Layout.bottomMargin: 28
+                    }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
+
+                    // ── Preview cache size ────────────────────────────────
+                    Label {
+                        text: qsTr("Preview Cache Size")
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                        Layout.bottomMargin: 6
+                    }
+                    Label {
+                        text: qsTr("Long-edge resolution used by the preview-cache builder. Larger values give sharper detail when zooming but take more disk space and longer to render.")
+                        font.pixelSize: 12
+                        opacity: 0.6
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 12
+                    }
+                    RowLayout {
+                        spacing: 12
+                        Layout.bottomMargin: 28
+
+                        ComboBox {
+                            id: previewSizeCombo
+                            implicitWidth: 160
+                            model: settingsModel ? settingsModel.previewSizeChoices : [2048]
+                            currentIndex: {
+                                var v = settingsModel ? settingsModel.previewMaxSize : 2048
+                                var choices = settingsModel ? settingsModel.previewSizeChoices : [2048]
+                                var idx = choices.indexOf(v)
+                                return idx >= 0 ? idx : 0
+                            }
+                            onActivated: {
+                                if (settingsModel)
+                                    settingsModel.setPreviewMaxSize(model[currentIndex])
+                            }
+                        }
+                        Label {
+                            text: qsTr("pixels (long edge)")
+                            font.pixelSize: 12
+                            opacity: 0.7
+                            verticalAlignment: Text.AlignVCenter
+                        }
                     }
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
