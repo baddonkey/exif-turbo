@@ -232,7 +232,7 @@ When results contain more than one file format, a row of format chips appears
 below the search bar. Click a chip to show only that format:
 
 ```
-All   CR2 · 1 459   JPG · 563   TIF · 113   PNG · 2
+All   CR2 · 1459   JPG · 563   TIF · 113   PNG · 2
 ```
 
 Click **All** to return to unfiltered results.
@@ -257,6 +257,22 @@ folders only. Multiple folders can be selected simultaneously. Hovering over a
 folder name shows its full path as a tooltip.
 
 ![Folder filter popup](screenshots/07_folder_filter.png)
+
+### The selection chip
+
+Whenever at least one image is marked (or the marked-only filter is active), a
+**selection chip** appears in the RESULTS header bar next to the **Folder(s)**
+dropdown. It shows the current marked count:
+
+| Label | Meaning |
+|-------|---------|
+| `☑ N` | Every marked image is in the current results |
+| `☑ here / total` | Only some marked images match the current filters (e.g. `☑ 12 / 87`) |
+
+Click the chip to toggle the **marked-only filter** — the tooltip switches
+between *"Show only selected images"* and *"Show all results"*. While the
+filter is active the chip stays highlighted so you always know which view
+you are looking at.
 
 *Photos: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
 
@@ -391,12 +407,11 @@ The preview supports cursor-anchored zoom and drag-to-pan:
 
 | Input | Action |
 |-------|--------|
-| **Scroll wheel** — up / down | Zoom in / out, anchored to the cursor position |
-| **Mouse — click and drag** | Pan the zoomed image in any direction |
-| **Touchpad — two-finger swipe** up / down | Smooth zoom in / out, anchored to the cursor position |
-| **Touchpad — two-finger swipe** left / right | Pan left / right |
-| **Touchpad — two-finger drag** | Pan in any direction |
+| **Ctrl + scroll wheel** (mouse) | Zoom in / out, anchored to the cursor position |
+| **Ctrl + two-finger scroll** (touchpad) | Zoom in / out, anchored to the cursor position |
 | **Touchpad — pinch** | Zoom in / out, anchored to the pinch centroid |
+| **Click and drag** / **two-finger drag** | Pan the zoomed image in any direction |
+| **Plain scroll wheel / two-finger scroll** | Pan vertically when zoomed in |
 | **Double-click** / **double-tap** | Reset zoom to fit |
 
 Zoom is capped at **8×**. A badge in the bottom-right corner of the preview shows
@@ -424,9 +439,11 @@ By default they start at **50 % / 50 %**.
 
 ## 9. Marking Images & Bulk Actions
 
-Every result card has a **checkbox** at its top-left corner. Tick it to *mark*
-that image — marks persist across searches, tab switches, and app restarts (the
-state is stored in the encrypted database). Marked images are the input for the
+Every result card has a **checkbox** in its bottom-right corner. Tick it to
+*mark* that image — marks persist across searches, tab switches, and app
+restarts (the state is stored in the encrypted database). The same checkbox
+is present on the cards in the **Browse** tab, so you can mark images while
+browsing as well as while searching. Marked images are the input for the
 bulk actions in the **Action** menu.
 
 The menu bar exposes two menus dedicated to marking and bulk actions.
@@ -499,6 +516,14 @@ Click the **Settings** tab to configure application behaviour.
 Controls the number of parallel threads used for indexing and thumbnail
 generation. Higher values speed up processing on multi-core machines but use
 more CPU and memory. The default is half the number of detected CPU threads.
+
+### Preview Cache Size
+
+Long-edge resolution used by the preview-cache builder. Larger values give
+sharper detail when zooming but take more disk space and longer to render.
+Choose a value (in pixels) from the dropdown — the change applies to
+subsequently built previews; existing cached previews are unaffected until
+you rebuild them via **Build Previews** on a folder row.
 
 ### Indexing Blacklist
 
@@ -586,6 +611,7 @@ The **Reset Database…** button is disabled while indexing is in progress.
 | `↑` | Select the previous result (Search tab) |
 | `Page Down` | Jump one page forward in results (Search tab) |
 | `Page Up` | Jump one page backward in results (Search tab) |
+| `Ctrl+Q` | Exit the application (File → Exit) |
 
 ---
 
