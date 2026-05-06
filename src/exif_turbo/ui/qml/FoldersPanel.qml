@@ -164,6 +164,7 @@ Item {
                             width: statusLabel.implicitWidth + 12
                             radius: 9
                             color: Qt.alpha(foldersPanel.statusColor(model.status), 0.18)
+                            Layout.alignment: Qt.AlignRight
 
                             Label {
                                 id: statusLabel
