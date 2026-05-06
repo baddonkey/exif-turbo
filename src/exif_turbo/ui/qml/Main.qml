@@ -1255,7 +1255,7 @@ ApplicationWindow {
                                 Label {
                                     id: previewSourceLabel
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: (controller && controller.useRawPreview) ? qsTr("Show Original") : qsTr("Show Preview")
+                                    text: (controller && controller.useRawPreview) ? qsTr("Show Preview") : qsTr("Show Original")
                                     font.pixelSize: 11
                                     font.weight: Font.DemiBold
                                     color: "#ffffff"
