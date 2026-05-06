@@ -1467,7 +1467,11 @@ ApplicationWindow {
                             radius: 6
                             color: Qt.rgba(0, 0, 0, 0.55)
                             visible: opacity > 0.0
-                            opacity: fullPreview.status === Image.Loading ? 1.0 : 0.0
+                            // Only show the overlay when loading the full original
+                            // image — cached previews load quickly enough that an
+                            // overlay would just flicker on screen.
+                            opacity: (fullPreview.status === Image.Loading
+                                      && controller && controller.useRawPreview) ? 1.0 : 0.0
                             Behavior on opacity { NumberAnimation { duration: 150 } }
 
                             Row {
@@ -1481,9 +1485,7 @@ ApplicationWindow {
                                 }
                                 Label {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: (controller && controller.useRawPreview)
-                                          ? qsTr("Loading original\u2026")
-                                          : qsTr("Loading preview\u2026")
+                                    text: qsTr("Loading original\u2026")
                                     font.pixelSize: 12
                                     color: "#ffffff"
                                 }
