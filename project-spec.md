@@ -374,8 +374,8 @@ Single source of truth: `src/exif_turbo/__init__.py` → `__version__ = "X.Y.Z"`
 
 | Platform | Script | Output |
 |----------|--------|--------|
-| Windows | `scripts/build_windows.ps1` | `dist\exif-turbo\` (onedir) + `dist\exif-turbo-<ver>-windows.msi` |
-| macOS | `scripts/build_macos.sh` | `dist/exif-turbo.app` + `dist/exif-turbo-<ver>-macos.dmg` |
+| Windows | `scripts/build_windows.py` | `dist\exif-turbo\` (onedir) + `dist\exif-turbo-<ver>-windows.msi` |
+| macOS | `scripts/build_macos.py` | `dist/exif-turbo.app` + `dist/exif-turbo-<ver>-macos.dmg` |
 
 ### Release workflow
 
@@ -383,7 +383,7 @@ Write release notes.
 
 1. Update `__version__` in `__init__.py` and `version` in `pyproject.toml`
 2. Commit and push
-3. Run `pwsh scripts\build_windows.ps1` (Windows) / `bash scripts/build_macos.sh` (macOS)
+3. Run `python scripts\build_windows.py` (Windows) / `python scripts/build_macos.py` (macOS)
 4. Tag: `git tag -a v<ver> -m "Release v<ver>"` + `git push origin v<ver>`
 5. Publish: `gh release create v<ver> --title "exif-turbo v<ver>" --notes "Release v<ver>" dist\exif-turbo-<ver>-windows.msi`
 
@@ -458,10 +458,9 @@ exif-turbo/
 ├── installer/
 │   └── exif-turbo.wxs           # WiX v4 MSI descriptor
 ├── scripts/
-│   ├── build_windows.ps1
-│   ├── build_macos.sh
-│   ├── regenerate_translations.py
-│   └── tag_release.ps1
+│   ├── build_windows.py
+│   ├── build_macos.py
+│   └── regenerate_translations.py
 ├── exif-turbo.spec              # PyInstaller — Windows
 ├── exif-turbo-macos.spec        # PyInstaller — macOS
 ├── pyproject.toml

@@ -73,8 +73,8 @@ They are **not** Python packages.
 | Tool | Used for | License | URL |
 |------|----------|---------|-----|
 | [ExifTool](https://exiftool.org/) | EXIF extraction — invoked as an external process (`exiftool -g1 -j`) to extract all EXIF, IPTC, and XMP metadata from image files | Artistic License / GPL | https://exiftool.org |
-| `iconutil` *(macOS)* | `build_macos.sh` — converts PNG icon assets into an `.icns` file embedded in the `.app` bundle | Proprietary (Xcode Command Line Tools) | https://developer.apple.com/xcode |
-| `hdiutil` *(macOS)* | `build_macos.sh` — packages the built `.app` bundle into a distributable `.dmg` disk image | Proprietary (macOS built-in) | https://developer.apple.com/macos |
+| `iconutil` *(macOS)* | `build_macos.py` — converts PNG icon assets into an `.icns` file embedded in the `.app` bundle | Proprietary (Xcode Command Line Tools) | https://developer.apple.com/xcode |
+| `hdiutil` *(macOS)* | `build_macos.py` — packages the built `.app` bundle into a distributable `.dmg` disk image | Proprietary (macOS built-in) | https://developer.apple.com/macos |
 
 ---
 

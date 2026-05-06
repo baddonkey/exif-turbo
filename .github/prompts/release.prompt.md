@@ -34,8 +34,8 @@ The user has provided (or will confirm) the new version: **$ARGUMENTS**
    - Ask the user: "Ready to build the binaries? This will run PyInstaller and (on Windows) WiX."
 
 6. **Build the release binaries**
-   - On **Windows**: run `pwsh scripts\build_windows.ps1`
-   - On **macOS**: run `bash scripts/build_macos.sh`
+   - On **Windows**: run `python scripts\build_windows.py`
+   - On **macOS**: run `python scripts/build_macos.py`
    - The build script auto-generates `version_info.py` from the spec and commits it automatically. No manual action needed.
    - Report the output artifacts from `dist\`.
 

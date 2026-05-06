@@ -269,29 +269,25 @@ Third-party software credits: [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md)
 
 ### Windows MSI
 
-Requirements: `pip install pyinstaller`, [WiX Toolset v4](https://wixtoolset.org/)
+Requirements: `pip install pyinstaller babel pillow`, [WiX Toolset v4](https://wixtoolset.org/)
 
 ```powershell
-pwsh scripts\build_windows.ps1
+python scripts\build_windows.py
 # Produces: dist\exif-turbo\  and  dist\exif-turbo-<version>-windows.msi
 ```
 
 ### macOS DMG
 
-Requirements: `pip install pyinstaller`, Xcode Command Line Tools
+Requirements: `pip install pyinstaller babel pillow`, Xcode Command Line Tools
 
 ```bash
-bash scripts/build_macos.sh
+python scripts/build_macos.py
 # Produces: dist/exif-turbo.app  and  dist/exif-turbo-<version>-macos.dmg
 ```
 
 ### Tagging a release
 
-```powershell
-pwsh scripts\tag_release.ps1
-```
-
-Or use the `/release` prompt in VS Code Copilot Chat.
+Use the `/release` prompt in VS Code Copilot Chat.
 
 ## Sample Image Credits
 
