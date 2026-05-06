@@ -510,6 +510,40 @@ class AppController(QObject):
             _("Inverting selection\u2026"),
         )
 
+    @Slot()
+    def selectMissingThumbnails(self) -> None:
+        """Mark every matching image whose thumbnail is not yet cached.
+
+        Images flagged unthumbnailable (``.skip`` sentinel) are excluded so
+        running this repeatedly converges on the empty set.
+        """
+        if self._repo is None or self._cache_dir is None:
+            return
+        self._start_bulk_op(
+            "select_missing_thumbs",
+            _("Selecting images without a cached thumbnail\u2026"),
+            cache_dir=self._cache_dir,
+        )
+
+    @Slot()
+    def deleteMarkedImages(self) -> None:
+        """Permanently delete every marked image from disk and the index.
+
+        QML must confirm the destructive action with the user before invoking
+        this slot.  Cached thumbnails / previews for the deleted images are
+        also removed.
+        """
+        if self._repo is None:
+            return
+        if self._search_model.checked_count == 0:
+            self._set_status(_("No marked images to delete."))
+            return
+        self._start_bulk_op(
+            "delete_marked",
+            _("Deleting marked images\u2026"),
+            cache_dir=self._cache_dir,
+        )
+
     @Slot(str)
     def exportMarkedMetadataJson(self, file_url: str) -> None:
         file_path = Path(QUrl(file_url).toLocalFile())
@@ -541,6 +575,7 @@ class AppController(QObject):
         mark_value: bool = True,
         file_path: Path | None = None,
         sort_by: str = "path_asc",
+        cache_dir: Path | None = None,
     ) -> None:
         """Spawn a BulkOpWorker and show the busy overlay."""
         if self._is_busy:
@@ -557,6 +592,7 @@ class AppController(QObject):
             mark_value=mark_value,
             file_path=file_path,
             sort_by=sort_by,
+            cache_dir=cache_dir,
         )
         self._bulk_worker.progress.connect(self._on_bulk_progress)
         self._bulk_worker.finished.connect(self._on_bulk_finished)
@@ -585,10 +621,34 @@ class AppController(QObject):
         self.isBusyChanged.emit()
         if worker is None:
             return
-        if worker._operation in ("select_all", "deselect_all", "invert"):
+        if worker._operation in ("select_all", "deselect_all", "invert", "select_missing_thumbs"):
             self._search_model.set_checked_paths(worker.result_paths)
             self._recompute_checked_in_results()
             self.checkedCountChanged.emit()
+        elif worker._operation == "delete_marked":
+            # Refresh the search list so deleted rows disappear, and report
+            # the outcome in the status bar.
+            self._search_model.set_checked_paths(worker.result_paths)
+            self._load_formats()
+            self._invalidate_folder_tree()
+            self._load_indexed_folders()
+            self.search(self._query_text)
+            parts = [
+                _("Deleted {n} image(s).").format(n=worker.result_deleted_count)
+            ]
+            if worker.result_missing_count:
+                parts.append(
+                    _("{n} were already missing.").format(
+                        n=worker.result_missing_count
+                    )
+                )
+            if worker.result_failed_count:
+                parts.append(
+                    _("{n} could not be deleted.").format(
+                        n=worker.result_failed_count
+                    )
+                )
+            self._set_status(" ".join(parts))
         elif worker._operation == "export_json":
             fp = self._pending_export_path
             self._pending_export_path = None

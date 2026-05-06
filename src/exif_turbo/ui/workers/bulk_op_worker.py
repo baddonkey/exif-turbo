@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 from pathlib import Path
 from typing import List
@@ -8,6 +9,8 @@ from typing import List
 from PySide6.QtCore import QThread, Signal
 
 from ...data.image_index_repository import ImageIndexRepository
+from ...utils.preview_cache import preview_cache_name_from_stamp, preview_dir
+from ...utils.thumb_cache import thumb_cache_name_from_stamp
 
 _BATCH_SIZE = 500  # rows per progress tick for mark operations
 
@@ -41,6 +44,8 @@ class BulkOpWorker(QThread):
         # export_json
         file_path: Path | None = None,
         sort_by: str = "path_asc",
+        # select_missing_thumbs
+        cache_dir: Path | None = None,
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -54,11 +59,15 @@ class BulkOpWorker(QThread):
         self._mark_value = mark_value
         self._file_path = file_path
         self._sort_by = sort_by
+        self._cache_dir = cache_dir
         self._cancel_event = threading.Event()
 
         # Output fields — read by the controller in the finished slot
         self.result_paths: List[str] = []
         self.result_export_count: int = 0
+        self.result_deleted_count: int = 0
+        self.result_missing_count: int = 0
+        self.result_failed_count: int = 0
 
     # ------------------------------------------------------------------
     def cancel(self) -> None:
@@ -75,6 +84,10 @@ class BulkOpWorker(QThread):
                 self._run_mark(repo)
             elif self._operation == "invert":
                 self._run_invert(repo)
+            elif self._operation == "select_missing_thumbs":
+                self._run_select_missing_thumbs(repo)
+            elif self._operation == "delete_marked":
+                self._run_delete_marked(repo)
             elif self._operation == "export_json":
                 self._run_export(repo)
             else:
@@ -164,6 +177,197 @@ class BulkOpWorker(QThread):
         # Step 3: read back full marked set
         self.result_paths = repo.get_marked_paths()
         self.finished.emit()
+
+    def _run_select_missing_thumbs(self, repo: ImageIndexRepository) -> None:
+        """Mark every matching image whose thumbnail is not cached on disk.
+
+        ``.skip`` sentinels (files the thumbnailer gave up on — too large,
+        decoder errors, etc.) are *not* treated as cached: from the user's
+        point of view those images still have no thumbnail and should be
+        surfaced so they can be acted on.
+        """
+        import os as _os
+
+        if self._cache_dir is None:
+            self.failed.emit("cache_dir is required for select_missing_thumbs")
+            return
+        if self._is_canceled():
+            self.canceled.emit()
+            return
+
+        self.progress.emit(0, 0)
+
+        paths = repo.get_matching_paths(
+            self._query,
+            ext_filter=self._ext_filter,
+            path_filter=self._path_filter,
+            restrict_to_enabled_folders=self._restrict_to_enabled_folders,
+            marked_only=self._marked_only,
+        )
+        if self._is_canceled():
+            self.canceled.emit()
+            return
+
+        # Pre-scan cache dir once.  Only real thumbnail files count as cached;
+        # ``.skip`` sentinels mean "no thumbnail will ever exist" and are
+        # therefore considered missing.
+        encrypted = bool(self._key)
+        thumb_suffix = ".enc" if encrypted else ".png"
+        existing: set[str] = set()
+        try:
+            with _os.scandir(self._cache_dir) as it:
+                for entry in it:
+                    if entry.name.endswith(thumb_suffix):
+                        existing.add(entry.name)
+        except OSError:
+            pass
+
+        # Stamps drive the deterministic cache filename (no live os.stat).
+        stamps = repo.get_all_stamps()
+
+        total = len(paths)
+        self.progress.emit(0, total)
+
+        missing: list[str] = []
+        for i, p in enumerate(paths):
+            if self._is_canceled():
+                self.canceled.emit()
+                return
+            stamp = stamps.get(p)
+            if stamp is None:
+                missing.append(p)
+            else:
+                base = thumb_cache_name_from_stamp(p, stamp[0], stamp[1])
+                expected = base[:-4] + thumb_suffix
+                if expected not in existing:
+                    missing.append(p)
+            if (i + 1) % _BATCH_SIZE == 0:
+                self.progress.emit(i + 1, total)
+        self.progress.emit(total, total)
+
+        with repo.conn:
+            for i in range(0, len(missing), _BATCH_SIZE):
+                if self._is_canceled():
+                    self.canceled.emit()
+                    return
+                batch = missing[i : i + _BATCH_SIZE]
+                repo.conn.executemany(
+                    "UPDATE images SET marked = 1 WHERE path = ?",
+                    ((p,) for p in batch),
+                )
+
+        self.result_paths = repo.get_marked_paths()
+        self.finished.emit()
+
+    def _run_delete_marked(self, repo: ImageIndexRepository) -> None:
+        """Delete every marked image from disk and from the index.
+
+        Also removes any cached thumbnail / preview / .skip sentinel for the
+        deleted images so the cache does not accumulate orphan entries.
+        Reports progress per file so the busy overlay advances smoothly.
+        """
+        if self._is_canceled():
+            self.canceled.emit()
+            return
+
+        self.progress.emit(0, 0)
+        paths = repo.get_marked_paths()
+        total = len(paths)
+        self.progress.emit(0, total)
+
+        if total == 0:
+            self.finished.emit()
+            return
+
+        # Stamps drive the deterministic cache filenames \u2014 avoids live os.stat
+        # on a file we may have just unlinked.
+        stamps = repo.get_all_stamps()
+        encrypted = bool(self._key)
+        thumb_suffix = ".enc" if (encrypted and self._cache_dir is not None) else ".png"
+        prev_suffix = ".jpg.enc" if encrypted else ".jpg"
+        prev_dir = preview_dir(self._cache_dir) if self._cache_dir is not None else None
+
+        deleted = 0
+        missing = 0
+        failed = 0
+        deleted_paths: list[str] = []
+
+        for i, path in enumerate(paths):
+            if self._is_canceled():
+                # Persist the partial deletion before stopping so DB and disk
+                # stay in sync with what was actually removed.
+                self._purge_db_rows(repo, deleted_paths)
+                self.canceled.emit()
+                return
+            try:
+                os.unlink(path)
+                deleted += 1
+                deleted_paths.append(path)
+            except FileNotFoundError:
+                # Already gone \u2014 still purge the DB row.
+                missing += 1
+                deleted_paths.append(path)
+            except OSError:
+                failed += 1
+                # Skip cache cleanup and DB purge on failure so the user can retry.
+                self.progress.emit(i + 1, total)
+                continue
+
+            # Best-effort cache cleanup.
+            if self._cache_dir is not None:
+                stamp = stamps.get(path)
+                if stamp is not None:
+                    base_thumb = thumb_cache_name_from_stamp(path, stamp[0], stamp[1])
+                    base_prev = preview_cache_name_from_stamp(path, stamp[0], stamp[1])
+                    cache_files = [
+                        self._cache_dir / (base_thumb[:-4] + thumb_suffix),
+                        self._cache_dir / (base_thumb[:-4] + ".skip"),
+                    ]
+                    if prev_dir is not None:
+                        cache_files.append(prev_dir / (base_prev[:-4] + prev_suffix))
+                    for cf in cache_files:
+                        try:
+                            cf.unlink()
+                        except FileNotFoundError:
+                            pass
+                        except OSError:
+                            pass
+
+            self.progress.emit(i + 1, total)
+
+        self._purge_db_rows(repo, deleted_paths)
+
+        self.result_deleted_count = deleted
+        self.result_missing_count = missing
+        self.result_failed_count = failed
+        # Refresh the marked set \u2014 only the rows we failed to delete remain.
+        self.result_paths = repo.get_marked_paths()
+        self.finished.emit()
+
+    def _purge_db_rows(
+        self, repo: ImageIndexRepository, paths: list[str]
+    ) -> None:
+        """Remove *paths* from images, images_fts and image_folders."""
+        if not paths:
+            return
+        with repo.conn:
+            for i in range(0, len(paths), _BATCH_SIZE):
+                batch = paths[i : i + _BATCH_SIZE]
+                placeholders = ",".join("?" * len(batch))
+                repo.conn.execute(
+                    f"DELETE FROM images_fts WHERE path IN ({placeholders})",
+                    batch,
+                )
+                repo.conn.execute(
+                    f"DELETE FROM image_folders WHERE image_id IN ("
+                    f"  SELECT id FROM images WHERE path IN ({placeholders})"
+                    f")",
+                    batch,
+                )
+                repo.conn.execute(
+                    f"DELETE FROM images WHERE path IN ({placeholders})",
+                    batch,
+                )
 
     def _run_export(self, repo: ImageIndexRepository) -> None:
         if self._is_canceled():

@@ -237,7 +237,17 @@ ApplicationWindow {
             }
         }
         Menu {
+            id: selectMenu
             title: qsTr("&Select")
+            // Auto-size to the widest item label so long entries (e.g.
+            // "Select Images Without Thumbnail") are never truncated.
+            TextMetrics {
+                id: selectMenuMetrics
+                font: selectMenu.font
+                text: selectMissingItem.text
+            }
+            implicitWidth: selectMenuMetrics.width + 64
+
             Action {
                 text: qsTr("Select &All")
                 enabled: !_isLocked
@@ -253,17 +263,47 @@ ApplicationWindow {
                 enabled: !_isLocked
                 onTriggered: if (!_isLocked) controller.invertSelection()
             }
+            MenuSeparator {}
+            Action {
+                id: selectMissingItem
+                text: qsTr("Select Images Without &Thumbnail")
+                enabled: !_isLocked
+                onTriggered: if (!_isLocked) controller.selectMissingThumbnails()
+            }
         }
         Menu {
+            id: actionMenu
             title: qsTr("&Action")
-            implicitWidth: 380
+            // Auto-size to the widest item label so long entries (e.g. "Delete
+            // Marked Images… (1234 selected)") are never truncated.  Width is
+            // measured via TextMetrics on the live action texts.
+            TextMetrics {
+                id: actionMenuMetrics
+                font: actionMenu.font
+                text: {
+                    const a = exportJsonItem.text
+                    const b = deleteMarkedItem.text
+                    return a.length > b.length ? a : b
+                }
+            }
+            implicitWidth: actionMenuMetrics.width + 64
+
             Action {
+                id: exportJsonItem
                 readonly property int _cnt: controller ? controller.checkedCount : 0
                 text: _cnt > 0
                       ? qsTr("Export Metadata as &JSON\u2026 (%1 selected)").arg(_cnt)
                       : qsTr("Export Metadata as &JSON\u2026 (all results)")
                 enabled: !_isLocked
                 onTriggered: if (!_isLocked) exportJsonDialog.open()
+            }
+            MenuSeparator {}
+            Action {
+                id: deleteMarkedItem
+                readonly property int _cnt: controller ? controller.checkedCount : 0
+                text: qsTr("&Delete Marked Images\u2026 (%1 selected)").arg(_cnt)
+                enabled: !_isLocked && _cnt > 0
+                onTriggered: if (!_isLocked && _cnt > 0) deleteMarkedDialog.open()
             }
         }
         Menu {
@@ -292,6 +332,64 @@ ApplicationWindow {
         nameFilters: [qsTr("JSON files (*.json)"), qsTr("All files (*)")]
         defaultSuffix: "json"
         onAccepted: controller.exportMarkedMetadataJson(selectedFile)
+    }
+
+    // ── Delete-marked confirmation dialog ─────────────────────────────────
+    Dialog {
+        id: deleteMarkedDialog
+        title: qsTr("Delete Marked Images")
+        standardButtons: Dialog.Yes | Dialog.Cancel
+        anchors.centerIn: Overlay.overlay
+        modal: true
+        width: 460
+
+        readonly property int expectedCount: controller ? controller.checkedCount : 0
+        readonly property bool _confirmed:
+            parseInt(confirmCountField.text, 10) === expectedCount && expectedCount > 0
+
+        onOpened: {
+            confirmCountField.text = ""
+            confirmCountField.forceActiveFocus()
+            _refreshYesEnabled()
+        }
+        on_ConfirmedChanged: _refreshYesEnabled()
+
+        function _refreshYesEnabled() {
+            const yesBtn = standardButton(Dialog.Yes)
+            if (yesBtn) yesBtn.enabled = _confirmed
+        }
+
+        ColumnLayout {
+            width: parent.width
+            spacing: 12
+
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("Permanently delete %1 marked image file(s) from disk and remove them from the index?\n\nThis cannot be undone.")
+                    .arg(deleteMarkedDialog.expectedCount)
+            }
+
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("To confirm, type the number %1 below:")
+                    .arg(deleteMarkedDialog.expectedCount)
+            }
+
+            TextField {
+                id: confirmCountField
+                Layout.fillWidth: true
+                placeholderText: qsTr("Enter %1").arg(deleteMarkedDialog.expectedCount)
+                inputMethodHints: Qt.ImhDigitsOnly
+                validator: IntValidator { bottom: 0 }
+                onAccepted: if (deleteMarkedDialog._confirmed) deleteMarkedDialog.accept()
+            }
+        }
+
+        onAccepted: {
+            if (_confirmed) controller.deleteMarkedImages()
+        }
     }
 
     // ── Toolbar (hidden — search moved into Search tab) ─────────────────
