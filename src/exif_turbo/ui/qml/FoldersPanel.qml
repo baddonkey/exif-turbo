@@ -155,6 +155,8 @@ Item {
                     ColumnLayout {
                         spacing: 3
                         Layout.alignment: Qt.AlignVCenter
+                        Layout.preferredWidth: 150
+                        Layout.minimumWidth: 150
 
                         // Status badge
                         Rectangle {
@@ -235,6 +237,7 @@ Item {
                         text: qsTr("Rescan")
                         font.pixelSize: 11
                         implicitHeight: 30
+                        Layout.preferredWidth: 90
                         enabled: model.enabled && model.status !== "scanning"
                         ToolTip.text: qsTr("Re-index this folder (incremental)")
                         ToolTip.visible: hovered
@@ -247,6 +250,7 @@ Item {
                         text: qsTr("Full Rescan")
                         font.pixelSize: 11
                         implicitHeight: 30
+                        Layout.preferredWidth: 100
                         enabled: model.enabled && model.status !== "scanning"
                         ToolTip.text: qsTr("Force re-extract EXIF for every file in this folder")
                         ToolTip.visible: hovered
@@ -261,6 +265,7 @@ Item {
                               : qsTr("Build Previews")
                         font.pixelSize: 11
                         implicitHeight: 30
+                        Layout.preferredWidth: 110
                         enabled: model.enabled && model.imageCount > 0 &&
                                  (!controller.isBuildingPreviews || controller.previewBuildFolderId === model.folderId)
                         ToolTip.text: (controller && controller.isBuildingPreviews && controller.previewBuildFolderId === model.folderId)
@@ -275,15 +280,18 @@ Item {
                         }
                     }
 
-                    // Clear Previews button — only when something is cached
+                    // Clear Previews button — kept in layout (transparent when nothing cached)
+                    // so the Remove button stays aligned across rows.
                     Button {
                         flat: true
                         text: qsTr("Clear Previews")
                         font.pixelSize: 11
                         implicitHeight: 30
-                        visible: model.previewCachedCount > 0
-                        enabled: !controller.isBuildingPreviews
-                                 || controller.previewBuildFolderId !== model.folderId
+                        Layout.preferredWidth: 110
+                        opacity: model.previewCachedCount > 0 ? 1.0 : 0.0
+                        enabled: model.previewCachedCount > 0 &&
+                                 (!controller.isBuildingPreviews
+                                  || controller.previewBuildFolderId !== model.folderId)
                         ToolTip.text: qsTr("Delete all cached previews for this folder")
                         ToolTip.visible: hovered
                         onClicked: clearPreviewsConfirmDialog.open()
@@ -311,6 +319,7 @@ Item {
                         text: qsTr("Remove")
                         font.pixelSize: 11
                         implicitHeight: 30
+                        Layout.preferredWidth: 80
                         Material.foreground: Material.Red
                         ToolTip.text: qsTr("Remove this folder and delete its indexed images")
                         ToolTip.visible: hovered
