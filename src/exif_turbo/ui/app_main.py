@@ -19,6 +19,7 @@ from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtWebEngineQuick import QtWebEngineQuick
 
+from .. import __version__
 from ..config import db_path_for_name, default_db_path, settings_path, thumb_cache_dir
 from .gettext_translator import GettextTranslator
 from .models.checked_filter_proxy_model import CheckedFilterProxyModel
@@ -65,6 +66,11 @@ def _ensure_pyside6_dll_search_path() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Exif Turbo UI")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"exif-turbo {__version__}",
+    )
     parser.add_argument(
         "--db",
         default=None,

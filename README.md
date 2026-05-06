@@ -21,7 +21,6 @@ Fully generated using VS Code Copilot.
 - Reset Database — wipes all indexed images, folder records, and thumbnail cache in one step; database file shrinks immediately
 - RAW format support: CR2, CR3, NEF, ARW, DNG, ORF, RW2, PEF, RAF, RWL, SRW
 - EXIF orientation correction for thumbnails (all formats including RAW)
-- CLI indexer (`exif-turbo-index`) for scripted/headless use
 - Encrypted database at rest (SQLCipher); passphrase set on first launch, unlocked via the UI
 - **Mark / select images** — select all results (or deselect all) with a single menu action; individual checkbox per result row
 - **Select images without thumbnail** — `Select → Select Images Without Thumbnail` marks every result whose thumbnail is not yet cached on disk (including images the thumbnailer permanently gave up on), so they can be exported, deleted or rescanned in bulk
@@ -217,17 +216,26 @@ pip install -e .
 exif-turbo
 ```
 
-### Build / update the index (CLI)
+Use `--db <name>` to open a named database (stored under
+`~/.exif-turbo/data/<name>.db`):
 
 ```bash
-exif-turbo-index --folders "C:\Photos" --db data\index.db
+exif-turbo --db holidays
 ```
+
+Print the installed version and exit:
+
+```bash
+exif-turbo --version
+```
+
+Folders to index are managed inside the GUI on the **Indexed Folders** tab.
 
 ### Python module invocation
 
 ```bash
 python -m exif_turbo.app
-python -m exif_turbo.index --folders "C:\Photos" --db data\index.db
+python -m exif_turbo.app --db holidays
 ```
 
 ## Configuration
@@ -237,7 +245,6 @@ Control whether dotfiles (filenames starting with `.`) are indexed:
 | Method | Value |
 |--------|-------|
 | Environment variable | `EXIF_TURBO_SKIP_DOTFILES=true\|false` (default: `true`) |
-| CLI flag | `--include-dotfiles` |
 
 ## FTS5 Query Syntax
 

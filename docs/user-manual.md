@@ -54,12 +54,13 @@ pip install -e .
 ### Command-line options
 
 ```
-exif-turbo [--db NAME]
+exif-turbo [--db NAME] [--version]
 ```
 
 | Option | Description |
 |--------|-------------|
 | `--db NAME` | Open (or create) a named database instead of the default one. The database is always stored in `~/.exif-turbo/data/<NAME>/<NAME>.db`. Useful for keeping separate libraries — e.g. `exif-turbo --db work` and `exif-turbo --db holidays`. |
+| `--version` | Print the installed exif-turbo version and exit. |
 
 If `--db` is omitted, the default database `~/.exif-turbo/data/index/index.db` is used.
 

@@ -344,8 +344,13 @@ Options:
 ### `exif-turbo`
 
 ```
-exif-turbo [--db <path.db>]
+exif-turbo [--db NAME] [--version]
 ```
+
+| Option | Description |
+|--------|-------------|
+| `--db NAME` | Open (or create) a named database stored at `~/.exif-turbo/data/<NAME>/<NAME>.db`. Default: `index`. |
+| `--version` | Print the installed exif-turbo version and exit. |
 
 ---
 
