@@ -24,7 +24,9 @@ Fully generated using VS Code Copilot.
 - CLI indexer (`exif-turbo-index`) for scripted/headless use
 - Encrypted database at rest (SQLCipher); passphrase set on first launch, unlocked via the UI
 - **Mark / select images** — select all results (or deselect all) with a single menu action; individual checkbox per result row
+- **Select images without thumbnail** — `Select → Select Images Without Thumbnail` marks every result whose thumbnail is not yet cached on disk (including images the thumbnailer permanently gave up on), so they can be exported, deleted or rescanned in bulk
 - **Export marked images as JSON** — exports EXIF metadata for all marked images to a JSON file, respecting the current UI sort order
+- **Delete marked images** — `Action → Delete Marked Images…` permanently removes every marked image from disk *and* from the index, including any cached thumbnail and rendered preview; a confirmation dialog requires you to type the exact count to proceed
 - **Bulk-op progress overlay** — modal overlay with a progress bar and live `X / Y` count during select-all, deselect-all, and export operations; cancelable at any time
 - **Unlock spinner** — animated indicator shown on the lock screen while the encrypted database is being opened
 

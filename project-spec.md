@@ -134,7 +134,7 @@ derive stable thumbnail cache names without a live `os.stat` call.
 | `models/settings_model.py` | `SettingsModel(QObject)` — exposes `workerCount`, `blacklist`, `language`, and `theme` to QML; per-DB settings persisted as JSON; language and theme stored globally via `i18n` module |
 | `workers/index_worker.py` | `QThread` — runs `IndexerService.build_index` off the GUI thread; emits progress signals; supports `pause()`/`resume()` via `threading.Event` to yield I/O bandwidth during preview loads |
 | `workers/thumb_worker.py` | `QThread` — generates thumbnail cache off the GUI thread; supports `pause()`/`resume()` via `threading.Event` |
-| `workers/bulk_op_worker.py` | `QThread` — executes select-all, deselect-all, and export-JSON bulk operations off the GUI thread. Accepts full filter state (query, ext_filter, path_filter, restrict_to_enabled_folders, marked_only) and a `sort_by` key for export ordering. Mark operations run in batches of 500 rows each emitting a progress tick; export writes one JSON record at a time. Signals: `progress(done, total)`, `finished`, `failed(message)`, `canceled`. |
+| `workers/bulk_op_worker.py` | `QThread` — executes the bulk operations off the GUI thread: `select_all`, `deselect_all`, `invert`, `select_missing_thumbs` (marks every matching image whose expected `thumb_cache_path()` has no `.png`/`.enc` on disk; `.skip` sentinels are treated as missing too so failed-thumbnail images surface), `export_json`, and `delete_marked` (removes marked images from disk and from the index, plus the matching cached thumbnail `.png`/`.enc`, `.skip` sentinel and rendered preview `.jpg`/`.jpg.enc`; persists partial progress on cancel so DB and disk stay in sync). Accepts full filter state (query, ext_filter, path_filter, restrict_to_enabled_folders, marked_only), a `sort_by` key for export ordering, and a `cache_dir` for thumb/preview lookup. Mark operations run in batches of 500 rows each emitting a progress tick; export writes one JSON record at a time; delete reports `result_deleted_count`, `result_missing_count`, `result_failed_count`. Signals: `progress(done, total)`, `finished`, `failed(message)`, `canceled`. |
 | `providers/preview_image_provider.py` | `PreviewImageProvider(QQuickImageProvider)` — serves full-resolution previews for all formats (JPEG/PNG/TIFF/RAW) as `image://preview/<encoded-path>`; `ForceAsynchronousImageLoading`, `HighPriority` thread; reads raw bytes via `open().read()` to release the GIL during network I/O, then decodes in-memory with Pillow `draft()` for fast JPEG subsampling |
 | `providers/raw_image_provider.py` | `RawImageProvider(QQuickImageProvider)` — legacy RAW-only provider (`image://raw/`); kept for backward compatibility |
 | `qml/Main.qml` | Main application window: tab bar (Search, Browse), split-pane layout, EXIF detail panel, Settings sheet, lock screen |
@@ -160,12 +160,23 @@ derive stable thumbnail cache names without a live `os.stat` call.
   before the main thread stalls. The QML lock screen shows a `BusyIndicator`
   + "Unlocking…" label and disables the Unlock button while `True`.
 - **Bulk operations** — `selectAll()`, `deselectAll()`, `invertSelection()`,
-  and `exportMarkedMetadataJson()` slots each launch a `BulkOpWorker` on a
-  background thread. While the worker runs, `isBusy` is `True` and a modal
-  overlay with a `ProgressBar` and `"X / Y"` count label blocks the UI.
+  `selectMissingThumbnails()`, `exportMarkedMetadataJson()`, and
+  `deleteMarkedImages()` slots each launch a `BulkOpWorker` on a background
+  thread. While the worker runs, `isBusy` is `True` and a modal overlay with
+  a `ProgressBar` and `"X / Y"` count label blocks the UI.
   `cancelBulkOp()` signals the worker to stop cleanly. Export respects the
   current UI sort order (`_sort_by` passed as `sort_by` to the worker and
   forwarded to `get_marked_metadata(sort_by=...)` → `ORDER BY`).
+  `deleteMarkedImages()` requires QML to confirm via the typed-count
+  dialog (the user must type the exact number of marked images) before the
+  slot is invoked; on completion the search list, format facets, folder
+  tree, and indexed-folder counts are refreshed, and the status bar
+  reports `Deleted N image(s).` with optional `N were already missing.` /
+  `N could not be deleted.` clauses.
+- **Menu auto-sizing** — the Select and Action menus measure their widest
+  item via `TextMetrics` and bind `implicitWidth` accordingly, so long
+  dynamic labels (e.g. *"Delete Marked Images… (1234 selected)"* or
+  *"Select Images Without Thumbnail"*) are never truncated.
 - `currentResultRow` — `int` property tracking the currently selected result
   row. `_run_search()` restores it after a re-run (tab switch, filter change)
   so the selection survives navigation. Resets to `0` only when the query or

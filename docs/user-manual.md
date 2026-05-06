@@ -16,9 +16,10 @@ other tag — across thousands of images.
 6. [Searching](#6-searching)
 7. [Browsing by Folder](#7-browsing-by-folder)
 8. [Viewing Metadata and EXIF Tags](#8-viewing-metadata-and-exif-tags)
-9. [Settings](#9-settings)
-10. [Keyboard Shortcuts](#10-keyboard-shortcuts)
-11. [FAQ](#11-faq)
+9. [Marking Images & Bulk Actions](#9-marking-images--bulk-actions)
+10. [Settings](#10-settings)
+11. [Keyboard Shortcuts](#11-keyboard-shortcuts)
+12. [FAQ](#12-faq)
 
 ---
 
@@ -102,10 +103,15 @@ Click the **Indexed Folders** tab to manage which directories are scanned.
 
 ### Adding a folder
 
-1. Click **Add Folder** (top-right of the Indexed Folders tab).
+1. Click **Add Folder** in the **Managed Folders** header bar at the top of the
+   tab.
 2. Pick the directory in the file browser dialog.
 3. The folder is immediately queued for scanning — its status changes to **QUEUED**
    then **SCANNING** once the worker starts.
+
+The header bar also provides **Rescan All** (incrementally re-index all enabled
+folders) and **Full Rescan All** (force re-extract EXIF for every file in all
+enabled folders).
 
 ### Starting an index scan
 
@@ -122,8 +128,11 @@ updated or removed. Images indexed from other folders are not affected.
 
 ### Folder statuses
 
-Each folder row shows a coloured status badge and an image count badge
-(e.g. "42 images") once it has been indexed.
+Each folder row shows a coloured status badge, an image-count badge
+(e.g. "42 images") once it has been indexed, and — if previews have been
+rendered — a preview-cache badge ("✓ 42/42 previews"). The preview badge is
+**green** when every image in the folder has a cached preview and **amber**
+when only some do; hover it to see the exact ratio.
 
 | Status | Meaning |
 |--------|---------|
@@ -138,38 +147,51 @@ Each folder row shows a coloured status badge and an image count badge
 ### Disabling / enabling a folder
 
 Toggle the **Enabled** switch to exclude a folder from search results without
-deleting it or its index data.
+deleting it or its index data. Hovering the switch shows the tooltip *"Folder
+is included in search results"* (when on) or *"Folder is excluded from search
+results"* (when off).
 
-### Removing a folder
+### Per-folder actions
 
-Click **Remove**. A confirmation dialog asks you to confirm before the folder
-and all its indexed images are deleted from the database. The original files
-on disk are not touched.
+Each row exposes the following buttons on the right:
+
+| Button | Action |
+|--------|--------|
+| **Rescan** | Incrementally re-index this folder (only files whose modification time changed). |
+| **Full Rescan** | Force re-extract EXIF for every file in this folder. |
+| **Build Previews** | Render preview-cache JPEGs for every image in this folder. While the build is running on this folder the same button reads **Cancel Previews**. Disabled while another folder's preview build is in progress. |
+| **Clear Previews** | Delete all cached previews for this folder. Hidden (kept invisible for layout alignment) when nothing is cached. A confirmation dialog asks *"Delete N cached preview(s) for \"<folder>\"? Thumbnails are unaffected."* |
+| **Remove** | Remove the folder and delete all its indexed images. A **Remove Folder** confirmation dialog asks before deletion. The original files on disk are not touched. |
 
 ---
 
 ## 5. Indexing Progress
 
 While scanning, a non-blocking progress panel appears in the bottom-right corner
-of the **Indexed Folders** tab:
+of the **Indexed Folders** tab. The same panel is reused for the two background
+phases that may follow indexing — **thumbnail building** and **preview
+building** — so it can show three different titles:
 
-- **Queue indicator** — shows which folder is currently being scanned. When
-  multiple folders are queued it reads **"Indexing folder 2 of 5"**; when only
-  one folder is being processed it reads **"Indexing"**.
-- **Progress bar** — shows an indeterminate animation while exif-turbo is
-  scanning the folder for image files, then switches to a percentage once the
-  total file count is known.
-- **File counter** — shows **"Scanning for images…"** during the initial
-  discovery phase, then `n / total` files once counting is complete.
+- **"Indexing folder N of M"** / **"Indexing"** — file-indexing phase. Shown
+  while the indexer is processing folders from the queue.
+- **"Building Thumbnails"** — thumbnail-cache phase, started automatically
+  after indexing finishes.
+- **"Building Previews"** — preview-cache phase, started by the **Build
+  Previews** button on a folder row.
+
+The panel always contains:
+
+- **Progress bar** — indeterminate while the total is still being computed,
+  then a percentage once it is known.
+- **Count label** — **"Scanning for images…"** during indexing discovery,
+  **"Preparing…"** for the thumbnail and preview phases before the total is
+  known, then `n / total` files (indexing) or `n / total images` (thumbnails
+  and previews).
 - **Current file** — name of the file being processed.
-- **Cancel Indexing** button — stops indexing immediately. While the worker is
-  stopping the label changes to **"Canceling…"** and the button is disabled
-  until the worker has stopped. During the thumbnail-build phase the same button
-  shows **Cancel Thumbnails**.
-
-The same progress panel is reused after indexing finishes to show **thumbnail
-building** progress ("Building Thumbnails"). Thumbnails are generated in a
-background pass and cached to disk so subsequent launches are fast.
+- **Cancel button** — labelled **Cancel Indexing**, **Cancel Thumbnails**,
+  or **Cancel Previews** depending on the phase. While an indexing or thumbnail
+  cancel is in flight the label changes to **"Canceling…"** and the button is
+  disabled until the worker has stopped.
 
 Across **all tabs** the **status bar** at the very bottom of the window shows a
 pulsing blue dot and the text **Indexing…** during the file-indexing phase, so
@@ -251,6 +273,7 @@ Use the **Sort** dropdown at the top-right of the results panel:
 | Newest first | Date taken, most recent first |
 | Oldest first | Date taken, oldest first |
 | Largest | File size, largest first |
+| Smallest | File size, smallest first |
 
 ### Loading more results
 
@@ -346,6 +369,22 @@ embedded preview JPEG is used. A cached thumbnail is shown immediately as a
 low-resolution placeholder while the full image is loading; the full image fades
 in once it has been decoded.
 
+#### Show Preview / Show Original
+
+When the selected image has a cached preview JPEG, a small pill toggle appears
+at the right edge of the **PREVIEW** header bar. The label tells you what
+clicking it will do:
+
+- **Show Original** (with a green dot) — you are currently looking at the
+  cached preview; click to load the full-resolution source file.
+- **Show Preview** (with an orange dot) — you are currently looking at the
+  full-resolution source; click to switch back to the cached preview.
+
+The pill is useful for RAW files: the cached preview decodes instantly and is
+sufficient for most viewing, but switching to **Show Original** loads the
+full-resolution image when you want to zoom in for detail. The toggle is hidden
+when no cached preview is available for the selected image.
+
 #### Zooming and panning
 
 The preview supports cursor-anchored zoom and drag-to-pan:
@@ -383,7 +422,75 @@ By default they start at **50 % / 50 %**.
 
 ---
 
-## 9. Settings
+## 9. Marking Images & Bulk Actions
+
+Every result card has a **checkbox** at its top-left corner. Tick it to *mark*
+that image — marks persist across searches, tab switches, and app restarts (the
+state is stored in the encrypted database). Marked images are the input for the
+bulk actions in the **Action** menu.
+
+The menu bar exposes two menus dedicated to marking and bulk actions.
+
+### Select menu
+
+| Action | What it does |
+|--------|--------------|
+| **Select All** | Marks every image matching the current filters (search query, format chip, folder filter, marked-only toggle). Runs on a background thread in batches so the UI stays responsive. |
+| **Deselect All** | Unmarks every image matching the current filters. |
+| **Invert Selection** | Flips the marked state of every image matching the current filters. |
+| **Select Images Without Thumbnail** | Marks every matching image whose thumbnail has not been cached on disk yet. Images the thumbnailer has permanently given up on (oversized files or decoder errors, recorded as a `.skip` sentinel) are also marked, so you can act on them — for example by exporting the metadata or deleting the offending files. Like the other Select actions, it respects the active search query, format chip, folder filter, and marked-only toggle. |
+
+All four actions show the **bulk-op progress overlay** with a live `X / Y`
+counter and a **Cancel** button.
+
+### Action menu
+
+The Action menu operates on whatever is currently marked across the entire
+database — not just the visible results.
+
+| Action | What it does |
+|--------|--------------|
+| **Export Metadata as JSON…** | Writes the EXIF metadata of every marked image to a JSON file you choose via a Save dialog. The export honours the current **Sort** order (filename, path, date, or size). When nothing is marked, the menu label changes to *"Export Metadata as JSON… (all results)"* and the action exports every image matching the current filters instead. |
+| **Delete Marked Images…** | Permanently deletes every marked image **from disk** and removes its row from the index. Cached thumbnails (`.png` / `.enc`), `.skip` sentinels, and any rendered preview (`.jpg` / `.jpg.enc`) for the deleted images are also cleaned up. Disabled when nothing is marked. The menu label includes the current count, e.g. *"Delete Marked Images… (12 selected)"*. |
+
+Both menu items report the live count in their label and run via the bulk-op
+progress overlay; clicking **Cancel** mid-run stops cleanly and any deletions
+already made stay on disk and in the index — the database is never out of
+sync with the file system.
+
+#### Confirming a delete
+
+Because **Delete Marked Images…** is irreversible, the confirmation dialog
+requires an extra step:
+
+1. The dialog states how many files will be deleted (e.g.
+   *"Permanently delete 12 marked image file(s) from disk and remove them
+   from the index?"*).
+2. A text field asks you to **type the exact count** — for example `12` —
+   into the box labelled *"To confirm, type the number 12 below"*.
+3. The **Yes** button stays disabled until the typed number matches the
+   expected count exactly. Pressing **Enter** in the field also confirms
+   the action when the count matches.
+4. **Cancel** (or closing the dialog) aborts without deleting anything.
+
+After completion the status bar reports the outcome, e.g.
+**"Deleted 12 image(s)."** When some files were already gone or could not be
+removed (for example because of file-system permissions) extra clauses are
+appended: **"3 were already missing."** and/or **"1 could not be deleted."**
+
+> **There is no undo.** Files are removed using the operating system's regular
+> delete call — they do *not* go to the Recycle Bin / Trash. Make sure the
+> marked set is correct before confirming.
+
+### Tip — auto-sized menus
+
+The Select and Action menu popups are sized to fit their longest item, so
+dynamic labels such as *"Delete Marked Images… (1234 selected)"* are always
+shown in full and never truncated.
+
+---
+
+## 10. Settings
 
 Click the **Settings** tab to configure application behaviour.
 
@@ -466,7 +573,7 @@ The **Reset Database…** button is disabled while indexing is in progress.
 
 ---
 
-## 10. Keyboard Shortcuts
+## 11. Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
@@ -479,11 +586,10 @@ The **Reset Database…** button is disabled while indexing is in progress.
 | `↑` | Select the previous result (Search tab) |
 | `Page Down` | Jump one page forward in results (Search tab) |
 | `Page Up` | Jump one page backward in results (Search tab) |
-| `Ctrl+Q` | Quit |
 
 ---
 
-## 11. FAQ
+## 12. FAQ
 
 **Q: Why does the status bar say "Indexing…" even after I switch tabs?**  
 A: The indexer runs in the background across all tabs. The pulsing blue dot in
