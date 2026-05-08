@@ -332,12 +332,14 @@ The search box accepts the full **SQLite FTS5** query language:
 | `term1 AND term2` | `Canon AND 50mm` | Both terms must be present |
 | `term1 OR term2` | `Canon OR Nikon` | Either term must be present |
 | `term1 NOT term2` | `50mm NOT Nikon` | First term present, second term absent |
-| `column:term` | `filename:IMG_1234` | Search within a specific field only |
 | `prefix*` | `Fuji*` | Matches any token starting with the prefix |
 
-Available column names for scoped queries: `path`, `filename`, `metadata_text`.
-
 Multiple terms without an operator (`Canon 50mm`) are treated as an implicit AND.
+
+ExifTool stores metadata with group-prefixed keys such as `GPS:GPSLatitude` or
+`ExifIFD:FocalLength`. You can type these directly in the search box — the colon
+is treated as a word separator, so `GPS:GPSLatitude` becomes an implicit AND
+of `GPS` and `GPSLatitude`.
 
 ---
 

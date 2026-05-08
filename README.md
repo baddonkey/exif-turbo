@@ -255,16 +255,19 @@ term                    # single keyword
 term1 AND term2
 term1 OR term2
 term1 NOT term2
-col:term                # search within a specific EXIF field
 prefix*                 # prefix wildcard
 ```
+
+ExifTool group-prefixed keys (e.g. `GPS:GPSLatitude`, `ExifIFD:FocalLength`)
+can be typed verbatim — the colon is treated as a word separator.
 
 Examples:
 
 ```
-camera:Canon lens:50mm
+Canon 50mm
 "red car" AND mexico
-path:*.jpg
+GPS:GPSLatitude
+ExifIFD:FocalLength
 ```
 
 ## License

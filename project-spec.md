@@ -374,9 +374,12 @@ term                  keyword anywhere in metadata
 term1 AND term2
 term1 OR term2
 term1 NOT term2
-col:term              search within a specific EXIF field (e.g. camera:Canon)
 prefix*               prefix wildcard
 ```
+
+The colon (`:`) is treated as a word separator, not an FTS5 column-filter
+operator. This allows ExifTool group-prefixed keys such as `GPS:GPSLatitude`
+or `ExifIFD:FocalLength` to be typed verbatim without quoting.
 
 ---
 

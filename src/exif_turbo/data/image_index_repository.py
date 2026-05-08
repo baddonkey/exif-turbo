@@ -360,18 +360,22 @@ class ImageIndexRepository:
           - whitespace (token separators)
           - '"'  — phrase literal delimiter
           - '*'  — prefix wildcard (e.g. ``Fuji*``)
-          - ':'  — column scope separator (e.g. ``filename:eagle``)
           - '^'  — relevance boost
           - '(' ')' — grouping
 
+        ':' is intentionally excluded so that ExifTool group-prefixed keys such
+        as ``GPS:GPSLatitude`` or ``ExifIFD:FocalLength`` can be typed verbatim
+        without quoting.  The colon is converted to a token separator, turning
+        ``GPS:GPSLatitude`` into the implicit-AND query ``GPS GPSLatitude``.
+
         This preserves FTS5 operators (AND, OR, NOT), phrase literals, prefix
-        queries, column scopes, and boost expressions while silently converting
-        characters like '.' and '-' into token separators.  A query such as
+        queries, and boost expressions while silently converting characters like
+        '.', '-', and ':' into token separators.  A query such as
         ``img004.png`` becomes the implicit-AND query ``img004 png``, which
         correctly matches images whose FTS5 document contains both tokens.
         """
         import re
-        sanitized = re.sub(r'[^\w\s"*:^()]', ' ', query)
+        sanitized = re.sub(r'[^\w\s"*^()]', ' ', query)
         return ' '.join(sanitized.split())
 
     def search_images(

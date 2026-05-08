@@ -198,36 +198,33 @@ def test_search_fts_prefix_wildcard_returns_prefix_matches(repo: ImageIndexRepos
     assert "fuji.jpg" in rows[0][2]
 
 
-def test_search_fts_column_scope_restricts_to_filename_column(repo: ImageIndexRepository, tmp_path: Path) -> None:
-    # Arrange — "eagle" appears in filename of one image and metadata_text of another
-    path_hawk = str(make_jpeg(tmp_path / "hawk.jpg"))
-    path_eagle = str(make_jpeg(tmp_path / "eagle.jpg"))
-    repo.upsert_image(path_hawk, "hawk.jpg", 1.0, 100, {}, "eagle soaring wildlife")
-    repo.upsert_image(path_eagle, "eagle.jpg", 1.0, 100, {}, "hawk diving wildlife")
+def test_search_fts_colon_in_query_matches_both_tokens(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange — one image has an ExifTool-style group:key entry in its metadata
+    path_a = str(make_jpeg(tmp_path / "gps.jpg"))
+    path_b = str(make_jpeg(tmp_path / "other.jpg"))
+    repo.upsert_image(path_a, "gps.jpg", 1.0, 100, {}, "GPS GPSLatitude 47.3765")
+    repo.upsert_image(path_b, "other.jpg", 1.0, 100, {}, "ExifIFD FocalLength 50mm")
     repo.commit()
 
-    # Act — restrict search to the filename column
-    rows = repo.search_images("filename:eagle", limit=10, offset=0)
+    # Act — typing "GPS:GPSLatitude" should be treated as implicit AND of both tokens
+    rows = repo.search_images("GPS:GPSLatitude", limit=10, offset=0)
 
-    # Assert — only the image whose filename contains "eagle" is returned
+    # Assert — matches the image whose metadata contains both GPS and GPSLatitude
     assert len(rows) == 1
-    assert "eagle.jpg" in rows[0][2]
+    assert "gps.jpg" in rows[0][2]
 
 
-def test_search_fts_column_scope_restricts_to_metadata_text_column(repo: ImageIndexRepository, tmp_path: Path) -> None:
-    # Arrange — same setup as above
-    path_hawk = str(make_jpeg(tmp_path / "hawk.jpg"))
-    path_eagle = str(make_jpeg(tmp_path / "eagle.jpg"))
-    repo.upsert_image(path_hawk, "hawk.jpg", 1.0, 100, {}, "eagle soaring wildlife")
-    repo.upsert_image(path_eagle, "eagle.jpg", 1.0, 100, {}, "hawk diving wildlife")
+def test_search_fts_colon_does_not_cause_error(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange
+    path_a = str(make_jpeg(tmp_path / "a.jpg"))
+    repo.upsert_image(path_a, "a.jpg", 1.0, 100, {}, "ExifIFD FocalLength 50")
     repo.commit()
 
-    # Act — restrict search to metadata_text column
-    rows = repo.search_images("metadata_text:eagle", limit=10, offset=0)
+    # Act — colon-prefixed query should not raise an FTS5 syntax error
+    rows = repo.search_images("ExifIFD:FocalLength", limit=10, offset=0)
 
-    # Assert — only the image whose metadata_text contains "eagle" is returned
+    # Assert — result returned without error
     assert len(rows) == 1
-    assert "hawk.jpg" in rows[0][2]
 
 
 # ── delete_missing ────────────────────────────────────────────────────────────
