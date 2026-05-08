@@ -286,6 +286,10 @@ class AppController(QObject):
     def detailsHtml(self) -> str:
         return self._details_html
 
+    @Property(str, notify=detailsHtmlChanged)
+    def detailsPlainText(self) -> str:
+        return self._details_plain_text
+
     @Property(str, notify=geoLocationUrlChanged)
     def geoLocationUrl(self) -> str:
         return self._geo_location_url

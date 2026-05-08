@@ -1814,23 +1814,70 @@ ApplicationWindow {
                         }
                     }
 
-                    ScrollView {
+                    Flickable {
                         id: detailsScrollView
+                        objectName: "detailsScrollView"
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
+                        contentWidth: width
+                        contentHeight: detailsEditLoader.item
+                            ? detailsEditLoader.item.implicitHeight + detailsEditLoader.item.padding * 2
+                            : 0
+                        boundsBehavior: Flickable.StopAtBounds
 
-                        TextArea {
-                            id: detailsArea
-                            readOnly: true
-                            textFormat: TextEdit.RichText
-                            text: _detailsHtml
-                            wrapMode: TextEdit.Wrap
-                            font.family: root.monoFont
-                            font.pixelSize: 12
-                            placeholderText: qsTr("Select an image to see metadata")
-                            background: null
-                            padding: 8
+                        ScrollBar.vertical: ScrollBar {
+                            id: detailsVBar
+                            policy: ScrollBar.AsNeeded
+                        }
+
+                        // The TextEdit is recreated on every detailsHtml change
+                        // to defeat a Qt 6.10 RHI bug where TextEdit.RichText
+                        // leaves stale (black) tiles after replacing a long
+                        // document from a scrolled position. A fresh component
+                        // instance has a clean layout cache.
+                        property string detailsHtmlSnapshot: controller ? controller.detailsHtml : ""
+                        onDetailsHtmlSnapshotChanged: {
+                            detailsEditLoader.active = false
+                            detailsEditLoader.active = true
+                            contentY = 0
+                        }
+
+                        Loader {
+                            id: detailsEditLoader
+                            width: detailsScrollView.width
+                            active: true
+                            sourceComponent: detailsEditComponent
+                        }
+
+                        Component {
+                            id: detailsEditComponent
+                            TextEdit {
+                                objectName: "detailsArea"
+                                readOnly: true
+                                selectByMouse: true
+                                selectByKeyboard: true
+                                persistentSelection: false
+                                textFormat: TextEdit.RichText
+                                text: detailsScrollView.detailsHtmlSnapshot
+                                wrapMode: TextEdit.Wrap
+                                font.family: root.monoFont
+                                font.pixelSize: 12
+                                color: Material.foreground
+                                selectionColor: Material.accent
+                                selectedTextColor: Material.background
+                                width: detailsScrollView.width - padding * 2
+                                x: padding
+                                y: padding
+                                property real padding: 8
+                            }
+                        }
+
+                        Label {
+                            anchors.centerIn: parent
+                            visible: detailsScrollView.detailsHtmlSnapshot.length === 0
+                            text: qsTr("Select an image to see metadata")
+                            opacity: 0.4
                         }
                     }
                 }
@@ -1838,17 +1885,17 @@ ApplicationWindow {
                 Connections {
                     target: controller
                     function onFindScrollFractionChanged() {
-                        var bar = detailsScrollView.ScrollBar.vertical
-                        if (bar) bar.position = controller.findScrollFraction * (1.0 - bar.size)
+                        detailsScrollView.contentY = controller.findScrollFraction
+                            * Math.max(0, detailsScrollView.contentHeight - detailsScrollView.height)
                     }
                     function onGeoLocationUrlChanged() {
                         // Defer until after the ColumnLayout has finished its resize pass.
-                        // Setting position=0 synchronously fires before Qt updates the
-                        // ScrollView height, so the engine re-compensates and leaves a gap.
                         Qt.callLater(function() {
-                            var bar = detailsScrollView.ScrollBar.vertical
-                            if (bar) bar.position = 0
+                            detailsScrollView.contentY = 0
                         })
+                    }
+                    function onDetailsHtmlChanged() {
+                        detailsScrollView.contentY = 0
                     }
                 }
             }
