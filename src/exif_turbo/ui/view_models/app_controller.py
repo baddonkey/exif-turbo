@@ -58,6 +58,9 @@ class AppController(QObject):
     useRawPreviewChanged = Signal()
     isCancelingChanged = Signal()
     detailsHtmlChanged = Signal()
+    geoLocationUrlChanged = Signal()
+    geoGoogleMapsUrlChanged = Signal()
+    geoWikipediaUrlChanged = Signal()
     findScrollFractionChanged = Signal()
     selectedImageSourceChanged = Signal()
     selectedThumbSourceChanged = Signal()
@@ -130,6 +133,9 @@ class AppController(QObject):
         self._thumb_total = 0
         self._thumb_current_file = ""
         self._details_html = ""
+        self._geo_location_url = ""
+        self._geo_google_maps_url = ""
+        self._geo_wikipedia_url = ""
         self._find_scroll_fraction = 0.0
         self._selected_image_source = ""
         self._selected_thumb_source = ""
@@ -272,6 +278,18 @@ class AppController(QObject):
     @Property(str, notify=detailsHtmlChanged)
     def detailsHtml(self) -> str:
         return self._details_html
+
+    @Property(str, notify=geoLocationUrlChanged)
+    def geoLocationUrl(self) -> str:
+        return self._geo_location_url
+
+    @Property(str, notify=geoGoogleMapsUrlChanged)
+    def geoGoogleMapsUrl(self) -> str:
+        return self._geo_google_maps_url
+
+    @Property(str, notify=geoWikipediaUrlChanged)
+    def geoWikipediaUrl(self) -> str:
+        return self._geo_wikipedia_url
 
     @Property(float, notify=findScrollFractionChanged)
     def findScrollFraction(self) -> float:
@@ -1767,6 +1785,15 @@ class AppController(QObject):
         self._details_plain_text = ""
         self._details_html = ""
         self.detailsHtmlChanged.emit()
+        if self._geo_location_url:
+            self._geo_location_url = ""
+            self.geoLocationUrlChanged.emit()
+        if self._geo_google_maps_url:
+            self._geo_google_maps_url = ""
+            self.geoGoogleMapsUrlChanged.emit()
+        if self._geo_wikipedia_url:
+            self._geo_wikipedia_url = ""
+            self.geoWikipediaUrlChanged.emit()
         self._exif_model.set_rows([])
         self._selected_image_source = ""
         self._selected_thumb_source = ""
@@ -1800,10 +1827,58 @@ class AppController(QObject):
                     key=lambda r: r[0].lower(),
                 )
                 self._exif_model.set_rows(rows)
+                osm_url, gmaps_url, wiki_url = self._extract_geo_urls(parsed)
+                if osm_url != self._geo_location_url:
+                    self._geo_location_url = osm_url
+                    self.geoLocationUrlChanged.emit()
+                if gmaps_url != self._geo_google_maps_url:
+                    self._geo_google_maps_url = gmaps_url
+                    self.geoGoogleMapsUrlChanged.emit()
+                if wiki_url != self._geo_wikipedia_url:
+                    self._geo_wikipedia_url = wiki_url
+                    self.geoWikipediaUrlChanged.emit()
                 return
         except Exception:
             pass
         self._exif_model.set_rows([])
+        if self._geo_location_url:
+            self._geo_location_url = ""
+            self.geoLocationUrlChanged.emit()
+        if self._geo_google_maps_url:
+            self._geo_google_maps_url = ""
+            self.geoGoogleMapsUrlChanged.emit()
+        if self._geo_wikipedia_url:
+            self._geo_wikipedia_url = ""
+            self.geoWikipediaUrlChanged.emit()
+
+    @staticmethod
+    def _extract_geo_urls(parsed: dict) -> tuple[str, str, str]:
+        lat_raw = parsed.get("GPS:GPSLatitude")
+        lon_raw = parsed.get("GPS:GPSLongitude")
+        if lat_raw is None or lon_raw is None:
+            return "", "", ""
+        try:
+            lat = float(lat_raw)
+            lon = float(lon_raw)
+        except (TypeError, ValueError):
+            return "", "", ""
+        lat_ref = str(parsed.get("GPS:GPSLatitudeRef", "N")).strip().upper()
+        lon_ref = str(parsed.get("GPS:GPSLongitudeRef", "E")).strip().upper()
+        if lat_ref == "S":
+            lat = -lat
+        if lon_ref == "W":
+            lon = -lon
+        osm = f"https://www.openstreetmap.org/?mlat={lat:.6f}&mlon={lon:.6f}&zoom=14"
+        gmaps = f"https://www.google.com/maps?q={lat:.6f},{lon:.6f}"
+        # GeoHack is the official Wikimedia coordinate hub — shows Wikipedia articles
+        # and other geo tools for exact coordinates without any geolocation prompt.
+        lat_hemi = "N" if lat >= 0 else "S"
+        lon_hemi = "E" if lon >= 0 else "W"
+        wiki = (
+            f"https://geohack.toolforge.org/geohack.php"
+            f"?params={abs(lat):.6f}_{lat_hemi}_{abs(lon):.6f}_{lon_hemi}_"
+        )
+        return osm, gmaps, wiki
 
     def _update_details_html(self) -> None:
         text = self._details_plain_text

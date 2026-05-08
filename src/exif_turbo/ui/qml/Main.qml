@@ -124,6 +124,9 @@ ApplicationWindow {
     readonly property int    _indexQueuePosition:  controller ? controller.indexQueuePosition  : 0
     readonly property int    _indexQueueTotal:     controller ? controller.indexQueueTotal     : 0
     readonly property string _detailsHtml:         controller ? controller.detailsHtml        : ""
+    readonly property string _geoLocationUrl:       controller ? controller.geoLocationUrl     : ""
+    readonly property string _geoGoogleMapsUrl:     controller ? controller.geoGoogleMapsUrl   : ""
+    readonly property string _geoWikipediaUrl:      controller ? controller.geoWikipediaUrl    : ""
     readonly property bool   _checkedOnlyFilter:   controller ? controller.checkedOnlyFilter  : false
     readonly property string _sortBy:                  controller ? controller.sortBy              : ""
     readonly property string _extFilter:               controller ? controller.extFilter           : ""
@@ -1685,6 +1688,82 @@ ApplicationWindow {
                         }
                     }
 
+                    // OpenStreetMap link bar — visible when GPS coordinates are present
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: _geoLocationUrl !== "" ? 30 : 0
+                        visible: _geoLocationUrl !== ""
+                        color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.07)
+
+                        RowLayout {
+                            anchors { fill: parent; leftMargin: 10; rightMargin: 8 }
+                            spacing: 6
+
+                            Label {
+                                text: "\ud83d\uddfa"
+                                font.pixelSize: 13
+                            }
+                            Label {
+                                text: qsTr("GPS location —")
+                                font.pixelSize: 11
+                                opacity: 0.65
+                            }
+                            Label {
+                                text: qsTr("OpenStreetMap")
+                                font.pixelSize: 11
+                                color: Material.accent
+                                font.underline: true
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Qt.openUrlExternally(_geoLocationUrl)
+                                }
+                                ToolTip.text: _geoLocationUrl
+                                ToolTip.visible: osmLinkHover.hovered
+                                HoverHandler { id: osmLinkHover }
+                            }
+                            Label {
+                                text: "|"
+                                font.pixelSize: 11
+                                opacity: 0.35
+                            }
+                            Label {
+                                text: qsTr("Google Maps")
+                                font.pixelSize: 11
+                                color: Material.accent
+                                font.underline: true
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Qt.openUrlExternally(_geoGoogleMapsUrl)
+                                }
+                                ToolTip.text: _geoGoogleMapsUrl
+                                ToolTip.visible: gmapsLinkHover.hovered
+                                HoverHandler { id: gmapsLinkHover }
+                            }
+                            Label {
+                                text: "|"
+                                font.pixelSize: 11
+                                opacity: 0.35
+                            }
+                            Label {
+                                text: qsTr("GeoHack")
+                                font.pixelSize: 11
+                                color: Material.accent
+                                font.underline: true
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Qt.openUrlExternally(_geoWikipediaUrl)
+                                }
+                                ToolTip.text: _geoWikipediaUrl
+                                ToolTip.visible: wikiLinkHover.hovered
+                                HoverHandler { id: wikiLinkHover }
+                            }
+                            Item { Layout.fillWidth: true }
+                        }
+                    }
+
                     ScrollView {
                         id: detailsScrollView
                         Layout.fillWidth: true
@@ -1711,6 +1790,15 @@ ApplicationWindow {
                     function onFindScrollFractionChanged() {
                         var bar = detailsScrollView.ScrollBar.vertical
                         if (bar) bar.position = controller.findScrollFraction * (1.0 - bar.size)
+                    }
+                    function onGeoLocationUrlChanged() {
+                        // Defer until after the ColumnLayout has finished its resize pass.
+                        // Setting position=0 synchronously fires before Qt updates the
+                        // ScrollView height, so the engine re-compensates and leaves a gap.
+                        Qt.callLater(function() {
+                            var bar = detailsScrollView.ScrollBar.vertical
+                            if (bar) bar.position = 0
+                        })
                     }
                 }
             }
