@@ -205,6 +205,11 @@ Download: https://exiftool.org/
 brew install exiftool
 ```
 
+If Homebrew is not installed yet:
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
 **Linux (Debian/Ubuntu):**
 ```bash
 sudo apt install exiftool
