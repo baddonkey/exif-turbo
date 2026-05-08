@@ -175,6 +175,60 @@ ApplicationWindow {
     }
 
     // ── Dialogs ───────────────────────────────────────────────────────────
+
+    // ExifTool-missing warning — shown once after unlock if exiftool is not found
+    Dialog {
+        id: exiftoolMissingDialog
+        title: qsTr("ExifTool not found")
+        standardButtons: Dialog.Ok
+        anchors.centerIn: Overlay.overlay
+        width: 420
+        modal: true
+
+        Connections {
+            target: controller
+            function onExiftoolMissingChanged() {
+                if (controller.exiftoolMissing)
+                    exiftoolMissingDialog.open()
+            }
+        }
+
+        ColumnLayout {
+            width: parent.width
+            spacing: 12
+
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("ExifTool was not found on your system. Indexing is disabled until ExifTool is installed and available on your PATH.")
+                wrapMode: Text.WordWrap
+                font.pixelSize: 13
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("Download ExifTool from:")
+                font.pixelSize: 13
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: "<a href='https://exiftool.org/' style='color: " + Material.accent + ";'>https://exiftool.org/</a>"
+                font.pixelSize: 13
+                textFormat: Text.RichText
+                onLinkActivated: (link) => Qt.openUrlExternally(link)
+                HoverHandler { cursorShape: Qt.PointingHandCursor }
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("After installing ExifTool, restart exif-turbo.")
+                font.pixelSize: 12
+                opacity: 0.7
+                wrapMode: Text.WordWrap
+            }
+        }
+    }
+
     Dialog {
         id: aboutDialog
         title: qsTr("About exif-turbo")
@@ -2883,6 +2937,80 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.bottomMargin: 40
                     }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
+
+                    // ── ExifTool ──────────────────────────────────────────
+                    Label {
+                        text: qsTr("ExifTool")
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                        Layout.bottomMargin: 6
+                    }
+                    Label {
+                        text: qsTr("ExifTool is required for indexing. It must be installed and available on your PATH.")
+                        font.pixelSize: 12
+                        opacity: 0.6
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 12
+                    }
+
+                    RowLayout {
+                        spacing: 12
+                        Layout.bottomMargin: 6
+
+                        Button {
+                            id: checkExiftoolButton
+                            text: qsTr("Check")
+                            implicitWidth: 100
+                            onClicked: controller.checkExiftool()
+                        }
+
+                        // Status badge — shown after first check (or after unlock auto-check)
+                        RowLayout {
+                            id: exiftoolStatusRow
+                            spacing: 6
+                            visible: controller ? (controller.exiftoolVersion !== "" || controller.exiftoolMissing) : false
+
+                            Rectangle {
+                                width: 10; height: 10; radius: 5
+                                color: (controller && controller.exiftoolMissing) ? "#ef5350" : "#66bb6a"
+                            }
+
+                            Label {
+                                text: (controller && controller.exiftoolMissing)
+                                    ? qsTr("Not found")
+                                    : qsTr("Found — ExifTool %1").arg(controller ? controller.exiftoolVersion : "")
+                                font.pixelSize: 13
+                                color: (controller && controller.exiftoolMissing)
+                                    ? (Material.theme === Material.Dark ? "#ef9a9a" : "#c62828")
+                                    : (Material.theme === Material.Dark ? "#a5d6a7" : "#2e7d32")
+                            }
+                        }
+                    }
+
+                    // Download link — shown when exiftool is missing
+                    Label {
+                        visible: controller ? controller.exiftoolMissing : false
+                        text: "<a href='https://exiftool.org/' style='color: " + Material.accent + ";'>https://exiftool.org/</a>"
+                        font.pixelSize: 12
+                        textFormat: Text.RichText
+                        onLinkActivated: (link) => Qt.openUrlExternally(link)
+                        Layout.bottomMargin: 2
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    }
+
+                    Label {
+                        text: qsTr("After installing ExifTool, restart exif-turbo.")
+                        visible: controller ? controller.exiftoolMissing : false
+                        font.pixelSize: 11
+                        opacity: 0.55
+                        Layout.bottomMargin: 0
+                    }
+
+                    // spacer below the section
+                    Item { height: 28; Layout.fillWidth: true }
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
 

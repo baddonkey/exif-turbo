@@ -23,6 +23,7 @@ from PySide6.QtGui import QDesktopServices
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
 from ...i18n import _
+from ...indexing.exif_metadata_extractor import get_exiftool_version
 from ...indexing.image_utils import RAW_EXTENSIONS
 from ...models.search_result import SearchResult
 from ...utils.preview_cache import (
@@ -98,6 +99,8 @@ class AppController(QObject):
     isUnlockingChanged = Signal()
     passwordChangeFinished = Signal(bool, str)  # (success, message)
     busyCancelableChanged = Signal()
+    exiftoolMissingChanged = Signal()
+    exiftoolVersionChanged = Signal()
 
     def __init__(
         self,
@@ -190,6 +193,8 @@ class AppController(QObject):
         self._bulk_worker: BulkOpWorker | None = None
         self._pending_export_path: Path | None = None
         self._is_unlocking: bool = False
+        self._exiftool_missing: bool = False
+        self._exiftool_version: str = ""  # populated lazily by checkExiftool slot
         self._password_change_worker: PasswordChangeWorker | None = None
         self._password_change_old: str = ""
         self._password_change_new: str = ""
@@ -443,6 +448,28 @@ class AppController(QObject):
     @Property(bool, notify=isUnlockingChanged)
     def isUnlocking(self) -> bool:
         return self._is_unlocking
+
+    @Property(bool, notify=exiftoolMissingChanged)
+    def exiftoolMissing(self) -> bool:
+        return self._exiftool_missing
+
+    @Property(str, notify=exiftoolVersionChanged)
+    def exiftoolVersion(self) -> str:
+        return self._exiftool_version
+
+    @Slot()
+    def checkExiftool(self) -> None:
+        """Re-probe exiftool and update exiftoolMissing / exiftoolVersion."""
+        version = get_exiftool_version()
+        missing = version == ""
+        version_changed = version != self._exiftool_version
+        missing_changed = missing != self._exiftool_missing
+        self._exiftool_version = version
+        self._exiftool_missing = missing
+        if version_changed:
+            self.exiftoolVersionChanged.emit()
+        if missing_changed:
+            self.exiftoolMissingChanged.emit()
 
     def set_filter_proxy(self, proxy: CheckedFilterProxyModel) -> None:
         self._filter_proxy = proxy
@@ -761,6 +788,13 @@ class AppController(QObject):
             self.isLockedChanged.emit()
             self.unlockErrorChanged.emit()
             self.statusTextChanged.emit()
+            # Check exiftool availability once after unlock and warn if missing.
+            version = get_exiftool_version()
+            self._exiftool_version = version
+            self.exiftoolVersionChanged.emit()
+            if version == "":
+                self._exiftool_missing = True
+                self.exiftoolMissingChanged.emit()
             self._load_formats()
             self._folder_tree_dirty = True  # loaded on demand when Browse tab is opened
             self._load_indexed_folders()
@@ -1452,6 +1486,11 @@ class AppController(QObject):
     def _actually_start_indexing(self, folder_obj, *, force: bool) -> None:
         """Immediately start an IndexWorker for the given folder."""
         if self._repo is None:
+            return
+        if self._exiftool_missing:
+            # Surface the warning again in case the user dismissed the dialog
+            # and then tried to start a scan from the folder actions.
+            self.exiftoolMissingChanged.emit()
             return
         # Cancel any thumb worker that is still running (e.g. the one started at
         # unlock time).  A definitive build will be triggered after indexing

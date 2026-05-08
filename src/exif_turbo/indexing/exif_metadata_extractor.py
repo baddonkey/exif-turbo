@@ -33,6 +33,56 @@ def _find_exiftool() -> str:
     return found or "exiftool"  # fall back to bare name; will fail with a clear error
 
 
+def is_exiftool_available() -> bool:
+    """Return True if exiftool can be found and executed."""
+    augmented = os.pathsep.join(
+        [os.environ.get("PATH", "")] + _EXTRA_PATHS
+    )
+    found = shutil.which("exiftool", path=augmented)
+    if not found:
+        return False
+    try:
+        _platform_kwargs: dict = (
+            {"creationflags": 0x08000000} if os.name == "nt" else {"start_new_session": True}
+        )
+        result = subprocess.run(
+            [found, "-ver"],
+            capture_output=True,
+            timeout=10,
+            **_platform_kwargs,
+        )
+        return result.returncode == 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def get_exiftool_version() -> str:
+    """Return the exiftool version string, or empty string if not available."""
+    augmented = os.pathsep.join(
+        [os.environ.get("PATH", "")] + _EXTRA_PATHS
+    )
+    found = shutil.which("exiftool", path=augmented)
+    if not found:
+        return ""
+    try:
+        _platform_kwargs: dict = (
+            {"creationflags": 0x08000000} if os.name == "nt" else {"start_new_session": True}
+        )
+        result = subprocess.run(
+            [found, "-ver"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=10,
+            **_platform_kwargs,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+        return ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 class ExifMetadataExtractor:
     def extract(self, path: Path) -> Dict[str, str]:
         metadata: Dict[str, str] = {}
