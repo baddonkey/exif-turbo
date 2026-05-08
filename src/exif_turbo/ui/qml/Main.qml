@@ -1017,9 +1017,25 @@ ApplicationWindow {
 
                             ComboBox {
                                 id: sortCombo
+                                objectName: "sortCombo"
                                 implicitHeight: 28
-                                implicitWidth: 130
                                 font.pixelSize: 11
+
+                                // Grow to the widest translated label so no popup entry is
+                                // ever clipped.  FontMetrics.advanceWidth() is an invokable
+                                // method — not a property read — so it does not register
+                                // as a reactive dependency and avoids a re-entrant loop.
+                                // Reading `_sortFM.font` creates the font-change dependency.
+                                implicitWidth: {
+                                    var _f = _sortFM.font
+                                    var w = 0
+                                    for (var i = 0; i < _opts.length; i++)
+                                        w = Math.max(w, _sortFM.advanceWidth(_opts[i].text))
+                                    return w + leftPadding + rightPadding
+                                         + (indicator ? indicator.width : 0)
+                                }
+
+                                FontMetrics { id: _sortFM; font: sortCombo.font }
 
                                 readonly property var _opts: [
                                     { text: qsTr("Name A→Z"),      value: "filename_asc"  },

@@ -6,6 +6,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 import time
 import urllib.parse
 from pathlib import Path
@@ -1768,7 +1769,14 @@ class AppController(QObject):
         if not path:
             return
         if os.name == "nt":
-            subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
+            # /select,"<path>" must be passed as a shell string so the quoted
+            # path survives argument splitting even when it contains spaces.
+            # Windows NTFS paths cannot contain " so the quoting is safe.
+            norm = os.path.normpath(path)
+            subprocess.Popen(f'explorer /select,"{norm}"', shell=True)
+        elif sys.platform == "darwin":
+            # -R reveals (selects) the item in Finder.
+            subprocess.Popen(["open", "-R", path])
         else:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(path).parent)))
 

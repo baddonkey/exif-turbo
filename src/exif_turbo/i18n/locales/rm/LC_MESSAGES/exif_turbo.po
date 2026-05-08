@@ -647,6 +647,10 @@ msgid "Show only selected images"
 msgstr "Mussar mo ils maletgs seletgads"
 
 #: QML
+msgid "Smallest"
+msgstr "Pli pitschens"
+
+#: QML
 msgid "Sort"
 msgstr "Sortir"
 

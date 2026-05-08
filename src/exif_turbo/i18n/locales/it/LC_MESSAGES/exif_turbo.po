@@ -648,6 +648,10 @@ msgid "Show only selected images"
 msgstr "Mostra solo le immagini selezionate"
 
 #: QML
+msgid "Smallest"
+msgstr "Più piccolo"
+
+#: QML
 msgid "Sort"
 msgstr "Ordina"
 
