@@ -1952,8 +1952,13 @@ class AppController(QObject):
         text = self._details_plain_text
         ranges: List[Tuple[int, int, str]] = []
         if self._query_text:
-            for s, e in self._find_all(text, self._query_text):
-                ranges.append((s, e, "#fff176"))
+            # Strip FTS5 phrase-quote characters and trailing prefix-wildcards
+            # so a query like `"GPS:"` or `Canon*` highlights the literal
+            # substring rather than the syntax-decorated form.
+            highlight_query = self._query_text.replace('"', "").rstrip("*").strip()
+            if highlight_query:
+                for s, e in self._find_all(text, highlight_query):
+                    ranges.append((s, e, "#fff176"))
         if self._find_positions and self._find_index >= 0:
             s, e = self._find_positions[self._find_index]
             ranges.append((s, e, "#ffab40"))
@@ -2149,7 +2154,13 @@ class AppController(QObject):
             if start < last:
                 continue
             parts.append(html_lib.escape(text[last:start]))
-            parts.append(f'<span style="background-color:{color}">')
+            # Force dark text on the (light) yellow/orange highlight so the
+            # contrast is readable in both light and dark themes — without an
+            # explicit color the span inherits the panel's foreground (white
+            # on dark theme), which is unreadable on yellow.
+            parts.append(
+                f'<span style="background-color:{color};color:#000000">'
+            )
             parts.append(html_lib.escape(text[start:end]))
             parts.append("</span>")
             last = end
