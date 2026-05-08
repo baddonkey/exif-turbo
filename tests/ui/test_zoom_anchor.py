@@ -188,6 +188,7 @@ def zoom_engine(
 
     yield controller, engine, root
 
+    controller.close()
     engine.deleteLater()
     qtbot.wait(200)
 

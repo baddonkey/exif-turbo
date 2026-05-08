@@ -121,6 +121,7 @@ def window(
 
     yield controller, search_model, folder_paths
 
+    controller.close()
     engine.deleteLater()
     qtbot.wait(100)
 

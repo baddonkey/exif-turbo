@@ -121,6 +121,7 @@ def sort_window(
 
     yield sort_combo
 
+    controller.close()
     engine.deleteLater()
     qtbot.wait(200)
 

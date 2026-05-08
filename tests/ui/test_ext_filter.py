@@ -110,6 +110,7 @@ def window(
 
     yield controller, search_model
 
+    controller.close()
     engine.deleteLater()
     qtbot.wait(200)
 

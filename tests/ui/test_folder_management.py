@@ -119,6 +119,7 @@ def folder_window(
 
     yield controller, search_model, folder_model, alpha_dir, beta_dir
 
+    controller.close()
     engine.deleteLater()
     qtbot.wait(200)
 

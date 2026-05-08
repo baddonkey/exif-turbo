@@ -2084,6 +2084,30 @@ class AppController(QObject):
         self._search_model.refresh_thumbnails()
 
     def close(self) -> None:
+        # Stop any running background QThread workers before closing the DB
+        # connections they may still be using.  Without this, a worker that
+        # is mid-flight (e.g. ThumbWorker hashing files) can outlive the
+        # repository and crash the process when it next touches the closed
+        # connection — observed both on app exit and across pytest fixtures.
+        for worker in (
+            self._thumb_worker,
+            self._preview_worker,
+            self._index_worker,
+            self._password_change_worker,
+        ):
+            if worker is not None and worker.isRunning():
+                cancel = getattr(worker, "cancel", None)
+                if callable(cancel):
+                    cancel()
+                else:
+                    worker.requestInterruption()
+                worker.quit()
+                worker.wait(5000)
+        self._thumb_worker = None
+        self._preview_worker = None
+        self._index_worker = None
+        self._password_change_worker = None
+
         if self._repo is not None:
             self._repo.close()
             self._repo = None

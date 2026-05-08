@@ -110,6 +110,7 @@ def window(
 
     yield controller
 
+    controller.close()
     engine.deleteLater()
     qtbot.wait(100)
 
