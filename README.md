@@ -12,6 +12,7 @@ Fully generated using VS Code Copilot.
 ## Features
 
 - Full-text search over all EXIF metadata using SQLite FTS5
+- **Search-syntax tooltip** — a `?` button next to the search field shows an inline cheat-sheet (single token, phrases, AND/OR/NOT, prefix wildcard) translated into all supported languages
 - **GPS location bar** — when the selected image has GPS coordinates, a bar in the Metadata panel shows one-click links to OpenStreetMap, Google Maps, and GeoHack (Wikimedia coordinate hub)
 - PySide6 QML UI with Material Design — light, dark, or system theme
 - Multilanguage UI: English, German, French, Italian, Romansh
@@ -31,6 +32,20 @@ Fully generated using VS Code Copilot.
 - **Unlock spinner** — animated indicator shown on the lock screen while the encrypted database is being opened
 
 ## Recent changes
+
+### Search-syntax tooltip
+
+A small **`?`** icon now sits at the right edge of the search field. Hovering
+it shows a structured cheat-sheet:
+
+- A two-column grid listing six syntax examples with their monospace code and
+  a plain-English meaning (single token, implicit AND, OR, NOT, exact phrase,
+  prefix wildcard).
+- A "Tips" section explaining that operators must be UPPERCASE, phrases must be
+  quoted, and how the colon in ExifTool group-prefixed keys (`GPS:GPSLatitude`)
+  is handled.
+
+The tooltip text is fully translated into German, French, Italian, and Romansh.
 
 ### Bulk operations, export, and UX polish
 

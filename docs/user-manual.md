@@ -227,6 +227,11 @@ keywords, copyright, and more.
 
 Press **Enter** with an empty search bar to show all indexed images.
 
+A **`?`** button at the right edge of the search field shows a syntax
+cheat-sheet when hovered. It lists six examples (single token, implicit AND,
+OR, NOT, exact phrase, prefix wildcard) and a short tips section. You do not
+need to click it — the tooltip appears automatically on hover.
+
 ### Filtering by format
 
 When results contain more than one file format, a row of format chips appears
