@@ -186,6 +186,20 @@ def zoom_engine(
     with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
         controller.unlock("")
 
+    # Show & expose the window so the very first synthesised wheel event
+    # is delivered. Without this, the QML scene is constructed but never
+    # rendered, and Qt 6.11 drops the first wheel event sent to the scene
+    # — causing flaky off-by-one zoom drift in the tests below.
+    if hasattr(root, "setVisible"):
+        root.setVisible(True)
+        try:
+            qtbot.waitExposed(root, timeout=3000)
+        except Exception:
+            qtbot.wait(100)
+        # Let async Image.onSourceChanged callbacks (which reset _zoom = 1.0)
+        # settle BEFORE the test sets its own initial zoom.
+        qtbot.wait(150)
+
     yield controller, engine, root
 
     controller.close()
