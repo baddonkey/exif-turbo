@@ -69,6 +69,7 @@ class AppController(QObject):
     selectedHasPreviewChanged = Signal()
     totalResultsChanged = Signal()
     loadedResultsChanged = Signal()
+    searchErrorChanged = Signal()
     isLockedChanged = Signal()
     isNewDatabaseChanged = Signal()
     unlockErrorChanged = Signal()
@@ -146,6 +147,7 @@ class AppController(QObject):
         self._total_results = 0
         self._loaded_results = 0
         self._loading = False
+        self._search_error: str = ""
         self._details_plain_text = ""
         self._query_text = ""
         self._find_text = ""
@@ -323,6 +325,10 @@ class AppController(QObject):
     @Property(int, notify=loadedResultsChanged)
     def loadedResults(self) -> int:
         return self._loaded_results
+
+    @Property(str, notify=searchErrorChanged)
+    def searchError(self) -> str:
+        return self._search_error
 
     @Property(int, notify=indexCurrentChanged)
     def indexCurrent(self) -> int:
@@ -952,6 +958,12 @@ class AppController(QObject):
                 except OSError:
                     pass
 
+    def _set_search_error(self, message: str) -> None:
+        if self._search_error == message:
+            return
+        self._search_error = message
+        self.searchErrorChanged.emit()
+
     @Slot(str)
     def search(self, query: str) -> None:
         if self._repo is None:
@@ -1037,24 +1049,39 @@ class AppController(QObject):
         if self._repo is None:
             return
         path_filter = self._current_path_filter()
-        rows = self._repo.search_images(
-            self._query_text, _PAGE_SIZE, 0,
-            sort_by=self._sort_by, ext_filter=self._ext_filter,
-            path_filter=path_filter,
-            restrict_to_enabled_folders=(self._folder_repo is not None),
-            marked_only=self._checked_only_filter_active,
-        )
+        try:
+            rows = self._repo.search_images(
+                self._query_text, _PAGE_SIZE, 0,
+                sort_by=self._sort_by, ext_filter=self._ext_filter,
+                path_filter=path_filter,
+                restrict_to_enabled_folders=(self._folder_repo is not None),
+                marked_only=self._checked_only_filter_active,
+            )
+            total = self._repo.count_images(
+                self._query_text, ext_filter=self._ext_filter,
+                path_filter=path_filter,
+                restrict_to_enabled_folders=(self._folder_repo is not None),
+                marked_only=self._checked_only_filter_active,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _log.exception("Search failed")
+            self._set_search_error(str(exc))
+            self._search_model.set_rows([])
+            self._total_results = 0
+            self._loaded_results = 0
+            self._loading = False
+            self._checked_in_results_count = 0
+            self.checkedCountChanged.emit()
+            self.totalResultsChanged.emit()
+            self.loadedResultsChanged.emit()
+            self._clear_details()
+            return
+        self._set_search_error("")
         results = [
             SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
             for r in rows
         ]
         self._search_model.set_rows(results)
-        total = self._repo.count_images(
-            self._query_text, ext_filter=self._ext_filter,
-            path_filter=path_filter,
-            restrict_to_enabled_folders=(self._folder_repo is not None),
-            marked_only=self._checked_only_filter_active,
-        )
         # When the "checked only" filter is active, every row is marked,
         # so total == checked-in-results. Otherwise recompute against the
         # full filtered set (not just the loaded page).

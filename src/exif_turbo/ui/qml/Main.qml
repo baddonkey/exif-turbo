@@ -139,6 +139,7 @@ ApplicationWindow {
     readonly property string _searchFolderListJson:    controller ? controller.searchFolderListJson : "[]"
     readonly property int    _indexedFolderCount:      controller ? controller.indexedFolderCount  : 0
     readonly property int    _totalResults:       controller ? controller.totalResults        : 0
+    readonly property string _searchError:        controller ? controller.searchError         : ""
     readonly property string _appVersion:         controller ? controller.appVersion          : ""
     readonly property bool   _isBusy:             controller ? controller.isBusy             : false
     readonly property string _busyLabel:          controller ? controller.busyLabel          : ""
@@ -1140,11 +1141,42 @@ ApplicationWindow {
                         }
                     }
 
+                    // Search error banner — replaces results when a query
+                    // fails (e.g. malformed FTS expression).
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        visible: root._searchError !== ""
+
+                        ColumnLayout {
+                            anchors.centerIn: parent
+                            width: Math.min(parent.width - 32, 480)
+                            spacing: 8
+
+                            Label {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: qsTr("Search failed")
+                                font.pixelSize: 14
+                                font.weight: Font.DemiBold
+                                color: Material.color(Material.Red)
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.Wrap
+                                text: root._searchError
+                                font.pixelSize: 12
+                                opacity: 0.75
+                            }
+                        }
+                    }
+
                     ListView {
                         id: resultsList
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
+                        visible: root._searchError === ""
                         model: filteredSearchModel
                         currentIndex: controller ? controller.currentProxyResultRow : -1
                         ScrollBar.vertical: ScrollBar {}
