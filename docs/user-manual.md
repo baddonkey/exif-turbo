@@ -32,7 +32,7 @@ exif-turbo requires **ExifTool** on your `PATH` to extract metadata from images.
 | Platform | Install |
 |----------|---------|
 | **Windows** | Download the standalone `.exe` from [exiftool.org](https://exiftool.org/), rename to `exiftool.exe`, place in a folder on your `PATH` |
-| **macOS** | `brew install exiftool` |
+| **macOS** | `brew install exiftool` (if Homebrew is not installed yet: `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`) |
 | **Linux** | `sudo apt install libimage-exiftool-perl` |
 
 ---
@@ -571,6 +571,20 @@ The theme changes immediately.
 
 Select the display language from the dropdown. A restart is required for the
 language change to take full effect.
+
+### ExifTool
+
+Click **Check** to verify that ExifTool is installed and available on your
+`PATH`. A colour-coded badge appears next to the button:
+
+- **Green dot + "Found — ExifTool \<version\>"** — ExifTool was found and
+  the version is shown.
+- **Red dot + "Not found"** — ExifTool is missing. A download link
+  ([exiftool.org](https://exiftool.org/)) and a restart hint are shown below
+  the badge.
+
+The badge is also populated automatically each time you unlock the database,
+so you do not need to click **Check** after every launch.
 
 ### Change Password
 
