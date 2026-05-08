@@ -50,6 +50,7 @@ Run with:
 from __future__ import annotations
 
 import math
+import sys
 from pathlib import Path
 from typing import Generator
 
@@ -405,6 +406,13 @@ class TestPinchIncrementalZoom:
         )
 
 
+@pytest.mark.skipif(
+    sys.platform != "darwin",
+    reason="macOS-specific touchpad scroll behaviour; Qt event delivery on "
+           "other platforms synthesises angleDelta from pixelDelta differently "
+           "and amplifies the per-step zoom factor, so these contracts only "
+           "hold on macOS.",
+)
 class TestMacOSTouchpadScrollZoomOut:
     """E2E tests for Ctrl+scroll zoom via WheelHandler (mouse or trackpad).
 
