@@ -833,7 +833,7 @@ ApplicationWindow {
 
                                 TextInput {
                                     id: searchField
-                                    anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: text.length > 0 ? 28 : 10; verticalCenter: parent.verticalCenter }
+                                    anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: text.length > 0 ? 52 : 32; verticalCenter: parent.verticalCenter }
                                     font.pixelSize: 13
                                     color: Material.foreground
                                     selectedTextColor: "white"
@@ -845,7 +845,7 @@ ApplicationWindow {
                                 // Clear button — visible whenever the field has text
                                 Item {
                                     id: clearSearchButton
-                                    anchors { right: parent.right; rightMargin: 4; verticalCenter: parent.verticalCenter }
+                                    anchors { right: searchHelpButton.left; rightMargin: 2; verticalCenter: parent.verticalCenter }
                                     width: 20; height: 20
                                     visible: searchField.text.length > 0
 
@@ -867,6 +867,95 @@ ApplicationWindow {
                                             searchField.text = ""
                                             searchField.forceActiveFocus()
                                             controller.search("")
+                                        }
+                                    }
+                                }
+
+                                // Help (?) button — shows search-syntax hints on hover
+                                Item {
+                                    id: searchHelpButton
+                                    anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
+                                    width: 20; height: 20
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "?"
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                        color: Material.foreground
+                                        opacity: searchHelpHover.hovered ? 1.0 : 0.45
+                                        Behavior on opacity { NumberAnimation { duration: 80 } }
+                                    }
+
+                                    HoverHandler { id: searchHelpHover }
+
+                                    ToolTip {
+                                        id: searchHelpTip
+                                        visible: searchHelpHover.hovered
+                                        delay: 300
+                                        timeout: 20000
+                                        // Anchor the tip below the help icon so it doesn't cover the search field
+                                        x: -contentItem.implicitWidth + searchHelpButton.width
+                                        y: searchHelpButton.height + 6
+                                        padding: 12
+
+                                        contentItem: ColumnLayout {
+                                            spacing: 8
+
+                                            Label {
+                                                text: qsTr("Search syntax")
+                                                font.pixelSize: 13
+                                                font.bold: true
+                                                color: root._accentColor
+                                            }
+
+                                            GridLayout {
+                                                columns: 2
+                                                columnSpacing: 16
+                                                rowSpacing: 4
+
+                                                // header row
+                                                Label { text: qsTr("Example"); font.pixelSize: 11; font.bold: true; opacity: 0.65 }
+                                                Label { text: qsTr("Meaning"); font.pixelSize: 11; font.bold: true; opacity: 0.65 }
+
+                                                Label { text: "canon";          font.family: "Consolas, Menlo, monospace"; font.pixelSize: 12 }
+                                                Label { text: qsTr("single token"); font.pixelSize: 12 }
+
+                                                Label { text: "canon r5";       font.family: "Consolas, Menlo, monospace"; font.pixelSize: 12 }
+                                                Label { text: qsTr("both tokens (implicit AND)"); font.pixelSize: 12 }
+
+                                                Label { text: "canon OR nikon"; font.family: "Consolas, Menlo, monospace"; font.pixelSize: 12 }
+                                                Label { text: qsTr("either token"); font.pixelSize: 12 }
+
+                                                Label { text: "canon NOT raw";  font.family: "Consolas, Menlo, monospace"; font.pixelSize: 12 }
+                                                Label { text: qsTr("exclude token"); font.pixelSize: 12 }
+
+                                                Label { text: "\"Z 9\"";        font.family: "Consolas, Menlo, monospace"; font.pixelSize: 12 }
+                                                Label { text: qsTr("exact phrase"); font.pixelSize: 12 }
+
+                                                Label { text: "summer*";        font.family: "Consolas, Menlo, monospace"; font.pixelSize: 12 }
+                                                Label { text: qsTr("prefix wildcard"); font.pixelSize: 12 }
+                                            }
+
+                                            Rectangle {
+                                                Layout.fillWidth: true
+                                                height: 1
+                                                color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.15)
+                                            }
+
+                                            Label {
+                                                text: qsTr("Tips")
+                                                font.pixelSize: 13
+                                                font.bold: true
+                                                color: root._accentColor
+                                            }
+
+                                            Label {
+                                                text: qsTr("• Operators AND, OR, NOT must be UPPERCASE\n• Quote multi-word phrases\n• In ExifTool keys (e.g. GPS:GPSLatitude) the colon acts as a separator")
+                                                font.pixelSize: 12
+                                                lineHeight: 1.25
+                                                wrapMode: Text.WordWrap
+                                            }
                                         }
                                     }
                                 }
