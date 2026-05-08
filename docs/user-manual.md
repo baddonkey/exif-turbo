@@ -268,7 +268,7 @@ dropdown. It shows the current marked count:
 | Label | Meaning |
 |-------|---------|
 | `☑ N` | Every marked image is in the current results |
-| `☑ here / total` | Only some marked images match the current filters (e.g. `☑ 12 / 87`) |
+| `☑ here/total` | Only some marked images match the current filters (e.g. `☑ 12/87`) |
 
 Click the chip to toggle the **marked-only filter** — the tooltip switches
 between *"Show only selected images"* and *"Show all results"*. While the
@@ -427,6 +427,24 @@ search bar and find any tag value. Press **F3** (or click the ▼ / ▲ arrows) 
 jump through all matches. Search terms from the main search bar are highlighted
 automatically.
 
+#### GPS location bar
+
+When the selected image contains GPS coordinates in its EXIF metadata, a thin
+bar appears directly below the **Find** bar. It shows a 🗺 icon, a
+**"GPS location —"** label, and three links you can click to view the location
+on a map:
+
+| Link | Service |
+|------|---------|
+| **OpenStreetMap** | Opens the coordinates on [OpenStreetMap](https://www.openstreetmap.org) at zoom level 14 |
+| **Google Maps** | Opens the coordinates in [Google Maps](https://www.google.com/maps) |
+| **GeoHack** | Opens the [Wikimedia GeoHack](https://geohack.toolforge.org) coordinate hub — lists nearby Wikipedia articles and dozens of map services |
+
+The bar is hidden when the selected image has no GPS data, or when nothing is
+selected. Hovering over a link shows the full URL in a tooltip.
+
+![GPS location bar](screenshots/08_gps_location_bar.png)
+
 ### EXIF Tags panel (bottom-right)
 
 Displays the same metadata as a clean two-column table — **Tag** and **Value**
@@ -570,8 +588,9 @@ appears. The new password is required the next time you unlock the database.
 
 If the current password is wrong, an inline red error message
 (“Current password is incorrect.”) is shown and the dialog stays open. The
-**Change Password…** button is disabled while indexing or thumbnail building
-is in progress, and while the database is locked.
+The **Change Password…** button is disabled while indexing is in progress and while
+the database is locked. The operation is also rejected if thumbnail building is
+running when you submit the dialog.
 
 > **There is no recovery if you forget the new password.** Make sure you
 > remember it (or store it in a password manager) before clicking
@@ -662,3 +681,10 @@ published on Wikimedia Commons under the
 [Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/) license.
 
 Mandatory attribution: © Giles Laurent, gileslaurent.com, License CC BY-SA
+
+The GPS location bar screenshot uses a photograph by
+**1904.CC** (Manuel Schmalstieg),
+published on [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Xenakis_UPIC_system_computer_unit_2.jpg)
+under the [Creative Commons CC0 1.0 Universal Public Domain Dedication](https://creativecommons.org/publicdomain/zero/1.0/).
+
+Attribution (voluntary): 1904.CC (Manuel Schmalstieg), CC0, via Wikimedia Commons

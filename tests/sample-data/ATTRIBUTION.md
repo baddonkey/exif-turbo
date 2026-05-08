@@ -47,6 +47,23 @@ Mandatory attribution per the license:
 
 ---
 
+## GPS Fixture
+
+The test image in `gps/` is a photograph by **1904.CC** (Manuel Schmalstieg), published on
+[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Xenakis_UPIC_system_computer_unit_2.jpg)
+under the [Creative Commons CC0 1.0 Universal Public Domain Dedication](https://creativecommons.org/publicdomain/zero/1.0/).
+
+The work has been dedicated to the public domain. No attribution is legally required, but is
+provided here for completeness:
+
+> 1904.CC (Manuel Schmalstieg), CC0, via Wikimedia Commons
+
+| File | Wikimedia Commons |
+|------|------------------|
+| `gps/Xenakis_UPIC_system_computer_unit_2.jpg` | [File:Xenakis UPIC system computer unit 2.jpg](https://commons.wikimedia.org/wiki/File:Xenakis_UPIC_system_computer_unit_2.jpg) |
+
+---
+
 ## Troublemaker Fixtures
 
 | File | Origin |

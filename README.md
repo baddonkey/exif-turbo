@@ -12,6 +12,7 @@ Fully generated using VS Code Copilot.
 ## Features
 
 - Full-text search over all EXIF metadata using SQLite FTS5
+- **GPS location bar** — when the selected image has GPS coordinates, a bar in the Metadata panel shows one-click links to OpenStreetMap, Google Maps, and GeoHack (Wikimedia coordinate hub)
 - PySide6 QML UI with Material Design — light, dark, or system theme
 - Multilanguage UI: English, German, French, Italian, Romansh
 - Search and Browse tabs with 50/50 split-pane thumbnail preview

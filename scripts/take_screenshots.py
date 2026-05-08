@@ -7,6 +7,7 @@ Usage (from the project root, with the venv active):
 Requirements:
     - ExifTool must be on PATH (used by IndexerService)
     - Sample images in tests/sample-data/schweiz/
+    - GPS sample image in tests/sample-data/gps/
 
 The script:
 1. Builds a demo SQLite index from the sample images
@@ -22,6 +23,7 @@ Output files:
     05_browse_tab.png        -- browse tab (folder tree navigation)
     06_indexed_folders.png   -- indexed folders management tab
     07_folder_filter.png     -- folder filter popup (Schlösser, Sky, Wildlife)
+    08_gps_location_bar.png  -- GPS location bar (image with GPS coordinates selected)
 """
 
 from __future__ import annotations
@@ -40,10 +42,12 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 SAMPLE_DATA = _REPO_ROOT / "tests" / "sample-data" / "schweiz"
+GPS_SAMPLE_FOLDER = _REPO_ROOT / "tests" / "sample-data" / "gps"
 SAMPLE_FOLDERS = [
     SAMPLE_DATA / "Schl\u00f6sser",
     SAMPLE_DATA / "Sky",
     SAMPLE_DATA / "Wildlife",
+    GPS_SAMPLE_FOLDER,
 ]
 SCREENSHOTS_DIR = _REPO_ROOT / "docs" / "screenshots"
 DB_PATH = SCREENSHOTS_DIR / "demo.db"
@@ -76,6 +80,7 @@ _STEPS = [
     "05_browse_tab",
     "06_indexed_folders",
     "07_folder_filter",
+    "08_gps_location_bar",
 ]
 
 
@@ -357,6 +362,24 @@ def _run_gui() -> None:
 
     def step_6_grab() -> None:
         _grab(root, "07_folder_filter")
+        QTimer.singleShot(500, step_7_gps_setup)
+
+    # -- Step 7: GPS location bar (image with GPS coordinates) ----------------
+    def step_7_gps_setup() -> None:
+        from PySide6.QtCore import QMetaObject, Qt
+        # Close the folder filter popup, clear all folder filters, then
+        # filter to the GPS-only folder so result 0 is the Xenakis image.
+        QMetaObject.invokeMethod(root, "closeFolderFilterPopup", Qt.ConnectionType.DirectConnection)
+        ctrl.clearSearchFolderFilters()
+        ctrl.toggleSearchFolderFilter(str(GPS_SAMPLE_FOLDER))
+        ctrl.search("")
+        prev = ctrl.selectedImageSource
+        ctrl.selectResult(0)
+        print("  GPS image -- waiting for preview to decode ...")
+        _wait_for_preview(root, ctrl, step_7_gps_grab, prev_source=prev or "")
+
+    def step_7_gps_grab() -> None:
+        _grab(root, "08_gps_location_bar")
         print(f"  Done -- screenshots in {SCREENSHOTS_DIR.relative_to(_REPO_ROOT)}/")
         QTimer.singleShot(300, app.quit)
 

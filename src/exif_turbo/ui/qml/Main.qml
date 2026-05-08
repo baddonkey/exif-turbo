@@ -32,6 +32,8 @@ ApplicationWindow {
     }
     // Automation helper: used by the screenshot script to open the folder filter popup
     function openFolderFilterPopup() { folderMultiCombo.popup.open() }
+    // Automation helper: used by the screenshot script to close the folder filter popup
+    function closeFolderFilterPopup() { folderMultiCombo.popup.close() }
     readonly property string _licenseBgColor: _toRgb(Material.background)
     readonly property string _licenseTextColor: _toRgb(Material.foreground)
     readonly property string _licenseBorderColor: _toRgb(Qt.darker(Material.background, 1.4))

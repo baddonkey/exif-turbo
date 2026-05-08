@@ -137,7 +137,7 @@ derive stable thumbnail cache names without a live `os.stat` call.
 | `workers/bulk_op_worker.py` | `QThread` — executes the bulk operations off the GUI thread: `select_all`, `deselect_all`, `invert`, `select_missing_thumbs` (marks every matching image whose expected `thumb_cache_path()` has no `.png`/`.enc` on disk; `.skip` sentinels are treated as missing too so failed-thumbnail images surface), `export_json`, and `delete_marked` (removes marked images from disk and from the index, plus the matching cached thumbnail `.png`/`.enc`, `.skip` sentinel and rendered preview `.jpg`/`.jpg.enc`; persists partial progress on cancel so DB and disk stay in sync). Accepts full filter state (query, ext_filter, path_filter, restrict_to_enabled_folders, marked_only), a `sort_by` key for export ordering, and a `cache_dir` for thumb/preview lookup. Mark operations run in batches of 500 rows each emitting a progress tick; export writes one JSON record at a time; delete reports `result_deleted_count`, `result_missing_count`, `result_failed_count`. Signals: `progress(done, total)`, `finished`, `failed(message)`, `canceled`. |
 | `providers/preview_image_provider.py` | `PreviewImageProvider(QQuickImageProvider)` — serves full-resolution previews for all formats (JPEG/PNG/TIFF/RAW) as `image://preview/<encoded-path>`; `ForceAsynchronousImageLoading`, `HighPriority` thread; reads raw bytes via `open().read()` to release the GIL during network I/O, then decodes in-memory with Pillow `draft()` for fast JPEG subsampling |
 | `providers/raw_image_provider.py` | `RawImageProvider(QQuickImageProvider)` — legacy RAW-only provider (`image://raw/`); kept for backward compatibility |
-| `qml/Main.qml` | Main application window: tab bar (Search, Browse), split-pane layout, EXIF detail panel, Settings sheet, lock screen |
+| `qml/Main.qml` | Main application window: tab bar (Search, Browse), split-pane layout, EXIF detail panel, Settings sheet, lock screen; **GPS location bar** in the Metadata panel (visible when the selected image has GPS coordinates — shows links to OpenStreetMap, Google Maps, and GeoHack) |
 | `qml/FoldersPanel.qml` | Folder management panel — add/remove/enable folders, shows per-folder indexing status |
 | `qml/FloatingBadge.qml` | Reusable badge overlay component |
 
@@ -155,7 +155,19 @@ derive stable thumbnail cache names without a live `os.stat` call.
   mode (confirm field + security hint). Cleared to `False` after a
   successful `unlock()` call.
 - `isUnlocking` — bool property set to `True` the moment `unlock()` is
-  called; cleared once the DB opens (or fails). A `QTimer.singleShot(50ms)`
+  called; cleared once the DB opens (or fails).
+- **GPS location bar** — `_update_exif_table()` calls the static helper
+  `_extract_geo_urls(parsed)` which reads `GPS:GPSLatitude`,
+  `GPS:GPSLongitude`, `GPS:GPSLatitudeRef`, and `GPS:GPSLongitudeRef` from
+  the metadata JSON and returns a triple `(osm_url, gmaps_url, geohack_url)`.
+  Three `Q_PROPERTY` strings (`geoLocationUrl`, `geoGoogleMapsUrl`,
+  `geoWikipediaUrl`) are emitted to QML; the Metadata panel renders a thin
+  bar with links to OpenStreetMap
+  (`https://www.openstreetmap.org/?mlat=…&mlon=…&zoom=14`), Google Maps
+  (`https://www.google.com/maps?q=…`), and GeoHack
+  (`https://geohack.toolforge.org/geohack.php?params=…`). The bar is hidden
+  when no GPS data is present. `_clear_details()` resets all three URLs to
+  `""`. A `QTimer.singleShot(50ms)`
   defers the blocking `open()` call so the QML repaint (spinner) executes
   before the main thread stalls. The QML lock screen shows a `BusyIndicator`
   + "Unlocking…" label and disables the Unlock button while `True`.
