@@ -37,7 +37,11 @@ class RawImageProvider(QQuickImageProvider):
     def requestImage(  # type: ignore[override]
         self, id: str, size: QSize, requestedSize: QSize
     ) -> QImage:
-        path = urllib.parse.unquote(id)
+        # Strip the optional ``?m=<mtime>&s=<size>`` query (used by the preview
+        # cache lookup) before unquoting — the raw provider only needs the
+        # file path itself.
+        raw_id = id.split("?", 1)[0]
+        path = urllib.parse.unquote(raw_id)
         try:
             img = _decode_raw(path, requestedSize)
         except Exception:

@@ -315,7 +315,10 @@ def test_selectResult_rapid_calls_use_last_path(
     src = bare_controller.selectedImageSource
     # Scheme depends on whether a cached preview exists for this image —
     # the bare_controller fixture has no preview cache so it falls back to raw.
-    assert src.endswith(encoded_2)
+    # The URI may carry a ``?m=<mtime>&s=<size>`` query when DB stamps are
+    # known; just assert the encoded path appears between scheme and query.
+    path_part = src.split("?", 1)[0]
+    assert path_part.endswith(encoded_2)
     assert src.startswith("image://preview/") or src.startswith("image://raw/")
 
 

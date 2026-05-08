@@ -10,7 +10,11 @@ from PySide6.QtCore import QSize, QThread
 from PySide6.QtGui import QImage
 from PySide6.QtQuick import QQuickImageProvider
 
-from ...utils.preview_cache import preview_cache_path, preview_dir
+from ...utils.preview_cache import (
+    preview_cache_name_from_stamp,
+    preview_cache_path,
+    preview_dir,
+)
 from ...utils.preview_render import MAX_PREVIEW_PX, render_preview
 from ...utils.thumb_crypto import ThumbCrypto
 
@@ -62,10 +66,10 @@ class PreviewImageProvider(QQuickImageProvider):
         self, id: str, size: QSize, requestedSize: QSize
     ) -> QImage:
         QThread.currentThread().setPriority(QThread.Priority.HighPriority)
-        path = urllib.parse.unquote(id)
+        path, stamp = _parse_id(id)
         target = _effective_target(requestedSize)
         try:
-            img = self._load_cached_or_live(path, target)
+            img = self._load_cached_or_live(path, stamp, target)
         except Exception as exc:  # noqa: BLE001
             _log.error("Preview failed for %r: %s", path, exc)
             img = QImage()
@@ -75,17 +79,21 @@ class PreviewImageProvider(QQuickImageProvider):
 
     # ── Internal ─────────────────────────────────────────────────────────
 
-    def _load_cached_or_live(self, path: str, target: int) -> QImage:
-        cached = self._try_load_cached(path)
+    def _load_cached_or_live(
+        self, path: str, stamp: tuple[float, int] | None, target: int
+    ) -> QImage:
+        cached = self._try_load_cached(path, stamp)
         if cached is not None:
             return _pil_to_qimage(cached)
         pil_img = render_preview(path, target)
         return _pil_to_qimage(pil_img)
 
-    def _try_load_cached(self, path: str) -> Image.Image | None:
+    def _try_load_cached(
+        self, path: str, stamp: tuple[float, int] | None
+    ) -> Image.Image | None:
         if self._cache_dir is None:
             return None
-        cache_path = preview_cache_path(path, self._cache_dir)
+        cache_path = self._resolve_cache_path(path, stamp)
         try:
             if self._crypto is not None and self._crypto.is_active:
                 enc_path = cache_path.with_suffix(".jpg.enc")
@@ -105,8 +113,43 @@ class PreviewImageProvider(QQuickImageProvider):
             _log.warning("Cached preview unreadable for %r: %s", path, exc)
             return None
 
+    def _resolve_cache_path(
+        self, path: str, stamp: tuple[float, int] | None
+    ) -> Path:
+        """Compute the on-disk cache path for *path*.
+
+        When the caller provides DB-stored ``stamp`` (mtime, size), use it
+        directly so the lookup works even when the source drive is
+        disconnected.  Otherwise fall back to the legacy live-stat path.
+        """
+        assert self._cache_dir is not None
+        if stamp is not None:
+            name = preview_cache_name_from_stamp(path, stamp[0], stamp[1])
+            return preview_dir(self._cache_dir) / name
+        return preview_cache_path(path, self._cache_dir)
+
 
 # ── helpers ──────────────────────────────────────────────────────────────
+
+
+def _parse_id(raw_id: str) -> tuple[str, tuple[float, int] | None]:
+    """Split a provider id into ``(path, stamp)``.
+
+    The id format is ``<encoded-path>[?m=<mtime>&s=<size>]`` — the optional
+    query string carries DB-stored stamps so the cache lookup does not need
+    to stat the source file (which may live on a disconnected drive).
+    """
+    qpos = raw_id.find("?")
+    if qpos < 0:
+        return urllib.parse.unquote(raw_id), None
+    path = urllib.parse.unquote(raw_id[:qpos])
+    params = urllib.parse.parse_qs(raw_id[qpos + 1 :])
+    try:
+        mtime = float(params["m"][0])
+        size_b = int(params["s"][0])
+    except (KeyError, IndexError, ValueError):
+        return path, None
+    return path, (mtime, size_b)
 
 
 def _effective_target(requested: QSize) -> int:

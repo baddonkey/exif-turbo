@@ -204,6 +204,20 @@ class SearchListModel(QAbstractListModel):
             return self._rows[row].path
         return None
 
+    def get_stamp(self, row: int) -> tuple[float, int] | None:
+        """Return DB-stored ``(mtime, size)`` for *row*, or ``None`` if unknown.
+
+        Used by the preview pipeline to compute the on-disk cache filename
+        without touching the source file (which may live on a disconnected
+        drive).  Legacy rows missing an mtime return ``None``.
+        """
+        if not (0 <= row < len(self._rows)):
+            return None
+        item = self._rows[row]
+        if not item.mtime:
+            return None
+        return (item.mtime, item.size)
+
     def get_metadata_json(self, row: int) -> str | None:
         if 0 <= row < len(self._rows):
             return self._rows[row].metadata_json

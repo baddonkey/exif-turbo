@@ -29,7 +29,8 @@ from ...utils.preview_cache import (
     clear_cached_previews_for,
     count_cached_previews,
     list_existing_previews,
-    preview_cache_path,
+    preview_cache_name_from_stamp,
+    preview_dir,
 )
 from ..models.checked_filter_proxy_model import CheckedFilterProxyModel
 from ..models.exif_list_model import ExifListModel
@@ -158,6 +159,9 @@ class AppController(QObject):
         self._folder_tree: str = "[]"
         self._folder_tree_dirty: bool = False
         self._pending_preview_path: str = ""
+        # DB-stored (mtime, size) for the pending preview; used to compute the
+        # on-disk cache filename without statting the (possibly missing) source.
+        self._pending_preview_stamp: tuple[float, int] | None = None
         self._index_worker: IndexWorker | None = None
         self._thumb_worker: ThumbWorker | None = None
         self._preview_worker: PreviewBuildWorker | None = None
@@ -1182,11 +1186,14 @@ class AppController(QObject):
         # Debounce the full preview load — lets visible card thumbnails in the
         # list render before the heavier preview decode starts.
         self._pending_preview_path = path or ""
+        self._pending_preview_stamp = self._search_model.get_stamp(row)
         # Selecting a new image always falls back to the cached preview
         # (per-image scope for the toggle).  When no cached preview exists
         # for this image we transparently switch to the original instead;
         # the toggle is hidden in that case (see selectedHasPreview).
-        has_preview = self._compute_has_preview(self._pending_preview_path)
+        has_preview = self._compute_has_preview(
+            self._pending_preview_path, self._pending_preview_stamp
+        )
         if has_preview != self._selected_has_preview:
             self._selected_has_preview = has_preview
             self.selectedHasPreviewChanged.emit()
@@ -1730,10 +1737,22 @@ class AppController(QObject):
         path = self._pending_preview_path
         if not path:
             return
-        encoded = urllib.parse.quote(path, safe="")
         scheme = "raw" if self._use_raw_preview else "preview"
-        self._selected_image_source = f"image://{scheme}/{encoded}"
+        self._selected_image_source = self._build_preview_uri(path, scheme)
         self.selectedImageSourceChanged.emit()
+
+    def _build_preview_uri(self, path: str, scheme: str) -> str:
+        """Build an ``image://<scheme>/<encoded-path>`` URI.
+
+        When a DB-stored stamp is known for the pending preview, append it as
+        a query string so the provider can locate the cached preview without
+        statting the source file (which may live on a disconnected drive).
+        """
+        encoded = urllib.parse.quote(path, safe="")
+        stamp = self._pending_preview_stamp
+        if stamp is not None:
+            return f"image://{scheme}/{encoded}?m={stamp[0]}&s={stamp[1]}"
+        return f"image://{scheme}/{encoded}"
 
     @Slot()
     def resetDatabase(self) -> None:
@@ -1790,6 +1809,7 @@ class AppController(QObject):
     def _clear_details(self) -> None:
         self._preview_delay_timer.stop()
         self._pending_preview_path = ""
+        self._pending_preview_stamp = None
         self._details_plain_text = ""
         self._details_html = ""
         self.detailsHtmlChanged.emit()
@@ -1813,14 +1833,23 @@ class AppController(QObject):
             self._selected_has_preview = False
             self.selectedHasPreviewChanged.emit()
 
-    def _compute_has_preview(self, path: str) -> bool:
-        """Return True when a rendered preview exists in the on-disk cache."""
-        if not path or self._cache_dir is None:
+    def _compute_has_preview(
+        self, path: str, stamp: tuple[float, int] | None
+    ) -> bool:
+        """Return True when a rendered preview exists in the on-disk cache.
+
+        Uses DB-stored ``stamp`` (mtime, size) to compute the cache filename so
+        the lookup works even when the source drive is disconnected.  Falls
+        back to ``False`` for legacy rows without a stamp — the cache key is
+        derived from those values, so without them we cannot locate the file.
+        """
+        if not path or self._cache_dir is None or stamp is None:
             return False
         try:
-            cache_path = preview_cache_path(path, self._cache_dir)
+            name = preview_cache_name_from_stamp(path, stamp[0], stamp[1])
         except Exception:
             return False
+        cache_path = preview_dir(self._cache_dir) / name
         if cache_path.exists():
             return True
         # Encrypted variant used when a DB key is set.
@@ -1971,9 +2000,8 @@ class AppController(QObject):
         """Fire the full preview load after the debounce delay."""
         path = self._pending_preview_path
         if path:
-            encoded = urllib.parse.quote(path, safe="")
             scheme = "raw" if self._use_raw_preview else "preview"
-            self._selected_image_source = f"image://{scheme}/{encoded}"
+            self._selected_image_source = self._build_preview_uri(path, scheme)
         else:
             self._selected_image_source = ""
         self.selectedImageSourceChanged.emit()
