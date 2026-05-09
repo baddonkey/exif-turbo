@@ -46,6 +46,9 @@ from ..workers.thumb_worker import ThumbWorker
 
 _PAGE_SIZE = 50
 _DEFAULT_WORKERS = max(1, (os.cpu_count() or 2) // 2)
+# Pillow LANCZOS resampling is GIL-bound; beyond ~4 threads throughput drops
+# and GIL contention starves the scan thread and the GUI event loop on Windows.
+_MAX_THUMB_WORKERS = 4
 _log = logging.getLogger(__name__)
 
 
@@ -198,9 +201,10 @@ class AppController(QObject):
         self._password_change_worker: PasswordChangeWorker | None = None
         self._password_change_old: str = ""
         self._password_change_new: str = ""
-        # Timer: kick off a batch thumb build every 8 s while indexing runs
+        # Timer: kick off a batch thumb build while indexing runs. Fires 5 s
+        # after indexing begins so the DB has a first batch of rows to process.
         self._thumb_batch_timer = QTimer(self)
-        self._thumb_batch_timer.setInterval(8_000)
+        self._thumb_batch_timer.setInterval(5_000)
         self._thumb_batch_timer.timeout.connect(self._start_auto_thumbs)
         # Timer: refresh the search list with newly written thumbs every 10 s
         # during a thumb build — ensures mid-batch thumbnails appear on macOS
@@ -1543,11 +1547,11 @@ class AppController(QObject):
         self._index_worker.canceled.connect(self._on_managed_folder_index_canceled)
         # Run below normal priority so the GUI and preview thread get preference.
         self._index_worker.start(QThread.Priority.LowPriority)
-        # Do NOT start _thumb_batch_timer here.  ThumbWorker reads NAS files
-        # concurrently with the os.walk() lstat() storm, saturating the NAS link
-        # and causing severe GIL starvation on macOS SMB.  The timer is armed
-        # by _on_index_progress once the scan-complete sentinel arrives, i.e.
-        # after the walk phase is fully done.
+        # Arm the thumb timer immediately so ThumbWorker starts ~5 s into indexing
+        # and already-indexed images get thumbnails without waiting for the full
+        # scan to complete. ThumbWorker is capped at _MAX_THUMB_WORKERS threads
+        # to limit GIL pressure during the scan phase on Windows.
+        self._thumb_batch_timer.start()
 
     def _on_managed_folder_index_done(self, count: int, error_count: int = 0) -> None:
         self._thumb_batch_timer.stop()
@@ -2041,9 +2045,7 @@ class AppController(QObject):
         else:
             self._set_status(_("Indexing\u2026 {} / {}").format(current, total))
         if is_scan_complete:
-            # Walk phase done — NAS bandwidth is free; arm the thumbnail timer
-            # now so ThumbWorker doesn't race with the directory walk.
-            self._thumb_batch_timer.start()
+            pass  # timer already running since indexing started
 
     def _on_thumb_progress(self, current: int, total: int, path: str) -> None:
         # Throttle to ~5 Hz — ThumbWorker can fire thousands of signals per second
@@ -2075,7 +2077,10 @@ class AppController(QObject):
             self._db_path,
             self._search_model.cache_dir,
             self._search_model.max_thumb_bytes,
-            workers=self._settings.workerCount if self._settings else _DEFAULT_WORKERS,
+            workers=min(
+                self._settings.workerCount if self._settings else _DEFAULT_WORKERS,
+                _MAX_THUMB_WORKERS,
+            ),
             key=self._key,
         )
         self._thumb_worker.progress.connect(self._on_thumb_progress)
