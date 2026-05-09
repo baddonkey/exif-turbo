@@ -135,8 +135,11 @@ derive stable thumbnail cache names without a live `os.stat` call.
 | `workers/index_worker.py` | `QThread` — runs `IndexerService.build_index` off the GUI thread; emits progress signals; supports `pause()`/`resume()` via `threading.Event` to yield I/O bandwidth during preview loads |
 | `workers/thumb_worker.py` | `QThread` — generates thumbnail cache off the GUI thread; supports `pause()`/`resume()` via `threading.Event` |
 | `workers/bulk_op_worker.py` | `QThread` — executes the bulk operations off the GUI thread: `select_all`, `deselect_all`, `invert`, `select_missing_thumbs` (marks every matching image whose expected `thumb_cache_path()` has no `.png`/`.enc` on disk; `.skip` sentinels are treated as missing too so failed-thumbnail images surface), `export_json`, and `delete_marked` (removes marked images from disk and from the index, plus the matching cached thumbnail `.png`/`.enc`, `.skip` sentinel and rendered preview `.jpg`/`.jpg.enc`; persists partial progress on cancel so DB and disk stay in sync). Accepts full filter state (query, ext_filter, path_filter, restrict_to_enabled_folders, marked_only), a `sort_by` key for export ordering, and a `cache_dir` for thumb/preview lookup. Mark operations run in batches of 500 rows each emitting a progress tick; export writes one JSON record at a time; delete reports `result_deleted_count`, `result_missing_count`, `result_failed_count`. Signals: `progress(done, total)`, `finished`, `failed(message)`, `canceled`. |
+| `workers/password_change_worker.py` | `PasswordChangeWorker(QThread)` — re-encrypts the SQLCipher database off the GUI thread using `PRAGMA rekey`; on success re-wraps the `ThumbCrypto` master key so existing thumbnails remain decryptable without rebuild. Signals: `finished`, `failed(message)`. |
+| `workers/preview_build_worker.py` | `PreviewBuildWorker(QThread)` — renders preview JPEGs for one indexed folder off the GUI thread; scans the cache dir once, renders only missing previews with `render_preview()`, writes them as JPEG (encrypted via `ThumbCrypto` when DB key is set). Signals: `finished(built, total)`, `progress(done, total_missing, path)`, `canceled(built, total)`, `failed(message)`. |
 | `providers/preview_image_provider.py` | `PreviewImageProvider(QQuickImageProvider)` — serves full-resolution previews for all formats (JPEG/PNG/TIFF/RAW) as `image://preview/<encoded-path>`; `ForceAsynchronousImageLoading`, `HighPriority` thread; reads raw bytes via `open().read()` to release the GIL during network I/O, then decodes in-memory with Pillow `draft()` for fast JPEG subsampling |
 | `providers/raw_image_provider.py` | `RawImageProvider(QQuickImageProvider)` — legacy RAW-only provider (`image://raw/`); kept for backward compatibility |
+| `providers/thumb_image_provider.py` | `ThumbnailImageProvider(QQuickImageProvider)` — serves `image://thumb/<sha1_hex>` URIs; reads `.enc` files from the cache dir, decrypts via `ThumbCrypto` (AES-256-GCM), decodes PNG bytes to `QImage`; thread-safe (key set once on unlock) |
 | `qml/Main.qml` | Main application window: tab bar (Search, Browse), split-pane layout, EXIF detail panel, Settings sheet, lock screen; **GPS location bar** in the Metadata panel (visible when the selected image has GPS coordinates — shows links to OpenStreetMap, Google Maps, and GeoHack); **search-syntax tooltip** — a `?` icon button (`searchHelpButton`) at the right edge of the search field, with a custom `ToolTip` `contentItem` (ColumnLayout with accent-coloured section headers, a two-column `GridLayout` of examples, and a tips bullet list); translated via `qsTr()`; **ExifTool section in Settings** — **Check** button calls `controller.checkExiftool()`; colour-coded status badge (green dot + version string / red dot + "Not found") bound to `controller.exiftoolVersion` and `controller.exiftoolMissing`; download link styled with `Material.accent` for dark-mode readability; all bindings guarded against `null` controller; **ExifTool missing dialog** — modal dialog triggered by `onExiftoolMissingChanged` when ExifTool is absent at unlock time, with a clickable `exiftool.org` link |
 | `qml/FoldersPanel.qml` | Folder management panel — add/remove/enable folders, shows per-folder indexing status |
 | `qml/FloatingBadge.qml` | Reusable badge overlay component |
@@ -236,7 +239,10 @@ Translation domain: `exif_turbo`. Supported languages: German (`de`), French (`f
 
 | Module | Purpose |
 |--------|---------|
-| `thumb_cache.py` | `thumb_cache_path()` / `thumb_cache_name_from_stamp()` — SHA-1 keyed by `path|mtime|size` → `.png` filename |
+| `thumb_cache.py` | `thumb_cache_path()` / `thumb_cache_name_from_stamp()` — SHA-1 keyed by `path\|mtime\|size` → `.png` filename |
+| `thumb_crypto.py` | `ThumbCrypto` — AES-256-GCM encrypt/decrypt for thumbnail and preview files. Uses a random per-cache-dir master key stored password-wrapped in `.thumb_key` (v2 layout); v1 legacy caches (`.salt`) are migrated on next unlock. `change_password(old, new)` re-wraps the master key without touching the cached files. Raises `WrongPasswordError` on bad password. |
+| `preview_cache.py` | `preview_cache_name_from_stamp()` / `preview_cache_path()` / `preview_dir()` — SHA-1 keyed preview JPEG filenames; helpers to list, count, and clear cached previews for a folder. |
+| `preview_render.py` | `render_preview(path, target_long_edge)` — renders a downscaled Pillow `Image` for any supported format (JPEG/PNG/TIFF/RAW via rawpy); used by `PreviewBuildWorker`. |
 
 ---
 
@@ -446,7 +452,9 @@ exif-turbo/
 │   │   │   ├── search_list_model.py
 │   │   │   └── settings_model.py
 │   │   ├── providers/
-│   │   │   └── raw_image_provider.py
+│   │   │   ├── preview_image_provider.py
+│   │   │   ├── raw_image_provider.py
+│   │   │   └── thumb_image_provider.py
 │   │   ├── qml/
 │   │   │   ├── Main.qml
 │   │   │   ├── FoldersPanel.qml
@@ -454,10 +462,16 @@ exif-turbo/
 │   │   ├── view_models/
 │   │   │   └── app_controller.py
 │   │   └── workers/
+│   │       ├── bulk_op_worker.py
 │   │       ├── index_worker.py
+│   │       ├── password_change_worker.py
+│   │       ├── preview_build_worker.py
 │   │       └── thumb_worker.py
 │   ├── utils/
-│   │   └── thumb_cache.py
+│   │   ├── preview_cache.py
+│   │   ├── preview_render.py
+│   │   ├── thumb_cache.py
+│   │   └── thumb_crypto.py
 │   └── assets/
 │       ├── app_icon.svg
 │       └── lense.svg
@@ -466,15 +480,28 @@ exif-turbo/
 │   ├── data/
 │   │   ├── test_excluded_paths.py
 │   │   ├── test_image_index_repository.py
+│   │   ├── test_image_index_repository_rekey.py
 │   │   └── test_indexed_folder_repository.py
 │   ├── indexing/
 │   │   ├── test_image_utils.py
 │   │   ├── test_indexer_service.py  # e2e — real images, real DB
 │   │   └── test_metadata_to_text.py
-│   └── ui/
-│       ├── conftest.py              # Material style session fixture
-│       ├── test_app_controller.py   # pytest-qt live QML window tests
-│       └── test_folder_management.py
+│   ├── ui/
+│   │   ├── conftest.py              # Material style session fixture
+│   │   ├── test_app_controller.py
+│   │   ├── test_ext_filter.py
+│   │   ├── test_ext_filter_with_folder.py
+│   │   ├── test_folder_management.py
+│   │   ├── test_metadata_panel_scroll_reset.py
+│   │   ├── test_preview_build_worker.py
+│   │   ├── test_preview_provider_missing_source.py
+│   │   ├── test_raw_preview_toggle.py
+│   │   ├── test_sort_combo_width.py
+│   │   ├── test_thumbnail_loading.py
+│   │   └── test_zoom_anchor.py
+│   └── utils/
+│       ├── test_preview_cache.py
+│       └── test_thumb_crypto.py
 ├── installer/
 │   └── exif-turbo.wxs           # WiX v4 MSI descriptor
 ├── scripts/
@@ -496,7 +523,10 @@ exif-turbo/
 | PySide6 | ≥6.5 | Qt bindings — QML, widgets, image providers |
 | Pillow | ≥10.0 | Thumbnail generation; EXIF orientation correction |
 | rawpy | ≥0.18 | libraw wrapper for RAW format decoding |
-| sqlcipher3 | ≥0.5 | Encrypted SQLite || Babel | any | `.po`/`.mo` catalog management (dev-time only) || ExifTool | any (system) | EXIF extraction (external process) |
+| sqlcipher3 | ≥0.5 | Encrypted SQLite |
+| cryptography | any | AES-256-GCM thumbnail/preview encryption (`ThumbCrypto`) |
+| Babel | any | `.po`/`.mo` catalog management (dev-time only) |
+| ExifTool | any (system) | EXIF extraction (external process) |
 
 Build-time only:
 

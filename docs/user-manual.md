@@ -88,6 +88,13 @@ Enter your password in the **Password** field and click **Unlock** (or press
 Once unlocked, the **Search** tab opens and any previously indexed images are
 immediately available.
 
+> **ExifTool not found:** If ExifTool is not installed or not on your `PATH`
+> at the time of unlock, a **"ExifTool not found"** dialog appears automatically.
+> It explains that indexing is disabled and provides a link to
+> [exiftool.org](https://exiftool.org/). Install ExifTool and restart the app
+> to enable indexing. You can still search and browse existing index data while
+> ExifTool is missing.
+
 ### Help menu
 
 The **Help** menu in the menu bar provides access to this user manual, the
@@ -184,10 +191,11 @@ The panel always contains:
 
 - **Progress bar** — indeterminate while the total is still being computed,
   then a percentage once it is known.
-- **Count label** — **"Scanning for images…"** during indexing discovery,
-  **"Preparing…"** for the thumbnail and preview phases before the total is
-  known, then `n / total` files (indexing) or `n / total images` (thumbnails
-  and previews).
+- **Count label** — **"Scanning for images…"** at the start of indexing
+  discovery; **"N files found…"** while discovery is still running but files
+  are already being enumerated; **"Preparing…"** for the thumbnail and preview
+  phases before the total is known; then `n / total files` (indexing) or
+  `n / total images` (thumbnails and previews).
 - **Current file** — name of the file being processed.
 - **Cancel button** — labelled **Cancel Indexing**, **Cancel Thumbnails**,
   or **Cancel Previews** depending on the phase. While an indexing or thumbnail
@@ -231,6 +239,10 @@ A **`?`** button at the right edge of the search field shows a syntax
 cheat-sheet when hovered. It lists six examples (single token, implicit AND,
 OR, NOT, exact phrase, prefix wildcard) and a short tips section. You do not
 need to click it — the tooltip appears automatically on hover.
+
+When the search field contains text a **`×`** button appears to its left.
+Clicking it clears the field and immediately shows all images (equivalent to
+pressing **Enter** with an empty bar).
 
 ### Filtering by format
 
@@ -368,8 +380,9 @@ pinch-to-zoom, drag-to-pan, double-tap to reset — see
 [Zooming and panning](#zooming-and-panning)). **Double-click** an image to open
 it in your system's default viewer. (Unlike the Search tab, double-clicking in
 Browse always opens the image — there is no folder-open shortcut.) The Metadata
-and EXIF Tags panels are not shown in the Browse tab; use the **Search** tab
-for the full metadata view of a selected image.
+panel, EXIF Tags panel, GPS location bar, and **Show Preview / Show Original**
+toggle are not shown in the Browse tab — use the **Search** tab for the full
+metadata view and preview source options.
 
 Switching to the **Search** tab clears the folder filter and re-runs the current
 search query. Any image previously selected while browsing is not automatically
@@ -408,6 +421,13 @@ The pill is useful for RAW files: the cached preview decodes instantly and is
 sufficient for most viewing, but switching to **Show Original** loads the
 full-resolution image when you want to zoom in for detail. The toggle is hidden
 when no cached preview is available for the selected image.
+
+While a full-resolution original is loading, a small **"Loading original…"**
+overlay with a spinner appears over the preview area so you know the image is
+being decoded (large RAW files may take a few seconds).
+
+> The **Show Preview / Show Original** toggle is only present in the **Search**
+> tab. The Browse tab preview always shows the image directly.
 
 #### Zooming and panning
 
@@ -543,6 +563,10 @@ Controls the number of parallel threads used for indexing and thumbnail
 generation. Higher values speed up processing on multi-core machines but use
 more CPU and memory. The default is half the number of detected CPU threads.
 
+> **macOS note:** On macOS the worker count is automatically locked to **1** to
+> prevent Python GIL starvation that can occur with network-share folders. The
+> spinner in the Settings tab is disabled in this configuration.
+
 ### Preview Cache Size
 
 Long-edge resolution used by the preview-cache builder. Larger values give
@@ -609,7 +633,7 @@ appears. The new password is required the next time you unlock the database.
 
 If the current password is wrong, an inline red error message
 (“Current password is incorrect.”) is shown and the dialog stays open. The
-The **Change Password…** button is disabled while indexing is in progress and while
+**Change Password…** button is disabled while indexing is in progress and while
 the database is locked. The operation is also rejected if thumbnail building is
 running when you submit the dialog.
 

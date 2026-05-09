@@ -11,6 +11,11 @@ Fully generated using VS Code Copilot.
 
 ## Features
 
+- **Encrypted thumbnail and preview cache** — thumbnails and rendered previews are stored AES-256-GCM encrypted on disk; the encryption key is derived from the user’s password using a wrapped-key model so changing the password does not require rebuilding the cache
+- **Change Password** — re-encrypts the SQLCipher database under a new passphrase without rebuilding thumbnails; existing encrypted thumbnails remain valid
+- **Build Previews** — per-folder action builds a cache of downscaled preview JPEGs for instant display; configurable long-edge resolution in Settings
+- **`×` clear button** — when the search field contains text a `×` button clears it immediately (equivalent to pressing **Enter** with an empty bar)
+- **ExifTool not-found dialog** — if ExifTool is absent at unlock time a modal dialog explains that indexing is disabled and links to exiftool.org; search and browse of existing data continue normally
 - Full-text search over all EXIF metadata using SQLite FTS5
 - **Search-syntax tooltip** — a `?` button next to the search field shows an inline cheat-sheet (single token, phrases, AND/OR/NOT, prefix wildcard) translated into all supported languages
 - **GPS location bar** — when the selected image has GPS coordinates, a bar in the Metadata panel shows one-click links to OpenStreetMap, Google Maps, and GeoHack (Wikimedia coordinate hub)
@@ -33,161 +38,67 @@ Fully generated using VS Code Copilot.
 
 ## Recent changes
 
-### Search-syntax tooltip
+### Encrypted thumbnail and preview cache
 
-A small **`?`** icon now sits at the right edge of the search field. Hovering
-it shows a structured cheat-sheet:
+Thumbnails and rendered preview JPEGs are now stored AES-256-GCM encrypted
+on disk. The encryption uses a random per-cache master key that is itself
+stored password-wrapped in a `.thumb_key` file (v2 layout). Changing the
+database password re-wraps only the master key — no thumbnails or previews
+need to be rebuilt.
 
-- A two-column grid listing six syntax examples with their monospace code and
-  a plain-English meaning (single token, implicit AND, OR, NOT, exact phrase,
-  prefix wildcard).
-- A "Tips" section explaining that operators must be UPPERCASE, phrases must be
-  quoted, and how the colon in ExifTool group-prefixed keys (`GPS:GPSLatitude`)
-  is handled.
+`ThumbnailImageProvider` serves `image://thumb/<sha1_hex>` URIs, decrypting
+on demand in Qt’s async image-provider pool.
 
-The tooltip text is fully translated into German, French, Italian, and Romansh.
+### Change Password
 
-### Bulk operations, export, and UX polish
+A **Change Password…** button in the Settings tab re-encrypts the SQLCipher
+database off the GUI thread (`PasswordChangeWorker`). The dialog requires the
+current password plus a new passphrase + confirmation. On success the
+`ThumbCrypto` master key is re-wrapped under the new password so all cached
+thumbnails remain valid immediately.
 
-- **Select All / Deselect All** — `Action → Select All` (or Deselect All) marks
-  every image matching the current search filters. Operations run on a
-  background thread in batches of 500 rows so the UI stays responsive.
-- **Export Metadata as JSON** — `Action → Export Metadata as JSON…` writes a
-  JSON array of EXIF records for all marked images to a file chosen via a
-  Save dialog. Export respects the current UI sort order (filename, path,
-  date, or size).
-- **Bulk-op progress overlay** — a modal overlay appears during any bulk
-  operation, showing a `ProgressBar` and a live `X / Y` record count.
-  A **Cancel** button aborts the operation cleanly at any batch boundary.
-- **Unlock spinner** — after entering the passphrase and pressing **Unlock**,
-  a `BusyIndicator` with an "Unlocking…" label appears immediately while the
-  encrypted database opens. The Unlock button is disabled during this time.
-  Implemented via `QTimer.singleShot(50ms)` so the QML repaint fires before
-  the blocking open call.
-- **Action menu width** — the Action menu is sized wide enough to show the
-  full dynamic label `"Export Metadata as JSON… (N selected)"` without clipping.
+### Preview cache builder
 
-### Folder filter
+A **Build Previews** action on each folder row in the Indexed Folders tab
+launches `PreviewBuildWorker`, which renders downscaled JPEG previews for all
+images in that folder and stores them in the preview cache (encrypted when a
+database key is set). The preview long-edge resolution is configurable in
+Settings (**Preview Cache Size**). The Search tab shows a **Show Preview /
+Show Original** toggle to switch between the cached preview and the full
+resolution source. While a full-resolution original loads, a
+**"Loading original…"** overlay with a spinner appears over the preview area.
 
-- **Multi-folder filter** — when two or more indexed folders are enabled, a
-  **Folder(s)** dropdown appears in the RESULTS header bar (left of Sort). The
-  popup shows a checkbox list — **All folders** clears the filter; individual
-  folder names narrow results to exactly those folders. Multiple folders can be
-  selected simultaneously. The button label reflects the state: folder name
-  (one selected), **N folders** (many), or **All folders** (no filter).
+### ExifTool not-found dialog and settings badge
 
-### Multilanguage support
+If ExifTool is absent when the database is unlocked, a modal dialog pops up
+automatically explaining that indexing is disabled and providing a link to
+exiftool.org. The Settings tab **ExifTool** section shows a colour-coded
+badge (green = found with version, red = not found); a **Check** button
+re-probes on demand.
 
-- **i18n infrastructure** — Python `gettext` based translation system. Supported
-  languages: German, French, Italian, Romansh. Language is switchable at runtime
-  from the Settings sheet without restarting.
-- **Translation pipeline** — `scripts/regenerate_translations.py` extracts
-  strings from both Python (`_()`) and QML (`qsTr()`), merges them into `.pot`,
-  updates `.po` catalogs, and compiles `.mo` binaries.
+### `×` clear button in search field
 
-### Theme support
+When the search field contains text a `×` button appears to its left.
+Clicking it clears the field and immediately shows all images.
 
-- **Light / Dark / System theme** — QML `Material.theme` binding driven from
-  `settingsModel.theme`. The selection is persisted globally to `settings.json`
-  and applied immediately without restart.
+### macOS worker-count lock
 
-### Preview performance on network drives
+On macOS the indexing worker count is automatically locked to **1** to prevent
+Python GIL starvation that can occur with network-share folders. The spinner in
+Settings is disabled in this configuration.
 
-- **GIL-safe image loading** — `PreviewImageProvider` reads the full image
-  file via `open(path, "rb").read()` so CPython releases the GIL during the
-  `ReadFile()` syscall. This prevents PIL's C decoder from blocking the Qt
-  event loop while fetching from a NAS or slow share.
-- **Dedicated high-priority image provider** — `image://preview/` handles all
-  formats (JPEG/PNG/TIFF/RAW). The provider thread is boosted to
-  `HighPriority` and uses `PIL.Image.draft()` for JPEG subsampled decode (up
-  to 8× faster for large camera files).
-- **Background worker pause/resume** — clicking a result pauses
-  `ThumbWorker` and `IndexWorker` for 2 seconds via `threading.Event` so the
-  preview provider gets undivided I/O bandwidth on the network share.
-- **Instant thumbnail placeholder** — the cached 144 px thumbnail is shown
-  immediately while the full-resolution image loads asynchronously; it fades
-  out with a 150 ms transition once the full image is ready.
-- **Raised decompression bomb limit** — `PIL.Image.MAX_IMAGE_PIXELS` is set
-  to 894 MP (10× Pillow's default) at startup in `app_main.py` so large
-  panoramas and high-resolution TIFFs load without a warning.
+## Test suite
 
-### Browse tab
-
-- **Browse tab enabled** — the Browse tab is now fully functional. Selecting
-  a folder in the tree filters the image list to that folder; clicking an
-  image shows the full EXIF detail panel and preview, identical to the Search
-  tab.
-- **Tab-switch row preservation** — `AppController` tracks `currentResultRow`
-  as a `Q_PROPERTY`. Switching away and back to the Search or Browse tab
-  restores the previously selected row instead of resetting to row 0.
-
-### New-database passphrase UX
-
-- **Passphrase creation screen** — when a database does not yet exist,
-  `AppController.isNewDatabase` is `True` and the lock screen switches to a
-  dedicated creation mode: passphrase + confirm fields, mismatch validation,
-  a prominent security hint (recommends ≥12 chars, warns no recovery), and a
-  "Create Database" button. After first unlock the screen reverts to the normal
-  unlock form.
-
-### Folder management
-
-- **Indexed folder tracking** — folders are stored in a dedicated
-  `indexed_folders` table. The Folders panel lets users add/remove folders and
-  toggle them on/off; disabled folders are excluded from search results without
-  losing their index data.
-- **Per-folder status** — each folder tracks its last indexing status
-  (`new`, `indexed`, `error`) and image count.
-
-### Scoped rescan and Reset Database
-
-- **Scoped rescan** — `IndexerService.build_index()` passes `folder_roots` to
-  `ImageIndexRepository.delete_missing()`. Deletion is scoped to paths under
-  the scanned roots, so rescanning one folder never removes data from another.
-- **Reset Database** — a ⚠️ **Reset Database…** button (red) at the bottom of
-  the Settings tab opens a confirmation dialog. On confirm,
-  `AppController.resetDatabase()` calls `clear_all()` on both repositories and
-  removes the thumbnail cache directory, then emits UI signals to clear all
-  models instantly.
-
-### UI & view-model improvements
-
-- **Thumbnail rendering** — thumbnail URIs are pre-computed once when search
-  results load, not recalculated on every repaint.
-- **Thumbnail cache path** — derived from the active database path
-  (`~/.exif-turbo/data/<db-stem>/thumbs/`) so multiple databases keep
-  independent caches.
-- **`AppController.unlock()`** — SQLCipher authentication errors are reported
-  separately from other failures; the connection is always closed on any error.
-- **Worker count** — capped at `min(cpu_count, 12)` via a shared constant.
-- **`SearchResult`** — carries `mtime` for stable thumbnail cache keys.
-
-### Indexing & repository improvements
-
-- **Atomic upserts** — `upsert_image` wraps both `images` + `images_fts` writes
-  in a single transaction.
-- **Scoped `delete_missing`** — set-difference query via a temporary table; an
-  optional `folder_roots` parameter limits deletion to rows whose path belongs
-  to the scanned folder roots, so rescanning one folder never removes records
-  from other folders.
-- **`clear_all()` on both repositories** — drops and recreates the `images_fts`
-  FTS5 virtual table (purging all shadow tables), runs `VACUUM`, then
-  `PRAGMA wal_checkpoint(TRUNCATE)` so the database file shrinks to near-zero
-  immediately without requiring an app restart.
-- **`RAW_EXTENSIONS`** — exported constant; `IMAGE_EXTENSIONS` is defined as
-  `{..., *RAW_EXTENSIONS}`. No duplicated extension lists.
-- **Logged failures** — `ExifMetadataExtractor` logs a `WARNING` instead of
-  swallowing extraction errors.
-
-### Test suite
-
-93 automated tests across four layers:
+160 automated tests across four layers:
 
 | Suite | Count | What it covers |
 |-------|-------|----------------|
-| `tests/data/` | 39 | Repository: upsert, FTS5 search, delete_missing (scoped), clear_all, excluded paths, folder management |
+| `tests/data/` | 55 | Repository: upsert, FTS5 search, delete_missing (scoped), clear_all, excluded paths, folder management, rekey |
 | `tests/indexing/` | 26 | Image utils, metadata text, IndexerService e2e (real JPEG/PNG files), scoped rescan |
-| `tests/ui/` | 28 | Live QML window driven via pytest-qt — unlock, search, filter, folder add/remove/enable, controller state |
+| `tests/ui/` | 60 | Live QML window driven via pytest-qt — unlock, search, filter, folder add/remove/enable, controller state, ext filter, zoom, thumbnail loading, preview build worker, raw preview toggle, metadata panel scroll, sort combo |
+| `tests/utils/` | 19 | Preview cache naming/clearing, thumb crypto (encrypt/decrypt, password change, legacy migration) |
+
+**Total: 160**
 
 ## Requirements
 
