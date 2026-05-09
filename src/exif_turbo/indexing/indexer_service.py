@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import queue
+import threading
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait as cf_wait
 from pathlib import Path
 from typing import Callable, Dict, List
@@ -56,45 +58,57 @@ class IndexerService:
         count = 0
         error_count = 0
         canceled = False
+        scan_total = 0
 
         if force:
             # Wipe only the rows that belong to the folders being rescanned.
             # clear_all() would destroy images from every other folder.
             self.repo.delete_missing([], folder_roots=[str(f) for f in folders])
 
-        # Collect paths lazily so cancel_check fires per-file during discovery.
-        # iter_images yields (path, mtime, size) tuples; mtime/size come from
-        # find's own lstat() pass so the indexer can skip path.stat() for
-        # unchanged files — eliminating thousands of NAS round-trips on rescan.
-        # Emit on_progress(count, 0, path) every _SCAN_REPORT_INTERVAL files so
-        # the UI can show a live file count during the scan phase (total=0 is
-        # the "still scanning" convention; total>0 is "scan done").
-        _SCAN_REPORT_INTERVAL = 100
-        entries: list = []
-        _scan_reported = 0
-        for _entry in self.finder.iter_images(folders, cancel_check=cancel_check):
-            if cancel_check and cancel_check():
-                return 0, 0
-            entries.append(_entry)
-            _scan_reported += 1
-            if on_progress and _scan_reported % _SCAN_REPORT_INTERVAL == 0:
-                on_progress(_scan_reported, 0, _entry[0])
-        if cancel_check and cancel_check():
-            return 0, 0
-        total = len(entries)
-        if total == 0:
-            return 0, 0
-
-        # Signal that the directory scan is complete so the UI can show
-        # a meaningful total (e.g. "0 / 21 000") instead of a frozen bar.
-        if on_progress:
-            on_progress(0, total, Path(""))
-
-        # Snapshot of DB stamps — used to skip unchanged files without re-reading EXIF.
+        # Fetch DB stamps upfront so the pipeline can start comparing immediately
+        # without waiting for the full scan to finish.
         # Empty when force=True so every file is re-extracted.
         known_stamps = {} if force else self.repo.get_all_stamps()
         if cancel_check and cancel_check():
             return 0, 0
+
+        # ── scanner thread ────────────────────────────────────────────────────
+        # iter_images runs in a background thread, pushing FindEntry tuples onto
+        # scan_queue.  The main thread (or EXIF pool) consumes immediately so
+        # filesystem I/O and EXIF extraction overlap instead of running in
+        # sequence.
+        #
+        # Progress convention (unchanged from before):
+        #   on_progress(N, 0, path)         — pipeline active, N indexed so far
+        #   on_progress(0, total, Path("")) — scan complete (sentinel, once)
+        #   on_progress(N, total, path)     — post-scan extraction (multi-worker)
+        _SCAN_DONE: object = object()
+        scan_queue: queue.Queue = queue.Queue(maxsize=2000)
+        scan_total_ref = [0]
+
+        def _scan_producer() -> None:
+            n = 0
+            try:
+                for entry in self.finder.iter_images(folders, cancel_check=cancel_check):
+                    if cancel_check and cancel_check():
+                        return
+                    while True:
+                        try:
+                            scan_queue.put(entry, timeout=0.1)
+                            break
+                        except queue.Full:
+                            if cancel_check and cancel_check():
+                                return
+                    n += 1
+            finally:
+                scan_total_ref[0] = n
+                try:
+                    scan_queue.put(_SCAN_DONE, timeout=5.0)
+                except queue.Full:
+                    pass  # canceled — consumer has already stopped
+
+        scan_thread = threading.Thread(target=_scan_producer, daemon=True)
+        scan_thread.start()
 
         def build_item(
             path: Path,
@@ -115,7 +129,7 @@ class IndexerService:
                     mtime: float = find_mtime
                     size: int = find_size
                 else:
-                    # Windows os.walk() fallback: no find stamp available.
+                    # macOS/Windows fallback: no find stamp available.
                     stat = path.stat()
                     if stamp and stamp[0] == stat.st_mtime and stamp[1] == stat.st_size:
                         return _UNCHANGED
@@ -161,50 +175,98 @@ class IndexerService:
             existing_paths.append(item.path)
             count += 1
 
-        if workers > 1 and total > 0:
+        if workers > 1:
+            # Multi-worker pipeline: scanner + EXIF extraction overlap.
+            # Phase A (scan in progress): submit futures as entries arrive,
+            #   collect any that finish early, emit (completed, 0, path).
+            # Phase B (scan done): emit sentinel (0, total, Path("")), then
+            #   drain remaining futures emitting (completed, total, path).
             executor = ThreadPoolExecutor(max_workers=workers)
-            # Submit incrementally so cancel_check is tested before each submission,
-            # rather than submitting all 40K futures at once.
-            futures: dict = {}
+            pending: dict = {}
             completed = 0
+            scan_done = False
+
             try:
-                for path, find_mtime, find_size in entries:
-                    if should_cancel():
-                        canceled = True
-                        break
-                    futures[executor.submit(build_item, path, find_mtime, find_size)] = path
-                if not canceled:
-                    # Poll with a short timeout so cancel_check is tested every 200 ms
-                    # regardless of how long individual EXIF extractions take.
-                    pending = set(futures.keys())
-                    while pending:
-                        if should_cancel():
-                            canceled = True
-                            break
-                        done, pending = cf_wait(
-                            pending, timeout=0.2, return_when=FIRST_COMPLETED
-                        )
-                        for future in done:
+                while not canceled:
+                    # Ingest next scan item (50 ms timeout so we can also
+                    # collect completed futures while the scanner is busy).
+                    if not scan_done:
+                        try:
+                            entry = scan_queue.get(timeout=0.05)
+                        except queue.Empty:
+                            entry = None
+
+                        if entry is _SCAN_DONE:
+                            scan_done = True
+                            scan_total = scan_total_ref[0]
+                            if scan_total == 0:
+                                break
+                            if on_progress:
+                                on_progress(0, scan_total, Path(""))
+                        elif entry is not None:
                             if should_cancel():
                                 canceled = True
                                 break
-                            path = futures[future]
-                            completed += 1
-                            if on_progress:
-                                on_progress(completed, total, path)
-                            record(future.result(), path)
-                        if canceled:
+                            e_path, find_mtime, find_size = entry
+                            pending[
+                                executor.submit(build_item, e_path, find_mtime, find_size)
+                            ] = e_path
+
+                    # Collect any futures that finished.
+                    if scan_done and pending:
+                        # Phase B: block until at least one finishes.
+                        done_set, _ = cf_wait(
+                            set(pending.keys()), timeout=0.2, return_when=FIRST_COMPLETED
+                        )
+                    else:
+                        done_set = {f for f in pending if f.done()}
+
+                    for future in done_set:
+                        if should_cancel():
+                            canceled = True
                             break
+                        f_path = pending.pop(future)
+                        completed += 1
+                        total_val = scan_total if scan_done else 0
+                        if on_progress:
+                            on_progress(completed, total_val, f_path)
+                        record(future.result(), f_path)
+
+                    if canceled:
+                        break
+                    if scan_done and not pending:
+                        break
             finally:
                 executor.shutdown(wait=False, cancel_futures=True)
         else:
-            for idx, (path, find_mtime, find_size) in enumerate(entries, start=1):
+            # Single-worker pipeline: extraction runs in the main thread while
+            # the scanner runs in scan_thread.
+            while not canceled:
+                try:
+                    entry = scan_queue.get(timeout=0.1)
+                except queue.Empty:
+                    if should_cancel():
+                        canceled = True
+                    continue
+
+                if entry is _SCAN_DONE:
+                    scan_total = scan_total_ref[0]
+                    break
+
                 if should_cancel():
                     canceled = True
                     break
+
+                e_path, find_mtime, find_size = entry
+                record(build_item(e_path, find_mtime, find_size), e_path)
                 if on_progress:
-                    on_progress(idx, total, path)
-                record(build_item(path, find_mtime, find_size), path)
+                    on_progress(count, 0, e_path)
+
+            if not canceled and scan_total > 0:
+                if on_progress:
+                    on_progress(0, scan_total, Path(""))
+
+        scan_thread.join(timeout=5.0)
 
         # Only purge stale DB rows when the scan completed fully.  Calling
         # delete_missing on a partial/canceled scan would wipe every file that
@@ -237,6 +299,6 @@ class IndexerService:
             _log.warning(
                 "build_index: %d file(s) skipped due to errors out of %d total",
                 error_count,
-                total,
+                scan_total,
             )
         return count, error_count

@@ -2035,7 +2035,7 @@ class AppController(QObject):
         self.indexTotalChanged.emit()
         self.indexCurrentFileChanged.emit()
         if total == 0 and current > 0:
-            self._set_status(_("Scanning\u2026 {} files found").format(current))
+            self._set_status(_("Indexing\u2026 {} (scanning)").format(current))
         elif is_scan_complete:
             self._set_status(_("Indexing\u2026 0 / {}").format(total))
         else:

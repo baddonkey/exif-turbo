@@ -326,7 +326,9 @@ def test_build_index_calls_progress_callback(
     # Act
     service.build_index([image_folder], on_progress=lambda c, t, p: progress_calls.append((c, t, p)))
 
-    # Assert: first call is the scan-complete sentinel (current=0), then one per file
+    # Assert: pipeline emits (indexed, 0, path) per file while scanning, then
+    # the scan-complete sentinel (0, total, Path("")) once scanner finishes.
     assert len(progress_calls) == 4
-    assert progress_calls[0] == (0, 3, Path("."))
-    assert all(t == 3 for _, t, _ in progress_calls)
+    assert progress_calls[-1] == (0, 3, Path(""))   # scan-complete sentinel
+    assert [c for c, _, _ in progress_calls[:-1]] == [1, 2, 3]
+    assert all(t == 0 for _, t, _ in progress_calls[:-1])
