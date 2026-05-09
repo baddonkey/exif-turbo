@@ -2034,7 +2034,12 @@ class AppController(QObject):
         self.indexCurrentChanged.emit()
         self.indexTotalChanged.emit()
         self.indexCurrentFileChanged.emit()
-        self._set_status(_("Indexing\u2026 {} / {}").format(current, total))
+        if total == 0 and current > 0:
+            self._set_status(_("Scanning\u2026 {} files found").format(current))
+        elif is_scan_complete:
+            self._set_status(_("Indexing\u2026 0 / {}").format(total))
+        else:
+            self._set_status(_("Indexing\u2026 {} / {}").format(current, total))
         if is_scan_complete:
             # Walk phase done — NAS bandwidth is free; arm the thumbnail timer
             # now so ThumbWorker doesn't race with the directory walk.

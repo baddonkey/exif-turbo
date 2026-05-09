@@ -63,10 +63,25 @@ class IndexerService:
             self.repo.delete_missing([], folder_roots=[str(f) for f in folders])
 
         # Collect paths lazily so cancel_check fires per-file during discovery.
-        paths = list(self.finder.iter_images(folders, cancel_check=cancel_check))
+        # iter_images yields (path, mtime, size) tuples; mtime/size come from
+        # find's own lstat() pass so the indexer can skip path.stat() for
+        # unchanged files — eliminating thousands of NAS round-trips on rescan.
+        # Emit on_progress(count, 0, path) every _SCAN_REPORT_INTERVAL files so
+        # the UI can show a live file count during the scan phase (total=0 is
+        # the "still scanning" convention; total>0 is "scan done").
+        _SCAN_REPORT_INTERVAL = 100
+        entries: list = []
+        _scan_reported = 0
+        for _entry in self.finder.iter_images(folders, cancel_check=cancel_check):
+            if cancel_check and cancel_check():
+                return 0, 0
+            entries.append(_entry)
+            _scan_reported += 1
+            if on_progress and _scan_reported % _SCAN_REPORT_INTERVAL == 0:
+                on_progress(_scan_reported, 0, _entry[0])
         if cancel_check and cancel_check():
             return 0, 0
-        total = len(paths)
+        total = len(entries)
         if total == 0:
             return 0, 0
 
@@ -81,15 +96,31 @@ class IndexerService:
         if cancel_check and cancel_check():
             return 0, 0
 
-        def build_item(path: Path) -> IndexedImage | None | _UnchangedType:
+        def build_item(
+            path: Path,
+            find_mtime: float | None,
+            find_size: int | None,
+        ) -> IndexedImage | None | _UnchangedType:
             # Fast bail-out: don't start a new (potentially slow) extraction after cancel.
             if cancel_check and cancel_check():
                 return None
             try:
-                stat = path.stat()
                 stamp = known_stamps.get(str(path))
-                if stamp and stamp[0] == stat.st_mtime and stamp[1] == stat.st_size:
-                    return _UNCHANGED
+                if stamp and find_mtime is not None and find_size is not None:
+                    # find already called lstat(); use its mtime+size directly.
+                    # 1-second tolerance handles BSD stat integer precision on macOS.
+                    if int(stamp[0]) == int(find_mtime) and stamp[1] == find_size:
+                        return _UNCHANGED
+                    # Changed file — trust find's fresh values, no extra stat needed.
+                    mtime: float = find_mtime
+                    size: int = find_size
+                else:
+                    # Windows os.walk() fallback: no find stamp available.
+                    stat = path.stat()
+                    if stamp and stamp[0] == stat.st_mtime and stamp[1] == stat.st_size:
+                        return _UNCHANGED
+                    mtime = stat.st_mtime
+                    size = stat.st_size
                 if cancel_check and cancel_check():
                     return None
                 metadata = self.extractor.extract(path)
@@ -97,8 +128,8 @@ class IndexerService:
                 return IndexedImage(
                     path=str(path),
                     filename=path.name,
-                    mtime=stat.st_mtime,
-                    size=stat.st_size,
+                    mtime=mtime,
+                    size=size,
                     metadata=metadata,
                     metadata_text=metadata_text,
                 )
@@ -137,11 +168,11 @@ class IndexerService:
             futures: dict = {}
             completed = 0
             try:
-                for path in paths:
+                for path, find_mtime, find_size in entries:
                     if should_cancel():
                         canceled = True
                         break
-                    futures[executor.submit(build_item, path)] = path
+                    futures[executor.submit(build_item, path, find_mtime, find_size)] = path
                 if not canceled:
                     # Poll with a short timeout so cancel_check is tested every 200 ms
                     # regardless of how long individual EXIF extractions take.
@@ -167,13 +198,13 @@ class IndexerService:
             finally:
                 executor.shutdown(wait=False, cancel_futures=True)
         else:
-            for idx, path in enumerate(paths, start=1):
+            for idx, (path, find_mtime, find_size) in enumerate(entries, start=1):
                 if should_cancel():
                     canceled = True
                     break
                 if on_progress:
                     on_progress(idx, total, path)
-                record(build_item(path), path)
+                record(build_item(path, find_mtime, find_size), path)
 
         # Only purge stale DB rows when the scan completed fully.  Calling
         # delete_missing on a partial/canceled scan would wipe every file that

@@ -654,7 +654,9 @@ ApplicationWindow {
                     if (_isIndexing)
                         return _indexTotal > 0
                             ? _indexCurrent + " / " + _indexTotal + " " + qsTr("files")
-                            : qsTr("Scanning for images\u2026")
+                            : _indexCurrent > 0
+                                ? _indexCurrent + " " + qsTr("files found\u2026")
+                                : qsTr("Scanning for images\u2026")
                     if (_isBuildingPreviews)
                         return _previewTotal > 0
                             ? _previewCurrent + " / " + _previewTotal + " " + qsTr("images")
