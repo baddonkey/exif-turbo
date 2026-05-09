@@ -175,7 +175,7 @@ class ImageFinder:
                     mtime, size = None, None
                 if self._is_blacklisted(file_path):
                     continue
-                _log.info("found: %s", file_path)
+                _log.debug("found: %s", file_path)
                 out_queue.put((file_path, mtime, size))
         finally:
             if proc.stdout:
@@ -280,7 +280,7 @@ class ImageFinder:
                 if self._is_blacklisted(path):
                     continue
                 if is_image_file(path):
-                    _log.info("found: %s", path)
+                    _log.debug("found: %s", path)
                     yield path, None, None
 
     def iter_images(

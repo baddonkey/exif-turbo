@@ -35,6 +35,7 @@ Fully generated using VS Code Copilot.
 - **Delete marked images** — `Action → Delete Marked Images…` permanently removes every marked image from disk *and* from the index, including any cached thumbnail and rendered preview; a confirmation dialog requires you to type the exact count to proceed
 - **Bulk-op progress overlay** — modal overlay with a progress bar and live `X / Y` count during select-all, deselect-all, and export operations; cancelable at any time
 - **Unlock spinner** — animated indicator shown on the lock screen while the encrypted database is being opened
+- **Fast NAS scanning** — on macOS/Linux, `ImageFinder` spawns up to 8 parallel `find` subprocesses (one per top-level subdirectory) so all `getdents()`/`lstat()` calls happen inside a C binary outside the Python GIL; a live "N files found…" counter updates the progress panel while discovery is still running
 
 ## Recent changes
 
@@ -86,6 +87,20 @@ Clicking it clears the field and immediately shows all images.
 On macOS the indexing worker count is automatically locked to **1** to prevent
 Python GIL starvation that can occur with network-share folders. The spinner in
 Settings is disabled in this configuration.
+
+### Fast NAS scanning (macOS/Linux)
+
+On macOS and Linux, `ImageFinder` spawns up to 8 parallel `find` subprocesses
+— one per top-level subdirectory — via a `ThreadPoolExecutor` backed by a
+shared `queue.Queue`. All `getdents()`/`lstat()` calls happen inside a C binary,
+completely outside the Python GIL. This prevents the event-loop freezes
+previously caused by macOS SMB mounts (where every `scandir()` entry has
+`DT_UNKNOWN`, forcing a per-file `lstat()` through the GIL). Results stream
+back live, so the **"N files found…"** count label updates while discovery is
+still running.
+
+On Windows, `os.walk()` is used instead — SMB returns file attributes inline so
+no extra `stat()` calls are needed.
 
 ## Test suite
 

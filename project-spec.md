@@ -103,7 +103,7 @@ USING fts5(path, filename, metadata_text);
 | Module | Purpose |
 |--------|---------|
 | `cli.py` | `argparse` CLI adapter; entry point for `exif-turbo-index` |
-| `image_finder.py` | `ImageFinder` — walks folders, yields image paths; honours `AppConfig.skip_dotfiles` |
+| `image_finder.py` | `ImageFinder` — walks folders, yields `(path, mtime, size)` tuples. On POSIX (macOS/Linux) spawns up to 8 parallel `find` subprocesses (one per top-level subdirectory) via a `ThreadPoolExecutor` + shared `queue.Queue`, streaming results live as discovery runs — avoids Python GIL starvation caused by per-entry `lstat()` on macOS SMB mounts. On Windows uses `os.walk()` (SMB returns file attributes inline). Honours `AppConfig.skip_dotfiles` and a per-instance blacklist. |
 | `exif_metadata_extractor.py` | `ExifMetadataExtractor` — runs `exiftool -g1 -j`; parses JSON output. `is_exiftool_available() -> bool` and `get_exiftool_version() -> str` probe for a working ExifTool on an augmented `PATH` (adds macOS/Windows well-known install locations); return `False` / `""` if not found or if the process exits non-zero. |
 | `metadata_extractor.py` | `MetadataExtractor` protocol (port) |
 | `indexer_service.py` | `IndexerService` — orchestrates scan → extract → upsert; supports parallel workers, incremental updates (mtime/size stamps), force-rebuild, progress callback, cancel |
