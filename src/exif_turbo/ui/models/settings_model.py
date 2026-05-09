@@ -11,15 +11,9 @@ from exif_turbo.i18n import available_languages, current_language, current_theme
 
 
 _CPU_COUNT = os.cpu_count() or 2
-# On macOS, multiple NAS-reading threads cause GIL starvation that freezes the
-# Qt event loop (SMB forces an extra lstat() per entry → thousands of rapid
-# GIL bounces).  Lock workers to 1 so only one thread reads from the NAS at a
-# time; the GIL is still released during the C-level file read and Pillow
-# decode, so the event loop remains responsive.
-_MACOS = os.name == "posix" and hasattr(os, "uname") and os.uname().sysname == "Darwin"
-_DEFAULT_WORKERS = 1 if _MACOS else max(1, _CPU_COUNT // 2)
+_DEFAULT_WORKERS = max(1, _CPU_COUNT // 2)
 _MIN_WORKERS = 1
-_MAX_WORKERS = 1 if _MACOS else min(_CPU_COUNT, 16)
+_MAX_WORKERS = min(_CPU_COUNT, 16)
 
 # Patterns that are almost always noise — applied as defaults on first run
 _DEFAULT_BLACKLIST: List[str] = [
@@ -87,7 +81,7 @@ class SettingsModel(QObject):
 
     @Property(bool, constant=True)
     def workersLocked(self) -> bool:
-        return _MACOS
+        return False
 
     @Property("QVariantList", notify=blacklistChanged)
     def blacklist(self) -> List[str]:

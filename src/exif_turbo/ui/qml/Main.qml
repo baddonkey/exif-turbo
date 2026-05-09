@@ -2686,7 +2686,7 @@ ApplicationWindow {
                             value: _workerCount
                             implicitWidth: 160
                             editable: false
-                            enabled: settingsModel ? !settingsModel.workersLocked : true
+                            enabled: true
                             onValueModified: settingsModel.setWorkerCount(value)
                         }
 
@@ -2699,9 +2699,7 @@ ApplicationWindow {
                     }
 
                     Label {
-                        text: (settingsModel && settingsModel.workersLocked)
-                              ? qsTr("Locked to 1 on macOS to prevent GIL starvation on network shares.")
-                              : qsTr("Factory default: %1 (%2 CPU threads detected)").arg(_defaultWorkers).arg(_cpuCount)
+                        text: qsTr("Factory default: %1 (%2 CPU threads detected)").arg(_defaultWorkers).arg(_cpuCount)
                         font.pixelSize: 11
                         opacity: 0.45
                         Layout.bottomMargin: 28
