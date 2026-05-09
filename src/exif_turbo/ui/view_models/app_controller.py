@@ -1543,7 +1543,11 @@ class AppController(QObject):
         self._index_worker.canceled.connect(self._on_managed_folder_index_canceled)
         # Run below normal priority so the GUI and preview thread get preference.
         self._index_worker.start(QThread.Priority.LowPriority)
-        self._thumb_batch_timer.start()
+        # Do NOT start _thumb_batch_timer here.  ThumbWorker reads NAS files
+        # concurrently with the os.walk() lstat() storm, saturating the NAS link
+        # and causing severe GIL starvation on macOS SMB.  The timer is armed
+        # by _on_index_progress once the scan-complete sentinel arrives, i.e.
+        # after the walk phase is fully done.
 
     def _on_managed_folder_index_done(self, count: int, error_count: int = 0) -> None:
         self._thumb_batch_timer.stop()
@@ -2013,10 +2017,15 @@ class AppController(QObject):
         self.findScrollFractionChanged.emit()
 
     def _on_index_progress(self, current: int, total: int, path: str) -> None:
+        # current == 0 and total > 0 is the scan-complete sentinel emitted by
+        # IndexerService once the directory walk finishes and the file count is
+        # known.  Never throttle it — it fires exactly once per run and is the
+        # trigger to start the thumbnail batch timer.
+        is_scan_complete = current == 0 and total > 0
         # Throttle UI updates to at most ~10 Hz — prevents flooding the event loop
         # on large folders with thousands of files.
         now = time.monotonic()
-        if now - self._last_progress_update < 0.1 and current != total:
+        if not is_scan_complete and now - self._last_progress_update < 0.1 and current != total:
             return
         self._last_progress_update = now
         self._index_current = current
@@ -2026,6 +2035,10 @@ class AppController(QObject):
         self.indexTotalChanged.emit()
         self.indexCurrentFileChanged.emit()
         self._set_status(_("Indexing\u2026 {} / {}").format(current, total))
+        if is_scan_complete:
+            # Walk phase done — NAS bandwidth is free; arm the thumbnail timer
+            # now so ThumbWorker doesn't race with the directory walk.
+            self._thumb_batch_timer.start()
 
     def _on_thumb_progress(self, current: int, total: int, path: str) -> None:
         # Throttle to ~5 Hz — ThumbWorker can fire thousands of signals per second

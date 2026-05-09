@@ -972,22 +972,22 @@ ApplicationWindow {
                                                 Label { text: qsTr("Example"); font.pixelSize: 11; font.bold: true; opacity: 0.65 }
                                                 Label { text: qsTr("Meaning"); font.pixelSize: 11; font.bold: true; opacity: 0.65 }
 
-                                                Label { text: "canon";          font.family: "Consolas, Menlo, monospace"; font.pixelSize: 12 }
+                                                Label { text: "canon";          font.family: monoFont; font.pixelSize: 12 }
                                                 Label { text: qsTr("single token"); font.pixelSize: 12 }
 
-                                                Label { text: "canon r5";       font.family: "Consolas, Menlo, monospace"; font.pixelSize: 12 }
+                                                Label { text: "canon r5";       font.family: monoFont; font.pixelSize: 12 }
                                                 Label { text: qsTr("both tokens (implicit AND)"); font.pixelSize: 12 }
 
-                                                Label { text: "canon OR nikon"; font.family: "Consolas, Menlo, monospace"; font.pixelSize: 12 }
+                                                Label { text: "canon OR nikon"; font.family: monoFont; font.pixelSize: 12 }
                                                 Label { text: qsTr("either token"); font.pixelSize: 12 }
 
-                                                Label { text: "canon NOT raw";  font.family: "Consolas, Menlo, monospace"; font.pixelSize: 12 }
+                                                Label { text: "canon NOT raw";  font.family: monoFont; font.pixelSize: 12 }
                                                 Label { text: qsTr("exclude token"); font.pixelSize: 12 }
 
-                                                Label { text: "\"Z 9\"";        font.family: "Consolas, Menlo, monospace"; font.pixelSize: 12 }
+                                                Label { text: "\"Z 9\"";        font.family: monoFont; font.pixelSize: 12 }
                                                 Label { text: qsTr("exact phrase"); font.pixelSize: 12 }
 
-                                                Label { text: "summer*";        font.family: "Consolas, Menlo, monospace"; font.pixelSize: 12 }
+                                                Label { text: "summer*";        font.family: monoFont; font.pixelSize: 12 }
                                                 Label { text: qsTr("prefix wildcard"); font.pixelSize: 12 }
                                             }
 
@@ -2684,6 +2684,7 @@ ApplicationWindow {
                             value: _workerCount
                             implicitWidth: 160
                             editable: false
+                            enabled: settingsModel ? !settingsModel.workersLocked : true
                             onValueModified: settingsModel.setWorkerCount(value)
                         }
 
@@ -2696,7 +2697,9 @@ ApplicationWindow {
                     }
 
                     Label {
-                        text: qsTr("Factory default: %1 (%2 CPU threads detected)").arg(_defaultWorkers).arg(_cpuCount)
+                        text: (settingsModel && settingsModel.workersLocked)
+                              ? qsTr("Locked to 1 on macOS to prevent GIL starvation on network shares.")
+                              : qsTr("Factory default: %1 (%2 CPU threads detected)").arg(_defaultWorkers).arg(_cpuCount)
                         font.pixelSize: 11
                         opacity: 0.45
                         Layout.bottomMargin: 28

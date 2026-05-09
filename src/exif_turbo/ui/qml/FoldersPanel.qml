@@ -268,7 +268,7 @@ Item {
                         implicitHeight: 30
                         Layout.preferredWidth: 110
                         enabled: model.enabled && model.imageCount > 0 &&
-                                 (!controller.isBuildingPreviews || controller.previewBuildFolderId === model.folderId)
+                                 (!controller || !controller.isBuildingPreviews || controller.previewBuildFolderId === model.folderId)
                         ToolTip.text: (controller && controller.isBuildingPreviews && controller.previewBuildFolderId === model.folderId)
                                       ? qsTr("Cancel the running preview build")
                                       : qsTr("Render preview-cache JPEGs for this folder")

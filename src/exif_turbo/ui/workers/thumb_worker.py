@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional
@@ -198,29 +199,35 @@ class ThumbWorker(QThread):
             def build_thumb(path: str) -> bool:
                 if not path:
                     return False
-                # Skip immediately if the file is not reachable — avoids a
-                # multi-second hang when a NAS or external volume is offline.
-                if not os.path.exists(path):
-                    return False
                 # Yield to preview loads: wait while paused (2s max safety valve)
                 if not self._resume_event.is_set():
                     self._resume_event.wait(timeout=2.0)
                 if self._cancel_event.is_set():
                     return False
+                # Yield the GIL to the Qt event loop before starting NAS I/O +
+                # Pillow CPU work.  Without this, 7 parallel worker threads all
+                # holding the GIL for LANCZOS resampling starve the main thread
+                # on macOS, causing the rainbow spinner.
+                time.sleep(0.002)
                 # Compute cache filename — use DB stamp to avoid network stat
                 stamp = stamps.get(path)
                 if stamp is not None:
                     cache_name = thumb_cache_name_from_stamp(path, stamp[0], stamp[1])
                     cache_path_obj = self.cache_dir / cache_name
+                    # Use the DB-recorded size to avoid an extra NAS lstat().
+                    # 21 K images × 2 redundant lstats = 42 K unnecessary NAS
+                    # round-trips on macOS SMB (each one also bounces the GIL).
+                    file_size = stamp[1]
                 else:
                     cache_path_obj = thumb_cache_path(path, self.cache_dir)
-                try:
-                    if os.path.getsize(path) > self.max_thumb_bytes:
-                        size_mb = os.path.getsize(path) // (1024 * 1024)
-                        _mark_skip(cache_path_obj, f"file too large ({size_mb} MB): {path}")
-                        return False
-                except OSError:
-                    return False  # transient (e.g. NAS offline) — don't mark as skip
+                    try:
+                        file_size = os.path.getsize(path)
+                    except OSError:
+                        return False  # transient (e.g. NAS offline)
+                if file_size > self.max_thumb_bytes:
+                    size_mb = file_size // (1024 * 1024)
+                    _mark_skip(cache_path_obj, f"file too large ({size_mb} MB): {path}")
+                    return False
                 try:
                     img = _open_image(path)
                     img.thumbnail(_THUMB_SIZE, Image.LANCZOS)

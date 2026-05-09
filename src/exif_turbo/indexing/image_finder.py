@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import time
 from pathlib import Path
 from typing import Callable, Iterable, List, Optional
 
@@ -44,6 +45,12 @@ class ImageFinder:
             for root, dirs, files in os.walk(folder):
                 if cancel_check and cancel_check():
                     return
+                # Yield to the OS scheduler once per directory.  On macOS,
+                # time.sleep(0) (nanosleep 0) may return immediately without a
+                # real context switch; a 2 ms sleep forces the scheduler to run
+                # other threads (notably the Qt event loop) between directories.
+                # Cost: ~1 s for 500 dirs — imperceptible vs. a multi-minute NAS walk.
+                time.sleep(0.002)
                 root_path = Path(root)
                 # Prune blacklisted directories in-place so os.walk skips them
                 dirs[:] = [

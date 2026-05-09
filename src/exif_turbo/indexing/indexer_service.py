@@ -70,6 +70,11 @@ class IndexerService:
         if total == 0:
             return 0, 0
 
+        # Signal that the directory scan is complete so the UI can show
+        # a meaningful total (e.g. "0 / 21 000") instead of a frozen bar.
+        if on_progress:
+            on_progress(0, total, Path(""))
+
         # Snapshot of DB stamps — used to skip unchanged files without re-reading EXIF.
         # Empty when force=True so every file is re-extracted.
         known_stamps = {} if force else self.repo.get_all_stamps()

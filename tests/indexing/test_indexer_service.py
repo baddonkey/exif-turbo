@@ -326,6 +326,7 @@ def test_build_index_calls_progress_callback(
     # Act
     service.build_index([image_folder], on_progress=lambda c, t, p: progress_calls.append((c, t, p)))
 
-    # Assert
-    assert len(progress_calls) == 3
+    # Assert: first call is the scan-complete sentinel (current=0), then one per file
+    assert len(progress_calls) == 4
+    assert progress_calls[0] == (0, 3, Path("."))
     assert all(t == 3 for _, t, _ in progress_calls)
