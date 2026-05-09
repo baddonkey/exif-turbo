@@ -42,6 +42,7 @@ from ..workers.bulk_op_worker import BulkOpWorker
 from ..workers.index_worker import IndexWorker
 from ..workers.password_change_worker import PasswordChangeWorker
 from ..workers.preview_build_worker import PreviewBuildWorker
+from ..workers.search_worker import SearchWorker
 from ..workers.thumb_worker import ThumbWorker
 
 _PAGE_SIZE = 50
@@ -186,6 +187,11 @@ class AppController(QObject):
         self._index_queue_total = 0
         self._app_closing = False
         self._pending_thumb_restart = False
+        self._search_worker: SearchWorker | None = None
+        self._search_serial: int = 0
+        # Params for a search that arrived while one was already in-flight.
+        # Consumed immediately when the current worker finishes.
+        self._pending_search_params: dict | None = None
         self._filter_proxy: CheckedFilterProxyModel | None = None
         self._checked_only_filter_active: bool = False
         self._checked_in_results_count: int = 0
@@ -1089,35 +1095,69 @@ class AppController(QObject):
         self._run_search()
 
     def _run_search(self) -> None:
-        if self._repo is None:
+        if self._repo is None or self._db_path is None:
             return
         path_filter = self._current_path_filter()
-        try:
-            rows = self._repo.search_images(
-                self._query_text, _PAGE_SIZE, 0,
-                sort_by=self._sort_by, ext_filter=self._ext_filter,
-                path_filter=path_filter,
-                restrict_to_enabled_folders=(self._folder_repo is not None),
-                marked_only=self._checked_only_filter_active,
+        params = dict(
+            query=self._query_text,
+            page_size=_PAGE_SIZE,
+            offset=0,
+            sort_by=self._sort_by,
+            ext_filter=self._ext_filter,
+            path_filter=path_filter,
+            restrict_to_enabled_folders=(self._folder_repo is not None),
+            marked_only=self._checked_only_filter_active,
+        )
+        if self._search_worker is not None:
+            # A search is already running.  Record the latest params so
+            # _on_search_finished fires another search immediately after
+            # the current one closes its connection.  This keeps at most
+            # one SearchWorker (and one extra DB connection) alive at a time.
+            self._pending_search_params = params
+            self._search_serial += 1  # serial bump marks in-flight result stale
+            return
+
+        self._search_serial += 1
+        serial = self._search_serial
+
+        worker = SearchWorker(
+            self._db_path,
+            self._key,
+            serial=serial,
+            **params,
+        )
+        worker.finished.connect(self._on_search_finished)
+        worker.failed.connect(self._on_search_failed)
+        self._search_worker = worker
+        worker.start()
+
+    def _on_search_finished(
+        self,
+        rows: list,
+        total: int,
+        format_counts: list,
+        serial: int,
+    ) -> None:
+        self._search_worker = None
+        # If newer params are waiting, fire a follow-up search and discard
+        # these (now stale) results — only the latest request matters.
+        if self._pending_search_params is not None:
+            pending = self._pending_search_params
+            self._pending_search_params = None
+            serial_now = self._search_serial
+            worker = SearchWorker(
+                self._db_path,
+                self._key,
+                serial=serial_now,
+                **pending,
             )
-            total = self._repo.count_images(
-                self._query_text, ext_filter=self._ext_filter,
-                path_filter=path_filter,
-                restrict_to_enabled_folders=(self._folder_repo is not None),
-                marked_only=self._checked_only_filter_active,
-            )
-        except Exception as exc:  # noqa: BLE001
-            _log.exception("Search failed")
-            self._set_search_error(str(exc))
-            self._search_model.set_rows([])
-            self._total_results = 0
-            self._loaded_results = 0
-            self._loading = False
-            self._checked_in_results_count = 0
-            self.checkedCountChanged.emit()
-            self.totalResultsChanged.emit()
-            self.loadedResultsChanged.emit()
-            self._clear_details()
+            worker.finished.connect(self._on_search_finished)
+            worker.failed.connect(self._on_search_failed)
+            self._search_worker = worker
+            worker.start()
+            return
+        # Discard results that belong to a superseded search.
+        if serial != self._search_serial:
             return
         self._set_search_error("")
         results = [
@@ -1138,16 +1178,34 @@ class AppController(QObject):
         self._loading = False
         self.totalResultsChanged.emit()
         self.loadedResultsChanged.emit()
-        self._load_formats(
-            query=self._query_text,
-            path_filter=path_filter,
-            restrict_to_enabled_folders=(self._folder_repo is not None),
-        )
+        self._apply_format_counts(format_counts)
         if results:
             row = self._current_result_row if 0 <= self._current_result_row < len(results) else 0
             self._select_source_row(row)
         else:
             self._clear_details()
+
+    def _on_search_failed(self, error: str) -> None:
+        self._search_worker = None
+        _log.error("Search failed: %s", error)
+        self._set_search_error(error)
+        self._search_model.set_rows([])
+        self._total_results = 0
+        self._loaded_results = 0
+        self._loading = False
+        self._checked_in_results_count = 0
+        self.checkedCountChanged.emit()
+        self.totalResultsChanged.emit()
+        self.loadedResultsChanged.emit()
+        self._clear_details()
+
+    def _apply_format_counts(self, counts: list) -> None:
+        """Update the available-formats property from a pre-fetched counts list."""
+        items = [{"ext": ext, "count": cnt} for ext, cnt in counts]
+        if self._ext_filter and not any(it["ext"] == self._ext_filter for it in items):
+            items.append({"ext": self._ext_filter, "count": 0})
+        self._available_formats = json.dumps(items)
+        self.availableFormatsChanged.emit()
 
     def _load_formats(
         self,
@@ -1163,15 +1221,7 @@ class AppController(QObject):
             path_filter=path_filter,
             restrict_to_enabled_folders=restrict_to_enabled_folders,
         )
-        # Always include the currently selected ext filter — even if the
-        # current scope (query + path filter) yields zero matches for it —
-        # so the UI can still render and unselect it. Otherwise the user
-        # gets "stuck" on a filter that has been hidden from the chip row.
-        items = [{"ext": ext, "count": cnt} for ext, cnt in counts]
-        if self._ext_filter and not any(it["ext"] == self._ext_filter for it in items):
-            items.append({"ext": self._ext_filter, "count": 0})
-        self._available_formats = _json.dumps(items)
-        self.availableFormatsChanged.emit()
+        self._apply_format_counts(counts)
 
     def _invalidate_folder_tree(self) -> None:
         """Mark the folder tree as stale; it will be rebuilt on next Browse tab visit."""

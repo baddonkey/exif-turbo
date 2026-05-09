@@ -186,6 +186,10 @@ class IndexerService:
             #   collect any that finish early, emit (completed, 0, path).
             # Phase B (scan done): emit sentinel (0, total, Path("")), then
             #   drain remaining futures emitting (completed, total, path).
+            #
+            # Backpressure: cap pending to workers*4 so the dict never grows
+            # to tens-of-thousands of entries when scanning outpaces extraction.
+            _MAX_PENDING = workers * 4
             executor = ThreadPoolExecutor(max_workers=workers)
             pending: dict = {}
             completed = 0
@@ -213,6 +217,25 @@ class IndexerService:
                                 canceled = True
                                 break
                             e_path, find_mtime, find_size = entry
+                            # Backpressure: drain at least one future before
+                            # submitting when the cap is reached.
+                            if len(pending) >= _MAX_PENDING:
+                                drain, _ = cf_wait(
+                                    set(pending.keys()),
+                                    timeout=1.0,
+                                    return_when=FIRST_COMPLETED,
+                                )
+                                for future in drain:
+                                    if should_cancel():
+                                        canceled = True
+                                        break
+                                    f_path = pending.pop(future)
+                                    completed += 1
+                                    if on_progress:
+                                        on_progress(completed, 0, f_path)
+                                    record(future.result(), f_path)
+                                if canceled:
+                                    break
                             pending[
                                 executor.submit(build_item, e_path, find_mtime, find_size)
                             ] = e_path
@@ -276,6 +299,13 @@ class IndexerService:
         # Flush any remaining buffered writes before the cleanup phase.
         if not canceled:
             flush_batch()
+            # Fold the WAL into the main DB file now that all writes are done.
+            # One checkpoint here (rather than after every batch) avoids I/O
+            # pressure on the indexer thread during scanning, which was causing
+            # the UI to stall when the search connection tried concurrent reads.
+            # PASSIVE is non-blocking: it folds whatever the search connection
+            # isn't currently reading and returns immediately.
+            self.repo.conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
 
         # Only purge stale DB rows when the scan completed fully.  Calling
         # delete_missing on a partial/canceled scan would wipe every file that
