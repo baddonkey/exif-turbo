@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import os
 import urllib.parse
 
@@ -96,6 +97,20 @@ def _load_full_resolution(path: str) -> Image.Image | None:
     if ext in _RAW_EXTS and _RAWPY_AVAILABLE:
         try:
             with rawpy.imread(path) as raw:
+                raw_flip = raw.sizes.flip
+                try:
+                    thumb = raw.extract_thumb()
+                except rawpy.LibRawError:
+                    thumb = None
+                if thumb is not None and thumb.format == rawpy.ThumbFormat.JPEG:
+                    # Use the camera's embedded JPEG — it has in-camera processing
+                    # (white balance, lens correction, vignetting) already applied.
+                    img: Image.Image = Image.open(io.BytesIO(bytes(thumb.data)))
+                    img.load()
+                    from ...indexing.image_utils import orient_raw_thumb
+                    img = orient_raw_thumb(img, raw_flip)
+                    return img
+                # No embedded JPEG — fall back to full demosaic.
                 rgb = raw.postprocess(use_camera_wb=True)
             return Image.fromarray(rgb)
         except Exception:

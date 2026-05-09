@@ -12,6 +12,7 @@ from __future__ import annotations
 import io
 import logging
 import os
+import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -26,6 +27,42 @@ from ...utils.thumb_crypto import ThumbCrypto
 _log = logging.getLogger(__name__)
 
 _JPEG_QUALITY = 85
+
+
+def _lower_thread_priority() -> None:
+    """Lower the calling thread's OS scheduling priority (best-effort).
+
+    Keeps preview-build threads from competing with the live preview
+    provider threads, which run at HighPriority on Qt's async pool.
+    """
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            # THREAD_PRIORITY_BELOW_NORMAL = -1
+            ctypes.windll.kernel32.SetThreadPriority(
+                ctypes.windll.kernel32.GetCurrentThread(), -1
+            )
+        except Exception:  # noqa: BLE001
+            pass
+    elif sys.platform == "darwin":
+        try:
+            import ctypes
+            # PRIO_DARWIN_THREAD (3) scopes setpriority() to the calling thread
+            # only — unlike nice() which lowers the whole process on macOS.
+            libc = ctypes.CDLL("libSystem.B.dylib", use_errno=True)
+            libc.setpriority(3, 0, 10)
+        except Exception:  # noqa: BLE001
+            pass
+    else:
+        try:
+            # Linux: setpriority(PRIO_PROCESS, tid, niceness) where tid is the
+            # kernel thread ID scopes the change to the calling thread only.
+            import ctypes
+            libc = ctypes.CDLL("libc.so.6", use_errno=True)
+            tid = libc.syscall(186)  # SYS_gettid
+            libc.setpriority(0, tid, 10)  # PRIO_PROCESS = 0
+        except Exception:  # noqa: BLE001
+            pass
 
 
 class PreviewBuildWorker(QThread):
@@ -123,7 +160,10 @@ class PreviewBuildWorker(QThread):
                     return False
 
             if self._workers > 1 and missing > 0:
-                with ThreadPoolExecutor(max_workers=self._workers) as executor:
+                with ThreadPoolExecutor(
+                    max_workers=self._workers,
+                    initializer=_lower_thread_priority,
+                ) as executor:
                     futures = {executor.submit(build_one, p): p for p in paths}
                     completed = 0
                     for future in as_completed(futures):
@@ -137,6 +177,7 @@ class PreviewBuildWorker(QThread):
                         if future.result():
                             built += 1
             else:
+                _lower_thread_priority()
                 for idx, path in enumerate(paths, start=1):
                     if self._cancel_event.is_set():
                         self.canceled.emit(built, total)
