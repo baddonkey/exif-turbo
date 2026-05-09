@@ -29,6 +29,8 @@ class IndexedFolderRepository:
                 last_scanned_at REAL,
                 error_message   TEXT
             );
+
+            CREATE INDEX IF NOT EXISTS idx_indexed_folders_enabled ON indexed_folders(enabled);
             """
         )
 

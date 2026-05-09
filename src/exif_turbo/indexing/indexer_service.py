@@ -154,6 +154,14 @@ class IndexerService:
         def should_cancel() -> bool:
             return bool(cancel_check and cancel_check())
 
+        _BATCH_SIZE = 100
+        _write_batch: list[tuple[str, str, float, int, dict, str, int | None]] = []
+
+        def flush_batch() -> None:
+            if _write_batch:
+                self.repo.upsert_images_batch(_write_batch)
+                _write_batch.clear()
+
         def record(item: IndexedImage | None | _UnchangedType, path: Path) -> None:
             nonlocal count, error_count
             if isinstance(item, _UnchangedType):
@@ -163,17 +171,14 @@ class IndexerService:
             if not item:
                 error_count += 1
                 return
-            self.repo.upsert_image(
-                item.path,
-                item.filename,
-                item.mtime,
-                item.size,
-                item.metadata,
-                item.metadata_text,
-                folder_id=folder_id,
-            )
+            _write_batch.append((
+                item.path, item.filename, item.mtime, item.size,
+                item.metadata, item.metadata_text, folder_id,
+            ))
             existing_paths.append(item.path)
             count += 1
+            if len(_write_batch) >= _BATCH_SIZE:
+                flush_batch()
 
         if workers > 1:
             # Multi-worker pipeline: scanner + EXIF extraction overlap.
@@ -267,6 +272,10 @@ class IndexerService:
                     on_progress(0, scan_total, Path(""))
 
         scan_thread.join(timeout=5.0)
+
+        # Flush any remaining buffered writes before the cleanup phase.
+        if not canceled:
+            flush_batch()
 
         # Only purge stale DB rows when the scan completed fully.  Calling
         # delete_missing on a partial/canceled scan would wipe every file that

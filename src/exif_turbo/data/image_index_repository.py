@@ -62,9 +62,10 @@ class ImageIndexRepository:
             CREATE VIRTUAL TABLE IF NOT EXISTS images_fts
             USING fts5(path, filename, metadata_text);
 
-            CREATE INDEX IF NOT EXISTS idx_images_filename ON images(filename COLLATE NOCASE);
-            CREATE INDEX IF NOT EXISTS idx_images_mtime    ON images(mtime DESC);
-            CREATE INDEX IF NOT EXISTS idx_images_size     ON images(size DESC);
+            CREATE INDEX IF NOT EXISTS idx_images_filename  ON images(filename COLLATE NOCASE);
+            CREATE INDEX IF NOT EXISTS idx_images_path_nocase ON images(path COLLATE NOCASE);
+            CREATE INDEX IF NOT EXISTS idx_images_mtime      ON images(mtime DESC);
+            CREATE INDEX IF NOT EXISTS idx_images_size       ON images(size DESC);
 
             CREATE TABLE IF NOT EXISTS image_folders (
                 image_id  INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE,
@@ -114,33 +115,43 @@ class ImageIndexRepository:
         *,
         folder_id: int | None = None,
     ) -> None:
-        metadata_json = json.dumps(metadata, ensure_ascii=False)
+        self.upsert_images_batch([(path, filename, mtime, size, metadata, metadata_text, folder_id)])
+
+    def upsert_images_batch(
+        self,
+        items: list[tuple[str, str, float, int, dict, str, int | None]],
+    ) -> None:
+        """Write multiple images in a single transaction for bulk-insert efficiency."""
+        if not items:
+            return
         with self.conn:
-            self.conn.execute(
-                """
-                INSERT INTO images (path, filename, mtime, size, metadata_json)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(path) DO UPDATE SET
-                    filename=excluded.filename,
-                    mtime=excluded.mtime,
-                    size=excluded.size,
-                    metadata_json=excluded.metadata_json
-                """,
-                (path, filename, mtime, size, metadata_json),
-            )
-            self.conn.execute(
-                """
-                INSERT OR REPLACE INTO images_fts (rowid, path, filename, metadata_text)
-                VALUES ((SELECT id FROM images WHERE path = ?), ?, ?, ?)
-                """,
-                (path, path, filename, metadata_text),
-            )
-            if folder_id is not None:
+            for path, filename, mtime, size, metadata, metadata_text, folder_id in items:
+                metadata_json = json.dumps(metadata, ensure_ascii=False)
                 self.conn.execute(
-                    "INSERT OR IGNORE INTO image_folders (image_id, folder_id) "
-                    "VALUES ((SELECT id FROM images WHERE path = ?), ?)",
-                    (path, folder_id),
+                    """
+                    INSERT INTO images (path, filename, mtime, size, metadata_json)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(path) DO UPDATE SET
+                        filename=excluded.filename,
+                        mtime=excluded.mtime,
+                        size=excluded.size,
+                        metadata_json=excluded.metadata_json
+                    """,
+                    (path, filename, mtime, size, metadata_json),
                 )
+                self.conn.execute(
+                    """
+                    INSERT OR REPLACE INTO images_fts (rowid, path, filename, metadata_text)
+                    VALUES ((SELECT id FROM images WHERE path = ?), ?, ?, ?)
+                    """,
+                    (path, path, filename, metadata_text),
+                )
+                if folder_id is not None:
+                    self.conn.execute(
+                        "INSERT OR IGNORE INTO image_folders (image_id, folder_id) "
+                        "VALUES ((SELECT id FROM images WHERE path = ?), ?)",
+                        (path, folder_id),
+                    )
 
     def delete_missing(
         self,

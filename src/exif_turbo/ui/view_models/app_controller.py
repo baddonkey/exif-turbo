@@ -46,9 +46,10 @@ from ..workers.thumb_worker import ThumbWorker
 
 _PAGE_SIZE = 50
 _DEFAULT_WORKERS = max(1, (os.cpu_count() or 2) // 2)
-# Pillow LANCZOS resampling is GIL-bound; beyond ~4 threads throughput drops
-# and GIL contention starves the scan thread and the GUI event loop on Windows.
-_MAX_THUMB_WORKERS = 4
+# Pillow LANCZOS resampling is GIL-bound; running too many thumb threads while
+# IndexWorker is active starves the scan thread and GUI event loop on Windows.
+# 2 threads gives a mild throughput boost without measurable GIL pressure.
+_MAX_THUMB_WORKERS = 2
 _log = logging.getLogger(__name__)
 
 
