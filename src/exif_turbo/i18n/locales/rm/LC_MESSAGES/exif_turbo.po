@@ -10,12 +10,12 @@ msgstr ""
 "POT-Creation-Date: 2026-05-09 00:25+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language: rm\n"
 "Language-Team: rm <LL@li.org>\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"Language: rm\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "Generated-By: Babel 2.18.0\n"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:128
@@ -36,15 +36,15 @@ msgstr "Inversiun da la selecziun…"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:584
 msgid "Selecting images without a cached thumbnail…"
-msgstr ""
+msgstr "Seleziun da maletgs senza miniatura en il cache…"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:599
 msgid "No marked images to delete."
-msgstr ""
+msgstr "Nagins maletgs marcads per stizzar."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:603
 msgid "Deleting marked images…"
-msgstr ""
+msgstr "Maletgs marcads vegnan stizzads…"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:613
 msgid "No marked images to export."
@@ -57,17 +57,17 @@ msgstr "Exportaziun da metadata…"
 #: src/exif_turbo/ui/view_models/app_controller.py:697
 #, python-brace-format
 msgid "Deleted {n} image(s)."
-msgstr ""
+msgstr "{n} maletg(s) stizzad(s)."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:701
 #, python-brace-format
 msgid "{n} were already missing."
-msgstr ""
+msgstr "{n} eran gia betg chattabels."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:707
 #, python-brace-format
 msgid "{n} could not be deleted."
-msgstr ""
+msgstr "{n} n’han betg pudì vegnir stizzads."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:717
 #, python-brace-format
@@ -113,8 +113,8 @@ msgstr "Pled-clav vegn midada…"
 #, python-brace-format
 msgid "Database password changed, but reopening failed: {error}"
 msgstr ""
-"La pled-clav da la banca da datas è vegnida midada, ma la reaviertura n’è"
-" betg reussida: {error}"
+"La pled-clav da la banca da datas è vegnida midada, ma la reaviertura n’è "
+"betg reussida: {error}"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:939
 msgid "Password changed successfully."
@@ -128,8 +128,8 @@ msgstr "Midada da la pled-clav betg reussida: {error}"
 #: src/exif_turbo/ui/view_models/app_controller.py:985
 #, python-brace-format
 msgid ""
-"Password changed but thumbnail cache could not be re-wrapped ({error}). "
-"The cache has been cleared and will be rebuilt."
+"Password changed but thumbnail cache could not be re-wrapped ({error}). The "
+"cache has been cleared and will be rebuilt."
 msgstr ""
 "La pled-clav è vegnida midada, ma il cache da miniaturas n’è betg pudida "
 "vegnir cifrada da nov ({error}). Il cache è vegnì stizzad e vegn rebatgì."
@@ -170,31 +170,32 @@ msgstr "Interruziun…"
 #: src/exif_turbo/ui/view_models/app_controller.py:1747
 #, python-brace-format
 msgid "Built {built} preview(s) of {total}."
-msgstr ""
+msgstr "{built} prevista(s) da {total} creada(s)."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:1755
 #, python-brace-format
 msgid "Preview build failed: {error}"
-msgstr ""
+msgstr "Creaziun da previstas buca reussida: {error}"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:1763
 #, python-brace-format
 msgid "Preview build canceled ({built} of {total} done)."
-msgstr ""
+msgstr "Creaziun da previstas interrutta ({built} da {total} fatg)."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:1776
 msgid "Cancel the running preview build before clearing the cache."
 msgstr ""
+"Interrumper la creaziun da previstas en cors avant da stizzar il cache."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:1785
 #, python-brace-format
 msgid "Failed to clear preview cache: {error}"
-msgstr ""
+msgstr "Stizzar il cache da previstas n’è betg reussì: {error}"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:1791
 #, python-brace-format
 msgid "Removed {n} cached preview(s)."
-msgstr ""
+msgstr "{n} prevista(s) dal cache vegnida(s) stizzada(s)."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:1849
 msgid "Database reset"
@@ -215,7 +216,7 @@ msgstr "%1 cartellas"
 
 #: QML
 msgid "%1 of %2 previews cached"
-msgstr ""
+msgstr "%1 da %2 previstas en il cache"
 
 #: QML
 msgid "&About"
@@ -227,7 +228,7 @@ msgstr "&Acziun"
 
 #: QML
 msgid "&Delete Marked Images\\u2026 (%1 selected)"
-msgstr ""
+msgstr "&Stizzar maletgs marcads\\u2026 (%1 seletgads)"
 
 #: QML
 msgid "&Deselect All"
@@ -275,7 +276,7 @@ msgstr "Tuts"
 
 #: QML
 msgid "All %1 previews are cached"
-msgstr ""
+msgstr "Tut las %1 previstas sùn en il cache"
 
 #: QML
 msgid "All files (*)"
@@ -291,11 +292,11 @@ msgstr "Navigar"
 
 #: QML
 msgid "Build Previews"
-msgstr ""
+msgstr "Crear previstas"
 
 #: QML
 msgid "Building Previews"
-msgstr ""
+msgstr "Creaziun da previstas"
 
 #: QML
 msgid "Building Thumbnails"
@@ -315,7 +316,7 @@ msgstr "Interrumper indexaziun"
 
 #: QML
 msgid "Cancel Previews"
-msgstr ""
+msgstr "Interrumper previstas"
 
 #: QML
 msgid "Cancel Thumbnails"
@@ -323,7 +324,7 @@ msgstr "Interrumper miniatures"
 
 #: QML
 msgid "Cancel the running preview build"
-msgstr ""
+msgstr "Interrumper la creaziun da previstas en cors"
 
 #: QML
 msgid "Canceling\\u2026"
@@ -347,11 +348,11 @@ msgstr "Controlliar"
 
 #: QML
 msgid "Clear Preview Cache"
-msgstr ""
+msgstr "Stizzar cache da previstas"
 
 #: QML
 msgid "Clear Previews"
-msgstr ""
+msgstr "Stizzar previstas"
 
 #: QML
 msgid "Confirm new password"
@@ -390,14 +391,16 @@ msgid ""
 "Delete %1 cached preview(s) for \"%2\"?\n"
 "Thumbnails are unaffected."
 msgstr ""
+"Stizzar %1 prevista(s) dal cache per „%2“?\n"
+"Las miniaturas na vegnan betg pertutgadas."
 
 #: QML
 msgid "Delete Marked Images"
-msgstr ""
+msgstr "Stizzar maletgs marcads"
 
 #: QML
 msgid "Delete all cached previews for this folder"
-msgstr ""
+msgstr "Stizzar tut las previstas dal cache per questa cartella"
 
 #: QML
 msgid "Deselect image"
@@ -421,7 +424,7 @@ msgstr "TAGS EXIF"
 
 #: QML
 msgid "Enter %1"
-msgstr ""
+msgstr "Endatar %1"
 
 #: QML
 msgid "Enter the database password"
@@ -437,7 +440,7 @@ msgstr "Exempel"
 
 #: QML
 msgid "ExifTool"
-msgstr ""
+msgstr "ExifTool"
 
 #: QML
 msgid ""
@@ -453,11 +456,11 @@ msgstr "ExifTool betg chattà"
 
 #: QML
 msgid ""
-"ExifTool was not found on your system. Indexing is disabled until "
-"ExifTool is installed and available on your PATH."
+"ExifTool was not found on your system. Indexing is disabled until ExifTool "
+"is installed and available on your PATH."
 msgstr ""
-"ExifTool n’è betg vegnì chattà sin voss sistem. L’indexaziun è deactivada"
-" fin che ExifTool è installà ed disponibel sin voss PATH."
+"ExifTool n’è betg vegnì chattà sin voss sistem. L’indexaziun è deactivada "
+"fin che ExifTool è installà ed disponibel sin voss PATH."
 
 #: QML
 msgid "Export Metadata as &JSON\\u2026 (%1 selected)"
@@ -485,12 +488,10 @@ msgstr "Predefinì: %1 (%2 threads CPU detectads)"
 
 #: QML
 msgid ""
-"File and folder name patterns to skip during indexing. Supports wildcards"
-" (e.g. *, ?).\n"
+"File and folder name patterns to skip during indexing. Supports wildcards (e.g. *, ?).\n"
 "Changes take effect on the next rescan."
 msgstr ""
-"Schemes da nums da datotecas e cartellas da sursiglir durant "
-"l’indexaziun. Supporta caratters jolly (p.ex. *, ?).\n"
+"Schemes da nums da datotecas e cartellas da sursiglir durant l’indexaziun. Supporta caratters jolly (p.ex. *, ?).\n"
 "Mutaziuns vegnan activas en la proxima re-indexaziun."
 
 #: QML
@@ -524,8 +525,7 @@ msgstr "Cartella(s)"
 #: QML
 msgid "Force re-extract EXIF for every file in all enabled folders"
 msgstr ""
-"Forczar l’extracziun EXIF per mintga datoteca en tut las cartellas "
-"activadas"
+"Forczar l’extracziun EXIF per mintga datoteca en tut las cartellas activadas"
 
 #: QML
 msgid "Force re-extract EXIF for every file in this folder"
@@ -545,15 +545,15 @@ msgstr "Re-indexaziun cumplaina da tut"
 
 #: QML
 msgid "GPS location —"
-msgstr ""
+msgstr "Posiziun GPS —"
 
 #: QML
 msgid "GeoHack"
-msgstr ""
+msgstr "GeoHack"
 
 #: QML
 msgid "Google Maps"
-msgstr ""
+msgstr "Google Maps"
 
 #: QML
 msgid "IMAGES"
@@ -601,14 +601,16 @@ msgstr "Licenza: MIT"
 
 #: QML
 msgid "Loading original\\u2026"
-msgstr ""
+msgstr "Original vegn chargegiaù…"
 
 #: QML
 msgid ""
-"Long-edge resolution used by the preview-cache builder. Larger values "
-"give sharper detail when zooming but take more disk space and longer to "
-"render."
+"Long-edge resolution used by the preview-cache builder. Larger values give "
+"sharper detail when zooming but take more disk space and longer to render."
 msgstr ""
+"Resoluziun dal cantin lung duvrà dal generatur da cache da previstas. Valurs"
+" pli autas donneschan pli buns detagls al zoomar ma dovran dapli plaz sin "
+"disk e pli ditg per render."
 
 #: QML
 msgid "METADATA"
@@ -675,8 +677,8 @@ msgid ""
 "Number of parallel threads used for indexing and thumbnail generation. "
 "Higher values speed up processing but use more CPU and memory."
 msgstr ""
-"Dumber da threads parallels per indexaziun e creaziun da miniatures. "
-"Valurs pli autas acceleran la tractaziun ma duvran dapli CPU e memoria."
+"Dumber da threads parallels per indexaziun e creaziun da miniatures. Valurs "
+"pli autas acceleran la tractaziun ma duvran dapli CPU e memoria."
 
 #: QML
 msgid "Oldest first"
@@ -684,7 +686,7 @@ msgstr "Pli vegl emprim"
 
 #: QML
 msgid "OpenStreetMap"
-msgstr ""
+msgstr "OpenStreetMap"
 
 #: QML
 msgid "PREVIEW"
@@ -715,22 +717,24 @@ msgid ""
 "Patterns are matched against individual file or folder names (not full "
 "paths). Wildcards: * matches any characters, ? matches one character."
 msgstr ""
-"Ils schemes vegnan comparads cun nums singuls da datotecas u cartella "
-"(betg trajects cumplains). Caratters jolly: * correspunda a insaquants "
-"caratters, ? correspunda ad in caracter."
+"Ils schemes vegnan comparads cun nums singuls da datotecas u cartella (betg "
+"trajects cumplains). Caratters jolly: * correspunda a insaquants caratters, "
+"? correspunda ad in caracter."
 
 #: QML
 msgid ""
-"Permanently delete %1 marked image file(s) from disk and remove them from"
-" the index?\n"
+"Permanently delete %1 marked image file(s) from disk and remove them from the index?\n"
 "\n"
 "This cannot be undone."
 msgstr ""
+"Stizzar definitivamente %1 datoteca(s) d’immagine marcada(s) dal disk e stizzar ellas da l’index?\n"
+"\n"
+"Quai na po betg vegnir annullà."
 
 #: QML
 msgid ""
-"Permanently deletes all indexed images and folder records. This cannot be"
-" undone."
+"Permanently deletes all indexed images and folder records. This cannot be "
+"undone."
 msgstr ""
 "Stizza definitivamente tuts ils maletgs indexads e las registraziuns da "
 "cartellas. Quai na po betg vegnir annullà."
@@ -741,7 +745,7 @@ msgstr "Preparaziun…"
 
 #: QML
 msgid "Preview Cache Size"
-msgstr ""
+msgstr "Grondezza dal cache da previstas"
 
 #: QML
 msgid "Previous match"
@@ -756,8 +760,8 @@ msgid ""
 "Re-encrypts the database under a new password. Existing thumbnails are "
 "preserved."
 msgstr ""
-"Cifrescha la banca da datas dad nov cun ina nova pled-clav. Las "
-"miniaturas existentas vegnan mantegnidas."
+"Cifrescha la banca da datas dad nov cun ina nova pled-clav. Las miniaturas "
+"existentas vegnan mantegnidas."
 
 #: QML
 msgid "Re-index this folder (incremental)"
@@ -781,7 +785,7 @@ msgstr "Stizzar questa cartella e ses maletgs indexads"
 
 #: QML
 msgid "Render preview-cache JPEGs for this folder"
-msgstr ""
+msgstr "Crear JPEGs dal cache da previstas per questa cartella"
 
 #: QML
 msgid "Rescan"
@@ -801,7 +805,8 @@ msgstr "Resettar banca da datas…"
 
 #: QML
 msgid "Restart the application for language changes to take full effect."
-msgstr "Restartad l’applicaziun per che la midada da lingua saja daditg activa."
+msgstr ""
+"Restartad l’applicaziun per che la midada da lingua saja daditg activa."
 
 #: QML
 msgid "SETTINGS"
@@ -821,7 +826,7 @@ msgstr "Tschertgar en metadata EXIF…"
 
 #: QML
 msgid "Search failed"
-msgstr ""
+msgstr "Tschertga buca reussida"
 
 #: QML
 msgid "Search syntax"
@@ -837,7 +842,7 @@ msgstr "Tscherner cartella per manaschar"
 
 #: QML
 msgid "Select Images Without &Thumbnail"
-msgstr ""
+msgstr "Seletgar maletgs senza &miniatura"
 
 #: QML
 msgid "Select a folder"
@@ -857,11 +862,11 @@ msgstr "Parameters"
 
 #: QML
 msgid "Show Original"
-msgstr ""
+msgstr "Mussar original"
 
 #: QML
 msgid "Show Preview"
-msgstr ""
+msgstr "Mussar prevista"
 
 #: QML
 msgid "Show all results"
@@ -874,10 +879,14 @@ msgstr "Mussar mo ils maletgs seletgads"
 #: QML
 msgid "Showing cached preview. Click to load the full-resolution source."
 msgstr ""
+"Prevista dal cache vegnida mussada. Cliccar per chargegiar la sorgente en "
+"plaina resoluziun."
 
 #: QML
 msgid "Showing full-resolution source. Click to use cached preview."
 msgstr ""
+"Sorgente en plaina resoluziun vegnida mussada. Cliccar per utilisar la "
+"prevista dal cache."
 
 #: QML
 msgid "Smallest"
@@ -905,23 +914,21 @@ msgstr "Licenzas da terzas persunas"
 
 #: QML
 msgid ""
-"This passphrase encrypts your entire image index. Use at least 12 "
-"characters and a mix of letters, numbers, and symbols. There is no way to"
-" recover a lost passphrase."
+"This passphrase encrypts your entire image index. Use at least 12 characters"
+" and a mix of letters, numbers, and symbols. There is no way to recover a "
+"lost passphrase."
 msgstr ""
 "Questa pled-clav cifrescha l’entir index da maletgs. Duvrai almain 12 "
-"caratters ed ina mesadad da lettras, cifras e simbols. Ina pled-clav "
-"persa na po betg vegnir recuperada."
+"caratters ed ina mesadad da lettras, cifras e simbols. Ina pled-clav persa "
+"na po betg vegnir recuperada."
 
 #: QML
 msgid ""
-"This will permanently delete all indexed images and indexed folder "
-"records.\n"
+"This will permanently delete all indexed images and indexed folder records.\n"
 "\n"
 "Are you sure you want to continue?"
 msgstr ""
-"Quai stizzerà definitivamente tuts ils maletgs indexads e las "
-"registraziuns da cartellas.\n"
+"Quai stizzerà definitivamente tuts ils maletgs indexads e las registraziuns da cartellas.\n"
 "\n"
 "Es ti segir da vulair cuntinuar?"
 
@@ -931,7 +938,7 @@ msgstr "Cussegls"
 
 #: QML
 msgid "To confirm, type the number %1 below:"
-msgstr ""
+msgstr "Per confermar, endatar il numer %1 qua sutvart:"
 
 #: QML
 msgid "Unlock"
@@ -979,7 +986,7 @@ msgstr "maletgs"
 
 #: QML
 msgid "pixels (long edge)"
-msgstr ""
+msgstr "pixels (cantin lung)"
 
 #: QML
 msgid "prefix wildcard"
@@ -987,7 +994,7 @@ msgstr "joker da prefix"
 
 #: QML
 msgid "previews"
-msgstr ""
+msgstr "previstas"
 
 #: QML
 msgid "single token"
@@ -1009,6 +1016,4 @@ msgid ""
 msgstr ""
 "• Ils operaturs AND, OR, NOT ston esser scrits en MAJUSCULAS\n"
 "• Metter frasas da pliras pleds tranter virgulettas\n"
-"• En las clavs ExifTool (p.ex. GPS:GPSLatitude) ils dus puncts gioghan il"
-" rolla d'in separatur"
-
+"• En las clavs ExifTool (p.ex. GPS:GPSLatitude) ils dus puncts gioghan il rolla d'in separatur"

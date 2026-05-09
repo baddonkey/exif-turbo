@@ -10,12 +10,12 @@ msgstr ""
 "POT-Creation-Date: 2026-05-09 00:25+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language: fr\n"
 "Language-Team: fr <LL@li.org>\n"
-"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"Language: fr\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
 "Generated-By: Babel 2.18.0\n"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:128
@@ -36,15 +36,15 @@ msgstr "Inversion de la sélection…"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:584
 msgid "Selecting images without a cached thumbnail…"
-msgstr ""
+msgstr "Sélection des images sans miniature en cache…"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:599
 msgid "No marked images to delete."
-msgstr ""
+msgstr "Aucune image marquée à supprimer."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:603
 msgid "Deleting marked images…"
-msgstr ""
+msgstr "Suppression des images marquées…"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:613
 msgid "No marked images to export."
@@ -57,17 +57,17 @@ msgstr "Exportation des métadonnées…"
 #: src/exif_turbo/ui/view_models/app_controller.py:697
 #, python-brace-format
 msgid "Deleted {n} image(s)."
-msgstr ""
+msgstr "{n} image(s) supprimée(s)."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:701
 #, python-brace-format
 msgid "{n} were already missing."
-msgstr ""
+msgstr "{n} étaient déjà manquantes."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:707
 #, python-brace-format
 msgid "{n} could not be deleted."
-msgstr ""
+msgstr "{n} n’ont pas pu être supprimées."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:717
 #, python-brace-format
@@ -90,8 +90,8 @@ msgstr "La base de données est verrouillée."
 #: src/exif_turbo/ui/view_models/app_controller.py:859
 msgid "Cannot change password while indexing or thumb-building is running."
 msgstr ""
-"Impossible de changer le mot de passe pendant l’indexation ou la création"
-" des miniatures."
+"Impossible de changer le mot de passe pendant l’indexation ou la création "
+"des miniatures."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:863
 msgid "Current password is incorrect."
@@ -113,8 +113,8 @@ msgstr "Changement du mot de passe…"
 #, python-brace-format
 msgid "Database password changed, but reopening failed: {error}"
 msgstr ""
-"Mot de passe de la base de données modifié, mais la réouverture a échoué "
-": {error}"
+"Mot de passe de la base de données modifié, mais la réouverture a échoué : "
+"{error}"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:939
 msgid "Password changed successfully."
@@ -128,11 +128,11 @@ msgstr "Échec du changement de mot de passe : {error}"
 #: src/exif_turbo/ui/view_models/app_controller.py:985
 #, python-brace-format
 msgid ""
-"Password changed but thumbnail cache could not be re-wrapped ({error}). "
-"The cache has been cleared and will be rebuilt."
+"Password changed but thumbnail cache could not be re-wrapped ({error}). The "
+"cache has been cleared and will be rebuilt."
 msgstr ""
-"Mot de passe modifié, mais le cache des miniatures n’a pas pu être "
-"rechiffré ({error}). Le cache a été effacé et sera reconstruit."
+"Mot de passe modifié, mais le cache des miniatures n’a pas pu être rechiffré"
+" ({error}). Le cache a été effacé et sera reconstruit."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:1306
 #, python-brace-format
@@ -170,31 +170,31 @@ msgstr "Annulation…"
 #: src/exif_turbo/ui/view_models/app_controller.py:1747
 #, python-brace-format
 msgid "Built {built} preview(s) of {total}."
-msgstr ""
+msgstr "{built} aperçu(s) créé(s) sur {total}."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:1755
 #, python-brace-format
 msgid "Preview build failed: {error}"
-msgstr ""
+msgstr "Création des aperçus échouée : {error}"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:1763
 #, python-brace-format
 msgid "Preview build canceled ({built} of {total} done)."
-msgstr ""
+msgstr "Création des aperçus annulée ({built} sur {total} terminés)."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:1776
 msgid "Cancel the running preview build before clearing the cache."
-msgstr ""
+msgstr "Annulez la création d’aperçus en cours avant de vider le cache."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:1785
 #, python-brace-format
 msgid "Failed to clear preview cache: {error}"
-msgstr ""
+msgstr "Échec du vidage du cache des aperçus : {error}"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:1791
 #, python-brace-format
 msgid "Removed {n} cached preview(s)."
-msgstr ""
+msgstr "{n} aperçu(s) en cache supprimé(s)."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:1849
 msgid "Database reset"
@@ -215,7 +215,7 @@ msgstr "%1 dossiers"
 
 #: QML
 msgid "%1 of %2 previews cached"
-msgstr ""
+msgstr "%1 sur %2 aperçus en cache"
 
 #: QML
 msgid "&About"
@@ -227,7 +227,7 @@ msgstr "&Action"
 
 #: QML
 msgid "&Delete Marked Images\\u2026 (%1 selected)"
-msgstr ""
+msgstr "&Supprimer les images marquées\\u2026 (%1 sélectionnée(s))"
 
 #: QML
 msgid "&Deselect All"
@@ -275,7 +275,7 @@ msgstr "Tout"
 
 #: QML
 msgid "All %1 previews are cached"
-msgstr ""
+msgstr "Les %1 aperçus sont tous en cache"
 
 #: QML
 msgid "All files (*)"
@@ -291,11 +291,11 @@ msgstr "Parcourir"
 
 #: QML
 msgid "Build Previews"
-msgstr ""
+msgstr "Créer les aperçus"
 
 #: QML
 msgid "Building Previews"
-msgstr ""
+msgstr "Création des aperçus"
 
 #: QML
 msgid "Building Thumbnails"
@@ -315,7 +315,7 @@ msgstr "Annuler l’indexation"
 
 #: QML
 msgid "Cancel Previews"
-msgstr ""
+msgstr "Annuler les aperçus"
 
 #: QML
 msgid "Cancel Thumbnails"
@@ -323,7 +323,7 @@ msgstr "Annuler les miniatures"
 
 #: QML
 msgid "Cancel the running preview build"
-msgstr ""
+msgstr "Annuler la création d’aperçus en cours"
 
 #: QML
 msgid "Canceling\\u2026"
@@ -347,11 +347,11 @@ msgstr "Vérifier"
 
 #: QML
 msgid "Clear Preview Cache"
-msgstr ""
+msgstr "Vider le cache des aperçus"
 
 #: QML
 msgid "Clear Previews"
-msgstr ""
+msgstr "Supprimer les aperçus"
 
 #: QML
 msgid "Confirm new password"
@@ -390,14 +390,16 @@ msgid ""
 "Delete %1 cached preview(s) for \"%2\"?\n"
 "Thumbnails are unaffected."
 msgstr ""
+"Supprimer %1 aperçu(s) en cache pour « %2 » ?\n"
+"Les miniatures ne sont pas affectées."
 
 #: QML
 msgid "Delete Marked Images"
-msgstr ""
+msgstr "Supprimer les images marquées"
 
 #: QML
 msgid "Delete all cached previews for this folder"
-msgstr ""
+msgstr "Supprimer tous les aperçus en cache pour ce dossier"
 
 #: QML
 msgid "Deselect image"
@@ -421,7 +423,7 @@ msgstr "TAGS EXIF"
 
 #: QML
 msgid "Enter %1"
-msgstr ""
+msgstr "Saisir %1"
 
 #: QML
 msgid "Enter the database password"
@@ -437,7 +439,7 @@ msgstr "Exemple"
 
 #: QML
 msgid "ExifTool"
-msgstr ""
+msgstr "ExifTool"
 
 #: QML
 msgid ""
@@ -453,12 +455,11 @@ msgstr "ExifTool introuvable"
 
 #: QML
 msgid ""
-"ExifTool was not found on your system. Indexing is disabled until "
-"ExifTool is installed and available on your PATH."
+"ExifTool was not found on your system. Indexing is disabled until ExifTool "
+"is installed and available on your PATH."
 msgstr ""
-"ExifTool n’a pas été trouvé sur votre système. L’indexation est "
-"désactivée jusqu’à ce qu’ExifTool soit installé et disponible dans votre "
-"PATH."
+"ExifTool n’a pas été trouvé sur votre système. L’indexation est désactivée "
+"jusqu’à ce qu’ExifTool soit installé et disponible dans votre PATH."
 
 #: QML
 msgid "Export Metadata as &JSON\\u2026 (%1 selected)"
@@ -486,12 +487,10 @@ msgstr "Valeur par défaut : %1 (%2 threads CPU détectés)"
 
 #: QML
 msgid ""
-"File and folder name patterns to skip during indexing. Supports wildcards"
-" (e.g. *, ?).\n"
+"File and folder name patterns to skip during indexing. Supports wildcards (e.g. *, ?).\n"
 "Changes take effect on the next rescan."
 msgstr ""
-"Modèles de noms de fichiers et dossiers à ignorer lors de l’indexation. "
-"Supporte les caractères génériques (ex. *, ?).\n"
+"Modèles de noms de fichiers et dossiers à ignorer lors de l’indexation. Supporte les caractères génériques (ex. *, ?).\n"
 "Les modifications prennent effet lors de la prochaine réindexation."
 
 #: QML
@@ -525,8 +524,7 @@ msgstr "Dossier(s)"
 #: QML
 msgid "Force re-extract EXIF for every file in all enabled folders"
 msgstr ""
-"Forcer la réextraction EXIF pour chaque fichier de tous les dossiers "
-"activés"
+"Forcer la réextraction EXIF pour chaque fichier de tous les dossiers activés"
 
 #: QML
 msgid "Force re-extract EXIF for every file in this folder"
@@ -546,15 +544,15 @@ msgstr "Réindexation complète de tout"
 
 #: QML
 msgid "GPS location —"
-msgstr ""
+msgstr "Localisation GPS —"
 
 #: QML
 msgid "GeoHack"
-msgstr ""
+msgstr "GeoHack"
 
 #: QML
 msgid "Google Maps"
-msgstr ""
+msgstr "Google Maps"
 
 #: QML
 msgid "IMAGES"
@@ -602,14 +600,16 @@ msgstr "Licence : MIT"
 
 #: QML
 msgid "Loading original\\u2026"
-msgstr ""
+msgstr "Chargement de l’original…"
 
 #: QML
 msgid ""
-"Long-edge resolution used by the preview-cache builder. Larger values "
-"give sharper detail when zooming but take more disk space and longer to "
-"render."
+"Long-edge resolution used by the preview-cache builder. Larger values give "
+"sharper detail when zooming but take more disk space and longer to render."
 msgstr ""
+"Résolution du grand côté utilisée par le générateur de cache d’aperçus. Des "
+"valeurs plus élevées donnent plus de détails lors du zoom, mais occupent "
+"plus d’espace disque et sont plus longues à générer."
 
 #: QML
 msgid "METADATA"
@@ -676,9 +676,9 @@ msgid ""
 "Number of parallel threads used for indexing and thumbnail generation. "
 "Higher values speed up processing but use more CPU and memory."
 msgstr ""
-"Nombre de threads parallèles pour l’indexation et la création de "
-"miniatures. Des valeurs plus élevées accélèrent le traitement mais "
-"utilisent plus de CPU et de mémoire."
+"Nombre de threads parallèles pour l’indexation et la création de miniatures."
+" Des valeurs plus élevées accélèrent le traitement mais utilisent plus de "
+"CPU et de mémoire."
 
 #: QML
 msgid "Oldest first"
@@ -686,7 +686,7 @@ msgstr "Plus ancien d’abord"
 
 #: QML
 msgid "OpenStreetMap"
-msgstr ""
+msgstr "OpenStreetMap"
 
 #: QML
 msgid "PREVIEW"
@@ -717,25 +717,27 @@ msgid ""
 "Patterns are matched against individual file or folder names (not full "
 "paths). Wildcards: * matches any characters, ? matches one character."
 msgstr ""
-"Les modèles sont comparés aux noms de fichiers ou dossiers individuels "
-"(pas les chemins complets). Caractères génériques : * correspond à "
-"n’importe quels caractères, ? correspond à un caractère."
+"Les modèles sont comparés aux noms de fichiers ou dossiers individuels (pas "
+"les chemins complets). Caractères génériques : * correspond à n’importe "
+"quels caractères, ? correspond à un caractère."
 
 #: QML
 msgid ""
-"Permanently delete %1 marked image file(s) from disk and remove them from"
-" the index?\n"
+"Permanently delete %1 marked image file(s) from disk and remove them from the index?\n"
 "\n"
 "This cannot be undone."
 msgstr ""
+"Supprimer définitivement %1 fichier(s) image(s) marqué(s) du disque et les retirer de l’index ?\n"
+"\n"
+"Cette opération ne peut pas être annulée."
 
 #: QML
 msgid ""
-"Permanently deletes all indexed images and folder records. This cannot be"
-" undone."
+"Permanently deletes all indexed images and folder records. This cannot be "
+"undone."
 msgstr ""
-"Supprime définitivement toutes les images indexées et les enregistrements"
-" de dossiers. Cette opération ne peut pas être annulée."
+"Supprime définitivement toutes les images indexées et les enregistrements de"
+" dossiers. Cette opération ne peut pas être annulée."
 
 #: QML
 msgid "Preparing\\u2026"
@@ -743,7 +745,7 @@ msgstr "Préparation…"
 
 #: QML
 msgid "Preview Cache Size"
-msgstr ""
+msgstr "Taille du cache des aperçus"
 
 #: QML
 msgid "Previous match"
@@ -758,8 +760,8 @@ msgid ""
 "Re-encrypts the database under a new password. Existing thumbnails are "
 "preserved."
 msgstr ""
-"Rechiffre la base de données avec un nouveau mot de passe. Les miniatures"
-" existantes sont conservées."
+"Rechiffre la base de données avec un nouveau mot de passe. Les miniatures "
+"existantes sont conservées."
 
 #: QML
 msgid "Re-index this folder (incremental)"
@@ -771,7 +773,8 @@ msgstr "Supprimer"
 
 #: QML
 msgid "Remove \"%1\" and delete all its indexed images from the database?"
-msgstr "Supprimer « %1 » et toutes ses images indexées de la base de données ?"
+msgstr ""
+"Supprimer « %1 » et toutes ses images indexées de la base de données ?"
 
 #: QML
 msgid "Remove Folder"
@@ -783,7 +786,7 @@ msgstr "Supprimer ce dossier et ses images indexées"
 
 #: QML
 msgid "Render preview-cache JPEGs for this folder"
-msgstr ""
+msgstr "Générer les JPEG du cache d’aperçus pour ce dossier"
 
 #: QML
 msgid "Rescan"
@@ -804,8 +807,8 @@ msgstr "Réinitialiser la base de données…"
 #: QML
 msgid "Restart the application for language changes to take full effect."
 msgstr ""
-"Redémarrez l’application pour que le changement de langue prenne "
-"pleinement effet."
+"Redémarrez l’application pour que le changement de langue prenne pleinement "
+"effet."
 
 #: QML
 msgid "SETTINGS"
@@ -825,7 +828,7 @@ msgstr "Rechercher dans les métadonnées EXIF…"
 
 #: QML
 msgid "Search failed"
-msgstr ""
+msgstr "Recherche échouée"
 
 #: QML
 msgid "Search syntax"
@@ -841,7 +844,7 @@ msgstr "Sélectionner un dossier à gérer"
 
 #: QML
 msgid "Select Images Without &Thumbnail"
-msgstr ""
+msgstr "Sélectionner les images sans &miniature"
 
 #: QML
 msgid "Select a folder"
@@ -861,11 +864,11 @@ msgstr "Paramètres"
 
 #: QML
 msgid "Show Original"
-msgstr ""
+msgstr "Afficher l’original"
 
 #: QML
 msgid "Show Preview"
-msgstr ""
+msgstr "Afficher l’aperçu"
 
 #: QML
 msgid "Show all results"
@@ -878,10 +881,14 @@ msgstr "Afficher uniquement les images sélectionnées"
 #: QML
 msgid "Showing cached preview. Click to load the full-resolution source."
 msgstr ""
+"Aperçu en cache affiché. Cliquez pour charger la source en pleine "
+"résolution."
 
 #: QML
 msgid "Showing full-resolution source. Click to use cached preview."
 msgstr ""
+"Source en pleine résolution affichée. Cliquez pour utiliser l’aperçu en "
+"cache."
 
 #: QML
 msgid "Smallest"
@@ -909,23 +916,21 @@ msgstr "Licences tierces"
 
 #: QML
 msgid ""
-"This passphrase encrypts your entire image index. Use at least 12 "
-"characters and a mix of letters, numbers, and symbols. There is no way to"
-" recover a lost passphrase."
+"This passphrase encrypts your entire image index. Use at least 12 characters"
+" and a mix of letters, numbers, and symbols. There is no way to recover a "
+"lost passphrase."
 msgstr ""
-"Ce mot de passe chiffre l’intégralité de votre index d’images. Utilisez "
-"au moins 12 caractères et un mélange de lettres, chiffres et symboles. Il"
-" est impossible de récupérer un mot de passe perdu."
+"Ce mot de passe chiffre l’intégralité de votre index d’images. Utilisez au "
+"moins 12 caractères et un mélange de lettres, chiffres et symboles. Il est "
+"impossible de récupérer un mot de passe perdu."
 
 #: QML
 msgid ""
-"This will permanently delete all indexed images and indexed folder "
-"records.\n"
+"This will permanently delete all indexed images and indexed folder records.\n"
 "\n"
 "Are you sure you want to continue?"
 msgstr ""
-"Ceci supprimera définitivement toutes les images indexées et les "
-"enregistrements de dossiers.\n"
+"Ceci supprimera définitivement toutes les images indexées et les enregistrements de dossiers.\n"
 "\n"
 "Êtes-vous sûr de vouloir continuer ?"
 
@@ -935,7 +940,7 @@ msgstr "Astuces"
 
 #: QML
 msgid "To confirm, type the number %1 below:"
-msgstr ""
+msgstr "Pour confirmer, saisissez le nombre %1 ci-dessous :"
 
 #: QML
 msgid "Unlock"
@@ -983,7 +988,7 @@ msgstr "images"
 
 #: QML
 msgid "pixels (long edge)"
-msgstr ""
+msgstr "pixels (grand côté)"
 
 #: QML
 msgid "prefix wildcard"
@@ -991,7 +996,7 @@ msgstr "joker de préfixe"
 
 #: QML
 msgid "previews"
-msgstr ""
+msgstr "aperçus"
 
 #: QML
 msgid "single token"
@@ -1013,6 +1018,4 @@ msgid ""
 msgstr ""
 "• Les opérateurs AND, OR, NOT doivent être en MAJUSCULES\n"
 "• Mettre les expressions de plusieurs mots entre guillemets\n"
-"• Dans les clés ExifTool (p. ex. GPS:GPSLatitude), le deux-points sert de"
-" séparateur"
-
+"• Dans les clés ExifTool (p. ex. GPS:GPSLatitude), le deux-points sert de séparateur"
