@@ -113,7 +113,15 @@ ApplicationWindow {
     // ── Preview context menu (right-click on either preview pane) ─────────
     Menu {
         id: previewContextMenu
+        // Drive the popup width from the item's natural (untruncated) text size.
+        // contentItem.implicitWidth always reflects the full text width regardless
+        // of the width that the Menu assigns to the item, so there is no circular
+        // dependency and elision is avoided for any text length or locale.
+        width: _copyImageMenuItem.leftPadding
+             + _copyImageMenuItem.contentItem.implicitWidth
+             + _copyImageMenuItem.rightPadding
         MenuItem {
+            id: _copyImageMenuItem
             text: qsTr("Copy Image to Clipboard")
             enabled: _selectedImageSource !== ""
             onTriggered: { if (controller) controller.copyPreviewToClipboard() }

@@ -13,6 +13,7 @@ Fully generated using VS Code Copilot.
 
 - **Encrypted thumbnail and preview cache** — thumbnails and rendered previews are stored AES-256-GCM encrypted on disk; the encryption key is derived from the user’s password using a wrapped-key model so changing the password does not require rebuilding the cache
 - **Change Password** — re-encrypts the SQLCipher database under a new passphrase without rebuilding thumbnails; existing encrypted thumbnails remain valid
+- **Copy to Clipboard** — right-click the preview image or click the **Copy** pill button to copy the rendered preview to the system clipboard; a toast notification confirms the copy; falls back to copying the file path as text if rendering fails
 - **Build Previews** — per-folder action builds a cache of downscaled preview JPEGs for instant display; configurable long-edge resolution in Settings
 - **`×` clear button** — when the search field contains text a `×` button clears it immediately (equivalent to pressing **Enter** with an empty bar)
 - **ExifTool not-found dialog** — if ExifTool is absent at unlock time a modal dialog explains that indexing is disabled and links to exiftool.org; search and browse of existing data continue normally
@@ -38,6 +39,16 @@ Fully generated using VS Code Copilot.
 - **Fast NAS scanning** — on macOS/Linux, `ImageFinder` spawns up to 8 parallel `find` subprocesses (one per top-level subdirectory) so all `getdents()`/`lstat()` calls happen inside a C binary outside the Python GIL; a live "N files found…" counter updates the progress panel while discovery is still running
 
 ## Recent changes
+
+### Copy preview image to clipboard
+
+A **Copy** pill button appears in the preview header of both the Search and Browse
+tabs. Right-clicking the preview area opens a context menu with the same action.
+Invoking either calls `controller.copyPreviewToClipboard()`, which renders the
+current preview via `render_preview()`, converts it to a `QImage`, and places it
+on the system clipboard via `QGuiApplication.clipboard().setImage()`. A toast
+overlay at the bottom of the window confirms success. If rendering fails the
+file path is copied as plain text instead.
 
 ### Encrypted thumbnail and preview cache
 

@@ -221,7 +221,17 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Password Changed": "Passwort geändert",
         "Password changed but thumbnail cache could not be re-wrapped ({error}). The cache has been cleared and will be rebuilt.": "Das Passwort wurde geändert, aber der Vorschaubild-Cache konnte nicht neu verschlüsselt werden ({error}). Der Cache wurde geleert und wird neu erstellt.",
         "Password changed successfully.": "Passwort erfolgreich geändert.",
-        "Re-encrypts the database under a new password. Existing thumbnails are preserved.": "Verschlüsselt die Datenbank mit einem neuem Passwort neu. Bestehende Vorschaubilder bleiben erhalten.",    },
+        "Re-encrypts the database under a new password. Existing thumbnails are preserved.": "Verschlüsselt die Datenbank mit einem neuem Passwort neu. Bestehende Vorschaubilder bleiben erhalten.",
+        # ── Clipboard copy ───────────────────────────────────────────────────
+        "Image copied to clipboard": "Bild in Zwischenablage kopiert",
+        "Path copied to clipboard": "Pfad in Zwischenablage kopiert",
+        "Indexing\u2026 {} (scanning)": "Indizierung\u2026 {} (Suche)",
+        "Indexing\u2026 0 / {}": "Indizierung\u2026 0 / {}",
+        "Copy": "Kopieren",
+        "Copy Image to Clipboard": "Bild in Zwischenablage kopieren",
+        "Copy preview image to clipboard": "Vorschaubild in Zwischenablage kopieren",
+        "indexed, scanning\\u2026": "indiziert, Suche\u2026",
+    },
     "fr": {
         # ── Tabs ────────────────────────────────────────────────────────────
         "Search": "Rechercher",
@@ -439,6 +449,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Password changed but thumbnail cache could not be re-wrapped ({error}). The cache has been cleared and will be rebuilt.": "Mot de passe modifi\u00e9, mais le cache des miniatures n\u2019a pas pu \u00eatre rechiffr\u00e9 ({error}). Le cache a \u00e9t\u00e9 effac\u00e9 et sera reconstruit.",
         "Password changed successfully.": "Mot de passe modifi\u00e9 avec succ\u00e8s.",
         "Re-encrypts the database under a new password. Existing thumbnails are preserved.": "Rechiffre la base de donn\u00e9es avec un nouveau mot de passe. Les miniatures existantes sont conserv\u00e9es.",
+        # ── Clipboard copy ───────────────────────────────────────────────────
+        "Image copied to clipboard": "Image copi\u00e9e dans le presse-papiers",
+        "Path copied to clipboard": "Chemin copi\u00e9 dans le presse-papiers",
+        "Indexing\u2026 {} (scanning)": "Indexation\u2026 {} (analyse)",
+        "Indexing\u2026 0 / {}": "Indexation\u2026 0 / {}",
+        "Copy": "Copier",
+        "Copy Image to Clipboard": "Copier l\u2019image dans le presse-papiers",
+        "Copy preview image to clipboard": "Copier l\u2019aper\u00e7u dans le presse-papiers",
+        "indexed, scanning\\u2026": "index\u00e9, analyse\u2026",
     },
     "it": {
         # ── Tabs ────────────────────────────────────────────────────────────
@@ -661,7 +680,17 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Password Changed": "Password modificata",
         "Password changed but thumbnail cache could not be re-wrapped ({error}). The cache has been cleared and will be rebuilt.": "La password è stata modificata ma la cache delle miniature non è stata ricifrata ({error}). La cache è stata svuotata e verrà ricostruita.",
         "Password changed successfully.": "Password modificata correttamente.",
-        "Re-encrypts the database under a new password. Existing thumbnails are preserved.": "Ricifra il database con una nuova password. Le miniature esistenti vengono conservate.",    },
+        "Re-encrypts the database under a new password. Existing thumbnails are preserved.": "Ricifra il database con una nuova password. Le miniature esistenti vengono conservate.",
+        # ── Clipboard copy ───────────────────────────────────────────────────
+        "Image copied to clipboard": "Immagine copiata negli appunti",
+        "Path copied to clipboard": "Percorso copiato negli appunti",
+        "Indexing\u2026 {} (scanning)": "Indicizzazione\u2026 {} (scansione)",
+        "Indexing\u2026 0 / {}": "Indicizzazione\u2026 0 / {}",
+        "Copy": "Copia",
+        "Copy Image to Clipboard": "Copia immagine negli appunti",
+        "Copy preview image to clipboard": "Copia anteprima negli appunti",
+        "indexed, scanning\\u2026": "indicizzato, scansione\u2026",
+    },
     "rm": {
         # ── Tabs ────────────────────────────────────────────────────────────
         "Search": "Tschertgar",
@@ -881,6 +910,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Password changed but thumbnail cache could not be re-wrapped ({error}). The cache has been cleared and will be rebuilt.": "La pled-clav \u00e8 vegnida midada, ma il cache da miniaturas n\u2019\u00e8 betg pudida vegnir cifrada da nov ({error}). Il cache \u00e8 vegn\u00ec stizzad e vegn rebatg\u00ec.",
         "Password changed successfully.": "Pled-clav midada cun success.",
         "Re-encrypts the database under a new password. Existing thumbnails are preserved.": "Cifrescha la banca da datas dad nov cun ina nova pled-clav. Las miniaturas existentas vegnan mantegnidas.",
+        # ── Clipboard copy ───────────────────────────────────────────────────
+        "Image copied to clipboard": "Maletg copi\u00e0 en la tavla d\u2019interscambi",
+        "Path copied to clipboard": "Traject copi\u00e0 en la tavla d\u2019interscambi",
+        "Indexing\u2026 {} (scanning)": "Indexaziun\u2026 {} (tscherta)",
+        "Indexing\u2026 0 / {}": "Indexaziun\u2026 0 / {}",
+        "Copy": "Copiar",
+        "Copy Image to Clipboard": "Copiar maletg en tavla d\u2019interscambi",
+        "Copy preview image to clipboard": "Copiar prevista en tavla d\u2019interscambi",
+        "indexed, scanning\\u2026": "index\u00e0, tscherta\u2026",
     },
 }
 # fmt: on
