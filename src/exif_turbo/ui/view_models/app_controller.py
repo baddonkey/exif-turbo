@@ -1883,6 +1883,28 @@ class AppController(QObject):
 
     # ── Preview source toggle ─────────────────────────────────────────────
 
+    def _load_preview_for_clipboard(self, path: str) -> "Image.Image":
+        """Return a Pillow image for *path* matching what is currently on screen.
+
+        - "Show Original" mode (``_use_raw_preview`` is True): decode the
+          source file directly so the user copies the full-resolution original.
+        - Preview mode (default): read from the local preview cache when
+          available, so clipboard copy works even when the source volume is
+          disconnected.
+        """
+        from PIL import Image  # noqa: PLC0415
+
+        if self._use_raw_preview:
+            # User is viewing the full-resolution source — copy that.
+            return render_preview(path, MAX_PREVIEW_PX)
+
+        stamp = self._pending_preview_stamp
+        if self._preview_provider is not None and self._preview_provider._cache_dir is not None:
+            cached = self._preview_provider._try_load_cached(path, stamp)
+            if cached is not None:
+                return cached
+        return render_preview(path, MAX_PREVIEW_PX)
+
     @Slot()
     def copyPreviewToClipboard(self) -> None:
         """Copy the currently displayed preview image to the system clipboard.
@@ -1894,18 +1916,27 @@ class AppController(QObject):
         if not path:
             return
         try:
-            pil_img = render_preview(path, MAX_PREVIEW_PX)
-            pil_img = pil_img.convert("RGBA")
-            from PySide6.QtGui import QImage  # local import to avoid top-level cycle
+            import io
+            from PySide6.QtCore import QByteArray, QMimeData
+            from PySide6.QtGui import QImage
 
-            data = bytes(pil_img.tobytes("raw", "RGBA"))
+            pil_img = self._load_preview_for_clipboard(path)
+            buf = io.BytesIO()
+            pil_img.save(buf, format="PNG")
+            png_bytes = buf.getvalue()
+            mime = QMimeData()
+            # image/png → public.png UTI on macOS and MIME on Linux so that
+            # native apps (Messages, Mail, GIMP, etc.) receive a real image.
+            mime.setData("image/png", QByteArray(png_bytes))
+            # setImageData → CF_DIB on Windows so legacy Win32 apps (Paint,
+            # older Office builds) that only read CF_DIB still work.
+            rgba = pil_img.convert("RGBA")
+            raw = bytes(rgba.tobytes("raw", "RGBA"))
             qimage = QImage(
-                data,
-                pil_img.width,
-                pil_img.height,
-                QImage.Format.Format_RGBA8888,
+                raw, rgba.width, rgba.height, QImage.Format.Format_RGBA8888
             ).copy()
-            QGuiApplication.clipboard().setImage(qimage)
+            mime.setImageData(qimage)
+            QGuiApplication.clipboard().setMimeData(mime)
             self.clipboardCopyDone.emit(_("Image copied to clipboard"))
         except Exception:  # noqa: BLE001
             _log.exception("copyPreviewToClipboard failed for %r, falling back to path", path)
