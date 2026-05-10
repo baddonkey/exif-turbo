@@ -7,200 +7,216 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-09 00:25+0200\n"
+"POT-Creation-Date: 2026-05-10 17:30+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: it <LL@li.org>\n"
 "Language: it\n"
+"Language-Team: it <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:128
+#: src/exif_turbo/ui/view_models/app_controller.py:135
 msgid "Enter the database password to continue"
 msgstr "Inserisci la password del database per continuare"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:550
+#: src/exif_turbo/ui/view_models/app_controller.py:570
 msgid "Selecting all matching images…"
 msgstr "Selezione di tutte le immagini corrispondenti…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:560
+#: src/exif_turbo/ui/view_models/app_controller.py:580
 msgid "Deselecting all matching images…"
 msgstr "Deselezione di tutte le immagini corrispondenti…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:570
+#: src/exif_turbo/ui/view_models/app_controller.py:590
 msgid "Inverting selection…"
 msgstr "Inversione della selezione…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:584
+#: src/exif_turbo/ui/view_models/app_controller.py:604
 msgid "Selecting images without a cached thumbnail…"
 msgstr "Selezione delle immagini senza miniatura nella cache…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:599
+#: src/exif_turbo/ui/view_models/app_controller.py:619
 msgid "No marked images to delete."
 msgstr "Nessuna immagine contrassegnata da eliminare."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:603
+#: src/exif_turbo/ui/view_models/app_controller.py:623
 msgid "Deleting marked images…"
 msgstr "Eliminazione delle immagini contrassegnate…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:613
+#: src/exif_turbo/ui/view_models/app_controller.py:633
 msgid "No marked images to export."
 msgstr "Nessuna immagine contrassegnata da esportare."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:618
+#: src/exif_turbo/ui/view_models/app_controller.py:638
 msgid "Exporting metadata…"
 msgstr "Esportazione metadati…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:697
+#: src/exif_turbo/ui/view_models/app_controller.py:717
 #, python-brace-format
 msgid "Deleted {n} image(s)."
 msgstr "{n} immagine/i eliminata/e."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:701
+#: src/exif_turbo/ui/view_models/app_controller.py:721
 #, python-brace-format
 msgid "{n} were already missing."
 msgstr "{n} erano già mancanti."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:707
+#: src/exif_turbo/ui/view_models/app_controller.py:727
 #, python-brace-format
 msgid "{n} could not be deleted."
 msgstr "{n} non è/sono potuta/e essere eliminata/e."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:717
+#: src/exif_turbo/ui/view_models/app_controller.py:737
 #, python-brace-format
 msgid "Exported {count} image(s) to {name}"
 msgstr "{count} immagine/i esportata/e in {name}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:726
+#: src/exif_turbo/ui/view_models/app_controller.py:746
 #, python-brace-format
 msgid "Operation failed: {}"
 msgstr "Operazione fallita: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:732
+#: src/exif_turbo/ui/view_models/app_controller.py:752
 msgid "Operation canceled."
 msgstr "Operazione annullata."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:854
+#: src/exif_turbo/ui/view_models/app_controller.py:874
 msgid "Database is locked."
 msgstr "Il database è bloccato."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:859
+#: src/exif_turbo/ui/view_models/app_controller.py:879
 msgid "Cannot change password while indexing or thumb-building is running."
 msgstr ""
 "Impossibile cambiare la password mentre è in corso l’indicizzazione o la "
 "creazione delle miniature."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:863
+#: src/exif_turbo/ui/view_models/app_controller.py:883
 msgid "Current password is incorrect."
 msgstr "La password attuale non è corretta."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:866
+#: src/exif_turbo/ui/view_models/app_controller.py:886
 msgid "New password must not be empty."
 msgstr "La nuova password non può essere vuota."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:870
+#: src/exif_turbo/ui/view_models/app_controller.py:890
 msgid "New password must differ from the current password."
 msgstr "La nuova password deve essere diversa da quella attuale."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:888
+#: src/exif_turbo/ui/view_models/app_controller.py:908
 msgid "Changing password…"
 msgstr "Modifica password in corso…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:929
+#: src/exif_turbo/ui/view_models/app_controller.py:949
 #, python-brace-format
 msgid "Database password changed, but reopening failed: {error}"
-msgstr ""
-"Password del database modificata, ma la riapertura non è riuscita: {error}"
+msgstr "Password del database modificata, ma la riapertura non è riuscita: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:939
+#: src/exif_turbo/ui/view_models/app_controller.py:959
 msgid "Password changed successfully."
 msgstr "Password modificata correttamente."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:980
+#: src/exif_turbo/ui/view_models/app_controller.py:1000
 #, python-brace-format
 msgid "Failed to change password: {error}"
 msgstr "Modifica password non riuscita: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:985
+#: src/exif_turbo/ui/view_models/app_controller.py:1005
 #, python-brace-format
 msgid ""
-"Password changed but thumbnail cache could not be re-wrapped ({error}). The "
-"cache has been cleared and will be rebuilt."
+"Password changed but thumbnail cache could not be re-wrapped ({error}). "
+"The cache has been cleared and will be rebuilt."
 msgstr ""
 "La password è stata modificata ma la cache delle miniature non è stata "
 "ricifrata ({error}). La cache è stata svuotata e verrà ricostruita."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1306
+#: src/exif_turbo/ui/view_models/app_controller.py:1392
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Cartella già monitorata: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1530
+#: src/exif_turbo/ui/view_models/app_controller.py:1616
 #, python-brace-format
 msgid "Indexing {}…"
 msgstr "Indicizzazione {}…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1562
+#: src/exif_turbo/ui/view_models/app_controller.py:1652
 #, python-brace-format
 msgid "Indexed {count} images ({errors} skipped due to errors)"
 msgstr "{count} immagini indicizzate ({errors} saltate a causa di errori)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1567
+#: src/exif_turbo/ui/view_models/app_controller.py:1657
 #, python-brace-format
 msgid "Indexed {} images"
 msgstr "{} immagini indicizzate"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1600
+#: src/exif_turbo/ui/view_models/app_controller.py:1690
 #, python-brace-format
 msgid "Index failed: {}"
 msgstr "Indicizzazione fallita: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1632
+#: src/exif_turbo/ui/view_models/app_controller.py:1722
 msgid "Index canceled"
 msgstr "Indicizzazione annullata"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1652
+#: src/exif_turbo/ui/view_models/app_controller.py:1742
 msgid "Canceling…"
 msgstr "Annullamento…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1747
+#: src/exif_turbo/ui/view_models/app_controller.py:1837
 #, python-brace-format
 msgid "Built {built} preview(s) of {total}."
 msgstr "{built} anteprima/e create di {total}."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1755
+#: src/exif_turbo/ui/view_models/app_controller.py:1845
 #, python-brace-format
 msgid "Preview build failed: {error}"
 msgstr "Creazione anteprime non riuscita: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1763
+#: src/exif_turbo/ui/view_models/app_controller.py:1853
 #, python-brace-format
 msgid "Preview build canceled ({built} of {total} done)."
 msgstr "Creazione anteprime annullata ({built} di {total} completate)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1776
+#: src/exif_turbo/ui/view_models/app_controller.py:1866
 msgid "Cancel the running preview build before clearing the cache."
-msgstr ""
-"Annulla la creazione delle anteprime in corso prima di svuotare la cache."
+msgstr "Annulla la creazione delle anteprime in corso prima di svuotare la cache."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1785
+#: src/exif_turbo/ui/view_models/app_controller.py:1875
 #, python-brace-format
 msgid "Failed to clear preview cache: {error}"
 msgstr "Impossibile svuotare la cache delle anteprime: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1791
+#: src/exif_turbo/ui/view_models/app_controller.py:1881
 #, python-brace-format
 msgid "Removed {n} cached preview(s)."
 msgstr "{n} anteprima/e in cache rimossa/e."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1849
+#: src/exif_turbo/ui/view_models/app_controller.py:1909
+msgid "Image copied to clipboard"
+msgstr "Immagine copiata negli appunti"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:1913
+msgid "Path copied to clipboard"
+msgstr "Percorso copiato negli appunti"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:1968
 msgid "Database reset"
 msgstr "Database ripristinato"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2028
+#: src/exif_turbo/ui/view_models/app_controller.py:2153
+#, python-brace-format
+msgid "Indexing… {} (scanning)"
+msgstr "Indicizzazione… {} (scansione)"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:2155
+#, python-brace-format
+msgid "Indexing… 0 / {}"
+msgstr "Indicizzazione… 0 / {}"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:2157
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indicizzazione… {} / {}"
@@ -362,6 +378,18 @@ msgid "Confirm passphrase"
 msgstr "Conferma passphrase"
 
 #: QML
+msgid "Copy"
+msgstr "Copia"
+
+#: QML
+msgid "Copy Image to Clipboard"
+msgstr "Copia immagine negli appunti"
+
+#: QML
+msgid "Copy preview image to clipboard"
+msgstr "Copia anteprima negli appunti"
+
+#: QML
 msgid "Create Database"
 msgstr "Crea database"
 
@@ -455,12 +483,12 @@ msgstr "ExifTool non trovato"
 
 #: QML
 msgid ""
-"ExifTool was not found on your system. Indexing is disabled until ExifTool "
-"is installed and available on your PATH."
+"ExifTool was not found on your system. Indexing is disabled until "
+"ExifTool is installed and available on your PATH."
 msgstr ""
 "ExifTool non è stato trovato sul tuo sistema. L’indicizzazione è "
-"disabilitata finché ExifTool non viene installato e reso disponibile nel tuo"
-" PATH."
+"disabilitata finché ExifTool non viene installato e reso disponibile nel "
+"tuo PATH."
 
 #: QML
 msgid "Export Metadata as &JSON\\u2026 (%1 selected)"
@@ -488,10 +516,12 @@ msgstr "Impostazione predefinita: %1 (%2 thread CPU rilevati)"
 
 #: QML
 msgid ""
-"File and folder name patterns to skip during indexing. Supports wildcards (e.g. *, ?).\n"
+"File and folder name patterns to skip during indexing. Supports wildcards"
+" (e.g. *, ?).\n"
 "Changes take effect on the next rescan."
 msgstr ""
-"Modelli di nomi di file e cartelle da ignorare durante l’indicizzazione. Supporta caratteri jolly (es. *, ?).\n"
+"Modelli di nomi di file e cartelle da ignorare durante l’indicizzazione. "
+"Supporta caratteri jolly (es. *, ?).\n"
 "Le modifiche hanno effetto alla prossima reindicizzazione."
 
 #: QML
@@ -524,8 +554,7 @@ msgstr "Cartella/e"
 
 #: QML
 msgid "Force re-extract EXIF for every file in all enabled folders"
-msgstr ""
-"Forza la rieestrazione EXIF per ogni file in tutte le cartelle abilitate"
+msgstr "Forza la rieestrazione EXIF per ogni file in tutte le cartelle abilitate"
 
 #: QML
 msgid "Force re-extract EXIF for every file in this folder"
@@ -605,8 +634,9 @@ msgstr "Caricamento originale…"
 
 #: QML
 msgid ""
-"Long-edge resolution used by the preview-cache builder. Larger values give "
-"sharper detail when zooming but take more disk space and longer to render."
+"Long-edge resolution used by the preview-cache builder. Larger values "
+"give sharper detail when zooming but take more disk space and longer to "
+"render."
 msgstr ""
 "Risoluzione del lato lungo utilizzata dal generatore di cache anteprime. "
 "Valori più alti forniscono dettagli più nitidi durante lo zoom, ma "
@@ -678,8 +708,8 @@ msgid ""
 "Higher values speed up processing but use more CPU and memory."
 msgstr ""
 "Numero di thread paralleli per l’indicizzazione e la generazione di "
-"miniature. Valori più alti accelerano l’elaborazione ma utilizzano più CPU e"
-" memoria."
+"miniature. Valori più alti accelerano l’elaborazione ma utilizzano più "
+"CPU e memoria."
 
 #: QML
 msgid "Oldest first"
@@ -719,23 +749,25 @@ msgid ""
 "paths). Wildcards: * matches any characters, ? matches one character."
 msgstr ""
 "I modelli vengono confrontati con nomi di file o cartelle singoli (non "
-"percorsi completi). Caratteri jolly: * corrisponde a qualsiasi carattere, ? "
-"corrisponde a un carattere."
+"percorsi completi). Caratteri jolly: * corrisponde a qualsiasi carattere,"
+" ? corrisponde a un carattere."
 
 #: QML
 msgid ""
-"Permanently delete %1 marked image file(s) from disk and remove them from the index?\n"
+"Permanently delete %1 marked image file(s) from disk and remove them from"
+" the index?\n"
 "\n"
 "This cannot be undone."
 msgstr ""
-"Eliminare definitivamente %1 file immagine contrassegnata/i dal disco e rimuoverla/i dall’indice?\n"
+"Eliminare definitivamente %1 file immagine contrassegnata/i dal disco e "
+"rimuoverla/i dall’indice?\n"
 "\n"
 "Questa operazione non può essere annullata."
 
 #: QML
 msgid ""
-"Permanently deletes all indexed images and folder records. This cannot be "
-"undone."
+"Permanently deletes all indexed images and folder records. This cannot be"
+" undone."
 msgstr ""
 "Elimina definitivamente tutte le immagini indicizzate e i record delle "
 "cartelle. Questa operazione non può essere annullata."
@@ -761,8 +793,8 @@ msgid ""
 "Re-encrypts the database under a new password. Existing thumbnails are "
 "preserved."
 msgstr ""
-"Ricifra il database con una nuova password. Le miniature esistenti vengono "
-"conservate."
+"Ricifra il database con una nuova password. Le miniature esistenti "
+"vengono conservate."
 
 #: QML
 msgid "Re-index this folder (incremental)"
@@ -775,7 +807,8 @@ msgstr "Rimuovi"
 #: QML
 msgid "Remove \"%1\" and delete all its indexed images from the database?"
 msgstr ""
-"Rimuovere «%1» ed eliminare tutte le sue immagini indicizzate dal database?"
+"Rimuovere «%1» ed eliminare tutte le sue immagini indicizzate dal "
+"database?"
 
 #: QML
 msgid "Remove Folder"
@@ -882,14 +915,14 @@ msgstr "Mostra solo le immagini selezionate"
 #: QML
 msgid "Showing cached preview. Click to load the full-resolution source."
 msgstr ""
-"Visualizzazione anteprima in cache. Clicca per caricare la sorgente ad alta "
-"risoluzione."
+"Visualizzazione anteprima in cache. Clicca per caricare la sorgente ad "
+"alta risoluzione."
 
 #: QML
 msgid "Showing full-resolution source. Click to use cached preview."
 msgstr ""
-"Visualizzazione sorgente ad alta risoluzione. Clicca per usare l’anteprima "
-"in cache."
+"Visualizzazione sorgente ad alta risoluzione. Clicca per usare "
+"l’anteprima in cache."
 
 #: QML
 msgid "Smallest"
@@ -917,21 +950,23 @@ msgstr "Licenze di terze parti"
 
 #: QML
 msgid ""
-"This passphrase encrypts your entire image index. Use at least 12 characters"
-" and a mix of letters, numbers, and symbols. There is no way to recover a "
-"lost passphrase."
+"This passphrase encrypts your entire image index. Use at least 12 "
+"characters and a mix of letters, numbers, and symbols. There is no way to"
+" recover a lost passphrase."
 msgstr ""
-"Questa passphrase cifra l’intero indice delle immagini. Utilizza almeno 12 "
-"caratteri e una combinazione di lettere, numeri e simboli. Una passphrase "
-"persa non può essere recuperata."
+"Questa passphrase cifra l’intero indice delle immagini. Utilizza almeno "
+"12 caratteri e una combinazione di lettere, numeri e simboli. Una "
+"passphrase persa non può essere recuperata."
 
 #: QML
 msgid ""
-"This will permanently delete all indexed images and indexed folder records.\n"
+"This will permanently delete all indexed images and indexed folder "
+"records.\n"
 "\n"
 "Are you sure you want to continue?"
 msgstr ""
-"Questa operazione eliminerà definitivamente tutte le immagini indicizzate e i record delle cartelle.\n"
+"Questa operazione eliminerà definitivamente tutte le immagini indicizzate"
+" e i record delle cartelle.\n"
 "\n"
 "Sei sicuro di voler continuare?"
 
@@ -988,6 +1023,10 @@ msgid "images"
 msgstr "immagini"
 
 #: QML
+msgid "indexed, scanning\\u2026"
+msgstr "indicizzato, scansione…"
+
+#: QML
 msgid "pixels (long edge)"
 msgstr "pixel (lato lungo)"
 
@@ -1019,4 +1058,6 @@ msgid ""
 msgstr ""
 "• Gli operatori AND, OR, NOT devono essere in MAIUSCOLO\n"
 "• Racchiudere le frasi di più parole tra virgolette\n"
-"• Nelle chiavi ExifTool (es. GPS:GPSLatitude) i due punti fungono da separatore"
+"• Nelle chiavi ExifTool (es. GPS:GPSLatitude) i due punti fungono da "
+"separatore"
+

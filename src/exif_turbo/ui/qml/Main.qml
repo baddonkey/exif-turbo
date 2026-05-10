@@ -105,7 +105,63 @@ ApplicationWindow {
                 searchField.forceActiveFocus()
             }
         }
+        function onClipboardCopyDone(message) {
+            clipboardToast.show(message)
+        }
     }
+
+    // ── Preview context menu (right-click on either preview pane) ─────────
+    Menu {
+        id: previewContextMenu
+        // Drive the popup width from the item's natural (untruncated) text size.
+        // contentItem.implicitWidth always reflects the full text width regardless
+        // of the width that the Menu assigns to the item, so there is no circular
+        // dependency and elision is avoided for any text length or locale.
+        width: _copyImageMenuItem.leftPadding
+             + _copyImageMenuItem.contentItem.implicitWidth
+             + _copyImageMenuItem.rightPadding
+        MenuItem {
+            id: _copyImageMenuItem
+            text: qsTr("Copy Image to Clipboard")
+            enabled: _selectedImageSource !== ""
+            onTriggered: { if (controller) controller.copyPreviewToClipboard() }
+        }
+    }
+
+    // ── Clipboard copy toast ──────────────────────────────────────────────
+    Rectangle {
+        id: clipboardToast
+        anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter; bottomMargin: 32 }
+        width: clipboardToastLabel.implicitWidth + 32
+        height: 36
+        radius: 18
+        color: Qt.rgba(0.1, 0.1, 0.1, 0.88)
+        z: 9999
+        opacity: 0.0
+        visible: opacity > 0.0
+
+        function show(message) {
+            clipboardToastLabel.text = message
+            opacity = 1.0
+            clipboardToastTimer.restart()
+        }
+
+        Behavior on opacity { NumberAnimation { duration: 180 } }
+
+        Timer {
+            id: clipboardToastTimer
+            interval: 2000
+            onTriggered: clipboardToast.opacity = 0.0
+        }
+
+        Label {
+            id: clipboardToastLabel
+            anchors.centerIn: parent
+            font.pixelSize: 13
+            color: "#ffffff"
+        }
+    }
+
     readonly property bool   _isNewDatabase:       controller ? controller.isNewDatabase      : false
     readonly property bool   _isIndexing:          controller ? controller.isIndexing         : false
     readonly property bool   _isBuildingThumbs:    controller ? controller.isBuildingThumbs   : false
@@ -1523,6 +1579,47 @@ ApplicationWindow {
                             text: qsTr("PREVIEW")
                         }
 
+                        // Copy to clipboard button
+                        Rectangle {
+                            id: copyToClipboardBtn
+                            anchors {
+                                right: previewSourceToggle.visible ? previewSourceToggle.left : parent.right
+                                rightMargin: previewSourceToggle.visible ? 6 : 8
+                                verticalCenter: parent.verticalCenter
+                            }
+                            width: copyToClipboardLabel.implicitWidth + 28
+                            height: 22
+                            radius: 11
+                            color: Qt.rgba(0, 0, 0, copyBtnArea.containsMouse ? 0.75 : 0.45)
+                            border.color: Qt.rgba(1, 1, 1, 0.25)
+                            border.width: 1
+                            visible: _selectedImageSource !== ""
+                            opacity: copyBtnArea.containsMouse ? 1.0 : 0.5
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
+
+                            Label {
+                                id: copyToClipboardLabel
+                                anchors.centerIn: parent
+                                text: qsTr("Copy")
+                                font.pixelSize: 11
+                                font.weight: Font.DemiBold
+                                color: "#ffffff"
+                            }
+
+                            MouseArea {
+                                id: copyBtnArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: { if (controller) controller.copyPreviewToClipboard() }
+                            }
+
+                            ToolTip.text: qsTr("Copy preview image to clipboard")
+                            ToolTip.visible: copyBtnArea.containsMouse
+                            ToolTip.delay: 400
+                        }
+
                         // Preview / Raw source toggle — lets the user override
                         // the cached preview to load the full-resolution raw
                         // file when zooming in for detail.
@@ -1680,6 +1777,14 @@ ApplicationWindow {
                                     previewHost._zoom = 1.0
                                     previewFlick.contentX = 0
                                     previewFlick.contentY = 0
+                                }
+                            }
+
+                            // Right-click context menu
+                            TapHandler {
+                                acceptedButtons: Qt.RightButton
+                                onTapped: (eventPoint) => {
+                                    previewContextMenu.popup()
                                 }
                             }
                         }
@@ -2473,6 +2578,42 @@ ApplicationWindow {
                             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                             text: qsTr("PREVIEW")
                         }
+
+                        // Copy to clipboard button
+                        Rectangle {
+                            anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                            width: copyToClipboardLabel2.implicitWidth + 28
+                            height: 22
+                            radius: 11
+                            color: Qt.rgba(0, 0, 0, copyBtnArea2.containsMouse ? 0.75 : 0.45)
+                            border.color: Qt.rgba(1, 1, 1, 0.25)
+                            border.width: 1
+                            visible: _selectedImageSource !== ""
+                            opacity: copyBtnArea2.containsMouse ? 1.0 : 0.5
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
+
+                            Label {
+                                id: copyToClipboardLabel2
+                                anchors.centerIn: parent
+                                text: qsTr("Copy")
+                                font.pixelSize: 11
+                                font.weight: Font.DemiBold
+                                color: "#ffffff"
+                            }
+
+                            MouseArea {
+                                id: copyBtnArea2
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: { if (controller) controller.copyPreviewToClipboard() }
+                            }
+
+                            ToolTip.text: qsTr("Copy preview image to clipboard")
+                            ToolTip.visible: copyBtnArea2.containsMouse
+                            ToolTip.delay: 400
+                        }
                     }
 
                     // Preview: show cached thumbnail instantly as placeholder,
@@ -2558,6 +2699,14 @@ ApplicationWindow {
                                     previewHost2._zoom = 1.0
                                     previewFlick2.contentX = 0
                                     previewFlick2.contentY = 0
+                                }
+                            }
+
+                            // Right-click context menu
+                            TapHandler {
+                                acceptedButtons: Qt.RightButton
+                                onTapped: (eventPoint) => {
+                                    previewContextMenu.popup()
                                 }
                             }
                         }

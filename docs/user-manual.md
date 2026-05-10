@@ -429,6 +429,21 @@ being decoded (large RAW files may take a few seconds).
 > The **Show Preview / Show Original** toggle is only present in the **Search**
 > tab. The Browse tab preview always shows the image directly.
 
+#### Copying the preview image
+
+You can copy the currently displayed preview image to the system clipboard in
+two ways:
+
+- Click the **Copy** pill button at the left of the **PREVIEW** header bar
+  (to the left of the **Show Preview / Show Original** toggle).
+- **Right-click** anywhere on the preview image and choose
+  **Copy Image to Clipboard** from the context menu.
+
+Both actions are available in the **Search** and **Browse** tabs. A brief
+toast notification at the bottom of the window confirms that the image has
+been placed on the clipboard. If rendering fails for any reason, the file
+path is copied as plain text instead.
+
 #### Zooming and panning
 
 The preview supports cursor-anchored zoom and drag-to-pan:

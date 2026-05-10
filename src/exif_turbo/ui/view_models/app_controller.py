@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 import sqlcipher3
 from PySide6.QtCore import Property, QObject, QThread, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QGuiApplication
 
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
@@ -44,6 +44,7 @@ from ..workers.password_change_worker import PasswordChangeWorker
 from ..workers.preview_build_worker import PreviewBuildWorker
 from ..workers.search_worker import SearchWorker
 from ..workers.thumb_worker import ThumbWorker
+from ...utils.preview_render import MAX_PREVIEW_PX, render_preview
 
 _PAGE_SIZE = 50
 _DEFAULT_WORKERS = max(1, (os.cpu_count() or 2) // 2)
@@ -106,6 +107,7 @@ class AppController(QObject):
     busyCancelableChanged = Signal()
     exiftoolMissingChanged = Signal()
     exiftoolVersionChanged = Signal()
+    clipboardCopyDone = Signal(str)  # message to show in toast
 
     def __init__(
         self,
@@ -1880,6 +1882,35 @@ class AppController(QObject):
         )
 
     # ── Preview source toggle ─────────────────────────────────────────────
+
+    @Slot()
+    def copyPreviewToClipboard(self) -> None:
+        """Copy the currently displayed preview image to the system clipboard.
+
+        Falls back to copying the file path (as plain text) when the image
+        cannot be decoded (e.g. source file on a disconnected drive).
+        """
+        path = self._pending_preview_path
+        if not path:
+            return
+        try:
+            pil_img = render_preview(path, MAX_PREVIEW_PX)
+            pil_img = pil_img.convert("RGBA")
+            from PySide6.QtGui import QImage  # local import to avoid top-level cycle
+
+            data = bytes(pil_img.tobytes("raw", "RGBA"))
+            qimage = QImage(
+                data,
+                pil_img.width,
+                pil_img.height,
+                QImage.Format.Format_RGBA8888,
+            ).copy()
+            QGuiApplication.clipboard().setImage(qimage)
+            self.clipboardCopyDone.emit(_("Image copied to clipboard"))
+        except Exception:  # noqa: BLE001
+            _log.exception("copyPreviewToClipboard failed for %r, falling back to path", path)
+            QGuiApplication.clipboard().setText(path)
+            self.clipboardCopyDone.emit(_("Path copied to clipboard"))
 
     @Slot(bool)
     def setUseRawPreview(self, use_raw: bool) -> None:
