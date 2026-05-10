@@ -189,6 +189,13 @@ class AppController(QObject):
         self._pending_thumb_restart = False
         self._search_worker: SearchWorker | None = None
         self._search_serial: int = 0
+        # Workers that have emitted results_ready but whose QThread cleanup has
+        # not yet completed.  We keep them in this set so the Python object is
+        # not garbage-collected while QThreadWrapper::run() is still unwinding
+        # its C++ stack (which holds a reference via AutoDecRef).  Each worker
+        # is removed in _on_search_worker_done, which is connected to
+        # QThread.finished — emitted only after run() has fully returned.
+        self._finishing_search_workers: set[SearchWorker] = set()
         # Params for a search that arrived while one was already in-flight.
         # Consumed immediately when the current worker finishes.
         self._pending_search_params: dict | None = None
@@ -1126,10 +1133,21 @@ class AppController(QObject):
             serial=serial,
             **params,
         )
-        worker.finished.connect(self._on_search_finished)
+        worker.results_ready.connect(self._on_search_finished)
         worker.failed.connect(self._on_search_failed)
+        worker.finished.connect(self._on_search_worker_done)
         self._search_worker = worker
         worker.start()
+
+    def _on_search_worker_done(self) -> None:
+        """Slot connected to QThread.finished (emitted after run() fully exits).
+
+        Releases the Python reference to the old worker only after Qt has
+        confirmed the thread has fully unwound — preventing the GC from
+        destroying the QThread wrapper while its C++ run() is still live.
+        """
+        worker = self.sender()
+        self._finishing_search_workers.discard(worker)  # type: ignore[arg-type]
 
     def _on_search_finished(
         self,
@@ -1138,7 +1156,14 @@ class AppController(QObject):
         format_counts: list,
         serial: int,
     ) -> None:
+        old_worker = self._search_worker
         self._search_worker = None
+        # Keep a Python reference to the outgoing worker until QThread.finished
+        # fires (_on_search_worker_done).  Without this, the GC can destroy the
+        # Python wrapper while QThreadWrapper::run() is still unwinding its
+        # C++ stack, causing Qt to call abort().
+        if old_worker is not None:
+            self._finishing_search_workers.add(old_worker)
         # If newer params are waiting, fire a follow-up search and discard
         # these (now stale) results — only the latest request matters.
         if self._pending_search_params is not None:
@@ -1151,8 +1176,9 @@ class AppController(QObject):
                 serial=serial_now,
                 **pending,
             )
-            worker.finished.connect(self._on_search_finished)
+            worker.results_ready.connect(self._on_search_finished)
             worker.failed.connect(self._on_search_failed)
+            worker.finished.connect(self._on_search_worker_done)
             self._search_worker = worker
             worker.start()
             return
@@ -1186,7 +1212,10 @@ class AppController(QObject):
             self._clear_details()
 
     def _on_search_failed(self, error: str) -> None:
+        old_worker = self._search_worker
         self._search_worker = None
+        if old_worker is not None:
+            self._finishing_search_workers.add(old_worker)
         _log.error("Search failed: %s", error)
         self._set_search_error(error)
         self._search_model.set_rows([])

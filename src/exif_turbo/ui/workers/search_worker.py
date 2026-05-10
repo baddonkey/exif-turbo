@@ -17,7 +17,7 @@ class SearchWorker(QThread):
 
     Signals
     -------
-    finished(rows, total, format_counts, serial)
+    results_ready(rows, total, format_counts, serial)
         Emitted with the query results when the search completes.
         ``serial`` matches the value passed to the constructor so the
         controller can discard stale results if a newer search was
@@ -26,8 +26,8 @@ class SearchWorker(QThread):
         Emitted if the query raises an exception.
     """
 
-    finished: Signal = Signal(list, int, list, int)
-    failed:   Signal = Signal(str)
+    results_ready: Signal = Signal(list, int, list, int)
+    failed:         Signal = Signal(str)
 
     def __init__(
         self,
@@ -81,6 +81,6 @@ class SearchWorker(QThread):
                 restrict_to_enabled_folders=self._restrict,
             )
             repo.close()
-            self.finished.emit(rows, total, format_counts, self._serial)
+            self.results_ready.emit(rows, total, format_counts, self._serial)
         except Exception as exc:  # noqa: BLE001
             self.failed.emit(str(exc))
