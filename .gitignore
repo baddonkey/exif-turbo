@@ -34,6 +34,7 @@ MANIFEST
 # Track the project's own specs — they contain bundle configuration (datas, hiddenimports)
 !exif-turbo.spec
 !exif-turbo-macos.spec
+!exif-turbo-linux.spec
 
 # Installer logs
 pip-log.txt
