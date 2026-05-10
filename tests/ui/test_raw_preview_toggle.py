@@ -160,11 +160,20 @@ def test_raw_provider_returns_full_resolution_not_downscaled_to_requested_size(
     full_w, full_h = 4000, 3000
     fake_rgb = np.zeros((full_h, full_w, 3), dtype=np.uint8)
 
+    class _FakeSizes:
+        flip = 0
+
     class _FakeRaw:
+        sizes = _FakeSizes()
+
         def __enter__(self) -> "_FakeRaw":
             return self
 
         def __exit__(self, *_: object) -> None:
+            return None
+
+        def extract_thumb(self) -> None:
+            """No embedded JPEG — force fallback to postprocess()."""
             return None
 
         def postprocess(self, **_: object) -> np.ndarray:
