@@ -71,8 +71,9 @@ def _decode_raw(path: str, requested_size: QSize) -> QImage:
     if img is None:
         return QImage()
 
-    # Apply EXIF orientation (embedded JPEG thumbs often carry an Orientation tag)
-    img = ImageOps.exif_transpose(img)
+    # Orientation is already applied inside _load_full_resolution:
+    # RAW files use orient_raw_thumb (raw_flip + EXIF fallback),
+    # non-RAW files use ImageOps.exif_transpose.
 
     # Convert to RGBA for a predictable QImage byte layout
     img = img.convert("RGBA")
@@ -118,6 +119,6 @@ def _load_full_resolution(path: str) -> Image.Image | None:
     try:
         img = Image.open(path)
         img.load()
-        return img
+        return ImageOps.exif_transpose(img)
     except Exception:
         return None
