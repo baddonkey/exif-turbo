@@ -78,6 +78,7 @@ ApplicationWindow {
         enabled: mainTabBar.currentIndex === 0 && controller && controller.currentResultRow < resultsList.count - 1
         onActivated: {
             var next = controller.currentResultRow + 1
+            root._previewNavigating = true
             controller.selectResult(next)
             resultsList.positionViewAtIndex(next, ListView.Contain)
         }
@@ -87,12 +88,14 @@ ApplicationWindow {
         enabled: mainTabBar.currentIndex === 0 && controller && controller.currentResultRow > 0
         onActivated: {
             var prev = controller.currentResultRow - 1
+            root._previewNavigating = true
             controller.selectResult(prev)
             resultsList.positionViewAtIndex(prev, ListView.Contain)
         }
     }
 
     property bool findBarVisible: false
+    property bool _previewNavigating: false
 
     // ── Null-safe proxies ─────────────────────────────────────────────────
     readonly property bool   _isLocked:            controller ? controller.isLocked           : true
@@ -1721,16 +1724,18 @@ ApplicationWindow {
                                 smooth: true
                                 asynchronous: true
                                 cache: false
-                                opacity: status === Image.Ready ? 1.0 : 0.0
-                                Behavior on opacity { NumberAnimation { duration: 200 } }
+                                opacity: (!root._previewNavigating && status === Image.Ready) ? 1.0 : 0.0
+                                Behavior on opacity { enabled: !root._previewNavigating; NumberAnimation { duration: 200 } }
                                 onSourceChanged: {
                                     previewHost._zoom = 1.0
                                     previewFlick.contentX = 0
                                     previewFlick.contentY = 0
                                 }
                                 onStatusChanged: {
-                                    if (status === Image.Ready || status === Image.Error)
+                                    if (status === Image.Ready || status === Image.Error) {
+                                        root._previewNavigating = false
                                         if (controller) controller.onPreviewStatusChanged()
+                                    }
                                 }
                             }
 
