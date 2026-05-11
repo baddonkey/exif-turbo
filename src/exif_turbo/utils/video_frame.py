@@ -13,6 +13,7 @@ PyAV is not installed.
 from __future__ import annotations
 
 import logging
+import struct
 from typing import Any
 
 from PIL import Image
@@ -26,14 +27,17 @@ except ImportError:  # pragma: no cover
     _AV_AVAILABLE = False
 
 
-def _get_video_rotation(container: Any, stream: Any) -> int:
+def _get_video_rotation(container: Any, stream: Any, path: str = "") -> int:
     """Return the clockwise rotation in degrees needed to display *stream* upright.
 
     Checks, in order:
     1. Stream metadata ``rotate`` tag (most containers from cameras/phones).
     2. Codec-context metadata ``rotate`` tag (some encoders put it here).
     3. Container (format) metadata.
-    4. Display matrix side data (PyAV ≥†12 on streams that carry one).
+    4. Display matrix side data (PyAV when available).
+    5. QuickTime / MPEG-4 ``tkhd`` transformation matrix (parsed directly from
+       the file bytes) — required for iPhone/iOS videos where PyAV does not
+       surface the display matrix as ``stream.side_data``.
     """
     for meta in (
         getattr(stream, "metadata", None),
@@ -51,7 +55,7 @@ def _get_video_rotation(container: Any, stream: Any) -> int:
             except (TypeError, ValueError):
                 pass
 
-    # Try display matrix side data (PyAV ≥ 12)
+    # Try display matrix side data (PyAV when it surfaces it)
     side_data = getattr(stream, "side_data", None)
     if side_data is not None:
         dm = side_data.get("DISPLAYMATRIX") if hasattr(side_data, "get") else None
@@ -65,6 +69,14 @@ def _get_video_rotation(container: Any, stream: Any) -> int:
                         return cw
                 except (TypeError, ValueError):
                     pass
+
+    # Fallback: read the QuickTime / MPEG-4 tkhd transformation matrix directly.
+    # PyAV 17 does not expose stream-level side data (stream.side_data is None)
+    # for many MOV/MP4 files from cameras and phones, so we parse the atoms.
+    if path:
+        qt_rot = _get_rotation_from_qt_atoms(path)
+        if qt_rot:
+            return qt_rot
 
     return 0
 
@@ -133,10 +145,10 @@ def extract_video_frame(
         raise RuntimeError("PyAV is not installed; cannot decode video frames")
 
     with _av.open(path) as container:
-        img = _try_embedded_thumbnail(container, target_long_edge)
+        img = _try_embedded_thumbnail(container, target_long_edge, path)
         if img is not None:
             return img
-        img = _extract_frame_at_third(container, target_long_edge)
+        img = _extract_frame_at_third(container, target_long_edge, path)
         if img is not None:
             return img
 
@@ -149,6 +161,7 @@ def extract_video_frame(
 def _try_embedded_thumbnail(
     container: Any,
     target_long_edge: int | None,
+    path: str = "",
 ) -> Image.Image | None:
     """Return the highest-resolution embedded thumbnail, or ``None``.
 
@@ -169,7 +182,7 @@ def _try_embedded_thumbnail(
     if best_stream is None:
         return None
 
-    rotation = _get_video_rotation(container, best_stream)
+    rotation = _get_video_rotation(container, best_stream, path)
     try:
         for packet in container.demux(best_stream):
             for frame in packet.decode():
@@ -189,6 +202,7 @@ def _try_embedded_thumbnail(
 def _extract_frame_at_third(
     container: Any,
     target_long_edge: int | None,
+    path: str = "",
 ) -> Image.Image | None:
     """Seek to 1/3 of the video duration and decode the nearest key frame.
 
@@ -239,9 +253,127 @@ def _extract_frame_at_third(
     if frame is None:
         return None
 
-    rotation = _get_video_rotation(container, stream)
+    rotation = _get_video_rotation(container, stream, path)
     img: Image.Image = frame.to_image()
     img = _apply_rotation(img, rotation)
     if target_long_edge is not None:
         img.thumbnail((target_long_edge, target_long_edge), Image.LANCZOS)
     return img
+
+
+# ── QuickTime / MPEG-4 atom parser ───────────────────────────────────────────
+
+
+def _get_rotation_from_qt_atoms(path: str) -> int:
+    """Return the CW rotation in degrees read from the first video tkhd matrix.
+
+    Parses QuickTime / MPEG-4 container atoms directly — required for files
+    (e.g. iPhone MOV) where the rotation is stored only in the track-header
+    transformation matrix and PyAV does not surface it as ``stream.side_data``.
+
+    Returns 0 for non-QT/MP4 files or if no rotation is found.
+    """
+    try:
+        with open(path, "rb") as f:
+            return _parse_qt_tkhd_rotation(f)
+    except Exception:
+        return 0
+
+
+def _parse_qt_tkhd_rotation(f: Any) -> int:
+    """Scan a seekable binary file object for the first video tkhd matrix."""
+
+    def _read_box(limit_end: int) -> tuple[str | None, int, int]:
+        pos = f.tell()
+        if pos >= limit_end:
+            return None, pos, pos
+        raw = f.read(8)
+        if len(raw) < 8:
+            return None, pos, limit_end
+        size_raw: int
+        box_type_b: bytes
+        size_raw, box_type_b = struct.unpack(">I4s", raw)
+        box_type = box_type_b.decode("latin-1", errors="replace")
+        if size_raw == 1:
+            ext = f.read(8)
+            if len(ext) < 8:
+                return None, pos, limit_end
+            (size,) = struct.unpack(">Q", ext)
+            content_start = pos + 16
+        elif size_raw == 0:
+            size = limit_end - pos
+            content_start = pos + 8
+        else:
+            size = size_raw
+            content_start = pos + 8
+        return box_type, content_start, pos + size
+
+    def _find_box(target: str, limit_end: int) -> tuple[int, int] | tuple[None, None]:
+        while f.tell() < limit_end:
+            box_type, content_start, box_end = _read_box(limit_end)
+            if box_type is None:
+                return None, None
+            if box_type == target:
+                return content_start, box_end
+            f.seek(box_end)
+        return None, None
+
+    # File size
+    f.seek(0, 2)
+    file_size = f.tell()
+    f.seek(0)
+
+    moov_content, moov_end = _find_box("moov", file_size)
+    if moov_content is None or moov_end is None:
+        return 0
+
+    f.seek(moov_content)
+
+    while True:
+        trak_content, trak_end = _find_box("trak", moov_end)
+        if trak_content is None or trak_end is None:
+            break
+
+        f.seek(trak_content)
+        tkhd_content, _ = _find_box("tkhd", trak_end)
+        if tkhd_content is None:
+            f.seek(trak_end)
+            continue
+
+        f.seek(tkhd_content)
+        version_flags = f.read(4)
+        if len(version_flags) < 4:
+            f.seek(trak_end)
+            continue
+
+        # Skip fields before the 36-byte matrix.
+        # version 0: creation(4)+modification(4)+trackid(4)+reserved(4)+duration(4)
+        #            +reserved(8)+layer(2)+altgroup(2)+volume(2)+reserved(2) = 36
+        # version 1: creation(8)+modification(8)+trackid(4)+reserved(4)+duration(8)
+        #            +reserved(8)+layer(2)+altgroup(2)+volume(2)+reserved(2) = 48
+        skip = 48 if version_flags[0] == 1 else 36
+        f.read(skip)
+
+        matrix_data = f.read(36)
+        if len(matrix_data) < 36:
+            f.seek(trak_end)
+            continue
+
+        # Matrix layout: [a, b, u, c, d, v, tx, ty, w] — nine 32-bit big-endian ints.
+        # a and b are 16.16 fixed-point; determine rotation from their signs.
+        vals = struct.unpack(">9i", matrix_data)
+        a = vals[0] / 65536.0
+        b = vals[1] / 65536.0
+        eps = 0.5
+        if abs(a) < eps and b > eps:
+            return 90   # 90° CW (portrait from landscape sensor)
+        if a < -eps and abs(b) < eps:
+            return 180
+        if abs(a) < eps and b < -eps:
+            return 270  # 270° CW
+        if a > eps and abs(b) < eps:
+            return 0    # identity — no rotation on this track
+
+        f.seek(trak_end)
+
+    return 0

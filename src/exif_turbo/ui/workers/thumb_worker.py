@@ -203,6 +203,7 @@ class ThumbWorker(QThread):
             def build_thumb(path: str) -> bool:
                 if not path:
                     return False
+                ext = Path(path).suffix.lower()
                 # Yield to preview loads: wait while paused (2s max safety valve)
                 if not self._resume_event.is_set():
                     self._resume_event.wait(timeout=2.0)
@@ -228,7 +229,10 @@ class ThumbWorker(QThread):
                         file_size = os.path.getsize(path)
                     except OSError:
                         return False  # transient (e.g. NAS offline)
-                if file_size > self.max_thumb_bytes:
+                if file_size > self.max_thumb_bytes and ext not in VIDEO_EXTENSIONS:
+                    # Videos are never fully loaded into memory — only a single
+                    # decoded frame is used — so the file-size guard does not
+                    # apply to them.
                     size_mb = file_size // (1024 * 1024)
                     _mark_skip(cache_path_obj, f"file too large ({size_mb} MB): {path}")
                     return False
