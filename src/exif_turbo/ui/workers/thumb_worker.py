@@ -18,9 +18,10 @@ from PIL import Image, ImageFile, ImageOps
 from PySide6.QtCore import QThread, Signal
 
 from ...data.image_index_repository import ImageIndexRepository
-from ...indexing.image_utils import RAW_EXTENSIONS, orient_raw_thumb
+from ...indexing.image_utils import RAW_EXTENSIONS, VIDEO_EXTENSIONS, orient_raw_thumb
 from ...utils.thumb_cache import thumb_cache_name_from_stamp, thumb_cache_path
 from ...utils.thumb_crypto import ThumbCrypto
+from ...utils.video_frame import extract_video_frame
 
 # Pillow 12 treats some valid-but-unusual files (e.g. 16-bit RGBA PNGs with
 # large metadata chunks) as truncated.  Allow truncated reads globally so
@@ -38,6 +39,9 @@ _RAW_EXTENSIONS = RAW_EXTENSIONS
 def _open_image(path: str) -> Image.Image:
     """Open any image as a Pillow Image, using rawpy for RAW files."""
     ext = Path(path).suffix.lower()
+    if ext in VIDEO_EXTENSIONS:
+        # Extract frame at 1/3 of video duration; returns a PIL RGB Image
+        return extract_video_frame(path)
     if ext in _RAW_EXTENSIONS and _RAWPY_AVAILABLE:
         with rawpy.imread(path) as raw:
             raw_flip = raw.sizes.flip

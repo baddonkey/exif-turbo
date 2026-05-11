@@ -15,6 +15,9 @@ from PySide6.QtCore import QSize
 from PySide6.QtGui import QImage
 from PySide6.QtQuick import QQuickImageProvider
 
+from ...indexing.image_utils import VIDEO_EXTENSIONS
+from ...utils.video_frame import extract_video_frame
+
 
 class RawImageProvider(QQuickImageProvider):
     """
@@ -95,6 +98,12 @@ _RAW_EXTS = frozenset({
 def _load_full_resolution(path: str) -> Image.Image | None:
     """Return the source image at full resolution, or ``None`` on failure."""
     ext = os.path.splitext(path)[1].lower()
+    if ext in VIDEO_EXTENSIONS:
+        try:
+            # Full-resolution frame at 1/3 of video duration — no size cap
+            return extract_video_frame(path)
+        except Exception:
+            return None
     if ext in _RAW_EXTS and _RAWPY_AVAILABLE:
         try:
             with rawpy.imread(path) as raw:

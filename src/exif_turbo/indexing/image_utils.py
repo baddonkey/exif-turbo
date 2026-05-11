@@ -21,10 +21,22 @@ RAW_EXTENSIONS = {
     ".srw",                   # Samsung
 }
 
+# Video formats decoded via PyAV (FFmpeg).  A representative frame at 1/3 of
+# the video duration is extracted and used as the thumbnail/preview.
+VIDEO_EXTENSIONS = {
+    ".mp4", ".mov", ".avi", ".mkv", ".wmv", ".m4v",
+    ".mts", ".m2ts", ".3gp", ".webm", ".flv",
+}
+
 IMAGE_EXTENSIONS = {
     ".jpg", ".jpeg", ".tif", ".tiff", ".png", ".bmp", ".gif", ".webp",
     *RAW_EXTENSIONS,
+    *VIDEO_EXTENSIONS,
 }
+
+
+def is_video_file(path: Path) -> bool:
+    return path.suffix.lower() in VIDEO_EXTENSIONS
 
 
 def is_image_file(path: Path) -> bool:
