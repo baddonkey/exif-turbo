@@ -217,12 +217,14 @@ def main() -> None:
     try:
         if build_deb:
             deb_out = dist_dir / f"exif-turbo-{version}-linux.deb"
+            deb_out.unlink(missing_ok=True)
             print(f"\n  Building DEB → {deb_out.name} ...")
             build_fpm_package("deb", staging, version, fpm, deb_out)
             artifacts.append(deb_out)
 
         if build_rpm:
             rpm_out = dist_dir / f"exif-turbo-{version}-linux.rpm"
+            rpm_out.unlink(missing_ok=True)
             print(f"\n  Building RPM → {rpm_out.name} ...")
             build_fpm_package("rpm", staging, version, fpm, rpm_out)
             artifacts.append(rpm_out)
