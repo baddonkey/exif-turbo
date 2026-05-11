@@ -18,7 +18,7 @@ Test structure:
       Baseline: with an empty cache, thumbnailSource is "" for every row.
   * test_thumbnails_appear_when_cache_has_prebuilt_files
       When thumb files already exist (from a prior session) and are present
-      when the model is created, thumbnailSource returns a file:// URI.
+      when the model is created, thumbnailSource returns an image://thumb/ URI.
   * test_start_auto_thumbs_populates_thumbnail_source
       If _start_auto_thumbs() IS called explicitly, thumbs are built and
       refresh_thumbnails() makes them available via the model.
@@ -239,7 +239,7 @@ def test_thumbnails_appear_when_cache_has_prebuilt_files(
     """Pre-built thumb files present at model-creation time are returned immediately.
 
     This is the 'happy path' for a repeat session: thumbs exist from before,
-    _scan_cache_dir() finds them at __init__ time, and data() returns file://
+    _scan_cache_dir() finds them at __init__ time, and data() returns image://thumb/
     URIs without any explicit refresh.
     """
     ctrl = ctrl_prebuilt_cache
@@ -249,10 +249,10 @@ def test_thumbnails_appear_when_cache_has_prebuilt_files(
         ctrl.unlock("")
     assert ctrl._search_model.rowCount() == 3
 
-    # Assert — every result card has a resolvable file:// thumbnail URI
+    # Assert — every result card has a resolvable image://thumb/ URI
     sources = _thumb_sources(ctrl)
-    assert all(src.startswith("file://") for src in sources), (
-        f"Expected all results to have a file:// thumbnail URI, got: {sources}"
+    assert all(src.startswith("image://thumb/") for src in sources), (
+        f"Expected all results to have an image://thumb/ URI, got: {sources}"
     )
 
 
@@ -279,10 +279,10 @@ def test_start_auto_thumbs_populates_thumbnail_source(
     # Wait for the worker to finish (isBuildingThumbs → False)
     qtbot.waitUntil(lambda: not ctrl.isBuildingThumbs, timeout=15_000)
 
-    # Assert — model now returns file:// URIs for every result card
+    # Assert — model now returns image://thumb/ URIs for every result card
     sources = _thumb_sources(ctrl)
-    assert all(src.startswith("file://") for src in sources), (
-        f"Expected file:// thumbnail URIs after building, got: {sources}"
+    assert all(src.startswith("image://thumb/") for src in sources), (
+        f"Expected image://thumb/ URIs after building, got: {sources}"
     )
 
 
@@ -342,8 +342,8 @@ def test_thumbnail_building_triggered_for_preindexed_db_without_pending_scans(
 
     # Assert — thumbnails are now populated in the search result cards
     sources = _thumb_sources(ctrl)
-    assert all(src.startswith("file://") for src in sources), (
-        f"Expected file:// thumbnail URIs after unlock on pre-indexed DB, got: {sources}"
+    assert all(src.startswith("image://thumb/") for src in sources), (
+        f"Expected image://thumb/ URIs after unlock on pre-indexed DB, got: {sources}"
     )
 
 
@@ -444,7 +444,7 @@ def test_rescan_triggers_exactly_one_thumb_build_not_multiple(
 
         # All thumbnails must be present at the end
         sources = _thumb_sources(ctrl)
-        assert all(src.startswith("file://") for src in sources), (
+        assert all(src.startswith("image://thumb/") for src in sources), (
             f"Expected all thumbnails populated after rescan, got: {sources}"
         )
 

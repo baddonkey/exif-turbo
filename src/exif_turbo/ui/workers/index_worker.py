@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import os
 import shutil
 import threading
 import time
@@ -8,9 +10,11 @@ from typing import List
 
 from PySide6.QtCore import QThread, Signal
 
+from ...config import thumb_cache_dir
 from ...data.image_index_repository import ImageIndexRepository
 from ...indexing.image_finder import ImageFinder
 from ...indexing.indexer_service import IndexerService
+from ...utils.preview_cache import preview_dir
 
 
 class IndexWorker(QThread):
@@ -90,6 +94,15 @@ class IndexWorker(QThread):
                 force=self._force,
                 folder_id=self._folder_id,
             )
+            # Cache GC: remove orphaned thumb/preview files that no longer
+            # correspond to any DB row.  Self-heals after crashes, file moves
+            # and external deletions.  Skipped on cancel and on the cache-clear
+            # path (which already wiped everything itself).
+            if not self._cancel_event.is_set() and self._clear_cache_dir is None:
+                # Sentinel progress emit (-1, -1, "") tells the controller to
+                # show a translated "Cleaning up cache…" status.
+                self.progress.emit(-1, -1, "")
+                self._gc_orphaned_cache(repo)
             repo.close()
             if self._cancel_event.is_set():
                 self.canceled.emit(count)
@@ -97,4 +110,44 @@ class IndexWorker(QThread):
                 self.finished.emit(count, error_count)
         except Exception as exc:
             self.failed.emit(str(exc))
+
+    def _gc_orphaned_cache(self, repo: ImageIndexRepository) -> None:
+        """Delete cache files whose SHA-1 prefix isn't present in the DB.
+
+        The on-disk filename is ``SHA1(path|mtime|size)`` followed by one of
+        ``.png``, ``.enc``, ``.skip`` (thumbs) or ``.jpg``, ``.jpg.enc``
+        (previews).  Anything in the cache directory whose 40-char SHA-1
+        prefix isn't present in the current DB stamp set is an orphan and
+        gets unlinked.
+        """
+        try:
+            cache_dir = thumb_cache_dir(self.db_path)
+            stamps = repo.get_all_stamps()
+        except Exception:
+            return
+        # Build the expected SHA-1 set from current DB stamps.
+        expected: set[str] = set()
+        for ipath, (mtime, size) in stamps.items():
+            key = f"{ipath}|{mtime}|{size}"
+            expected.add(
+                hashlib.sha1(key.encode("utf-8", errors="ignore")).hexdigest()
+            )
+        for directory in (cache_dir, preview_dir(cache_dir)):
+            self._purge_orphans(directory, expected)
+
+    @staticmethod
+    def _purge_orphans(directory: Path, expected: set[str]) -> None:
+        """Unlink every file in *directory* whose 40-char prefix isn't expected."""
+        try:
+            with os.scandir(directory) as it:
+                for entry in it:
+                    name = entry.name
+                    if len(name) <= 40 or name[:40] in expected:
+                        continue
+                    try:
+                        os.unlink(entry.path)
+                    except OSError:
+                        pass
+        except OSError:
+            pass
 

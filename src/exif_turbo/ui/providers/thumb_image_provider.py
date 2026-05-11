@@ -14,13 +14,24 @@ _log = logging.getLogger(__name__)
 
 
 class ThumbnailImageProvider(QQuickImageProvider):
-    """QML image provider for encrypted thumbnail files.
+    """QML image provider for thumbnail files (encrypted or plain).
 
-    Serves ``image://thumb/<sha1_hex>`` URIs.  For each request:
+    Serves ``image://thumb/<sha1_hex>`` URIs.  An optional ``?t=<n>`` cache-
+    bust query is stripped from the id, so callers can force QML's pixmap
+    cache to refetch a regenerated thumbnail without changing the underlying
+    filename.
 
-    1. Reads ``cache_dir/<sha1_hex>.enc``
-    2. Decrypts with AES-256-GCM via :class:`ThumbCrypto`
-    3. Decodes PNG bytes → QImage via Qt's built-in PNG decoder
+    For each request:
+
+    1. If a key is configured, reads ``<cache>/<sha1>.enc`` and decrypts with
+       AES-256-GCM via :class:`ThumbCrypto`.
+    2. Otherwise reads ``<cache>/<sha1>.png`` directly from disk.
+    3. Decodes PNG bytes → QImage via Qt's built-in PNG decoder.
+
+    Routing all thumbs (encrypted or not) through this provider guarantees
+    that ``recreateThumbnail`` busts QML's pixmap cache: the same filename
+    always loads fresh pixels because the provider re-reads the file each
+    request.
 
     Thread-safe: ``set_key`` is called once on unlock from the main thread;
     subsequent ``requestImage`` calls arrive on Qt's async image-provider
@@ -51,17 +62,31 @@ class ThumbnailImageProvider(QQuickImageProvider):
         with self._lock:
             crypto = self._crypto
             cache_dir = self._cache_dir
-        if crypto is None or cache_dir is None:
+        if cache_dir is None:
             return QImage()
-        enc_path = cache_dir / f"{id}.enc"
+        # Strip optional ?t=<n> cache-bust query.
+        sha1 = id.split("?", 1)[0]
+        if crypto is not None:
+            enc_path = cache_dir / f"{sha1}.enc"
+            try:
+                raw = enc_path.read_bytes()
+                png_bytes = crypto.decrypt(raw)
+                qimg = QImage()
+                if qimg.loadFromData(png_bytes, "PNG"):
+                    size.setWidth(qimg.width())
+                    size.setHeight(qimg.height())
+                    return qimg
+            except Exception:
+                _log.debug("Failed to load encrypted thumb %s", enc_path, exc_info=True)
+            return QImage()
+        # Unencrypted mode — read .png directly.
+        png_path = cache_dir / f"{sha1}.png"
         try:
-            raw = enc_path.read_bytes()
-            png_bytes = crypto.decrypt(raw)
             qimg = QImage()
-            if qimg.loadFromData(png_bytes, "PNG"):
+            if qimg.load(str(png_path), "PNG"):
                 size.setWidth(qimg.width())
                 size.setHeight(qimg.height())
                 return qimg
         except Exception:
-            _log.debug("Failed to load encrypted thumb %s", enc_path, exc_info=True)
+            _log.debug("Failed to load plain thumb %s", png_path, exc_info=True)
         return QImage()

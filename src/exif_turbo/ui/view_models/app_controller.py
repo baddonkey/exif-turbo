@@ -1930,6 +1930,11 @@ class AppController(QObject):
         # Clear the displayed thumb immediately so the UI shows a blank placeholder.
         self._selected_thumb_source = ""
         self.selectedThumbSourceChanged.emit()
+        # Bust the left-grid thumbnail URI so QML's pixmap cache refetches the
+        # rebuilt PNG once the worker finishes (the filename is identical so
+        # without a busted URL QML would keep serving the stale cached image).
+        if self._current_result_row >= 0:
+            self._search_model.bust_thumbnail(self._current_result_row)
         # Rebuild: ensure the thumb worker runs a fresh scan that includes this
         # file.  If a worker is already running it has already captured its
         # `paths` list (before we deleted the skip), so cancel it and let the
@@ -2233,6 +2238,11 @@ class AppController(QObject):
         self.findScrollFractionChanged.emit()
 
     def _on_index_progress(self, current: int, total: int, path: str) -> None:
+        # Cache GC sentinel: emitted once after build_index, before the
+        # finished signal, while orphaned thumb/preview files are unlinked.
+        if current == -1 and total == -1:
+            self._set_status(_("Cleaning up cache\u2026"))
+            return
         # current == 0 and total > 0 is the scan-complete sentinel emitted by
         # IndexerService once the directory walk finishes and the file count is
         # known.  Never throttle it — it fires exactly once per run and is the
