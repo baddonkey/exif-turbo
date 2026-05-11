@@ -1954,17 +1954,15 @@ class AppController(QObject):
             from ...utils.preview_cache import preview_cache_path as _pcp
             cache_name = _pcp(path, cache_dir).name
         encrypted = bool(self._key)
-        suffix = ".enc" if encrypted else ".jpg"
-        cached_file = preview_dir(cache_dir) / cache_name
-        try:
-            cached_file.with_suffix(suffix).unlink(missing_ok=True)
-        except OSError:
-            pass
-        # Also remove the plain .jpg if it exists when encrypted (safety)
-        try:
-            cached_file.unlink(missing_ok=True)
-        except OSError:
-            pass
+        cached_file = preview_dir(cache_dir) / cache_name  # always ends in .jpg
+        # Worker saves as <sha1>.jpg (plain) or <sha1>.jpg.enc (encrypted).
+        # Use with_suffix on the full compound extension to get the right filename.
+        enc_file = cached_file.with_name(cache_name + ".enc")  # <sha1>.jpg.enc
+        for f in (enc_file if encrypted else cached_file, cached_file):
+            try:
+                f.unlink(missing_ok=True)
+            except OSError:
+                pass
         # Bust the URL cache so QML Image reloads from the provider.
         self._preview_bust += 1
         # Update hasPreview flag then force the provider to re-render.

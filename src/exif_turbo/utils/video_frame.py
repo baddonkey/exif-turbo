@@ -371,8 +371,7 @@ def _parse_qt_tkhd_rotation(f: Any) -> int:
             return 180
         if abs(a) < eps and b < -eps:
             return 270  # 270° CW
-        if a > eps and abs(b) < eps:
-            return 0    # identity — no rotation on this track
+        # Identity matrix (a≈1, b≈0) or unrecognised — try next track.
 
         f.seek(trak_end)
 
