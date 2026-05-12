@@ -11,6 +11,9 @@ Fully generated using VS Code Copilot.
 
 ## Features
 
+- **Video indexing** — MP4, MOV, AVI, MKV, WMV, M4V, MTS, M2TS, 3GP, WebM, FLV are indexed alongside still images; thumbnails and previews are decoded via PyAV/FFmpeg using the embedded thumbnail when present, otherwise a representative frame at 1/3 of the video duration. Rotation is applied from the QuickTime `tkhd` display matrix so portrait iPhone clips render upright.
+- **Recreate Thumbnail / Recreate Preview** — right-click the preview image to rebuild a single thumbnail or preview if it ever looks wrong (e.g. video frame extracted before the rotation fix); the left-grid thumbnail refreshes immediately via a cache-busting URL.
+- **Self-healing cache** — after every folder index run a fast garbage-collection pass deletes orphaned thumbnail and preview files (those whose source image no longer exists in the database). Status bar reports *“Cleaning up cache…”* during the sweep.
 - **Encrypted thumbnail and preview cache** — thumbnails and rendered previews are stored AES-256-GCM encrypted on disk; the encryption key is derived from the user’s password using a wrapped-key model so changing the password does not require rebuilding the cache
 - **Change Password** — re-encrypts the SQLCipher database under a new passphrase without rebuilding thumbnails; existing encrypted thumbnails remain valid
 - **Copy to Clipboard** — right-click the preview image or click the **Copy** pill button to copy the rendered preview to the system clipboard; a toast notification confirms the copy; falls back to copying the file path as text if rendering fails
@@ -39,6 +42,57 @@ Fully generated using VS Code Copilot.
 - **Fast NAS scanning** — on macOS/Linux, `ImageFinder` spawns up to 8 parallel `find` subprocesses (one per top-level subdirectory) so all `getdents()`/`lstat()` calls happen inside a C binary outside the Python GIL; a live "N files found…" counter updates the progress panel while discovery is still running
 
 ## Recent changes
+
+### Video indexing
+
+Video files (MP4, MOV, AVI, MKV, WMV, M4V, MTS, M2TS, 3GP, WebM, FLV) are now
+indexed alongside still images. EXIF/QuickTime metadata is extracted via
+ExifTool exactly as for photos. Thumbnails and previews are produced via
+**PyAV** (FFmpeg bindings):
+
+1. The embedded cover/thumbnail stream is used when present (instant decode).
+2. Otherwise PyAV seeks to **1/3 of the video duration** and decodes the
+   keyframe nearest that point.
+3. Rotation is read first from the `rotate` tag, then — if absent — from the
+   QuickTime `tkhd` atom display matrix. iOS portrait clips that PyAV does
+   not surface `stream.side_data` for are rotated correctly via direct atom
+   parsing.
+
+The `ThumbWorker` skips the file-size guard for video files so a 4 GB MP4
+still produces a thumbnail (only one frame is decoded, not the whole file).
+
+### Recreate Thumbnail / Recreate Preview
+
+Right-clicking the preview image now exposes two extra context-menu items in
+addition to *Copy Image to Clipboard*:
+
+- **Recreate Thumbnail** — deletes the cached `.png`/`.enc`/`.skip` for the
+  selected image and re-queues the thumb worker. The left-grid thumbnail
+  refreshes immediately because the model now serves all thumbs through
+  `image://thumb/<sha1>?t=N` and bumps the bust counter on rebuild, defeating
+  the QML pixmap cache without requiring a full reload.
+- **Recreate Preview** — deletes the cached preview JPEG/`jpg.enc` and bumps
+  the preview URL bust counter so the provider re-renders on next paint.
+
+### Self-healing cache GC
+
+At the end of every successful folder index run, `IndexWorker` performs a
+garbage-collection pass against the cache directories:
+
+- Computes `SHA1(path|mtime|size)` for every row currently in the DB.
+- Scans `<db>/thumbs/` and `<db>/thumbs/previews/` and unlinks every file
+  whose 40-character SHA-1 prefix is not in the expected set.
+- Status bar shows *“Cleaning up cache…”* (translated) while the sweep runs.
+
+This self-heals across crashes, file moves, external deletions, and the old
+bug where `delete_missing` left orphaned encrypted previews behind.
+
+### Linux DEB/RPM packaging
+
+`scripts/build_linux.py` produces both a `.deb` and a `.rpm` from the
+PyInstaller onedir bundle using **fpm**. The package installs to
+`/opt/exif-turbo/`, registers a `.desktop` launcher with the bundled
+`assets/icon.png`, and creates a `/usr/bin/exif-turbo` symlink.
 
 ### Copy preview image to clipboard
 
@@ -159,6 +213,8 @@ sudo apt install exiftool
 Download the latest installer from the [Releases page](https://github.com/baddonkey/exif-turbo/releases):
 
 - **Windows**: `exif-turbo-<version>-windows.msi` — installs to `%ProgramFiles%\exif-turbo\`, adds Start Menu shortcut
+- **macOS**: `exif-turbo-<version>-macos.dmg` — drag-and-drop installer; signed app bundle
+- **Linux**: `exif-turbo_<version>_amd64.deb` (Debian/Ubuntu) and `exif-turbo-<version>-1.x86_64.rpm` (Fedora/openSUSE) — installs to `/opt/exif-turbo/` with a `.desktop` entry and `/usr/bin/exif-turbo` symlink
 
 ### From source
 

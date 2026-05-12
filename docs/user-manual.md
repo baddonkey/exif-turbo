@@ -2,7 +2,10 @@
 
 **exif-turbo** lets you scan image folders, build a searchable index of all EXIF
 metadata, and instantly find any photo by camera model, lens, date, location, or any
-other tag — across thousands of images.
+other tag — across thousands of images. Video files (MP4, MOV, AVI, MKV, WMV,
+M4V, MTS, M2TS, 3GP, WebM, FLV) are indexed alongside still images, with
+thumbnails and previews extracted from the embedded thumbnail or a frame at
+1/3 of the duration.
 
 ---
 
@@ -44,6 +47,28 @@ exif-turbo requires **ExifTool** on your `PATH` to extract metadata from images.
 Download `exif-turbo-<version>-windows.msi` from the
 [Releases page](https://github.com/baddonkey/exif-turbo/releases).
 The installer adds an entry to **Start Menu** and puts `exif-turbo` on your `PATH`.
+
+### macOS installer
+
+Download `exif-turbo-<version>-macos.dmg` from the same Releases page,
+open it, and drag **exif-turbo.app** into your **Applications** folder.
+
+### Linux package
+
+Download either `exif-turbo_<version>_amd64.deb` (Debian/Ubuntu) or
+`exif-turbo-<version>-1.x86_64.rpm` (Fedora/openSUSE) from the Releases page
+and install it with your package manager:
+
+```bash
+# Debian / Ubuntu
+sudo apt install ./exif-turbo_<version>_amd64.deb
+
+# Fedora / openSUSE
+sudo dnf install ./exif-turbo-<version>-1.x86_64.rpm
+```
+
+The package installs the application to `/opt/exif-turbo/`, registers a
+desktop launcher, and creates a `/usr/bin/exif-turbo` symlink.
 
 ### From source
 
@@ -208,6 +233,16 @@ you always know the indexer is running even when you are working in Search or
 Browse. The dot is not shown during the separate thumbnail-building phase. The
 status bar also shows brief event messages to its right (such as "Indexed 42
 images" after a scan completes).
+
+### Self-healing cache cleanup
+
+At the end of every successful folder index run, exif-turbo runs a quick
+garbage-collection pass over the thumbnail and preview cache directories.
+Any cached file whose source image is no longer present in the index (because
+the file was deleted, moved, or renamed since the last scan) is removed. The
+status bar shows **“Cleaning up cache…”** while the sweep runs. This keeps the
+cache compact and self-heals across crashes or external file deletions, so
+you never need to manually clear the cache directory.
 
 ### Pause and resume
 
@@ -443,6 +478,23 @@ Both actions are available in the **Search** and **Browse** tabs. A brief
 toast notification at the bottom of the window confirms that the image has
 been placed on the clipboard. If rendering fails for any reason, the file
 path is copied as plain text instead.
+
+#### Recreate Thumbnail / Recreate Preview
+
+The preview context menu (right-click on the preview image) also offers two
+rebuild actions, useful when a cached thumbnail or preview ever looks wrong
+(for example a video frame that was extracted before the rotation fix):
+
+- **Recreate Thumbnail** — deletes the cached thumbnail for the selected
+  image (including any `.skip` sentinel that previously marked it as
+  unthumbnailable) and re-queues thumbnail generation. The thumbnail in the
+  left-hand result grid refreshes automatically as soon as the new file is
+  written — you do not need to switch images or restart the app.
+- **Recreate Preview** — deletes the cached preview JPEG for the selected
+  image. The preview pane re-renders the image immediately on next display.
+
+Both actions only affect the selected image; other cached thumbnails and
+previews are left untouched.
 
 #### Zooming and panning
 
@@ -716,6 +768,11 @@ A: Never. exif-turbo only *reads* metadata — it never writes to your images.
 **Q: What image formats are supported?**  
 A: JPEG, PNG, TIFF, HEIC, BMP, GIF, and RAW formats: CR2, CR3, NEF, ARW, DNG,
 ORF, RW2, PEF, RAF, RWL, SRW (and any other format that ExifTool can read).
+Video files are also indexed: MP4, MOV, AVI, MKV, WMV, M4V, MTS, M2TS, 3GP,
+WebM, FLV. Thumbnails and previews for video files are extracted via PyAV
+(FFmpeg) — the embedded thumbnail is used when available, otherwise a frame
+at 1/3 of the duration. Rotation is applied so portrait phone clips render
+upright.
 
 **Q: Where is the database stored?**  
 A: By default at `~/.exif-turbo/data/index/index.db` on all platforms.
