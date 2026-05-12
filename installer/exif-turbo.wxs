@@ -1,17 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  exif-turbo.wxs — WiX v4 installer descriptor
+  exif-turbo.wxs - WiX v4 installer descriptor
 
   Build with:
     wix build installer\exif-turbo.wxs
          -d Version=<version>
          -d AppDir=<abs-path-to-dist\exif-turbo>
          -d IconFile=<abs-path-to-assets\icon.ico>
+         -d ExifToolDir=<abs-path-to-build\exiftool-staged>
+         -ext WixToolset.UI.wixext
          -out dist\exif-turbo-<version>-windows.msi
 
-  Or run: scripts\build_windows.ps1
+  Or run: python scripts\build_windows.py
+
+  ExifTool is bundled in the MSI under the optional ExifToolFeature
+  feature (selected by default). It is installed into an exiftool\
+  subfolder inside the application directory.
+  exif-turbo prefers any system-wide exiftool already on PATH and only
+  falls back to the bundled copy when no system installation is found.
+
+  ExifTool copyright (c) Phil Harvey. License: same terms as Perl
+  (GPL v1 or later, or Artistic License).
+  See installer\LICENSE.rtf and THIRD-PARTY-LICENSES.md.
 -->
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package
       Name="exif-turbo"
       Manufacturer="exif-turbo"
@@ -29,15 +42,22 @@
     <Icon Id="ExifTurboIcon" SourceFile="$(var.IconFile)" />
     <Property Id="ARPPRODUCTICON" Value="ExifTurboIcon" />
 
-    <!-- Installation directory: %ProgramFiles%\exif-turbo\ -->
+    <!-- ============================================================
+         Directory layout - no <Files> here.
+         In WiX v4, <Files> placed inside <Feature> with a Directory
+         attribute auto-assigns generated components to that feature,
+         avoiding WIX0267 "orphaned component" errors.
+         ============================================================ -->
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="exif-turbo">
-        <!-- Unified onedir bundle — all files and subdirectories -->
-        <Files Include="$(var.AppDir)\**" />
+        <!-- ExifTool lives in a dedicated subfolder so it does not
+             pollute the app root and can be skipped when a system-wide
+             ExifTool is already present on PATH. -->
+        <Directory Id="EXIFTOOLSUBDIR" Name="exiftool" />
       </Directory>
     </StandardDirectory>
 
-    <!-- Start Menu shortcut -->
+    <!-- Start Menu shortcut component -->
     <StandardDirectory Id="ProgramMenuFolder">
       <Directory Id="AppStartMenuFolder" Name="exif-turbo">
         <Component Id="AppShortcut" Guid="*">
@@ -62,6 +82,51 @@
         </Component>
       </Directory>
     </StandardDirectory>
+
+    <!-- ============================================================
+         Feature tree
+
+         In WiX v4, <Files> placed directly inside <Feature> (with a
+         Directory attribute) auto-generates components and assigns
+         them to that feature, avoiding WIX0267 "orphaned component"
+         errors.
+         ============================================================ -->
+    <Feature Id="MainFeature"
+             Title="exif-turbo"
+             Description="Install the exif-turbo application."
+             Level="1">
+      <!-- Unified onedir bundle into INSTALLFOLDER -->
+      <Files Directory="INSTALLFOLDER" Include="$(var.AppDir)\**" />
+      <ComponentRef Id="AppShortcut" />
+    </Feature>
+
+    <!--
+      ExifTool optional feature - pre-selected (Level="1").
+      Installed into [INSTALLFOLDER]\exiftool\
+      exif-turbo uses this copy only if no system ExifTool is on PATH.
+
+      ExifTool copyright (c) Phil Harvey.
+      License: GPL v1+ or Artistic License (same terms as Perl).
+      Source: https://exiftool.org/
+    -->
+    <Feature Id="ExifToolFeature"
+             Title="ExifTool (bundled, recommended)"
+             Description="Install the bundled copy of ExifTool by Phil Harvey. ExifTool is required for reading image metadata. This copy is only used if ExifTool is not already installed system-wide. License: GPL/Artistic (same terms as Perl). Source: https://exiftool.org/"
+             Level="1"
+             AllowAdvertise="no"
+             InstallDefault="local"
+             TypicalDefault="install">
+      <!-- ExifTool files into EXIFTOOLSUBDIR ([INSTALLFOLDER]\exiftool\) -->
+      <Files Directory="EXIFTOOLSUBDIR" Include="$(var.ExifToolDir)\**" />
+    </Feature>
+
+    <!-- ============================================================
+         UI: feature tree so the user can opt out of bundled ExifTool
+         ============================================================ -->
+    <ui:WixUI Id="WixUI_FeatureTree" />
+
+    <!-- License screen covers both exif-turbo and ExifTool -->
+    <WixVariable Id="WixUILicenseRtf" Value="installer\LICENSE.rtf" />
 
   </Package>
 </Wix>

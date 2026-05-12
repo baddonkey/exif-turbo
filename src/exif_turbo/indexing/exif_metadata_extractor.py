@@ -24,13 +24,41 @@ _EXTRA_PATHS = [
     "/bin",
 ]
 
+
+def _bundled_exiftool() -> Path | None:
+    """Return the path to the exiftool bundled with the Windows MSI installer.
+
+    The MSI installs ExifTool into an ``exiftool/`` subfolder next to the
+    application executable.  When running as a PyInstaller frozen bundle
+    ``sys.executable`` points to the .exe itself, so its parent is the app
+    directory.  In dev mode we return None so the system PATH is used.
+    """
+    if os.name != "nt":
+        return None
+    import sys
+    app_dir = Path(sys.executable).parent
+    candidate = app_dir / "exiftool" / "exiftool.exe"
+    return candidate if candidate.exists() else None
+
+
 def _find_exiftool() -> str:
-    """Return the path to exiftool, searching common locations if needed."""
+    """Return the path to exiftool.
+
+    Search order:
+    1. ``exiftool`` found on the system PATH (including common extra locations).
+    2. Bundled copy installed by the Windows MSI alongside the application.
+    3. Bare ``"exiftool"`` name — will produce a clear error if missing.
+    """
     augmented = os.pathsep.join(
         [os.environ.get("PATH", "")] + _EXTRA_PATHS
     )
     found = shutil.which("exiftool", path=augmented)
-    return found or "exiftool"  # fall back to bare name; will fail with a clear error
+    if found:
+        return found
+    bundled = _bundled_exiftool()
+    if bundled:
+        return str(bundled)
+    return "exiftool"  # fall back to bare name; will fail with a clear error
 
 
 def is_exiftool_available() -> bool:
@@ -39,6 +67,9 @@ def is_exiftool_available() -> bool:
         [os.environ.get("PATH", "")] + _EXTRA_PATHS
     )
     found = shutil.which("exiftool", path=augmented)
+    if not found:
+        bundled = _bundled_exiftool()
+        found = str(bundled) if bundled else None
     if not found:
         return False
     try:
@@ -62,6 +93,9 @@ def get_exiftool_version() -> str:
         [os.environ.get("PATH", "")] + _EXTRA_PATHS
     )
     found = shutil.which("exiftool", path=augmented)
+    if not found:
+        bundled = _bundled_exiftool()
+        found = str(bundled) if bundled else None
     if not found:
         return ""
     try:

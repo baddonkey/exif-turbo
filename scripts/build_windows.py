@@ -6,7 +6,14 @@ Produces:
 
 Requirements:
     pip install pyinstaller babel pillow
-    dotnet tool install --global wix          (WiX Toolset v4)
+    dotnet tool install --global wix          (WiX Toolset v6)
+    wix extension add WixToolset.UI.wixext    (run once to install the UI ext)
+
+The script automatically downloads the latest 64-bit ExifTool Windows binary
+from exiftool.org, stages it in build/exiftool-staged/, and bundles it into
+the MSI as an optional feature (pre-selected by default).  Internet access is
+required at build time.  The staged directory is reused on subsequent runs to
+avoid repeated downloads.
 
 Usage:
     python scripts/build_windows.py
@@ -14,10 +21,14 @@ Usage:
 
 from __future__ import annotations
 
+import io
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
+import urllib.request
+import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -80,6 +91,71 @@ def commit_version_info(version: str) -> None:
         print(f"  Committed version_info.py ({version}).")
 
 
+def stage_exiftool() -> Path:
+    """Download and stage the ExifTool 64-bit Windows binary for the MSI.
+
+    Downloads the latest exiftool-<ver>_64.zip from SourceForge, extracts it
+    into build/exiftool-staged/ (flattening the versioned top-level folder in
+    the zip), and renames 'exiftool(-k).exe' to 'exiftool.exe'.  The staged
+    directory is returned and passed to the WiX build as $(var.ExifToolDir).
+
+    If the directory already exists (i.e. was staged in a previous run) and
+    contains exiftool.exe, the download is skipped.
+    """
+    staged = REPO_ROOT / "build" / "exiftool-staged"
+    exe = staged / "exiftool.exe"
+    if exe.exists():
+        print(f"  ExifTool already staged: {staged}")
+        return staged
+
+    print("  Staging ExifTool for MSI ...")
+    ver_url = "https://exiftool.org/ver.txt"
+    with urllib.request.urlopen(ver_url, timeout=30) as resp:  # noqa: S310
+        version = resp.read().decode().strip()
+    print(f"    Latest ExifTool version: {version}")
+
+    zip_url = (
+        f"https://sourceforge.net/projects/exiftool/files/"
+        f"exiftool-{version}_64.zip/download"
+    )
+    print(f"    Downloading {zip_url} ...")
+    with urllib.request.urlopen(zip_url, timeout=300) as resp:  # noqa: S310
+        data = resp.read()
+
+    # Extract into a temporary directory, then move contents up so that
+    # exiftool.exe and exiftool_files/ are at the staged root (they must
+    # be co-located or ExifTool will not function).
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            zf.extractall(tmp_path)
+
+        # The zip contains a single versioned subfolder (e.g. exiftool-13.58_64/)
+        subdirs = [d for d in tmp_path.iterdir() if d.is_dir()]
+        inner = subdirs[0] if len(subdirs) == 1 else tmp_path
+
+        staged.mkdir(parents=True, exist_ok=True)
+        for item in inner.iterdir():
+            dest = staged / item.name
+            if dest.exists():
+                if dest.is_dir():
+                    shutil.rmtree(dest)
+                else:
+                    dest.unlink()
+            shutil.move(str(item), str(dest))
+
+    # Rename the GUI-drag-drop exe to a plain CLI name
+    kexe = next(staged.glob("exiftool(-k).exe"), None)
+    if kexe:
+        kexe.rename(staged / "exiftool.exe")
+        print(f"    Renamed '{kexe.name}' → 'exiftool.exe'")
+    elif not exe.exists():
+        fail("exiftool(-k).exe not found in downloaded zip — check the ExifTool download URL.")
+
+    print(f"    ExifTool staged at: {staged}")
+    return staged
+
+
 def generate_icon() -> Path:
     icon_file = REPO_ROOT / "assets" / "icon.ico"
     logo_png = REPO_ROOT / "src" / "exif_turbo" / "assets" / "logo.png"
@@ -120,6 +196,7 @@ def main() -> None:
     app_dir = (REPO_ROOT / "dist" / "exif-turbo").resolve()
     msi_out = REPO_ROOT / "dist" / f"exif-turbo-{version}-windows.msi"
     icon_file = generate_icon()
+    exiftool_dir = stage_exiftool()
 
     run(
         [
@@ -132,6 +209,12 @@ def main() -> None:
             f"AppDir={app_dir}",
             "-d",
             f"IconFile={icon_file}",
+            "-d",
+            f"ExifToolDir={exiftool_dir.resolve()}",
+            "-arch",
+            "x64",
+            "-ext",
+            "WixToolset.UI.wixext",
             "-out",
             str(msi_out),
         ]

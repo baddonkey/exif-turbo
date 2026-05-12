@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+# WiX Toolset cache
+.wix/
+
 # Distribution / packaging
 .Python
 build/

@@ -72,9 +72,35 @@ They are **not** Python packages.
 
 | Tool | Used for | License | URL |
 |------|----------|---------|-----|
-| [ExifTool](https://exiftool.org/) | EXIF extraction — invoked as an external process (`exiftool -g1 -j`) to extract all EXIF, IPTC, and XMP metadata from image files | Artistic License / GPL | https://exiftool.org |
+| [ExifTool](https://exiftool.org/) | EXIF extraction — invoked as an external process (`exiftool -g1 -j`) to extract all EXIF, IPTC, and XMP metadata from image files | Artistic License / GPL (same terms as Perl) | https://exiftool.org |
 | `iconutil` *(macOS)* | `build_macos.py` — converts PNG icon assets into an `.icns` file embedded in the `.app` bundle | Proprietary (Xcode Command Line Tools) | https://developer.apple.com/xcode |
 | `hdiutil` *(macOS)* | `build_macos.py` — packages the built `.app` bundle into a distributable `.dmg` disk image | Proprietary (macOS built-in) | https://developer.apple.com/macos |
+
+---
+
+## Bundled Third-Party Binaries (Windows MSI)
+
+The Windows MSI installer includes the following third-party binary as an
+optional, pre-selected feature.  It is installed into a dedicated
+`exiftool\` subfolder inside the application directory and is **not** added
+to the system PATH.  exif-turbo uses this bundled copy only when no
+system-wide ExifTool is found on PATH.
+
+### ExifTool (Windows 64-bit executable)
+
+- **Author:** Phil Harvey
+- **Version bundled:** latest stable at build time (fetched from exiftool.org)
+- **Source:** https://exiftool.org/ — https://github.com/exiftool/exiftool
+- **License:** Free software; redistributable under the same terms as Perl itself —
+  either the [GNU General Public License, version 1 or later](https://dev.perl.org/licenses/gpl1.html),
+  or the [Artistic License](https://dev.perl.org/licenses/artistic.html).
+
+The Windows binary package is based on work by Oliver Betz and uses his
+launcher.  See https://oliverbetz.de/pages/Artikel/ExifTool-for-Windows.
+
+Redistribution of the ExifTool Windows executable in this installer is
+permitted by its license.  The full Perl license texts are available at
+https://dev.perl.org/licenses/.
 
 ---
 
