@@ -43,6 +43,19 @@ Fully generated using VS Code Copilot.
 
 ## Recent changes
 
+### Bundle ExifTool in Windows MSI
+
+ExifTool (by Phil Harvey, GPL/Artistic licence) is now **bundled inside the Windows MSI installer**
+as an optional but pre-selected feature. During installation the WiX feature-tree UI lets you
+deselect it if you already have ExifTool installed system-wide.
+
+The bundled copy is placed at `C:\Program Files\exif-turbo\exiftool\exiftool.exe`.
+exif-turbo checks `PATH` first and falls back to the bundled copy only when no system-wide
+`exiftool` is found. macOS and Linux are unchanged — ExifTool must still be installed manually.
+
+The MSI is built with `scripts/build_windows.py`, which downloads ExifTool from exiftool.org
+at build time (internet required during the build, not at runtime).
+
 ### Video indexing
 
 Video files (MP4, MOV, AVI, MKV, WMV, M4V, MTS, M2TS, 3GP, WebM, FLV) are now
@@ -189,7 +202,10 @@ ExifTool reads EXIF, IPTC, XMP, and other metadata from image files.
 
 Download: https://exiftool.org/
 
-**Windows:** download the standalone `.exe`, rename to `exiftool.exe`, place on `PATH`.
+**Windows (MSI install):** ExifTool is **bundled inside the MSI** — no separate download needed.
+A system-wide `exiftool.exe` on your `PATH` takes priority if you have one installed.
+
+**Windows (source install):** download the standalone `.exe`, rename to `exiftool.exe`, place on `PATH`.
 
 **macOS:**
 ```bash
@@ -212,7 +228,7 @@ sudo apt install exiftool
 
 Download the latest installer from the [Releases page](https://github.com/baddonkey/exif-turbo/releases):
 
-- **Windows**: `exif-turbo-<version>-windows.msi` — installs to `%ProgramFiles%\exif-turbo\`, adds Start Menu shortcut
+- **Windows**: `exif-turbo-<version>-windows.msi` — installs to `%ProgramFiles%\exif-turbo\`, adds Start Menu shortcut; **ExifTool is bundled inside the MSI** so no separate download is needed
 - **macOS**: `exif-turbo-<version>-macos.dmg` — drag-and-drop installer; signed app bundle
 - **Linux**: `exif-turbo_<version>_amd64.deb` (Debian/Ubuntu) and `exif-turbo-<version>-1.x86_64.rpm` (Fedora/openSUSE) — installs to `/opt/exif-turbo/` with a `.desktop` entry and `/usr/bin/exif-turbo` symlink
 

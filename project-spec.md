@@ -32,7 +32,7 @@
 | Video thumbnails / previews | PyAV 12+ → FFmpeg (MP4, MOV, AVI, MKV, WMV, M4V, MTS, M2TS, 3GP, WebM, FLV); embedded thumbnail when present, otherwise a frame at 1/3 of the duration; rotation from `rotate` tag or QuickTime `tkhd` display matrix |
 | Type checking | mypy strict |
 | Testing | pytest |
-| Packaging | PyInstaller (onedir) + WiX v4 (Windows MSI) + hdiutil (macOS DMG) |
+| Packaging | PyInstaller (onedir) + WiX v6 (Windows MSI, bundles ExifTool) + hdiutil (macOS DMG) |
 
 ---
 
@@ -105,7 +105,7 @@ USING fts5(path, filename, metadata_text);
 |--------|---------|
 | `cli.py` | `argparse` CLI adapter; entry point for `exif-turbo-index` |
 | `image_finder.py` | `ImageFinder` — walks folders, yields `(path, mtime, size)` tuples. On POSIX (macOS/Linux) spawns up to 8 parallel `find` subprocesses (one per top-level subdirectory) via a `ThreadPoolExecutor` + shared `queue.Queue`, streaming results live as discovery runs — avoids Python GIL starvation caused by per-entry `lstat()` on macOS SMB mounts. On Windows uses `os.walk()` (SMB returns file attributes inline). Honours `AppConfig.skip_dotfiles` and a per-instance blacklist. |
-| `exif_metadata_extractor.py` | `ExifMetadataExtractor` — runs `exiftool -g1 -j`; parses JSON output. `is_exiftool_available() -> bool` and `get_exiftool_version() -> str` probe for a working ExifTool on an augmented `PATH` (adds macOS/Windows well-known install locations); return `False` / `""` if not found or if the process exits non-zero. |
+| `exif_metadata_extractor.py` | `ExifMetadataExtractor` — runs `exiftool -g1 -j`; parses JSON output. `is_exiftool_available() -> bool` and `get_exiftool_version() -> str` probe for a working ExifTool via `_find_exiftool()`, which checks: (1) augmented `PATH` (adds macOS/Windows well-known install locations); (2) on Windows frozen bundles only, the bundled copy at `Path(sys.executable).parent / "exiftool" / "exiftool.exe"`; returning `False` / `""` if not found or if the process exits non-zero. |
 | `metadata_extractor.py` | `MetadataExtractor` protocol (port) |
 | `indexer_service.py` | `IndexerService` — orchestrates scan → extract → upsert; supports parallel workers, incremental updates (mtime/size stamps), force-rebuild, progress callback, cancel |
 | `image_utils.py` | Image file type helpers. Defines `RAW_EXTENSIONS`, `VIDEO_EXTENSIONS`, `IMAGE_EXTENSIONS` (union of stills + RAW + video), `is_image_file()`, `is_video_file()`. RAW orientation helper `orient_raw_thumb()` maps `rawpy.RawPy.sizes.flip` → Pillow transpose ops. |

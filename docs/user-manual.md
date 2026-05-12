@@ -34,7 +34,8 @@ exif-turbo requires **ExifTool** on your `PATH` to extract metadata from images.
 
 | Platform | Install |
 |----------|---------|
-| **Windows** | Download the standalone `.exe` from [exiftool.org](https://exiftool.org/), rename to `exiftool.exe`, place in a folder on your `PATH` |
+| **Windows (MSI)** | ExifTool is **bundled with the MSI installer** — no separate download needed. A system-wide `exiftool.exe` on your `PATH` takes priority if present. |
+| **Windows (source)** | Download the standalone `.exe` from [exiftool.org](https://exiftool.org/), rename to `exiftool.exe`, place in a folder on your `PATH` |
 | **macOS** | `brew install exiftool` (if Homebrew is not installed yet: `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`) |
 | **Linux** | `sudo apt install libimage-exiftool-perl` |
 
@@ -47,6 +48,8 @@ exif-turbo requires **ExifTool** on your `PATH` to extract metadata from images.
 Download `exif-turbo-<version>-windows.msi` from the
 [Releases page](https://github.com/baddonkey/exif-turbo/releases).
 The installer adds an entry to **Start Menu** and puts `exif-turbo` on your `PATH`.
+ExifTool is **included in the MSI** — you do not need to download it separately.
+If you already have ExifTool installed system-wide, that version takes priority.
 
 ### macOS installer
 
