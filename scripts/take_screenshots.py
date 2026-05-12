@@ -11,9 +11,12 @@ Requirements:
 
 The script:
 1. Builds a demo SQLite index from the sample images
-2. Launches the QML application pointing at that index (empty password)
-3. Drives the UI through several states with QTimer callbacks
-4. Saves screenshots to docs/screenshots/
+2. Pre-builds all thumbnails (144×144 PNG) and preview JPEGs (2048px) so
+   that the UI shows fully loaded cards and a "Show Preview" toggle, not just
+   placeholder spinners.
+3. Launches the QML application pointing at that index (empty password)
+4. Drives the UI through several states with QTimer callbacks
+5. Saves screenshots to docs/screenshots/
 
 Output files:
     01_lock_screen.png       -- startup password prompt
@@ -71,6 +74,9 @@ from exif_turbo.ui.providers.preview_image_provider import PreviewImageProvider 
 from exif_turbo.ui.providers.raw_image_provider import RawImageProvider  # noqa: E402
 from exif_turbo.ui.providers.thumb_image_provider import ThumbnailImageProvider  # noqa: E402
 from exif_turbo.ui.view_models.app_controller import AppController  # noqa: E402
+from exif_turbo.utils.preview_cache import preview_cache_name_from_stamp, preview_dir  # noqa: E402
+from exif_turbo.utils.preview_render import MAX_PREVIEW_PX, render_preview  # noqa: E402
+from exif_turbo.utils.thumb_cache import thumb_cache_name_from_stamp  # noqa: E402
 
 _STEPS = [
     "01_lock_screen",
@@ -116,6 +122,69 @@ def build_demo_db() -> None:
 
     total = sum(c for _, c in folder_counts)
     print(f"Indexed {total} image(s) across {len(SAMPLE_FOLDERS)} folders into {DB_PATH}")
+
+
+# -- Offline thumbnail + preview builder ---------------------------------------
+
+def build_thumbs_and_previews() -> None:
+    """Pre-build all thumbnails and preview JPEGs before the GUI starts.
+
+    Generates:
+    - ``THUMB_CACHE/<sha1>.png``         — 144×144 thumbnails
+    - ``THUMB_CACHE/previews/<sha1>.jpg`` — up-to-2048px preview JPEGs
+
+    Runs synchronously, no Qt required.  Because both artefacts use the same
+    SHA-1 content-hash as the in-app workers, the GUI finds them already
+    cached and immediately shows fully-rendered cards and preview images.
+    """
+    from PIL import Image, ImageOps, UnidentifiedImageError
+
+    _THUMB_SIZE = (144, 144)
+    _PREVIEW_LONG_EDGE = min(2048, MAX_PREVIEW_PX)
+
+    THUMB_CACHE.mkdir(parents=True, exist_ok=True)
+    prev_dir = preview_dir(THUMB_CACHE)
+    prev_dir.mkdir(parents=True, exist_ok=True)
+
+    repo = ImageIndexRepository(DB_PATH, key="")
+    stamps: dict[str, tuple[float, int]] = repo.get_enabled_stamps()
+    repo.close()
+
+    total = len(stamps)
+    print(f"Pre-building {total} thumbnails + previews ...")
+    for idx, (path, (mtime, size)) in enumerate(stamps.items(), 1):
+        thumb_name = thumb_cache_name_from_stamp(path, mtime, size)
+        thumb_path = THUMB_CACHE / thumb_name
+        prev_name = preview_cache_name_from_stamp(path, mtime, size)
+        prev_path = prev_dir / prev_name
+
+        needs_thumb = not thumb_path.exists()
+        needs_preview = not prev_path.exists()
+        if not (needs_thumb or needs_preview):
+            continue
+
+        print(f"  [{idx}/{total}] {Path(path).name}")
+        try:
+            pil_img: Image.Image | None = None
+
+            if needs_thumb or needs_preview:
+                # Decode once at preview resolution; downsample for the thumb
+                pil_img = render_preview(path, _PREVIEW_LONG_EDGE)
+                pil_img = ImageOps.exif_transpose(pil_img) if hasattr(pil_img, "info") else pil_img
+
+            if needs_preview and pil_img is not None:
+                pil_img.convert("RGB").save(str(prev_path), "JPEG", quality=90)
+
+            if needs_thumb and pil_img is not None:
+                thumb_img = pil_img.copy()
+                thumb_img.thumbnail(_THUMB_SIZE, Image.LANCZOS)
+                thumb_img.convert("RGBA").save(str(thumb_path), "PNG")
+
+        except (OSError, UnidentifiedImageError, Exception) as exc:
+            print(f"    WARNING: skipped {Path(path).name}: {exc}")
+
+    print(f"Done — thumbnails in {THUMB_CACHE.relative_to(_REPO_ROOT)}")
+    print(f"Done — previews   in {prev_dir.relative_to(_REPO_ROOT)}")
 
 
 # -- Screenshot helper ---------------------------------------------------------
@@ -392,6 +461,7 @@ def _run_gui() -> None:
 def main() -> None:
     logging.basicConfig(level=logging.WARNING)
     build_demo_db()
+    build_thumbs_and_previews()
     print("\nLaunching UI for screenshot capture ...")
     _run_gui()
 

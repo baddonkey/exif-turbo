@@ -217,8 +217,8 @@ The panel always contains:
 - **Progress bar** — indeterminate while the total is still being computed,
   then a percentage once it is known.
 - **Count label** — **"Scanning for images…"** at the start of indexing
-  discovery; **"N files found…"** while discovery is still running but files
-  are already being enumerated; **"Preparing…"** for the thumbnail and preview
+  discovery; **"N indexed, scanning…"** while indexing has started but the
+  total file count is not yet known; **"Preparing…"** for the thumbnail and preview
   phases before the total is known; then `n / total files` (indexing) or
   `n / total images` (thumbnails and previews).
 - **Current file** — name of the file being processed.
@@ -469,7 +469,7 @@ being decoded (large RAW files may take a few seconds).
 You can copy the currently displayed preview image to the system clipboard in
 two ways:
 
-- Click the **Copy** pill button at the left of the **PREVIEW** header bar
+- Click the **Copy** pill button at the right of the **PREVIEW** header bar
   (to the left of the **Show Preview / Show Original** toggle).
 - **Right-click** anywhere on the preview image and choose
   **Copy Image to Clipboard** from the context menu.
@@ -629,10 +629,6 @@ Click the **Settings** tab to configure application behaviour.
 Controls the number of parallel threads used for indexing and thumbnail
 generation. Higher values speed up processing on multi-core machines but use
 more CPU and memory. The default is half the number of detected CPU threads.
-
-> **macOS note:** On macOS the worker count is automatically locked to **1** to
-> prevent Python GIL starvation that can occur with network-share folders. The
-> spinner in the Settings tab is disabled in this configuration.
 
 ### Preview Cache Size
 
