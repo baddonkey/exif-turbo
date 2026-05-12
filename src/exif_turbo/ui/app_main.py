@@ -15,7 +15,7 @@ _PILImage.MAX_IMAGE_PIXELS = 894_784_850
 
 from PySide6.QtCore import QUrl, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QGuiApplication, QIcon, QImageReader
-from PySide6.QtNetwork import QLocalServer
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtWebEngineQuick import QtWebEngineQuick
@@ -68,6 +68,11 @@ def _ensure_pyside6_dll_search_path() -> None:
 def _acquire_single_instance_lock(db_path: Path) -> QLocalServer:
     """Claim a per-database single-instance lock via QLocalServer.
 
+    Uses the connect-first pattern: probe for an existing server with
+    QLocalSocket before starting our own.  This is reliable on Windows where
+    QLocalServer.listen() can silently succeed for multiple processes on the
+    same named pipe, making the old listen()-failure guard ineffective.
+
     Returns the server object (must be kept alive for the process lifetime).
     Exits with code 1 if another instance is already running for the same db.
     """
@@ -76,19 +81,31 @@ def _acquire_single_instance_lock(db_path: Path) -> QLocalServer:
     slug = hashlib.sha1(str(db_path.resolve()).encode()).hexdigest()[:12]
     lock_name = f"exif-turbo-{slug}"
 
+    # Probe: try to reach an already-running instance.
+    probe = QLocalSocket()
+    probe.connectToServer(lock_name)
+    if probe.waitForConnected(500):
+        probe.abort()
+        print(
+            f"exif-turbo: another instance is already running for "
+            f"database '{db_path.stem}'. Close it before opening a second window.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    probe.abort()
+
+    # No live instance found — become the server.
+    # removeServer() cleans up a stale Unix socket file left by a prior crash;
+    # it is a documented no-op on Windows.
+    QLocalServer.removeServer(lock_name)
     server = QLocalServer()
     server.setSocketOptions(QLocalServer.SocketOption.UserAccessOption)
-
     if not server.listen(lock_name):
-        # Try once to recover from a stale socket left by a previous crash.
-        QLocalServer.removeServer(lock_name)
-        if not server.listen(lock_name):
-            print(
-                f"exif-turbo: another instance is already running for "
-                f"database '{db_path.stem}'. Close it before opening a second window.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
+        print(
+            f"exif-turbo: failed to acquire instance lock for '{db_path.stem}'.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     return server
 
