@@ -68,8 +68,10 @@
               Target="[INSTALLFOLDER]exif-turbo.exe"
               WorkingDirectory="INSTALLFOLDER"
               Icon="ExifTurboIcon"
-              IconIndex="0"
-              AppUserModelId="exif-turbo" />
+              IconIndex="0">
+            <!-- Ensures the running process merges onto the pinned taskbar icon -->
+            <ShortcutProperty Key="System.AppUserModel.ID" Value="exif-turbo" />
+          </Shortcut>
           <!-- Clean up the Start Menu folder on uninstall -->
           <RemoveFolder Id="RemoveAppStartMenuFolder" Directory="AppStartMenuFolder" On="uninstall" />
           <!-- Registry key is the KeyPath for this component -->
