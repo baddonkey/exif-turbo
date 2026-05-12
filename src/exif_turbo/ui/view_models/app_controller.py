@@ -33,6 +33,7 @@ from ...utils.preview_cache import (
     preview_cache_name_from_stamp,
     preview_dir,
 )
+from ...utils.thumb_cache import thumb_cache_name_from_stamp
 from ..models.checked_filter_proxy_model import CheckedFilterProxyModel
 from ..models.exif_list_model import ExifListModel
 from ..models.folder_list_model import FolderListModel
@@ -154,6 +155,7 @@ class AppController(QObject):
         self._selected_thumb_source = ""
         self._selected_has_preview = False
         self._current_result_row: int = -1
+        self._preview_bust: int = 0
         self._total_results = 0
         self._loaded_results = 0
         self._loading = False
@@ -1906,6 +1908,76 @@ class AppController(QObject):
         return render_preview(path, MAX_PREVIEW_PX)
 
     @Slot()
+    def recreateThumbnail(self) -> None:
+        """Delete the cached thumbnail for the selected image and rebuild it."""
+        path = self._pending_preview_path
+        stamp = self._pending_preview_stamp
+        if not path:
+            return
+        cache_dir = self._search_model.cache_dir
+        if stamp is not None:
+            cache_name = thumb_cache_name_from_stamp(path, stamp[0], stamp[1])
+        else:
+            from ...utils.thumb_cache import thumb_cache_path as _tcp
+            cache_name = _tcp(path, cache_dir).name
+        base = cache_dir / cache_name          # always .png stem
+        encrypted = bool(self._key)
+        for suffix in (".enc" if encrypted else ".png", ".skip"):
+            try:
+                base.with_suffix(suffix).unlink(missing_ok=True)
+            except OSError:
+                pass
+        # Clear the displayed thumb immediately so the UI shows a blank placeholder.
+        self._selected_thumb_source = ""
+        self.selectedThumbSourceChanged.emit()
+        # Bust the left-grid thumbnail URI so QML's pixmap cache refetches the
+        # rebuilt PNG once the worker finishes (the filename is identical so
+        # without a busted URL QML would keep serving the stale cached image).
+        if self._current_result_row >= 0:
+            self._search_model.bust_thumbnail(self._current_result_row)
+        # Rebuild: ensure the thumb worker runs a fresh scan that includes this
+        # file.  If a worker is already running it has already captured its
+        # `paths` list (before we deleted the skip), so cancel it and let the
+        # `_pending_thumb_restart` flag trigger a new run once it exits.
+        if self._is_building_thumbs and self._thumb_worker is not None:
+            self._pending_thumb_restart = True
+            self._thumb_worker.cancel()
+        elif not self._is_building_thumbs:
+            self._start_auto_thumbs()
+
+    @Slot()
+    def recreatePreview(self) -> None:
+        """Delete the cached preview for the selected image and re-render it."""
+        path = self._pending_preview_path
+        stamp = self._pending_preview_stamp
+        if not path:
+            return
+        cache_dir = self._search_model.cache_dir
+        if stamp is not None:
+            cache_name = preview_cache_name_from_stamp(path, stamp[0], stamp[1])
+        else:
+            from ...utils.preview_cache import preview_cache_path as _pcp
+            cache_name = _pcp(path, cache_dir).name
+        encrypted = bool(self._key)
+        cached_file = preview_dir(cache_dir) / cache_name  # always ends in .jpg
+        # Worker saves as <sha1>.jpg (plain) or <sha1>.jpg.enc (encrypted).
+        # Use with_suffix on the full compound extension to get the right filename.
+        enc_file = cached_file.with_name(cache_name + ".enc")  # <sha1>.jpg.enc
+        for f in (enc_file if encrypted else cached_file, cached_file):
+            try:
+                f.unlink(missing_ok=True)
+            except OSError:
+                pass
+        # Bust the URL cache so QML Image reloads from the provider.
+        self._preview_bust += 1
+        # Update hasPreview flag then force the provider to re-render.
+        has_preview = self._compute_has_preview(path, stamp)
+        if has_preview != self._selected_has_preview:
+            self._selected_has_preview = has_preview
+            self.selectedHasPreviewChanged.emit()
+        self._refresh_selected_image_source()
+
+    @Slot()
     def copyPreviewToClipboard(self) -> None:
         """Copy the currently displayed preview image to the system clipboard.
 
@@ -1970,8 +2042,11 @@ class AppController(QObject):
         """
         encoded = urllib.parse.quote(path, safe="")
         stamp = self._pending_preview_stamp
+        bust = f"&t={self._preview_bust}" if self._preview_bust else ""
         if stamp is not None:
-            return f"image://{scheme}/{encoded}?m={stamp[0]}&s={stamp[1]}"
+            return f"image://{scheme}/{encoded}?m={stamp[0]}&s={stamp[1]}{bust}"
+        if bust:
+            return f"image://{scheme}/{encoded}?{bust[1:]}"  # strip leading &
         return f"image://{scheme}/{encoded}"
 
     @Slot()
@@ -2163,6 +2238,11 @@ class AppController(QObject):
         self.findScrollFractionChanged.emit()
 
     def _on_index_progress(self, current: int, total: int, path: str) -> None:
+        # Cache GC sentinel: emitted once after build_index, before the
+        # finished signal, while orphaned thumb/preview files are unlinked.
+        if current == -1 and total == -1:
+            self._set_status(_("Cleaning up cache\u2026"))
+            return
         # current == 0 and total > 0 is the scan-complete sentinel emitted by
         # IndexerService once the directory walk finishes and the file count is
         # known.  Never throttle it — it fires exactly once per run and is the
@@ -2271,16 +2351,32 @@ class AppController(QObject):
         self._preview_resume_timer.stop()
         self._resume_thumb_for_preview()
 
+    def _refresh_selected_thumb_source(self) -> None:
+        """Re-read the thumbnail URI for the current row and emit if changed."""
+        row = self._current_result_row
+        if row < 0:
+            return
+        uri = self._search_model.data(
+            self._search_model.index(row, 0),
+            SearchListModel.ThumbnailSourceRole,
+        )
+        new_uri = uri or ""
+        if new_uri != self._selected_thumb_source:
+            self._selected_thumb_source = new_uri
+            self.selectedThumbSourceChanged.emit()
+
     def _on_thumb_refresh_tick(self) -> None:
         """Periodic mid-batch refresh so thumbnails appear as they are written."""
         if self._is_building_thumbs:
             self._search_model.refresh_thumbnails()
+            self._refresh_selected_thumb_source()
 
     def _on_thumb_done(self, cached: int, total: int) -> None:
         self._thumb_refresh_timer.stop()
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
         self._search_model.refresh_thumbnails()
+        self._refresh_selected_thumb_source()
         if self._pending_thumb_restart:
             self._pending_thumb_restart = False
             self._start_auto_thumbs()
@@ -2295,6 +2391,9 @@ class AppController(QObject):
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
         self._search_model.refresh_thumbnails()
+        if self._pending_thumb_restart:
+            self._pending_thumb_restart = False
+            self._start_auto_thumbs()
 
     def close(self) -> None:
         # Stop any running background QThread workers before closing the DB

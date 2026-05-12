@@ -28,7 +28,8 @@ except ImportError:  # pragma: no cover
 
 from PIL import Image, ImageFile, ImageOps, UnidentifiedImageError
 
-from ..indexing.image_utils import RAW_EXTENSIONS, orient_raw_thumb
+from ..indexing.image_utils import RAW_EXTENSIONS, VIDEO_EXTENSIONS, orient_raw_thumb
+from .video_frame import extract_video_frame
 
 # Hard cap on any preview decode \u2014 prevents allocating a 200 MB RGBA buffer
 # for a 50 MP image even if the caller passes a huge target size.
@@ -43,6 +44,8 @@ def render_preview(path: str, target_long_edge: int) -> Image.Image:
     """
     target = (target_long_edge, target_long_edge)
     ext = Path(path).suffix.lower()
+    if ext in VIDEO_EXTENSIONS:
+        return extract_video_frame(path, target_long_edge)
     if ext in RAW_EXTENSIONS and _RAWPY_AVAILABLE:
         return _load_raw(path, target)
     return _load_standard(path, target)

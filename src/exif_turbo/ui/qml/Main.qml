@@ -116,18 +116,33 @@ ApplicationWindow {
     // ── Preview context menu (right-click on either preview pane) ─────────
     Menu {
         id: previewContextMenu
-        // Drive the popup width from the item's natural (untruncated) text size.
+        // Drive the popup width from the widest item's natural (untruncated) text.
         // contentItem.implicitWidth always reflects the full text width regardless
         // of the width that the Menu assigns to the item, so there is no circular
         // dependency and elision is avoided for any text length or locale.
-        width: _copyImageMenuItem.leftPadding
-             + _copyImageMenuItem.contentItem.implicitWidth
-             + _copyImageMenuItem.rightPadding
+        width: Math.max(
+            _copyImageMenuItem.leftPadding + _copyImageMenuItem.contentItem.implicitWidth + _copyImageMenuItem.rightPadding,
+            _recreateThumbMenuItem.leftPadding + _recreateThumbMenuItem.contentItem.implicitWidth + _recreateThumbMenuItem.rightPadding,
+            _recreatePreviewMenuItem.leftPadding + _recreatePreviewMenuItem.contentItem.implicitWidth + _recreatePreviewMenuItem.rightPadding
+        )
         MenuItem {
             id: _copyImageMenuItem
             text: qsTr("Copy Image to Clipboard")
             enabled: _selectedImageSource !== ""
             onTriggered: { if (controller) controller.copyPreviewToClipboard() }
+        }
+        MenuSeparator {}
+        MenuItem {
+            id: _recreateThumbMenuItem
+            text: qsTr("Recreate Thumbnail")
+            enabled: _selectedImageSource !== ""
+            onTriggered: { if (controller) controller.recreateThumbnail() }
+        }
+        MenuItem {
+            id: _recreatePreviewMenuItem
+            text: qsTr("Recreate Preview")
+            enabled: _selectedImageSource !== ""
+            onTriggered: { if (controller) controller.recreatePreview() }
         }
     }
 

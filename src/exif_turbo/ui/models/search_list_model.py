@@ -72,6 +72,9 @@ class SearchListModel(QAbstractListModel):
         self._encrypted: bool = False
         self._cached_files: set[str] = self._scan_cache_dir()
         self._checked: set[str] = set()  # file paths — persists across searches
+        # path -> bust counter; appended as ?t=<n> to the thumb URI so QML's
+        # pixmap cache refetches after recreateThumbnail rebuilds the file.
+        self._thumb_bust: Dict[str, int] = {}
 
     @property
     def cache_dir(self) -> Path:
@@ -109,20 +112,28 @@ class SearchListModel(QAbstractListModel):
         return result
 
     def _thumbnail_uri(self, item: SearchResult) -> str:
-        """Compute the thumbnail cache URI using DB-stored stamps (no live os.stat)."""
+        """Compute the thumbnail cache URI using DB-stored stamps (no live os.stat).
+
+        Always returns an ``image://thumb/<sha1>`` URI (encrypted or plain),
+        so QML's pixmap cache can be busted via a ``?t=<n>`` query string —
+        see :meth:`bust_thumbnail`.
+        """
         if item.mtime:
             name = thumb_cache_name_from_stamp(item.path, item.mtime, item.size)
         else:
             # Fallback for rows without mtime (legacy DB entries)
             name = thumb_cache_path(item.path, self._cache_dir).name
+        sha1 = name[:-4]  # strip ".png" suffix
         if self._encrypted:
-            enc_name = name[:-4] + ".enc"
-            if enc_name in self._cached_files:
-                return f"image://thumb/{enc_name[:-4]}"
+            if (sha1 + ".enc") not in self._cached_files:
+                return ""
         else:
-            if name in self._cached_files:
-                return (self._cache_dir / name).as_uri()
-        return ""
+            if name not in self._cached_files:
+                return ""
+        bust = self._thumb_bust.get(item.path, 0)
+        if bust:
+            return f"image://thumb/{sha1}?t={bust}"
+        return f"image://thumb/{sha1}"
 
     def set_rows(self, rows: List[SearchResult]) -> None:
         self.beginResetModel()
@@ -186,6 +197,26 @@ class SearchListModel(QAbstractListModel):
             top_left = self.index(0, 0)
             bottom_right = self.index(len(self._rows) - 1, 0)
             self.dataChanged.emit(top_left, bottom_right, [self.ThumbnailSourceRole])
+
+    def bust_thumbnail(self, row: int) -> None:
+        """Force QML to refetch the thumbnail for *row* on next bind.
+
+        Increments a per-path bust counter that is appended as a ``?t=<n>``
+        query string to the ``image://thumb/<sha1>`` URI.  QML's
+        ``QQuickPixmapCache`` keys on the full URL, so the new URL bypasses
+        the in-memory cache and the provider re-reads the file from disk.
+        """
+        if not (0 <= row < len(self._rows)):
+            return
+        path = self._rows[row].path
+        self._thumb_bust[path] = self._thumb_bust.get(path, 0) + 1
+        # Re-scan in case the rebuilt file isn't yet present (URI will be
+        # empty until the worker writes it; refresh_thumbnails will pick it
+        # up on the next periodic tick).
+        self._cached_files = self._scan_cache_dir()
+        self._thumbnail_uris[row] = None
+        idx = self.index(row, 0)
+        self.dataChanged.emit(idx, idx, [self.ThumbnailSourceRole])
 
     def set_encryption(self, encrypted: bool) -> None:
         """Switch between plain PNG (``encrypted=False``) and encrypted .enc mode."""
