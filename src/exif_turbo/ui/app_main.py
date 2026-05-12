@@ -15,6 +15,7 @@ _PILImage.MAX_IMAGE_PIXELS = 894_784_850
 
 from PySide6.QtCore import QUrl, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QGuiApplication, QIcon, QImageReader
+from PySide6.QtNetwork import QLocalServer
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtWebEngineQuick import QtWebEngineQuick
@@ -62,6 +63,34 @@ def _ensure_pyside6_dll_search_path() -> None:
     except Exception:
         # Best-effort; if this fails, icon loading may still fall back to default behavior.
         pass
+
+
+def _acquire_single_instance_lock(db_path: Path) -> QLocalServer:
+    """Claim a per-database single-instance lock via QLocalServer.
+
+    Returns the server object (must be kept alive for the process lifetime).
+    Exits with code 1 if another instance is already running for the same db.
+    """
+    import hashlib
+
+    slug = hashlib.sha1(str(db_path.resolve()).encode()).hexdigest()[:12]
+    lock_name = f"exif-turbo-{slug}"
+
+    server = QLocalServer()
+    server.setSocketOptions(QLocalServer.SocketOption.UserAccessOption)
+
+    if not server.listen(lock_name):
+        # Try once to recover from a stale socket left by a previous crash.
+        QLocalServer.removeServer(lock_name)
+        if not server.listen(lock_name):
+            print(
+                f"exif-turbo: another instance is already running for "
+                f"database '{db_path.stem}'. Close it before opening a second window.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    return server
 
 
 def parse_args() -> argparse.Namespace:
@@ -112,6 +141,7 @@ def main() -> None:
     app.installTranslator(translator)
 
     db_path = db_path_for_name(args.db) if args.db else default_db_path()
+    _instance_lock = _acquire_single_instance_lock(db_path)  # kept alive until app exits
     settings = SettingsModel(settings_path(db_path))
     _cache_dir = thumb_cache_dir(db_path)
     search_model = SearchListModel(cache_dir=_cache_dir)
