@@ -179,6 +179,11 @@ def build_fpm_package(
     ]
     if fmt == "deb":
         cmd += ["--deb-no-default-config-files"]
+    if fmt == "rpm":
+        # Large PyInstaller bundles (thousands of files) overflow the RPM bitmap
+        # when using SHA-256 file digests, causing "Id is out of bitmap range".
+        # MD5 avoids this limit.
+        cmd += ["--rpm-digest", "md5"]
     cmd += ["."]
     run(cmd)
 
