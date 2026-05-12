@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-11 22:37+0200\n"
+"POT-Creation-Date: 2026-05-12 18:50+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: rm\n"
@@ -82,6 +82,15 @@ msgstr "Operaziun buca reussida: {}"
 #: src/exif_turbo/ui/view_models/app_controller.py:754
 msgid "Operation canceled."
 msgstr "Operaziun annullada."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:838
+msgid "Wrong password — please try again."
+msgstr "Pled-clav fauss — emprova p.pl. anc ina giada."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:850
+#, python-brace-format
+msgid "Failed to open database: {error}"
+msgstr "Impussibel da rir la banca da datas: {error}"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:876
 msgid "Database is locked."
@@ -808,11 +817,11 @@ msgstr "Re-indexar questa cartella (incremental)"
 
 #: QML
 msgid "Recreate Preview"
-msgstr ""
+msgstr "Crear danovamain la previsualisaziun"
 
 #: QML
 msgid "Recreate Thumbnail"
-msgstr ""
+msgstr "Crear danovamain il maletg en miniatura"
 
 #: QML
 msgid "Remove"

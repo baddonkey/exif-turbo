@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-11 22:37+0200\n"
+"POT-Creation-Date: 2026-05-12 18:50+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: fr\n"
@@ -82,6 +82,15 @@ msgstr "Opération échouée : {}"
 #: src/exif_turbo/ui/view_models/app_controller.py:754
 msgid "Operation canceled."
 msgstr "Opération annulée."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:838
+msgid "Wrong password — please try again."
+msgstr "Mot de passe incorrect — veuillez réessayer."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:850
+#, python-brace-format
+msgid "Failed to open database: {error}"
+msgstr "Échec de l’ouverture de la base de données : {error}"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:876
 msgid "Database is locked."
@@ -810,11 +819,11 @@ msgstr "Réindexer ce dossier (incrémentiel)"
 
 #: QML
 msgid "Recreate Preview"
-msgstr ""
+msgstr "Recréer l’aperçu"
 
 #: QML
 msgid "Recreate Thumbnail"
-msgstr ""
+msgstr "Recréer la miniature"
 
 #: QML
 msgid "Remove"

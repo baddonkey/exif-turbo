@@ -835,7 +835,7 @@ class AppController(QObject):
             if not self._scan_queue and not self._is_indexing:
                 self._start_auto_thumbs()
         except sqlcipher3.DatabaseError:
-            self._unlock_error = "Wrong password — please try again."
+            self._unlock_error = _("Wrong password — please try again.")
             self._is_unlocking = False
             self.isUnlockingChanged.emit()
             self.unlockErrorChanged.emit()
@@ -847,7 +847,7 @@ class AppController(QObject):
             self._folder_repo = None
             self._is_locked = True
         except Exception as exc:
-            self._unlock_error = f"Failed to open database: {exc}"
+            self._unlock_error = _("Failed to open database: {error}").format(error=exc)
             self._is_unlocking = False
             self.isUnlockingChanged.emit()
             self.unlockErrorChanged.emit()
