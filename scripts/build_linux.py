@@ -116,8 +116,18 @@ def ensure_icon() -> Path | None:
     return icon_png
 
 
-def build_staging(bundle_dir: Path, icon_png: Path | None) -> Path:
+def build_staging(bundle_dir: Path, icon_png: Path | None, fmt: str) -> Path:
     """Assemble the staging tree that fpm will package.
+
+    For ``deb`` the bundle is laid out file-by-file under ``/opt/exif-turbo/``.
+
+    For ``rpm`` the bundle is shipped as a single ``bundle.tar.gz`` and
+    extracted by a post-install script. PyInstaller + PySide6 produce
+    ~3000 files; shipping them all triggers the libsolv "Id is out of bitmap
+    range" error during ``dnf`` dependency resolution on Fedora 44 (RPM 6,
+    libsolv 0.7.x). Bundling reduces the package's file count to a handful
+    and sidesteps the limit. This is the same workaround used by Datadog,
+    Splunk, and other large self-contained RPMs.
 
     Returns the path to the staging root directory.
     """
@@ -126,8 +136,24 @@ def build_staging(bundle_dir: Path, icon_png: Path | None) -> Path:
 
     opt_dir = staging / "opt" / "exif-turbo"
     opt_dir.mkdir(parents=True)
-    print(f"  Copying bundle → {opt_dir} ...")
-    shutil.copytree(bundle_dir, opt_dir, dirs_exist_ok=True)
+
+    if fmt == "rpm":
+        bundle_tar = opt_dir / "bundle.tar.gz"
+        print(f"  Archiving bundle → {bundle_tar} ...")
+        # Use deterministic, dir-relative tar (no leading "./exif-turbo/").
+        run(
+            [
+                "tar",
+                "--create",
+                "--gzip",
+                "--file", str(bundle_tar),
+                "--directory", str(bundle_dir),
+                ".",
+            ]
+        )
+    else:
+        print(f"  Copying bundle → {opt_dir} ...")
+        shutil.copytree(bundle_dir, opt_dir, dirs_exist_ok=True)
 
     # ── wrapper scripts ────────────────────────────────────────────────────────
     bin_dir = staging / "usr" / "bin"
@@ -152,6 +178,43 @@ def build_staging(bundle_dir: Path, icon_png: Path | None) -> Path:
         shutil.copy2(icon_png, icons_dir / "exif-turbo.png")
 
     return staging
+
+
+# Post-install script for the RPM: extract the bundle tarball in place.
+RPM_POSTINSTALL = """\
+#!/bin/sh
+set -e
+cd /opt/exif-turbo
+if [ -f bundle.tar.gz ]; then
+    tar -xzf bundle.tar.gz
+    rm -f bundle.tar.gz
+fi
+exit 0
+"""
+
+# Pre-uninstall script for the RPM: remove extracted files on full removal.
+# $1 == 0 → package removal; $1 == 1 → upgrade (keep files in place).
+RPM_PREUNINSTALL = """\
+#!/bin/sh
+set -e
+if [ "$1" = "0" ]; then
+    find /opt/exif-turbo -mindepth 1 -delete 2>/dev/null || true
+fi
+exit 0
+"""
+
+
+def write_rpm_scripts(staging: Path) -> tuple[Path, Path]:
+    """Write the RPM post-install / pre-uninstall scripts and return their paths."""
+    scripts_dir = staging.parent / f"{staging.name}-scripts"
+    scripts_dir.mkdir(exist_ok=True)
+    post = scripts_dir / "after-install.sh"
+    pre = scripts_dir / "before-remove.sh"
+    post.write_text(RPM_POSTINSTALL, encoding="utf-8")
+    pre.write_text(RPM_PREUNINSTALL, encoding="utf-8")
+    post.chmod(0o755)
+    pre.chmod(0o755)
+    return post, pre
 
 
 def build_fpm_package(
@@ -180,10 +243,14 @@ def build_fpm_package(
     if fmt == "deb":
         cmd += ["--deb-no-default-config-files"]
     if fmt == "rpm":
-        # Large PyInstaller bundles (thousands of files) overflow the RPM bitmap
-        # when using SHA-256 file digests, causing "Id is out of bitmap range".
-        # MD5 avoids this limit.
-        cmd += ["--rpm-digest", "md5"]
+        post, pre = write_rpm_scripts(staging)
+        cmd += [
+            "--after-install", str(post),
+            "--before-remove", str(pre),
+            # tar requires a working POSIX shell at install time
+            "--rpm-tag", "Requires(post): tar",
+            "--rpm-tag", "Requires(post): coreutils",
+        ]
     cmd += ["."]
     run(cmd)
 
@@ -214,27 +281,33 @@ def main() -> None:
         fail(f"Expected bundle directory not found: {bundle_dir}")
 
     icon_png = ensure_icon()
-    staging = build_staging(bundle_dir, icon_png)
 
     dist_dir = REPO_ROOT / "dist"
     artifacts: list[Path] = []
+    staging_dirs: list[Path] = []
 
     try:
         if build_deb:
+            deb_staging = build_staging(bundle_dir, icon_png, fmt="deb")
+            staging_dirs.append(deb_staging)
             deb_out = dist_dir / f"exif-turbo-{version}-linux.deb"
             deb_out.unlink(missing_ok=True)
             print(f"\n  Building DEB → {deb_out.name} ...")
-            build_fpm_package("deb", staging, version, fpm, deb_out)
+            build_fpm_package("deb", deb_staging, version, fpm, deb_out)
             artifacts.append(deb_out)
 
         if build_rpm:
+            rpm_staging = build_staging(bundle_dir, icon_png, fmt="rpm")
+            staging_dirs.append(rpm_staging)
             rpm_out = dist_dir / f"exif-turbo-{version}-linux.rpm"
             rpm_out.unlink(missing_ok=True)
             print(f"\n  Building RPM → {rpm_out.name} ...")
-            build_fpm_package("rpm", staging, version, fpm, rpm_out)
+            build_fpm_package("rpm", rpm_staging, version, fpm, rpm_out)
             artifacts.append(rpm_out)
     finally:
-        shutil.rmtree(staging, ignore_errors=True)
+        for d in staging_dirs:
+            shutil.rmtree(d, ignore_errors=True)
+            shutil.rmtree(d.parent / f"{d.name}-scripts", ignore_errors=True)
 
     print()
     print("Done! Artifacts:")
