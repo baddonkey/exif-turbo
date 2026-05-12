@@ -68,7 +68,8 @@
               Target="[INSTALLFOLDER]exif-turbo.exe"
               WorkingDirectory="INSTALLFOLDER"
               Icon="ExifTurboIcon"
-              IconIndex="0" />
+              IconIndex="0"
+              AppUserModelId="exif-turbo" />
           <!-- Clean up the Start Menu folder on uninstall -->
           <RemoveFolder Id="RemoveAppStartMenuFolder" Directory="AppStartMenuFolder" On="uninstall" />
           <!-- Registry key is the KeyPath for this component -->
