@@ -149,9 +149,6 @@ def build_dmg(app: Path, version: str) -> Path:
 
 Drag exif-turbo.app into the Applications folder to install.
 
-For CLI indexing, use the bundled exif-turbo-index binary inside the app:
-  exif-turbo.app/Contents/MacOS/exif-turbo-index --folders <dir> --db <path.db>
-
 Full documentation: https://github.com/baddonkey/exif-turbo
 """
         )
