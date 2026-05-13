@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Linux PyInstaller spec — produces a onedir bundle (GUI + CLI indexer).
+# Linux PyInstaller spec — produces a GUI onedir bundle.
 # Run via: python scripts/build_linux.py
 import re
 from pathlib import Path
@@ -49,29 +49,7 @@ a_gui = Analysis(
     optimize=0,
 )
 
-# ── CLI indexer ────────────────────────────────────────────────────────────────
-a_cli = Analysis(
-    ['src/exif_turbo/indexer.py'],
-    pathex=['src'],
-    binaries=[],
-    datas=[],
-    hiddenimports=[
-        'exif_turbo.indexing',
-        'exif_turbo.indexing.cli',
-        'exif_turbo.indexing.indexer_service',
-        'rawpy',
-        'sqlcipher3',
-    ],
-    hookspath=[],
-    hooksconfig={},
-    runtime_hooks=[],
-    excludes=[],
-    noarchive=False,
-    optimize=0,
-)
-
 pyz_gui = PYZ(a_gui.pure)
-pyz_cli = PYZ(a_cli.pure)
 
 exe_gui = EXE(
     pyz_gui,
@@ -88,28 +66,10 @@ exe_gui = EXE(
     disable_windowed_traceback=False,
 )
 
-exe_cli = EXE(
-    pyz_cli,
-    a_cli.scripts,
-    exclude_binaries=True,
-    name='exif-turbo-index',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=False,
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=True,                 # CLI tool — keep console
-    disable_windowed_traceback=False,
-)
-
 coll = COLLECT(
     exe_gui,
     a_gui.binaries,
     a_gui.datas,
-    exe_cli,
-    a_cli.binaries,
-    a_cli.datas,
     strip=False,
     upx=False,
     upx_exclude=[],
