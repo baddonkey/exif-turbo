@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.exifturbo.app</id>
+  <name>exif-turbo</name>
+  <summary>Fast EXIF full-text image search</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>
+      exif-turbo is a cross-platform image EXIF metadata search and indexing tool.
+      It scans image folders, extracts EXIF metadata, stores it in a local SQLite
+      index, and provides fast full-text search over that data.
+    </p>
+  </description>
+  <launchable type="desktop-id">exif-turbo.desktop</launchable>
+  <url type="homepage">https://github.com/baddonkey/exif-turbo</url>
+  <categories>
+    <category>Graphics</category>
+    <category>Viewer</category>
+  </categories>
+  <provides>
+    <binary>exif-turbo</binary>
+  </provides>
+  <releases>
+    <release version="1.10.3" date="2026-05-13"/>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>
