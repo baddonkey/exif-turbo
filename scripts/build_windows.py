@@ -47,13 +47,15 @@ def run(cmd: list[str], **kwargs: object) -> None:
 
 
 def find_tool(name: str, venv_subpath: str | None = None) -> str:
-    found = shutil.which(name)
-    if found:
-        return found
+    # Prefer the venv-local binary so that venv-installed packages (e.g. av,
+    # Pillow) are visible to PyInstaller instead of a globally installed copy.
     if venv_subpath:
         candidate = REPO_ROOT / venv_subpath
         if candidate.exists():
             return str(candidate)
+    found = shutil.which(name)
+    if found:
+        return found
     fail(f"Required tool '{name}' not found. See script header for install instructions.")
     return ""  # unreachable
 
