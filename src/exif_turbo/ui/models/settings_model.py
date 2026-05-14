@@ -30,6 +30,15 @@ _DEFAULT_BLACKLIST: List[str] = [
 _PREVIEW_SIZE_CHOICES: List[int] = [1280, 1600, 2048, 2560, 3840]
 _DEFAULT_PREVIEW_SIZE = 2048
 
+_DEFAULT_SORT = "captured_desc"
+_VALID_SORTS = {
+    "filename_asc", "filename_desc",
+    "path_asc",     "path_desc",
+    "date_desc",    "date_asc",
+    "size_desc",    "size_asc",
+    "captured_desc", "captured_asc",
+}
+
 
 class SettingsModel(QObject):
     """Persistent settings stored per-database as JSON.
@@ -46,6 +55,7 @@ class SettingsModel(QObject):
     languageChanged = Signal()
     retranslateRequested = Signal()
     previewMaxSizeChanged = Signal()
+    sortByChanged = Signal()
 
     def __init__(self, settings_path: Path, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -55,6 +65,7 @@ class SettingsModel(QObject):
         self._theme: str = current_theme()
         self._language: str = current_language()
         self._preview_max_size: int = _DEFAULT_PREVIEW_SIZE
+        self._sort_by: str = _DEFAULT_SORT
         self._load()
 
     # ── Properties ───────────────────────────────────────────────────────────
@@ -174,6 +185,25 @@ class SettingsModel(QObject):
     def getBlacklist(self) -> List[str]:
         return list(self._blacklist)
 
+    # ── Sort order ────────────────────────────────────────────────────────────
+
+    @Property(str, notify=sortByChanged)
+    def sortBy(self) -> str:
+        return self._sort_by
+
+    @property
+    def sort_by(self) -> str:
+        """Python-only accessor for AppController."""
+        return self._sort_by
+
+    @Slot(str)
+    def setSortBy(self, value: str) -> None:
+        if value not in _VALID_SORTS or self._sort_by == value:
+            return
+        self._sort_by = value
+        self.sortByChanged.emit()
+        self._save()
+
     # ── Python-only API (used by IndexWorker) ────────────────────────────────
 
     @property
@@ -194,6 +224,8 @@ class SettingsModel(QObject):
                 self._blacklist = [str(p) for p in data["blacklist"] if p]
             if isinstance(data.get("previewMaxSize"), int) and data["previewMaxSize"] in _PREVIEW_SIZE_CHOICES:
                 self._preview_max_size = data["previewMaxSize"]
+            if isinstance(data.get("sortBy"), str) and data["sortBy"] in _VALID_SORTS:
+                self._sort_by = data["sortBy"]
         except Exception:
             pass  # corrupt/missing file — use defaults
 
@@ -206,6 +238,7 @@ class SettingsModel(QObject):
                         "workerCount": self._worker_count,
                         "blacklist": self._blacklist,
                         "previewMaxSize": self._preview_max_size,
+                        "sortBy": self._sort_by,
                     },
                     indent=2,
                 ),

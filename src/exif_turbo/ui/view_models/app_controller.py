@@ -167,7 +167,7 @@ class AppController(QObject):
         self._find_text = ""
         self._find_positions: List[Tuple[int, int]] = []
         self._find_index = -1
-        self._sort_by = "path_asc"
+        self._sort_by = self._settings.sort_by if self._settings else "captured_desc"
         self._ext_filter = ""
         self._available_formats: str = "[]"
         self._folder_filter: str = ""
@@ -802,7 +802,7 @@ class AppController(QObject):
             self._is_locked = False
             self._is_new_database = False
             self._ext_filter = ""
-            self._sort_by = "path_asc"
+            self._sort_by = self._settings.sort_by if self._settings else "captured_desc"
             self._folder_filter = ""
             self._search_folder_filters = set()
             self._date_from = None
@@ -1062,6 +1062,8 @@ class AppController(QObject):
         if self._sort_by == sort:
             return
         self._sort_by = sort
+        if self._settings:
+            self._settings.setSortBy(sort)
         self._current_result_row = 0
         self.sortByChanged.emit()
         self._run_search()

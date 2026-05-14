@@ -39,9 +39,38 @@ Fully generated using VS Code Copilot.
 - **Delete marked images** — `Action → Delete Marked Images…` permanently removes every marked image from disk *and* from the index, including any cached thumbnail and rendered preview; a confirmation dialog requires you to type the exact count to proceed
 - **Bulk-op progress overlay** — modal overlay with a progress bar and live `X / Y` count during select-all, deselect-all, and export operations; cancelable at any time
 - **Unlock spinner** — animated indicator shown on the lock screen while the encrypted database is being opened
+- **Capture-date indexing & timeline filter** — `DateTimeOriginal` / `CreateDate` EXIF tags are stored as a UTC epoch timestamp (`captured_at`). After indexing, a **year histogram** appears in the Search tab: click a bar to filter to that year, shift-click a second bar to extend the range, click the active bar again to clear, or hit the `×` chip. Images without an EXIF date fall back to the file-system creation time (macOS/Windows) or mtime (Linux).
 - **Fast NAS scanning** — on macOS/Linux, `ImageFinder` spawns up to 8 parallel `find` subprocesses (one per top-level subdirectory) so all `getdents()`/`lstat()` calls happen inside a C binary outside the Python GIL; a live "N files found…" counter updates the progress panel while discovery is still running
 
 ## Recent changes
+
+### Capture-date indexing and timeline filter
+
+Every image now stores a `captured_at` UTC timestamp in the database, resolved
+in priority order:
+
+1. EXIF `DateTimeOriginal` / `CreateDate` (group-prefixed `ExifIFD:` or `IFD0:`)
+   — sub-second suffixes are stripped before parsing.
+2. File-system creation time (`st_birthtime` on macOS, `st_ctime` on Windows).
+3. Modification time (mtime) as a last resort on Linux.
+
+After re-indexing, a **year histogram** bar chart appears below the format
+chips in the Search tab whenever at least one image has a known capture date:
+
+- **Click** a bar to filter results to that year.
+- **Shift-click** a different bar to extend the range (tooltip hints this when
+  a filter is already active).
+- **Click the active bar** again to clear the filter.
+- **`×` chip** at the right also clears the filter.
+
+Images that have no capture date are excluded from results when a date filter
+is active. The histogram reflects the current search query and folder/format
+filters.
+
+New sort options **Date taken ↓** / **Date taken ↑** sort purely by `captured_at`;
+images without an EXIF date sort last in both directions. **Newest/Oldest first**
+continues to sort by filesystem `mtime`. The chosen sort order is persisted per
+database in `settings.json` and restored on the next launch.
 
 ### Bundle ExifTool in Windows MSI
 
@@ -182,16 +211,16 @@ no extra `stat()` calls are needed.
 
 ## Test suite
 
-160 automated tests across four layers:
+178 automated tests across four layers:
 
 | Suite | Count | What it covers |
 |-------|-------|----------------|
-| `tests/data/` | 55 | Repository: upsert, FTS5 search, delete_missing (scoped), clear_all, excluded paths, folder management, rekey |
-| `tests/indexing/` | 26 | Image utils, metadata text, IndexerService e2e (real JPEG/PNG files), scoped rescan |
-| `tests/ui/` | 60 | Live QML window driven via pytest-qt — unlock, search, filter, folder add/remove/enable, controller state, ext filter, zoom, thumbnail loading, preview build worker, raw preview toggle, metadata panel scroll, sort combo |
+| `tests/data/` | 64 | Repository: upsert, FTS5 search, delete_missing (scoped), clear_all, excluded paths, folder management, rekey, `captured_at` persistence, date-range filter, `get_year_counts` |
+| `tests/indexing/` | 31 | Image utils, metadata text, IndexerService e2e (real JPEG/PNG files), scoped rescan, `_resolve_captured_at` (EXIF parse, sub-second suffix, fallback chain) |
+| `tests/ui/` | 64 | Live QML window driven via pytest-qt — unlock, search, filter, folder add/remove/enable, controller state, ext filter, zoom, thumbnail loading, preview build worker, raw preview toggle, metadata panel scroll, sort combo |
 | `tests/utils/` | 19 | Preview cache naming/clearing, thumb crypto (encrypt/decrypt, password change, legacy migration) |
 
-**Total: 160**
+**Total: 178**
 
 ## Requirements
 

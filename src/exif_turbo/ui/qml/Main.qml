@@ -1265,12 +1265,14 @@ ApplicationWindow {
                                 FontMetrics { id: _sortFM; font: sortCombo.font }
 
                                 readonly property var _opts: [
+                                    { text: qsTr("Date taken ↓"),  value: "captured_desc" },
+                                    { text: qsTr("Date taken ↑"),  value: "captured_asc"  },
+                                    { text: qsTr("Newest first"),  value: "date_desc"     },
+                                    { text: qsTr("Oldest first"),  value: "date_asc"      },
                                     { text: qsTr("Name A→Z"),      value: "filename_asc"  },
                                     { text: qsTr("Name Z→A"),      value: "filename_desc" },
                                     { text: qsTr("Path A→Z"),      value: "path_asc"      },
                                     { text: qsTr("Path Z→A"),      value: "path_desc"     },
-                                    { text: qsTr("Newest first"),  value: "date_desc"     },
-                                    { text: qsTr("Oldest first"),  value: "date_asc"      },
                                     { text: qsTr("Largest"),       value: "size_desc"     },
                                     { text: qsTr("Smallest"),      value: "size_asc"      },
                                 ]
@@ -1283,7 +1285,7 @@ ApplicationWindow {
                                     for (var i = 0; i < _opts.length; i++) {
                                         if (_opts[i].value === sv) return i
                                     }
-                                    return 2  // fallback: Path A→Z
+                                    return 0  // fallback: Date taken ↓
                                 }
                                 onActivated: controller.setSortBy(sortCombo._opts[currentIndex].value)
                             }

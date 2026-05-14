@@ -338,8 +338,8 @@ class ImageIndexRepository:
         "date_asc":           "images.mtime ASC",
         "size_desc":          "images.size DESC",
         "size_asc":           "images.size ASC",
-        "captured_desc":      "COALESCE(images.captured_at, images.mtime) DESC",
-        "captured_asc":       "COALESCE(images.captured_at, images.mtime) ASC",
+        "captured_desc":      "images.captured_at DESC NULLS LAST",
+        "captured_asc":       "images.captured_at ASC NULLS LAST",
     }
 
     _DEFAULT_SORT_SQL = "images.filename COLLATE NOCASE ASC"
