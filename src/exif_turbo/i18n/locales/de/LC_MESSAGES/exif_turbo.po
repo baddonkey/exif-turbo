@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-12 18:50+0200\n"
+"POT-Creation-Date: 2026-05-14 13:51+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: de\n"
@@ -18,123 +18,123 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:136
+#: src/exif_turbo/ui/view_models/app_controller.py:138
 msgid "Enter the database password to continue"
 msgstr "Datenbankpasswort eingeben, um fortzufahren"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:572
+#: src/exif_turbo/ui/view_models/app_controller.py:591
 msgid "Selecting all matching images…"
 msgstr "Alle passenden Bilder werden ausgewählt…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:582
+#: src/exif_turbo/ui/view_models/app_controller.py:601
 msgid "Deselecting all matching images…"
 msgstr "Auswahl aller passenden Bilder wird aufgehoben…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:592
+#: src/exif_turbo/ui/view_models/app_controller.py:611
 msgid "Inverting selection…"
 msgstr "Auswahl wird umgekehrt…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:606
+#: src/exif_turbo/ui/view_models/app_controller.py:625
 msgid "Selecting images without a cached thumbnail…"
 msgstr "Bilder ohne gecachtes Vorschaubild werden ausgewählt…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:621
+#: src/exif_turbo/ui/view_models/app_controller.py:640
 msgid "No marked images to delete."
 msgstr "Keine markierten Bilder zum Löschen."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:625
+#: src/exif_turbo/ui/view_models/app_controller.py:644
 msgid "Deleting marked images…"
 msgstr "Markierte Bilder werden gelöscht…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:635
+#: src/exif_turbo/ui/view_models/app_controller.py:654
 msgid "No marked images to export."
 msgstr "Keine markierten Bilder zum Exportieren."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:640
+#: src/exif_turbo/ui/view_models/app_controller.py:659
 msgid "Exporting metadata…"
 msgstr "Metadaten werden exportiert…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:719
+#: src/exif_turbo/ui/view_models/app_controller.py:740
 #, python-brace-format
 msgid "Deleted {n} image(s)."
 msgstr "{n} Bild(er) gelöscht."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:723
+#: src/exif_turbo/ui/view_models/app_controller.py:744
 #, python-brace-format
 msgid "{n} were already missing."
 msgstr "{n} waren bereits nicht mehr vorhanden."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:729
+#: src/exif_turbo/ui/view_models/app_controller.py:750
 #, python-brace-format
 msgid "{n} could not be deleted."
 msgstr "{n} konnten nicht gelöscht werden."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:739
+#: src/exif_turbo/ui/view_models/app_controller.py:760
 #, python-brace-format
 msgid "Exported {count} image(s) to {name}"
 msgstr "{count} Bild(er) nach {name} exportiert"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:748
+#: src/exif_turbo/ui/view_models/app_controller.py:769
 #, python-brace-format
 msgid "Operation failed: {}"
 msgstr "Vorgang fehlgeschlagen: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:754
+#: src/exif_turbo/ui/view_models/app_controller.py:775
 msgid "Operation canceled."
 msgstr "Vorgang abgebrochen."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:838
+#: src/exif_turbo/ui/view_models/app_controller.py:861
 msgid "Wrong password — please try again."
 msgstr "Falsches Passwort — bitte erneut versuchen."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:850
+#: src/exif_turbo/ui/view_models/app_controller.py:873
 #, python-brace-format
 msgid "Failed to open database: {error}"
 msgstr "Datenbank konnte nicht geöffnet werden: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:876
+#: src/exif_turbo/ui/view_models/app_controller.py:899
 msgid "Database is locked."
 msgstr "Die Datenbank ist gesperrt."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:881
+#: src/exif_turbo/ui/view_models/app_controller.py:904
 msgid "Cannot change password while indexing or thumb-building is running."
 msgstr ""
 "Das Passwort kann nicht geändert werden, während Indizierung oder "
 "Vorschaubilderstellung läuft."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:885
+#: src/exif_turbo/ui/view_models/app_controller.py:908
 msgid "Current password is incorrect."
 msgstr "Das aktuelle Passwort ist falsch."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:888
+#: src/exif_turbo/ui/view_models/app_controller.py:911
 msgid "New password must not be empty."
 msgstr "Das neue Passwort darf nicht leer sein."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:892
+#: src/exif_turbo/ui/view_models/app_controller.py:915
 msgid "New password must differ from the current password."
 msgstr "Das neue Passwort muss sich vom aktuellen unterscheiden."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:910
+#: src/exif_turbo/ui/view_models/app_controller.py:933
 msgid "Changing password…"
 msgstr "Passwort wird geändert…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:951
+#: src/exif_turbo/ui/view_models/app_controller.py:974
 #, python-brace-format
 msgid "Database password changed, but reopening failed: {error}"
 msgstr ""
 "Datenbankpasswort geändert, aber das erneute Öffnen ist fehlgeschlagen: "
 "{error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:961
+#: src/exif_turbo/ui/view_models/app_controller.py:984
 msgid "Password changed successfully."
 msgstr "Passwort erfolgreich geändert."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1002
+#: src/exif_turbo/ui/view_models/app_controller.py:1025
 #, python-brace-format
 msgid "Failed to change password: {error}"
 msgstr "Passwortänderung fehlgeschlagen: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1007
+#: src/exif_turbo/ui/view_models/app_controller.py:1030
 #, python-brace-format
 msgid ""
 "Password changed but thumbnail cache could not be re-wrapped ({error}). "
@@ -144,97 +144,97 @@ msgstr ""
 " verschlüsselt werden ({error}). Der Cache wurde geleert und wird neu "
 "erstellt."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1394
+#: src/exif_turbo/ui/view_models/app_controller.py:1459
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Ordner bereits verfolgt: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1618
+#: src/exif_turbo/ui/view_models/app_controller.py:1683
 #, python-brace-format
 msgid "Indexing {}…"
 msgstr "Indizierung von {}…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1654
+#: src/exif_turbo/ui/view_models/app_controller.py:1719
 #, python-brace-format
 msgid "Indexed {count} images ({errors} skipped due to errors)"
 msgstr "{count} Bilder indiziert ({errors} aufgrund von Fehlern übersprungen)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1659
+#: src/exif_turbo/ui/view_models/app_controller.py:1724
 #, python-brace-format
 msgid "Indexed {} images"
 msgstr "{} Bilder indiziert"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1692
+#: src/exif_turbo/ui/view_models/app_controller.py:1757
 #, python-brace-format
 msgid "Index failed: {}"
 msgstr "Indizierung fehlgeschlagen: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1724
+#: src/exif_turbo/ui/view_models/app_controller.py:1789
 msgid "Index canceled"
 msgstr "Indizierung abgebrochen"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1744
+#: src/exif_turbo/ui/view_models/app_controller.py:1809
 msgid "Canceling…"
 msgstr "Abbrechen…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1839
+#: src/exif_turbo/ui/view_models/app_controller.py:1904
 #, python-brace-format
 msgid "Built {built} preview(s) of {total}."
 msgstr "{built} von {total} Vorschaubilder erstellt."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1847
+#: src/exif_turbo/ui/view_models/app_controller.py:1912
 #, python-brace-format
 msgid "Preview build failed: {error}"
 msgstr "Vorschaubilderstellung fehlgeschlagen: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1855
+#: src/exif_turbo/ui/view_models/app_controller.py:1920
 #, python-brace-format
 msgid "Preview build canceled ({built} of {total} done)."
 msgstr "Vorschaubilderstellung abgebrochen ({built} von {total} fertig)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1868
+#: src/exif_turbo/ui/view_models/app_controller.py:1933
 msgid "Cancel the running preview build before clearing the cache."
 msgstr ""
 "Bitte die laufende Vorschaubilderstellung abbrechen, bevor der Cache "
 "geleert wird."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1877
+#: src/exif_turbo/ui/view_models/app_controller.py:1942
 #, python-brace-format
 msgid "Failed to clear preview cache: {error}"
 msgstr "Löschen des Vorschau-Caches fehlgeschlagen: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1883
+#: src/exif_turbo/ui/view_models/app_controller.py:1948
 #, python-brace-format
 msgid "Removed {n} cached preview(s)."
 msgstr "{n} gecachtes Vorschaubild(er) entfernt."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2012
+#: src/exif_turbo/ui/view_models/app_controller.py:2077
 msgid "Image copied to clipboard"
 msgstr "Bild in Zwischenablage kopiert"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2016
+#: src/exif_turbo/ui/view_models/app_controller.py:2081
 msgid "Path copied to clipboard"
 msgstr "Pfad in Zwischenablage kopiert"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2074
+#: src/exif_turbo/ui/view_models/app_controller.py:2139
 msgid "Database reset"
 msgstr "Datenbank zurückgesetzt"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2244
+#: src/exif_turbo/ui/view_models/app_controller.py:2309
 msgid "Cleaning up cache…"
 msgstr "Cache wird bereinigt…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2264
+#: src/exif_turbo/ui/view_models/app_controller.py:2329
 #, python-brace-format
 msgid "Indexing… {} (scanning)"
 msgstr "Indizierung… {} (Suche)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2266
+#: src/exif_turbo/ui/view_models/app_controller.py:2331
 #, python-brace-format
 msgid "Indexing… 0 / {}"
 msgstr "Indizierung… 0 / {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2268
+#: src/exif_turbo/ui/view_models/app_controller.py:2333
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indizierung… {} / {}"
@@ -249,7 +249,7 @@ msgstr "%1 Ordner"
 
 #: QML
 msgid "%1 of %2 previews cached"
-msgstr "%1 von %2 Vorschaubilder gecacht"
+msgstr ""
 
 #: QML
 msgid "&About"
@@ -261,7 +261,7 @@ msgstr "&Aktion"
 
 #: QML
 msgid "&Delete Marked Images\\u2026 (%1 selected)"
-msgstr "Markierte Bilder &löschen\\u2026 (%1 ausgewählt)"
+msgstr ""
 
 #: QML
 msgid "&Deselect All"
@@ -309,7 +309,7 @@ msgstr "Alle"
 
 #: QML
 msgid "All %1 previews are cached"
-msgstr "Alle %1 Vorschaubilder sind gecacht"
+msgstr ""
 
 #: QML
 msgid "All files (*)"
@@ -325,11 +325,11 @@ msgstr "Durchsuchen"
 
 #: QML
 msgid "Build Previews"
-msgstr "Vorschaubilder erstellen"
+msgstr ""
 
 #: QML
 msgid "Building Previews"
-msgstr "Vorschaubilder werden erstellt"
+msgstr ""
 
 #: QML
 msgid "Building Thumbnails"
@@ -349,7 +349,7 @@ msgstr "Indizierung abbrechen"
 
 #: QML
 msgid "Cancel Previews"
-msgstr "Vorschaubilder abbrechen"
+msgstr ""
 
 #: QML
 msgid "Cancel Thumbnails"
@@ -357,7 +357,7 @@ msgstr "Vorschaubilder abbrechen"
 
 #: QML
 msgid "Cancel the running preview build"
-msgstr "Laufende Vorschaubilderstellung abbrechen"
+msgstr ""
 
 #: QML
 msgid "Canceling\\u2026"
@@ -381,11 +381,15 @@ msgstr "Prüfen"
 
 #: QML
 msgid "Clear Preview Cache"
-msgstr "Vorschau-Cache leeren"
+msgstr ""
 
 #: QML
 msgid "Clear Previews"
-msgstr "Vorschaubilder löschen"
+msgstr ""
+
+#: QML
+msgid "Clear date filter"
+msgstr "Datumsfilter zurücksetzen"
 
 #: QML
 msgid "Confirm new password"
@@ -432,20 +436,26 @@ msgid "Date"
 msgstr "Datum"
 
 #: QML
+msgid "Date taken ↑"
+msgstr "Aufnahmedatum ↑"
+
+#: QML
+msgid "Date taken ↓"
+msgstr "Aufnahmedatum ↓"
+
+#: QML
 msgid ""
 "Delete %1 cached preview(s) for \"%2\"?\n"
 "Thumbnails are unaffected."
 msgstr ""
-"%1 gecachte(s) Vorschaubild(er) für „%2“ löschen?\n"
-"Vorschaubilder sind nicht betroffen."
 
 #: QML
 msgid "Delete Marked Images"
-msgstr "Markierte Bilder löschen"
+msgstr ""
 
 #: QML
 msgid "Delete all cached previews for this folder"
-msgstr "Alle gecachten Vorschaubilder für diesen Ordner löschen"
+msgstr ""
 
 #: QML
 msgid "Deselect image"
@@ -469,7 +479,7 @@ msgstr "EXIF-TAGS"
 
 #: QML
 msgid "Enter %1"
-msgstr "%1 eingeben"
+msgstr ""
 
 #: QML
 msgid "Enter the database password"
@@ -485,7 +495,7 @@ msgstr "Beispiel"
 
 #: QML
 msgid "ExifTool"
-msgstr "ExifTool"
+msgstr ""
 
 #: QML
 msgid ""
@@ -591,15 +601,15 @@ msgstr "Alle vollständig neu indizieren"
 
 #: QML
 msgid "GPS location —"
-msgstr "GPS-Standort —"
+msgstr ""
 
 #: QML
 msgid "GeoHack"
-msgstr "GeoHack"
+msgstr ""
 
 #: QML
 msgid "Google Maps"
-msgstr "Google Maps"
+msgstr ""
 
 #: QML
 msgid "IMAGES"
@@ -647,7 +657,7 @@ msgstr "Lizenz: MIT"
 
 #: QML
 msgid "Loading original\\u2026"
-msgstr "Original wird geladen…"
+msgstr ""
 
 #: QML
 msgid ""
@@ -655,9 +665,6 @@ msgid ""
 "give sharper detail when zooming but take more disk space and longer to "
 "render."
 msgstr ""
-"Auflösung der langen Seite für die Vorschau-Cache-Erstellung. Höhere "
-"Werte liefern beim Zoomen schärfere Details, benötigen jedoch mehr "
-"Speicherplatz und längere Renderzeit."
 
 #: QML
 msgid "METADATA"
@@ -734,7 +741,7 @@ msgstr "Älteste zuerst"
 
 #: QML
 msgid "OpenStreetMap"
-msgstr "OpenStreetMap"
+msgstr ""
 
 #: QML
 msgid "PREVIEW"
@@ -776,10 +783,6 @@ msgid ""
 "\n"
 "This cannot be undone."
 msgstr ""
-"%1 markierte Bilddatei(en) dauerhaft von der Festplatte löschen und aus "
-"dem Index entfernen?\n"
-"\n"
-"Dies kann nicht rükgängig gemacht werden."
 
 #: QML
 msgid ""
@@ -795,7 +798,7 @@ msgstr "Vorbereitung…"
 
 #: QML
 msgid "Preview Cache Size"
-msgstr "Grösse des Vorschau-Caches"
+msgstr ""
 
 #: QML
 msgid "Previous match"
@@ -819,11 +822,11 @@ msgstr "Diesen Ordner inkrementell neu indizieren"
 
 #: QML
 msgid "Recreate Preview"
-msgstr "Vorschau neu erstellen"
+msgstr ""
 
 #: QML
 msgid "Recreate Thumbnail"
-msgstr "Vorschaubild neu erstellen"
+msgstr ""
 
 #: QML
 msgid "Remove"
@@ -843,7 +846,7 @@ msgstr "Diesen Ordner entfernen und seine indizierten Bilder löschen"
 
 #: QML
 msgid "Render preview-cache JPEGs for this folder"
-msgstr "Vorschau-Cache-JPEGs für diesen Ordner erstellen"
+msgstr ""
 
 #: QML
 msgid "Rescan"
@@ -885,7 +888,7 @@ msgstr "EXIF-Metadaten durchsuchen…"
 
 #: QML
 msgid "Search failed"
-msgstr "Suche fehlgeschlagen"
+msgstr ""
 
 #: QML
 msgid "Search syntax"
@@ -901,7 +904,7 @@ msgstr "Ordner zur Verwaltung auswählen"
 
 #: QML
 msgid "Select Images Without &Thumbnail"
-msgstr "Bilder ohne &Vorschaubild auswählen"
+msgstr ""
 
 #: QML
 msgid "Select a folder"
@@ -920,12 +923,16 @@ msgid "Settings"
 msgstr "Einstellungen"
 
 #: QML
+msgid "Shift-click to extend range"
+msgstr "Shift-Klick zum Erweitern des Bereichs"
+
+#: QML
 msgid "Show Original"
-msgstr "Original anzeigen"
+msgstr ""
 
 #: QML
 msgid "Show Preview"
-msgstr "Vorschau anzeigen"
+msgstr ""
 
 #: QML
 msgid "Show all results"
@@ -938,14 +945,10 @@ msgstr "Nur ausgewählte Bilder anzeigen"
 #: QML
 msgid "Showing cached preview. Click to load the full-resolution source."
 msgstr ""
-"Gecachte Vorschau wird angezeigt. Klicken, um die Quelldatei in voller "
-"Auflösung zu laden."
 
 #: QML
 msgid "Showing full-resolution source. Click to use cached preview."
 msgstr ""
-"Quelldatei in voller Auflösung wird angezeigt. Klicken, um die gecachte "
-"Vorschau zu verwenden."
 
 #: QML
 msgid "Smallest"
@@ -954,6 +957,10 @@ msgstr "Kleinste"
 #: QML
 msgid "Sort"
 msgstr "Sortieren"
+
+#: QML
+msgid "TAKEN"
+msgstr "AUFNAHMEDATUM"
 
 #: QML
 msgid "Tag"
@@ -1000,7 +1007,7 @@ msgstr "Tipps"
 
 #: QML
 msgid "To confirm, type the number %1 below:"
-msgstr "Zur Bestätigung die Zahl %1 unten eingeben:"
+msgstr ""
 
 #: QML
 msgid "Unlock"
@@ -1052,7 +1059,7 @@ msgstr "indiziert, Suche…"
 
 #: QML
 msgid "pixels (long edge)"
-msgstr "Pixel (lange Seite)"
+msgstr ""
 
 #: QML
 msgid "prefix wildcard"
@@ -1060,7 +1067,7 @@ msgstr "Präfix-Platzhalter"
 
 #: QML
 msgid "previews"
-msgstr "Vorschaubilder"
+msgstr ""
 
 #: QML
 msgid "single token"
@@ -1084,4 +1091,692 @@ msgstr ""
 "• Mehrwortausdrücke in Anführungszeichen setzen\n"
 "• In ExifTool-Schlüsseln (z.B. GPS:GPSLatitude) wirkt der Doppelpunkt als"
 " Trennzeichen"
+
+#~ msgid " images"
+#~ msgstr " Bilder"
+
+#~ msgid "%1 folders"
+#~ msgstr "%1 Ordner"
+
+#~ msgid "%1 of %2 previews cached"
+#~ msgstr "%1 von %2 Vorschaubilder gecacht"
+
+#~ msgid "&About"
+#~ msgstr "Ü&ber"
+
+#~ msgid "&Action"
+#~ msgstr "&Aktion"
+
+#~ msgid "&Delete Marked Images\\u2026 (%1 selected)"
+#~ msgstr "Markierte Bilder &löschen\\u2026 (%1 ausgewählt)"
+
+#~ msgid "&Deselect All"
+#~ msgstr "Auswahl &aufheben"
+
+#~ msgid "&File"
+#~ msgstr "&Datei"
+
+#~ msgid "&Help"
+#~ msgstr "&Hilfe"
+
+#~ msgid "&Invert Selection"
+#~ msgstr "Auswahl &umkehren"
+
+#~ msgid "&Select"
+#~ msgstr "Aus&wahl"
+
+#~ msgid "&User Manual"
+#~ msgstr "&Benutzerhandbuch"
+
+#~ msgid "About exif-turbo"
+#~ msgstr "Über exif-turbo"
+
+#~ msgid "Add"
+#~ msgstr "Hinzufügen"
+
+#~ msgid "Add Folder"
+#~ msgstr "Ordner hinzufügen"
+
+#~ msgid "After installing ExifTool, restart exif-turbo."
+#~ msgstr "Starten Sie exif-turbo nach der Installation von ExifTool neu."
+
+#~ msgid "All"
+#~ msgstr "Alle"
+
+#~ msgid "All %1 previews are cached"
+#~ msgstr "Alle %1 Vorschaubilder sind gecacht"
+
+#~ msgid "All files (*)"
+#~ msgstr "Alle Dateien (*)"
+
+#~ msgid "All folders"
+#~ msgstr "Alle Ordner"
+
+#~ msgid "Browse"
+#~ msgstr "Durchsuchen"
+
+#~ msgid "Build Previews"
+#~ msgstr "Vorschaubilder erstellen"
+
+#~ msgid "Building Previews"
+#~ msgstr "Vorschaubilder werden erstellt"
+
+#~ msgid "Building Thumbnails"
+#~ msgstr "Vorschaubilder werden erstellt"
+
+#~ msgid "Camera"
+#~ msgstr "Kamera"
+
+#~ msgid "Cancel"
+#~ msgstr "Abbrechen"
+
+#~ msgid "Cancel Indexing"
+#~ msgstr "Indizierung abbrechen"
+
+#~ msgid "Cancel Previews"
+#~ msgstr "Vorschaubilder abbrechen"
+
+#~ msgid "Cancel Thumbnails"
+#~ msgstr "Vorschaubilder abbrechen"
+
+#~ msgid "Cancel the running preview build"
+#~ msgstr "Laufende Vorschaubilderstellung abbrechen"
+
+#~ msgid "Canceling\\u2026"
+#~ msgstr "Abbrechen…"
+
+#~ msgid "Change Password"
+#~ msgstr "Passwort ändern"
+
+#~ msgid "Change Password\\u2026"
+#~ msgstr "Passwort ändern…"
+
+#~ msgid "Changing password\\u2026 This may take a moment."
+#~ msgstr "Passwort wird geändert… Dies kann einen Moment dauern."
+
+#~ msgid "Check"
+#~ msgstr "Prüfen"
+
+#~ msgid "Clear Preview Cache"
+#~ msgstr "Vorschau-Cache leeren"
+
+#~ msgid "Clear Previews"
+#~ msgstr "Vorschaubilder löschen"
+
+#~ msgid "Confirm new password"
+#~ msgstr "Neues Passwort bestätigen"
+
+#~ msgid "Confirm passphrase"
+#~ msgstr "Passwort bestätigen"
+
+#~ msgid "Copy"
+#~ msgstr "Kopieren"
+
+#~ msgid "Copy Image to Clipboard"
+#~ msgstr "Bild in Zwischenablage kopieren"
+
+#~ msgid "Copy preview image to clipboard"
+#~ msgstr "Vorschaubild in Zwischenablage kopieren"
+
+#~ msgid "Create Database"
+#~ msgstr "Datenbank erstellen"
+
+#~ msgid "Create a passphrase for your new database"
+#~ msgstr "Passwort für neue Datenbank festlegen"
+
+#~ msgid ""
+#~ "Cross-platform image EXIF metadata\n"
+#~ "search and indexing tool."
+#~ msgstr ""
+#~ "Plattformübergreifendes Werkzeug zur\n"
+#~ "Suche und Indizierung von Bild-EXIF-Metadaten."
+
+#~ msgid "Current password"
+#~ msgstr "Aktuelles Passwort"
+
+#~ msgid "Date"
+#~ msgstr "Datum"
+
+#~ msgid ""
+#~ "Delete %1 cached preview(s) for \"%2\"?\n"
+#~ "Thumbnails are unaffected."
+#~ msgstr ""
+#~ "%1 gecachte(s) Vorschaubild(er) für „%2“ löschen?\n"
+#~ "Vorschaubilder sind nicht betroffen."
+
+#~ msgid "Delete Marked Images"
+#~ msgstr "Markierte Bilder löschen"
+
+#~ msgid "Delete all cached previews for this folder"
+#~ msgstr "Alle gecachten Vorschaubilder für diesen Ordner löschen"
+
+#~ msgid "Deselect image"
+#~ msgstr "Bild abwählen"
+
+#~ msgid "Dimensions"
+#~ msgstr "Abmessungen"
+
+#~ msgid "Download ExifTool from:"
+#~ msgstr "ExifTool herunterladen unter:"
+
+#~ msgid "E&xit"
+#~ msgstr "&Beenden"
+
+#~ msgid "EXIF TAGS"
+#~ msgstr "EXIF-TAGS"
+
+#~ msgid "Enter %1"
+#~ msgstr "%1 eingeben"
+
+#~ msgid "Enter the database password"
+#~ msgstr "Datenbankpasswort eingeben"
+
+#~ msgid "Enter your current password and choose a new one."
+#~ msgstr "Geben Sie Ihr aktuelles Passwort ein und wählen Sie ein neues."
+
+#~ msgid "Example"
+#~ msgstr "Beispiel"
+
+#~ msgid "ExifTool"
+#~ msgstr "ExifTool"
+
+#~ msgid ""
+#~ "ExifTool is required for indexing. It"
+#~ " must be installed and available on"
+#~ " your PATH."
+#~ msgstr ""
+#~ "ExifTool wird für die Indizierung "
+#~ "benötigt. Es muss installiert und auf"
+#~ " Ihrem PATH verfügbar sein."
+
+#~ msgid "ExifTool not found"
+#~ msgstr "ExifTool nicht gefunden"
+
+#~ msgid ""
+#~ "ExifTool was not found on your "
+#~ "system. Indexing is disabled until "
+#~ "ExifTool is installed and available on"
+#~ " your PATH."
+#~ msgstr ""
+#~ "ExifTool wurde auf Ihrem System nicht"
+#~ " gefunden. Die Indizierung ist deaktiviert,"
+#~ " bis ExifTool installiert und auf "
+#~ "Ihrem PATH verfügbar ist."
+
+#~ msgid "Export Metadata as &JSON\\u2026 (%1 selected)"
+#~ msgstr "Metadaten als &JSON exportieren\\u2026 (%1 ausgewählt)"
+
+#~ msgid "Export Metadata as &JSON\\u2026 (all results)"
+#~ msgstr "Metadaten als &JSON exportieren\\u2026 (alle Ergebnisse)"
+
+#~ msgid "Export Metadata as JSON"
+#~ msgstr "Metadaten als JSON exportieren"
+
+#~ msgid "Exposure"
+#~ msgstr "Belichtung"
+
+#~ msgid "FOLDERS"
+#~ msgstr "ORDNER"
+
+#~ msgid "Factory default: %1 (%2 CPU threads detected)"
+#~ msgstr "Werkseinstellung: %1 (%2 erkannte CPU-Threads)"
+
+#~ msgid ""
+#~ "File and folder name patterns to "
+#~ "skip during indexing. Supports wildcards "
+#~ "(e.g. *, ?).\n"
+#~ "Changes take effect on the next rescan."
+#~ msgstr ""
+#~ "Datei- und Ordnernamenmuster, die bei "
+#~ "der Indizierung übersprungen werden. "
+#~ "Unterstützt Platzhalter (z.B. *, ?).\n"
+#~ "Änderungen werden beim nächsten Neuindizieren wirksam."
+
+#~ msgid "File size"
+#~ msgstr "Dateigrösse"
+
+#~ msgid "Find"
+#~ msgstr "Suchen"
+
+#~ msgid "Find in metadata (Ctrl+F)"
+#~ msgstr "In Metadaten suchen (Ctrl+F)"
+
+#~ msgid "Find in metadata\\u2026"
+#~ msgstr "In Metadaten suchen…"
+
+#~ msgid "Folder is excluded from search results"
+#~ msgstr "Ordner ist aus den Suchergebnissen ausgeschlossen"
+
+#~ msgid "Folder is included in search results"
+#~ msgstr "Ordner ist in den Suchergebnissen enthalten"
+
+#~ msgid "Folder(s)"
+#~ msgstr "Ordner"
+
+#~ msgid "Force re-extract EXIF for every file in all enabled folders"
+#~ msgstr "EXIF für alle Dateien in allen aktivierten Ordnern neu extrahieren"
+
+#~ msgid "Force re-extract EXIF for every file in this folder"
+#~ msgstr "EXIF für alle Dateien in diesem Ordner neu extrahieren"
+
+#~ msgid "Found — ExifTool %1"
+#~ msgstr "Gefunden — ExifTool %1"
+
+#~ msgid "Full Rescan"
+#~ msgstr "Vollständig neu indizieren"
+
+#~ msgid "Full Rescan All"
+#~ msgstr "Alle vollständig neu indizieren"
+
+#~ msgid "GPS location —"
+#~ msgstr "GPS-Standort —"
+
+#~ msgid "GeoHack"
+#~ msgstr "GeoHack"
+
+#~ msgid "Google Maps"
+#~ msgstr "Google Maps"
+
+#~ msgid "IMAGES"
+#~ msgstr "BILDER"
+
+#~ msgid "Incrementally re-index all enabled folders"
+#~ msgstr "Alle aktivierten Ordner inkrementell neu indizieren"
+
+#~ msgid "Indexed Folders"
+#~ msgstr "Indizierte Ordner"
+
+#~ msgid "Indexing"
+#~ msgstr "Indizierung"
+
+#~ msgid "Indexing Blacklist"
+#~ msgstr "Indizierungs-Blacklist"
+
+#~ msgid "Indexing folder %1 of %2"
+#~ msgstr "Ordner %1 von %2 indizieren"
+
+#~ msgid "Indexing…"
+#~ msgstr "Indizierung…"
+
+#~ msgid "JSON files (*.json)"
+#~ msgstr "JSON-Dateien (*.json)"
+
+#~ msgid "Language"
+#~ msgstr "Sprache"
+
+#~ msgid "Largest"
+#~ msgstr "Grösste"
+
+#~ msgid "License: MIT"
+#~ msgstr "Lizenz: MIT"
+
+#~ msgid "Loading original\\u2026"
+#~ msgstr "Original wird geladen…"
+
+#~ msgid ""
+#~ "Long-edge resolution used by the "
+#~ "preview-cache builder. Larger values give"
+#~ " sharper detail when zooming but take"
+#~ " more disk space and longer to "
+#~ "render."
+#~ msgstr ""
+#~ "Auflösung der langen Seite für die "
+#~ "Vorschau-Cache-Erstellung. Höhere Werte "
+#~ "liefern beim Zoomen schärfere Details, "
+#~ "benötigen jedoch mehr Speicherplatz und "
+#~ "längere Renderzeit."
+
+#~ msgid "METADATA"
+#~ msgstr "METADATEN"
+
+#~ msgid "Managed Folders"
+#~ msgstr "Verwaltete Ordner"
+
+#~ msgid "Meaning"
+#~ msgstr "Bedeutung"
+
+#~ msgid "Name A→Z"
+#~ msgstr "Name A→Z"
+
+#~ msgid "Name Z→A"
+#~ msgstr "Name Z→A"
+
+#~ msgid "New passphrase"
+#~ msgstr "Neues Passwort"
+
+#~ msgid "New password"
+#~ msgstr "Neues Passwort"
+
+#~ msgid "New password and confirmation do not match."
+#~ msgstr "Neues Passwort und Bestätigung stimmen nicht überein."
+
+#~ msgid "New pattern, e.g.  @eaDir  or  *.tmp"
+#~ msgstr "Neues Muster, z.B.  @eaDir  oder  *.tmp"
+
+#~ msgid "Newest first"
+#~ msgstr "Neueste zuerst"
+
+#~ msgid "Next match"
+#~ msgstr "Nächste Übereinstimmung"
+
+#~ msgid "No folders indexed yet"
+#~ msgstr "Noch keine Ordner indiziert"
+
+#~ msgid ""
+#~ "No folders managed yet.\n"
+#~ "Click \"Add Folder\" to start tracking a folder."
+#~ msgstr ""
+#~ "Noch keine Ordner verwaltet.\n"
+#~ "Klicken Sie auf „Ordner hinzufügen“, um einen Ordner zu verfolgen."
+
+#~ msgid "Not found"
+#~ msgstr "Nicht gefunden"
+
+#~ msgid ""
+#~ "Number of parallel threads used for "
+#~ "indexing and thumbnail generation. Higher "
+#~ "values speed up processing but use "
+#~ "more CPU and memory."
+#~ msgstr ""
+#~ "Anzahl paralleler Threads für Indizierung "
+#~ "und Vorschaubilderstellung. Höhere Werte "
+#~ "beschleunigen die Verarbeitung, benötigen "
+#~ "jedoch mehr CPU und Speicher."
+
+#~ msgid "Oldest first"
+#~ msgstr "Älteste zuerst"
+
+#~ msgid "OpenStreetMap"
+#~ msgstr "OpenStreetMap"
+
+#~ msgid "PREVIEW"
+#~ msgstr "VORSCHAU"
+
+#~ msgid "Passphrases do not match"
+#~ msgstr "Passwörter stimmen nicht überein"
+
+#~ msgid "Password"
+#~ msgstr "Passwort"
+
+#~ msgid "Password Changed"
+#~ msgstr "Passwort geändert"
+
+#~ msgid "Path A→Z"
+#~ msgstr "Pfad A→Z"
+
+#~ msgid "Path Z→A"
+#~ msgstr "Pfad Z→A"
+
+#~ msgid ""
+#~ "Patterns are matched against individual "
+#~ "file or folder names (not full "
+#~ "paths). Wildcards: * matches any "
+#~ "characters, ? matches one character."
+#~ msgstr ""
+#~ "Muster werden gegen einzelne Datei- oder"
+#~ " Ordnernamen (keine vollständigen Pfade) "
+#~ "verglichen. Platzhalter: * entspricht "
+#~ "beliebigen Zeichen, ? entspricht einem "
+#~ "Zeichen."
+
+#~ msgid ""
+#~ "Permanently delete %1 marked image "
+#~ "file(s) from disk and remove them "
+#~ "from the index?\n"
+#~ "\n"
+#~ "This cannot be undone."
+#~ msgstr ""
+#~ "%1 markierte Bilddatei(en) dauerhaft von "
+#~ "der Festplatte löschen und aus dem "
+#~ "Index entfernen?\n"
+#~ "\n"
+#~ "Dies kann nicht rükgängig gemacht werden."
+
+#~ msgid ""
+#~ "Permanently deletes all indexed images "
+#~ "and folder records. This cannot be "
+#~ "undone."
+#~ msgstr ""
+#~ "Löscht dauerhaft alle indizierten Bilder "
+#~ "und Ordnereinträge. Dies kann nicht "
+#~ "rükgängig gemacht werden."
+
+#~ msgid "Preparing\\u2026"
+#~ msgstr "Vorbereitung…"
+
+#~ msgid "Preview Cache Size"
+#~ msgstr "Grösse des Vorschau-Caches"
+
+#~ msgid "Previous match"
+#~ msgstr "Vorherige Übereinstimmung"
+
+#~ msgid "RESULTS"
+#~ msgstr "ERGEBNISSE"
+
+#~ msgid ""
+#~ "Re-encrypts the database under a "
+#~ "new password. Existing thumbnails are "
+#~ "preserved."
+#~ msgstr ""
+#~ "Verschlüsselt die Datenbank mit einem "
+#~ "neuem Passwort neu. Bestehende Vorschaubilder"
+#~ " bleiben erhalten."
+
+#~ msgid "Re-index this folder (incremental)"
+#~ msgstr "Diesen Ordner inkrementell neu indizieren"
+
+#~ msgid "Recreate Preview"
+#~ msgstr "Vorschau neu erstellen"
+
+#~ msgid "Recreate Thumbnail"
+#~ msgstr "Vorschaubild neu erstellen"
+
+#~ msgid "Remove"
+#~ msgstr "Entfernen"
+
+#~ msgid "Remove \"%1\" and delete all its indexed images from the database?"
+#~ msgstr "„%1“ entfernen und alle indizierten Bilder aus der Datenbank löschen?"
+
+#~ msgid "Remove Folder"
+#~ msgstr "Ordner entfernen"
+
+#~ msgid "Remove this folder and delete its indexed images"
+#~ msgstr "Diesen Ordner entfernen und seine indizierten Bilder löschen"
+
+#~ msgid "Render preview-cache JPEGs for this folder"
+#~ msgstr "Vorschau-Cache-JPEGs für diesen Ordner erstellen"
+
+#~ msgid "Rescan"
+#~ msgstr "Neu indizieren"
+
+#~ msgid "Rescan All"
+#~ msgstr "Alle erneut indizieren"
+
+#~ msgid "Reset Database"
+#~ msgstr "Datenbank zurücksetzen"
+
+#~ msgid "Reset Database\\u2026"
+#~ msgstr "Datenbank zurücksetzen…"
+
+#~ msgid "Restart the application for language changes to take full effect."
+#~ msgstr ""
+#~ "Starten Sie die Anwendung neu, damit "
+#~ "die Sprachänderung vollständig wirksam wird."
+
+#~ msgid "SETTINGS"
+#~ msgstr "EINSTELLUNGEN"
+
+#~ msgid "Scanning for images\\u2026"
+#~ msgstr "Bilder werden gesucht…"
+
+#~ msgid "Search"
+#~ msgstr "Suchen"
+
+#~ msgid "Search EXIF metadata\\u2026"
+#~ msgstr "EXIF-Metadaten durchsuchen…"
+
+#~ msgid "Search failed"
+#~ msgstr "Suche fehlgeschlagen"
+
+#~ msgid "Search syntax"
+#~ msgstr "Suchsyntax"
+
+#~ msgid "Select &All"
+#~ msgstr "&Alle auswählen"
+
+#~ msgid "Select Folder to Manage"
+#~ msgstr "Ordner zur Verwaltung auswählen"
+
+#~ msgid "Select Images Without &Thumbnail"
+#~ msgstr "Bilder ohne &Vorschaubild auswählen"
+
+#~ msgid "Select a folder"
+#~ msgstr "Ordner auswählen"
+
+#~ msgid "Select an image to see metadata"
+#~ msgstr "Bild auswählen, um Metadaten anzuzeigen"
+
+#~ msgid "Select image"
+#~ msgstr "Bild auswählen"
+
+#~ msgid "Settings"
+#~ msgstr "Einstellungen"
+
+#~ msgid "Show Original"
+#~ msgstr "Original anzeigen"
+
+#~ msgid "Show Preview"
+#~ msgstr "Vorschau anzeigen"
+
+#~ msgid "Show all results"
+#~ msgstr "Alle Ergebnisse anzeigen"
+
+#~ msgid "Show only selected images"
+#~ msgstr "Nur ausgewählte Bilder anzeigen"
+
+#~ msgid "Showing cached preview. Click to load the full-resolution source."
+#~ msgstr ""
+#~ "Gecachte Vorschau wird angezeigt. Klicken, "
+#~ "um die Quelldatei in voller Auflösung"
+#~ " zu laden."
+
+#~ msgid "Showing full-resolution source. Click to use cached preview."
+#~ msgstr ""
+#~ "Quelldatei in voller Auflösung wird "
+#~ "angezeigt. Klicken, um die gecachte "
+#~ "Vorschau zu verwenden."
+
+#~ msgid "Smallest"
+#~ msgstr "Kleinste"
+
+#~ msgid "Sort"
+#~ msgstr "Sortieren"
+
+#~ msgid "Tag"
+#~ msgstr "Tag"
+
+#~ msgid "Theme"
+#~ msgstr "Design"
+
+#~ msgid "Third-Party &Licenses"
+#~ msgstr "&Drittanbieter-Lizenzen"
+
+#~ msgid "Third-Party Licenses"
+#~ msgstr "Drittanbieter-Lizenzen"
+
+#~ msgid ""
+#~ "This passphrase encrypts your entire "
+#~ "image index. Use at least 12 "
+#~ "characters and a mix of letters, "
+#~ "numbers, and symbols. There is no "
+#~ "way to recover a lost passphrase."
+#~ msgstr ""
+#~ "Dieses Passwort verschlüsselt den gesamten "
+#~ "Bildindex. Verwenden Sie mindestens 12 "
+#~ "Zeichen und eine Kombination aus "
+#~ "Buchstaben, Ziffern und Sonderzeichen. Ein "
+#~ "verlorenes Passwort kann nicht "
+#~ "wiederhergestellt werden."
+
+#~ msgid ""
+#~ "This will permanently delete all indexed"
+#~ " images and indexed folder records.\n"
+#~ "\n"
+#~ "Are you sure you want to continue?"
+#~ msgstr ""
+#~ "Dadurch werden alle indizierten Bilder "
+#~ "und Ordnereinträge dauerhaft gelöscht.\n"
+#~ "\n"
+#~ "Möchten Sie wirklich fortfahren?"
+
+#~ msgid "Tips"
+#~ msgstr "Tipps"
+
+#~ msgid "To confirm, type the number %1 below:"
+#~ msgstr "Zur Bestätigung die Zahl %1 unten eingeben:"
+
+#~ msgid "Unlock"
+#~ msgstr "Entsperren"
+
+#~ msgid "Unlocking…"
+#~ msgstr "Wird entsperrt…"
+
+#~ msgid "Value"
+#~ msgstr "Wert"
+
+#~ msgid "Worker Threads"
+#~ msgstr "Worker-Threads"
+
+#~ msgid "\\u2190 Select a folder to browse images"
+#~ msgstr "← Ordner auswählen, um Bilder zu durchsuchen"
+
+#~ msgid "both tokens (implicit AND)"
+#~ msgstr "beide Begriffe (implizites AND)"
+
+#~ msgid "either token"
+#~ msgstr "einer der beiden Begriffe"
+
+#~ msgid "exact phrase"
+#~ msgstr "exakte Wortfolge"
+
+#~ msgid "exclude token"
+#~ msgstr "Begriff ausschliessen"
+
+#~ msgid "files"
+#~ msgstr "Dateien"
+
+#~ msgid "images"
+#~ msgstr "Bilder"
+
+#~ msgid "indexed, scanning\\u2026"
+#~ msgstr "indiziert, Suche…"
+
+#~ msgid "pixels (long edge)"
+#~ msgstr "Pixel (lange Seite)"
+
+#~ msgid "prefix wildcard"
+#~ msgstr "Präfix-Platzhalter"
+
+#~ msgid "previews"
+#~ msgstr "Vorschaubilder"
+
+#~ msgid "single token"
+#~ msgstr "einzelner Begriff"
+
+#~ msgid "thread"
+#~ msgstr "Thread"
+
+#~ msgid "threads"
+#~ msgstr "Threads"
+
+#~ msgid ""
+#~ "• Operators AND, OR, NOT must be UPPERCASE\n"
+#~ "• Quote multi-word phrases\n"
+#~ "• In ExifTool keys (e.g. GPS:GPSLatitude) the colon acts as a separator"
+#~ msgstr ""
+#~ "• Operatoren AND, OR, NOT müssen GROSSGESCHRIEBEN sein\n"
+#~ "• Mehrwortausdrücke in Anführungszeichen setzen\n"
+#~ "• In ExifTool-Schlüsseln (z.B. "
+#~ "GPS:GPSLatitude) wirkt der Doppelpunkt als "
+#~ "Trennzeichen"
 

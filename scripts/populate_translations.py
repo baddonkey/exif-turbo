@@ -67,6 +67,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Path Z\u2192A": "Pfad Z\u2192A",
         "Newest first": "Neueste zuerst",
         "Oldest first": "\u00c4lteste zuerst",
+        "Date taken \u2193": "Aufnahmedatum \u2193",
+        "Date taken \u2191": "Aufnahmedatum \u2191",
         "Largest": "Gr\u00f6sste",
         "Smallest": "Kleinste",
         "All": "Alle",
@@ -231,6 +233,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Copy Image to Clipboard": "Bild in Zwischenablage kopieren",
         "Copy preview image to clipboard": "Vorschaubild in Zwischenablage kopieren",
         "indexed, scanning\\u2026": "indiziert, Suche\u2026",
+        # \u2500\u2500 Timeline filter \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+        "TAKEN": "AUFNAHMEDATUM",
+        "Shift-click to extend range": "Shift-Klick zum Erweitern des Bereichs",
+        "Clear date filter": "Datumsfilter zur\u00fccksetzen",
     },
     "fr": {
         # ── Tabs ────────────────────────────────────────────────────────────
@@ -290,6 +296,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Path Z\u2192A": "Chemin Z\u2192A",
         "Newest first": "Plus r\u00e9cent d\u2019abord",
         "Oldest first": "Plus ancien d\u2019abord",
+        "Date taken \u2193": "Date de prise \u2193",
+        "Date taken \u2191": "Date de prise \u2191",
         "Largest": "Plus grand",
         "Smallest": "Plus petit",
         "All": "Tout",
@@ -458,6 +466,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Copy Image to Clipboard": "Copier l\u2019image dans le presse-papiers",
         "Copy preview image to clipboard": "Copier l\u2019aper\u00e7u dans le presse-papiers",
         "indexed, scanning\\u2026": "index\u00e9, analyse\u2026",
+        # \u2500\u2500 Timeline filter \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+        "TAKEN": "PRISE DE VUE",
+        "Shift-click to extend range": "Maj+clic pour \u00e9tendre la plage",
+        "Clear date filter": "Effacer le filtre de date",
     },
     "it": {
         # ── Tabs ────────────────────────────────────────────────────────────
@@ -517,6 +529,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Path Z\u2192A": "Percorso Z\u2192A",
         "Newest first": "Pi\u00f9 recente prima",
         "Oldest first": "Pi\u00f9 vecchio prima",
+        "Date taken \u2193": "Data scatto \u2193",
+        "Date taken \u2191": "Data scatto \u2191",
         "Largest": "Pi\u00f9 grande",
         "Smallest": "Pi\u00f9 piccolo",
         "All": "Tutti",
@@ -690,6 +704,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Copy Image to Clipboard": "Copia immagine negli appunti",
         "Copy preview image to clipboard": "Copia anteprima negli appunti",
         "indexed, scanning\\u2026": "indicizzato, scansione\u2026",
+        # \u2500\u2500 Timeline filter \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+        "TAKEN": "DATA SCATTO",
+        "Shift-click to extend range": "Maiusc+clic per estendere l\u2019intervallo",
+        "Clear date filter": "Cancella filtro data",
     },
     "rm": {
         # ── Tabs ────────────────────────────────────────────────────────────
@@ -749,6 +767,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Path Z\u2192A": "Traject Z\u2192A",
         "Newest first": "Pli novas emprim",
         "Oldest first": "Pli vegl emprim",
+        "Date taken \u2193": "Data da fotografar \u2193",
+        "Date taken \u2191": "Data da fotografar \u2191",
         "Largest": "Pli gronds",
         "Smallest": "Pli pitschens",
         "All": "Tuts",
@@ -919,6 +939,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Copy Image to Clipboard": "Copiar maletg en tavla d\u2019interscambi",
         "Copy preview image to clipboard": "Copiar prevista en tavla d\u2019interscambi",
         "indexed, scanning\\u2026": "index\u00e0, tscherta\u2026",
+        # \u2500\u2500 Timeline filter \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+        "TAKEN": "FOTOGRAFÀ",
+        "Shift-click to extend range": "Shift-clic per stender il rom",
+        "Clear date filter": "Stizzar il filter da data",
     },
 }
 # fmt: on

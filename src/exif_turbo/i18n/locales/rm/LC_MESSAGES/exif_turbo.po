@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-12 18:50+0200\n"
+"POT-Creation-Date: 2026-05-14 13:51+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: rm\n"
@@ -18,123 +18,123 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:136
+#: src/exif_turbo/ui/view_models/app_controller.py:138
 msgid "Enter the database password to continue"
 msgstr "Endatar la pled-clav da la banca da datas per cuntinuar"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:572
+#: src/exif_turbo/ui/view_models/app_controller.py:591
 msgid "Selecting all matching images…"
 msgstr "Seleziun da tuts ils maletgs correspundentas…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:582
+#: src/exif_turbo/ui/view_models/app_controller.py:601
 msgid "Deselecting all matching images…"
 msgstr "Deseleziun da tuts ils maletgs correspundentas…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:592
+#: src/exif_turbo/ui/view_models/app_controller.py:611
 msgid "Inverting selection…"
 msgstr "Inversiun da la selecziun…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:606
+#: src/exif_turbo/ui/view_models/app_controller.py:625
 msgid "Selecting images without a cached thumbnail…"
 msgstr "Seleziun da maletgs senza miniatura en il cache…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:621
+#: src/exif_turbo/ui/view_models/app_controller.py:640
 msgid "No marked images to delete."
 msgstr "Nagins maletgs marcads per stizzar."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:625
+#: src/exif_turbo/ui/view_models/app_controller.py:644
 msgid "Deleting marked images…"
 msgstr "Maletgs marcads vegnan stizzads…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:635
+#: src/exif_turbo/ui/view_models/app_controller.py:654
 msgid "No marked images to export."
 msgstr "Nagins maletgs marcads per exportar."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:640
+#: src/exif_turbo/ui/view_models/app_controller.py:659
 msgid "Exporting metadata…"
 msgstr "Exportaziun da metadata…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:719
+#: src/exif_turbo/ui/view_models/app_controller.py:740
 #, python-brace-format
 msgid "Deleted {n} image(s)."
 msgstr "{n} maletg(s) stizzad(s)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:723
+#: src/exif_turbo/ui/view_models/app_controller.py:744
 #, python-brace-format
 msgid "{n} were already missing."
 msgstr "{n} eran gia betg chattabels."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:729
+#: src/exif_turbo/ui/view_models/app_controller.py:750
 #, python-brace-format
 msgid "{n} could not be deleted."
 msgstr "{n} n’han betg pudì vegnir stizzads."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:739
+#: src/exif_turbo/ui/view_models/app_controller.py:760
 #, python-brace-format
 msgid "Exported {count} image(s) to {name}"
 msgstr "{count} maletg(s) exportad(s) en {name}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:748
+#: src/exif_turbo/ui/view_models/app_controller.py:769
 #, python-brace-format
 msgid "Operation failed: {}"
 msgstr "Operaziun buca reussida: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:754
+#: src/exif_turbo/ui/view_models/app_controller.py:775
 msgid "Operation canceled."
 msgstr "Operaziun annullada."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:838
+#: src/exif_turbo/ui/view_models/app_controller.py:861
 msgid "Wrong password — please try again."
 msgstr "Pled-clav fauss — emprova p.pl. anc ina giada."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:850
+#: src/exif_turbo/ui/view_models/app_controller.py:873
 #, python-brace-format
 msgid "Failed to open database: {error}"
 msgstr "Impussibel da rir la banca da datas: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:876
+#: src/exif_turbo/ui/view_models/app_controller.py:899
 msgid "Database is locked."
 msgstr "La banca da datas è serrada."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:881
+#: src/exif_turbo/ui/view_models/app_controller.py:904
 msgid "Cannot change password while indexing or thumb-building is running."
 msgstr ""
 "Impussibel da midar la pled-clav durant l’indexaziun u la creaziun da "
 "miniaturas."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:885
+#: src/exif_turbo/ui/view_models/app_controller.py:908
 msgid "Current password is incorrect."
 msgstr "La pled-clav actuala n’è betg correcta."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:888
+#: src/exif_turbo/ui/view_models/app_controller.py:911
 msgid "New password must not be empty."
 msgstr "La nova pled-clav na dastga betg esser vida."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:892
+#: src/exif_turbo/ui/view_models/app_controller.py:915
 msgid "New password must differ from the current password."
 msgstr "La nova pled-clav sto esser differenta da quella actuala."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:910
+#: src/exif_turbo/ui/view_models/app_controller.py:933
 msgid "Changing password…"
 msgstr "Pled-clav vegn midada…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:951
+#: src/exif_turbo/ui/view_models/app_controller.py:974
 #, python-brace-format
 msgid "Database password changed, but reopening failed: {error}"
 msgstr ""
 "La pled-clav da la banca da datas è vegnida midada, ma la reaviertura n’è"
 " betg reussida: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:961
+#: src/exif_turbo/ui/view_models/app_controller.py:984
 msgid "Password changed successfully."
 msgstr "Pled-clav midada cun success."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1002
+#: src/exif_turbo/ui/view_models/app_controller.py:1025
 #, python-brace-format
 msgid "Failed to change password: {error}"
 msgstr "Midada da la pled-clav betg reussida: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1007
+#: src/exif_turbo/ui/view_models/app_controller.py:1030
 #, python-brace-format
 msgid ""
 "Password changed but thumbnail cache could not be re-wrapped ({error}). "
@@ -143,95 +143,95 @@ msgstr ""
 "La pled-clav è vegnida midada, ma il cache da miniaturas n’è betg pudida "
 "vegnir cifrada da nov ({error}). Il cache è vegnì stizzad e vegn rebatgì."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1394
+#: src/exif_turbo/ui/view_models/app_controller.py:1459
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Cartella gia trackata: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1618
+#: src/exif_turbo/ui/view_models/app_controller.py:1683
 #, python-brace-format
 msgid "Indexing {}…"
 msgstr "Indexaziun {}…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1654
+#: src/exif_turbo/ui/view_models/app_controller.py:1719
 #, python-brace-format
 msgid "Indexed {count} images ({errors} skipped due to errors)"
 msgstr "{count} maletgs indexads ({errors} sursiglids pervia d’errurs)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1659
+#: src/exif_turbo/ui/view_models/app_controller.py:1724
 #, python-brace-format
 msgid "Indexed {} images"
 msgstr "{} maletgs indexads"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1692
+#: src/exif_turbo/ui/view_models/app_controller.py:1757
 #, python-brace-format
 msgid "Index failed: {}"
 msgstr "Indexaziun buca reussida: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1724
+#: src/exif_turbo/ui/view_models/app_controller.py:1789
 msgid "Index canceled"
 msgstr "Indexaziun interrutta"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1744
+#: src/exif_turbo/ui/view_models/app_controller.py:1809
 msgid "Canceling…"
 msgstr "Interruziun…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1839
+#: src/exif_turbo/ui/view_models/app_controller.py:1904
 #, python-brace-format
 msgid "Built {built} preview(s) of {total}."
 msgstr "{built} prevista(s) da {total} creada(s)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1847
+#: src/exif_turbo/ui/view_models/app_controller.py:1912
 #, python-brace-format
 msgid "Preview build failed: {error}"
 msgstr "Creaziun da previstas buca reussida: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1855
+#: src/exif_turbo/ui/view_models/app_controller.py:1920
 #, python-brace-format
 msgid "Preview build canceled ({built} of {total} done)."
 msgstr "Creaziun da previstas interrutta ({built} da {total} fatg)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1868
+#: src/exif_turbo/ui/view_models/app_controller.py:1933
 msgid "Cancel the running preview build before clearing the cache."
 msgstr "Interrumper la creaziun da previstas en cors avant da stizzar il cache."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1877
+#: src/exif_turbo/ui/view_models/app_controller.py:1942
 #, python-brace-format
 msgid "Failed to clear preview cache: {error}"
 msgstr "Stizzar il cache da previstas n’è betg reussì: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1883
+#: src/exif_turbo/ui/view_models/app_controller.py:1948
 #, python-brace-format
 msgid "Removed {n} cached preview(s)."
 msgstr "{n} prevista(s) dal cache vegnida(s) stizzada(s)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2012
+#: src/exif_turbo/ui/view_models/app_controller.py:2077
 msgid "Image copied to clipboard"
 msgstr "Maletg copià en la tavla d’interscambi"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2016
+#: src/exif_turbo/ui/view_models/app_controller.py:2081
 msgid "Path copied to clipboard"
 msgstr "Traject copià en la tavla d’interscambi"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2074
+#: src/exif_turbo/ui/view_models/app_controller.py:2139
 msgid "Database reset"
 msgstr "Banca da datas resettada"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2244
+#: src/exif_turbo/ui/view_models/app_controller.py:2309
 msgid "Cleaning up cache…"
 msgstr "Stizzar il cache…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2264
+#: src/exif_turbo/ui/view_models/app_controller.py:2329
 #, python-brace-format
 msgid "Indexing… {} (scanning)"
 msgstr "Indexaziun… {} (tscherta)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2266
+#: src/exif_turbo/ui/view_models/app_controller.py:2331
 #, python-brace-format
 msgid "Indexing… 0 / {}"
 msgstr "Indexaziun… 0 / {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2268
+#: src/exif_turbo/ui/view_models/app_controller.py:2333
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indexaziun… {} / {}"
@@ -246,7 +246,7 @@ msgstr "%1 cartellas"
 
 #: QML
 msgid "%1 of %2 previews cached"
-msgstr "%1 da %2 previstas en il cache"
+msgstr ""
 
 #: QML
 msgid "&About"
@@ -258,7 +258,7 @@ msgstr "&Acziun"
 
 #: QML
 msgid "&Delete Marked Images\\u2026 (%1 selected)"
-msgstr "&Stizzar maletgs marcads\\u2026 (%1 seletgads)"
+msgstr ""
 
 #: QML
 msgid "&Deselect All"
@@ -306,7 +306,7 @@ msgstr "Tuts"
 
 #: QML
 msgid "All %1 previews are cached"
-msgstr "Tut las %1 previstas sùn en il cache"
+msgstr ""
 
 #: QML
 msgid "All files (*)"
@@ -322,11 +322,11 @@ msgstr "Navigar"
 
 #: QML
 msgid "Build Previews"
-msgstr "Crear previstas"
+msgstr ""
 
 #: QML
 msgid "Building Previews"
-msgstr "Creaziun da previstas"
+msgstr ""
 
 #: QML
 msgid "Building Thumbnails"
@@ -346,7 +346,7 @@ msgstr "Interrumper indexaziun"
 
 #: QML
 msgid "Cancel Previews"
-msgstr "Interrumper previstas"
+msgstr ""
 
 #: QML
 msgid "Cancel Thumbnails"
@@ -354,7 +354,7 @@ msgstr "Interrumper miniatures"
 
 #: QML
 msgid "Cancel the running preview build"
-msgstr "Interrumper la creaziun da previstas en cors"
+msgstr ""
 
 #: QML
 msgid "Canceling\\u2026"
@@ -378,11 +378,15 @@ msgstr "Controlliar"
 
 #: QML
 msgid "Clear Preview Cache"
-msgstr "Stizzar cache da previstas"
+msgstr ""
 
 #: QML
 msgid "Clear Previews"
-msgstr "Stizzar previstas"
+msgstr ""
+
+#: QML
+msgid "Clear date filter"
+msgstr "Stizzar il filter da data"
 
 #: QML
 msgid "Confirm new password"
@@ -429,20 +433,26 @@ msgid "Date"
 msgstr "Data"
 
 #: QML
+msgid "Date taken ↑"
+msgstr "Data da fotografar ↑"
+
+#: QML
+msgid "Date taken ↓"
+msgstr "Data da fotografar ↓"
+
+#: QML
 msgid ""
 "Delete %1 cached preview(s) for \"%2\"?\n"
 "Thumbnails are unaffected."
 msgstr ""
-"Stizzar %1 prevista(s) dal cache per „%2“?\n"
-"Las miniaturas na vegnan betg pertutgadas."
 
 #: QML
 msgid "Delete Marked Images"
-msgstr "Stizzar maletgs marcads"
+msgstr ""
 
 #: QML
 msgid "Delete all cached previews for this folder"
-msgstr "Stizzar tut las previstas dal cache per questa cartella"
+msgstr ""
 
 #: QML
 msgid "Deselect image"
@@ -466,7 +476,7 @@ msgstr "TAGS EXIF"
 
 #: QML
 msgid "Enter %1"
-msgstr "Endatar %1"
+msgstr ""
 
 #: QML
 msgid "Enter the database password"
@@ -482,7 +492,7 @@ msgstr "Exempel"
 
 #: QML
 msgid "ExifTool"
-msgstr "ExifTool"
+msgstr ""
 
 #: QML
 msgid ""
@@ -590,15 +600,15 @@ msgstr "Re-indexaziun cumplaina da tut"
 
 #: QML
 msgid "GPS location —"
-msgstr "Posiziun GPS —"
+msgstr ""
 
 #: QML
 msgid "GeoHack"
-msgstr "GeoHack"
+msgstr ""
 
 #: QML
 msgid "Google Maps"
-msgstr "Google Maps"
+msgstr ""
 
 #: QML
 msgid "IMAGES"
@@ -626,7 +636,7 @@ msgstr "Indexaziun da la cartella %1 da %2"
 
 #: QML
 msgid "Indexing…"
-msgstr "Indexaziun…"
+msgstr ""
 
 #: QML
 msgid "JSON files (*.json)"
@@ -646,7 +656,7 @@ msgstr "Licenza: MIT"
 
 #: QML
 msgid "Loading original\\u2026"
-msgstr "Original vegn chargegiaù…"
+msgstr ""
 
 #: QML
 msgid ""
@@ -654,9 +664,6 @@ msgid ""
 "give sharper detail when zooming but take more disk space and longer to "
 "render."
 msgstr ""
-"Resoluziun dal cantin lung duvrà dal generatur da cache da previstas. "
-"Valurs pli autas donneschan pli buns detagls al zoomar ma dovran dapli "
-"plaz sin disk e pli ditg per render."
 
 #: QML
 msgid "METADATA"
@@ -732,7 +739,7 @@ msgstr "Pli vegl emprim"
 
 #: QML
 msgid "OpenStreetMap"
-msgstr "OpenStreetMap"
+msgstr ""
 
 #: QML
 msgid "PREVIEW"
@@ -774,10 +781,6 @@ msgid ""
 "\n"
 "This cannot be undone."
 msgstr ""
-"Stizzar definitivamente %1 datoteca(s) d’immagine marcada(s) dal disk e "
-"stizzar ellas da l’index?\n"
-"\n"
-"Quai na po betg vegnir annullà."
 
 #: QML
 msgid ""
@@ -793,7 +796,7 @@ msgstr "Preparaziun…"
 
 #: QML
 msgid "Preview Cache Size"
-msgstr "Grondezza dal cache da previstas"
+msgstr ""
 
 #: QML
 msgid "Previous match"
@@ -817,11 +820,11 @@ msgstr "Re-indexar questa cartella (incremental)"
 
 #: QML
 msgid "Recreate Preview"
-msgstr "Crear danovamain la previsualisaziun"
+msgstr ""
 
 #: QML
 msgid "Recreate Thumbnail"
-msgstr "Crear danovamain il maletg en miniatura"
+msgstr ""
 
 #: QML
 msgid "Remove"
@@ -841,7 +844,7 @@ msgstr "Stizzar questa cartella e ses maletgs indexads"
 
 #: QML
 msgid "Render preview-cache JPEGs for this folder"
-msgstr "Crear JPEGs dal cache da previstas per questa cartella"
+msgstr ""
 
 #: QML
 msgid "Rescan"
@@ -881,7 +884,7 @@ msgstr "Tschertgar en metadata EXIF…"
 
 #: QML
 msgid "Search failed"
-msgstr "Tschertga buca reussida"
+msgstr ""
 
 #: QML
 msgid "Search syntax"
@@ -897,7 +900,7 @@ msgstr "Tscherner cartella per manaschar"
 
 #: QML
 msgid "Select Images Without &Thumbnail"
-msgstr "Seletgar maletgs senza &miniatura"
+msgstr ""
 
 #: QML
 msgid "Select a folder"
@@ -916,12 +919,16 @@ msgid "Settings"
 msgstr "Parameters"
 
 #: QML
+msgid "Shift-click to extend range"
+msgstr "Shift-clic per stender il rom"
+
+#: QML
 msgid "Show Original"
-msgstr "Mussar original"
+msgstr ""
 
 #: QML
 msgid "Show Preview"
-msgstr "Mussar prevista"
+msgstr ""
 
 #: QML
 msgid "Show all results"
@@ -934,14 +941,10 @@ msgstr "Mussar mo ils maletgs seletgads"
 #: QML
 msgid "Showing cached preview. Click to load the full-resolution source."
 msgstr ""
-"Prevista dal cache vegnida mussada. Cliccar per chargegiar la sorgente en"
-" plaina resoluziun."
 
 #: QML
 msgid "Showing full-resolution source. Click to use cached preview."
 msgstr ""
-"Sorgente en plaina resoluziun vegnida mussada. Cliccar per utilisar la "
-"prevista dal cache."
 
 #: QML
 msgid "Smallest"
@@ -950,6 +953,10 @@ msgstr "Pli pitschens"
 #: QML
 msgid "Sort"
 msgstr "Sortir"
+
+#: QML
+msgid "TAKEN"
+msgstr "FOTOGRAFÀ"
 
 #: QML
 msgid "Tag"
@@ -995,7 +1002,7 @@ msgstr "Cussegls"
 
 #: QML
 msgid "To confirm, type the number %1 below:"
-msgstr "Per confermar, endatar il numer %1 qua sutvart:"
+msgstr ""
 
 #: QML
 msgid "Unlock"
@@ -1047,7 +1054,7 @@ msgstr "indexà, tscherta…"
 
 #: QML
 msgid "pixels (long edge)"
-msgstr "pixels (cantin lung)"
+msgstr ""
 
 #: QML
 msgid "prefix wildcard"
@@ -1055,7 +1062,7 @@ msgstr "joker da prefix"
 
 #: QML
 msgid "previews"
-msgstr "previstas"
+msgstr ""
 
 #: QML
 msgid "single token"
@@ -1079,4 +1086,695 @@ msgstr ""
 "• Metter frasas da pliras pleds tranter virgulettas\n"
 "• En las clavs ExifTool (p.ex. GPS:GPSLatitude) ils dus puncts gioghan il"
 " rolla d'in separatur"
+
+#~ msgid " images"
+#~ msgstr " maletgs"
+
+#~ msgid "%1 folders"
+#~ msgstr "%1 cartellas"
+
+#~ msgid "%1 of %2 previews cached"
+#~ msgstr "%1 da %2 previstas en il cache"
+
+#~ msgid "&About"
+#~ msgstr "&Davart"
+
+#~ msgid "&Action"
+#~ msgstr "&Acziun"
+
+#~ msgid "&Delete Marked Images\\u2026 (%1 selected)"
+#~ msgstr "&Stizzar maletgs marcads\\u2026 (%1 seletgads)"
+
+#~ msgid "&Deselect All"
+#~ msgstr "&Deseletgar tut"
+
+#~ msgid "&File"
+#~ msgstr "&Datoteca"
+
+#~ msgid "&Help"
+#~ msgstr "&Agid"
+
+#~ msgid "&Invert Selection"
+#~ msgstr "&Inverter selecziun"
+
+#~ msgid "&Select"
+#~ msgstr "&Seletgar"
+
+#~ msgid "&User Manual"
+#~ msgstr "&Manual d’utilisader"
+
+#~ msgid "About exif-turbo"
+#~ msgstr "Davart exif-turbo"
+
+#~ msgid "Add"
+#~ msgstr "Agiuntar"
+
+#~ msgid "Add Folder"
+#~ msgstr "Agiuntar cartella"
+
+#~ msgid "After installing ExifTool, restart exif-turbo."
+#~ msgstr "Suenter installar ExifTool, restartà exif-turbo."
+
+#~ msgid "All"
+#~ msgstr "Tuts"
+
+#~ msgid "All %1 previews are cached"
+#~ msgstr "Tut las %1 previstas sùn en il cache"
+
+#~ msgid "All files (*)"
+#~ msgstr "Tut las datotecas (*)"
+
+#~ msgid "All folders"
+#~ msgstr "Tut las cartellas"
+
+#~ msgid "Browse"
+#~ msgstr "Navigar"
+
+#~ msgid "Build Previews"
+#~ msgstr "Crear previstas"
+
+#~ msgid "Building Previews"
+#~ msgstr "Creaziun da previstas"
+
+#~ msgid "Building Thumbnails"
+#~ msgstr "Creaziun da miniatures"
+
+#~ msgid "Camera"
+#~ msgstr "Camera"
+
+#~ msgid "Cancel"
+#~ msgstr "Annullar"
+
+#~ msgid "Cancel Indexing"
+#~ msgstr "Interrumper indexaziun"
+
+#~ msgid "Cancel Previews"
+#~ msgstr "Interrumper previstas"
+
+#~ msgid "Cancel Thumbnails"
+#~ msgstr "Interrumper miniatures"
+
+#~ msgid "Cancel the running preview build"
+#~ msgstr "Interrumper la creaziun da previstas en cors"
+
+#~ msgid "Canceling\\u2026"
+#~ msgstr "Interruziun…"
+
+#~ msgid "Change Password"
+#~ msgstr "Midar pled-clav"
+
+#~ msgid "Change Password\\u2026"
+#~ msgstr "Midar pled-clav…"
+
+#~ msgid "Changing password\\u2026 This may take a moment."
+#~ msgstr "Pled-clav vegn midada… Quai po durar in mument."
+
+#~ msgid "Check"
+#~ msgstr "Controlliar"
+
+#~ msgid "Clear Preview Cache"
+#~ msgstr "Stizzar cache da previstas"
+
+#~ msgid "Clear Previews"
+#~ msgstr "Stizzar previstas"
+
+#~ msgid "Confirm new password"
+#~ msgstr "Confermar la nova pled-clav"
+
+#~ msgid "Confirm passphrase"
+#~ msgstr "Confermar la pled-clav"
+
+#~ msgid "Copy"
+#~ msgstr "Copiar"
+
+#~ msgid "Copy Image to Clipboard"
+#~ msgstr "Copiar maletg en tavla d’interscambi"
+
+#~ msgid "Copy preview image to clipboard"
+#~ msgstr "Copiar prevista en tavla d’interscambi"
+
+#~ msgid "Create Database"
+#~ msgstr "Crear banca da datas"
+
+#~ msgid "Create a passphrase for your new database"
+#~ msgstr "Crear ina pled-clav per la nova banca da datas"
+
+#~ msgid ""
+#~ "Cross-platform image EXIF metadata\n"
+#~ "search and indexing tool."
+#~ msgstr ""
+#~ "Instrument multiplatforma per tschertgar\n"
+#~ "e indexar metadata EXIF."
+
+#~ msgid "Current password"
+#~ msgstr "Pled-clav actuala"
+
+#~ msgid "Date"
+#~ msgstr "Data"
+
+#~ msgid ""
+#~ "Delete %1 cached preview(s) for \"%2\"?\n"
+#~ "Thumbnails are unaffected."
+#~ msgstr ""
+#~ "Stizzar %1 prevista(s) dal cache per „%2“?\n"
+#~ "Las miniaturas na vegnan betg pertutgadas."
+
+#~ msgid "Delete Marked Images"
+#~ msgstr "Stizzar maletgs marcads"
+
+#~ msgid "Delete all cached previews for this folder"
+#~ msgstr "Stizzar tut las previstas dal cache per questa cartella"
+
+#~ msgid "Deselect image"
+#~ msgstr "Deseletgar maletg"
+
+#~ msgid "Dimensions"
+#~ msgstr "Dimensiuns"
+
+#~ msgid "Download ExifTool from:"
+#~ msgstr "Telechargiar ExifTool da:"
+
+#~ msgid "E&xit"
+#~ msgstr "&Serrar"
+
+#~ msgid "EXIF TAGS"
+#~ msgstr "TAGS EXIF"
+
+#~ msgid "Enter %1"
+#~ msgstr "Endatar %1"
+
+#~ msgid "Enter the database password"
+#~ msgstr "Endatar la pled-clav da la banca da datas"
+
+#~ msgid "Enter your current password and choose a new one."
+#~ msgstr "Endatai la pled-clav actuala e tscherni in’autra."
+
+#~ msgid "Example"
+#~ msgstr "Exempel"
+
+#~ msgid "ExifTool"
+#~ msgstr "ExifTool"
+
+#~ msgid ""
+#~ "ExifTool is required for indexing. It"
+#~ " must be installed and available on"
+#~ " your PATH."
+#~ msgstr ""
+#~ "ExifTool è necessari per l’indexaziun. "
+#~ "El sto vegnir installà ed ëss "
+#~ "disponibel sin voss PATH."
+
+#~ msgid "ExifTool not found"
+#~ msgstr "ExifTool betg chattà"
+
+#~ msgid ""
+#~ "ExifTool was not found on your "
+#~ "system. Indexing is disabled until "
+#~ "ExifTool is installed and available on"
+#~ " your PATH."
+#~ msgstr ""
+#~ "ExifTool n’è betg vegnì chattà sin "
+#~ "voss sistem. L’indexaziun è deactivada "
+#~ "fin che ExifTool è installà ed "
+#~ "disponibel sin voss PATH."
+
+#~ msgid "Export Metadata as &JSON\\u2026 (%1 selected)"
+#~ msgstr "Exportar metadata sco &JSON\\u2026 (%1 seletgad(s))"
+
+#~ msgid "Export Metadata as &JSON\\u2026 (all results)"
+#~ msgstr "Exportar metadata sco &JSON\\u2026 (tuts ils resultats)"
+
+#~ msgid "Export Metadata as JSON"
+#~ msgstr "Exportar metadata sco JSON"
+
+#~ msgid "Exposure"
+#~ msgstr "Exposiziun"
+
+#~ msgid "FOLDERS"
+#~ msgstr "CARTELLAS"
+
+#~ msgid "Factory default: %1 (%2 CPU threads detected)"
+#~ msgstr "Predefinì: %1 (%2 threads CPU detectads)"
+
+#~ msgid ""
+#~ "File and folder name patterns to "
+#~ "skip during indexing. Supports wildcards "
+#~ "(e.g. *, ?).\n"
+#~ "Changes take effect on the next rescan."
+#~ msgstr ""
+#~ "Schemes da nums da datotecas e "
+#~ "cartellas da sursiglir durant l’indexaziun."
+#~ " Supporta caratters jolly (p.ex. *, "
+#~ "?).\n"
+#~ "Mutaziuns vegnan activas en la proxima re-indexaziun."
+
+#~ msgid "File size"
+#~ msgstr "Grondezza da datoteca"
+
+#~ msgid "Find"
+#~ msgstr "Tschertgar"
+
+#~ msgid "Find in metadata (Ctrl+F)"
+#~ msgstr "Tschertgar en metadata (Ctrl+F)"
+
+#~ msgid "Find in metadata\\u2026"
+#~ msgstr "Tschertgar en metadata…"
+
+#~ msgid "Folder is excluded from search results"
+#~ msgstr "La cartella è exclusa dals resultats da tschertga"
+
+#~ msgid "Folder is included in search results"
+#~ msgstr "La cartella è inclusa en ils resultats da tschertga"
+
+#~ msgid "Folder(s)"
+#~ msgstr "Cartella(s)"
+
+#~ msgid "Force re-extract EXIF for every file in all enabled folders"
+#~ msgstr ""
+#~ "Forczar l’extracziun EXIF per mintga "
+#~ "datoteca en tut las cartellas activadas"
+
+#~ msgid "Force re-extract EXIF for every file in this folder"
+#~ msgstr "Forczar l’extracziun EXIF per mintga datoteca en questa cartella"
+
+#~ msgid "Found — ExifTool %1"
+#~ msgstr "Chattà — ExifTool %1"
+
+#~ msgid "Full Rescan"
+#~ msgstr "Re-indexaziun cumplaina"
+
+#~ msgid "Full Rescan All"
+#~ msgstr "Re-indexaziun cumplaina da tut"
+
+#~ msgid "GPS location —"
+#~ msgstr "Posiziun GPS —"
+
+#~ msgid "GeoHack"
+#~ msgstr "GeoHack"
+
+#~ msgid "Google Maps"
+#~ msgstr "Google Maps"
+
+#~ msgid "IMAGES"
+#~ msgstr "MALETGS"
+
+#~ msgid "Incrementally re-index all enabled folders"
+#~ msgstr "Re-indexar incrementalmain tut las cartellas activadas"
+
+#~ msgid "Indexed Folders"
+#~ msgstr "Cartellas indexadas"
+
+#~ msgid "Indexing"
+#~ msgstr "Indexaziun"
+
+#~ msgid "Indexing Blacklist"
+#~ msgstr "Glista naira d’indexaziun"
+
+#~ msgid "Indexing folder %1 of %2"
+#~ msgstr "Indexaziun da la cartella %1 da %2"
+
+#~ msgid "Indexing…"
+#~ msgstr "Indexaziun…"
+
+#~ msgid "JSON files (*.json)"
+#~ msgstr "Datotecas JSON (*.json)"
+
+#~ msgid "Language"
+#~ msgstr "Lingua"
+
+#~ msgid "Largest"
+#~ msgstr "Pli gronds"
+
+#~ msgid "License: MIT"
+#~ msgstr "Licenza: MIT"
+
+#~ msgid "Loading original\\u2026"
+#~ msgstr "Original vegn chargegiaù…"
+
+#~ msgid ""
+#~ "Long-edge resolution used by the "
+#~ "preview-cache builder. Larger values give"
+#~ " sharper detail when zooming but take"
+#~ " more disk space and longer to "
+#~ "render."
+#~ msgstr ""
+#~ "Resoluziun dal cantin lung duvrà dal "
+#~ "generatur da cache da previstas. Valurs"
+#~ " pli autas donneschan pli buns "
+#~ "detagls al zoomar ma dovran dapli "
+#~ "plaz sin disk e pli ditg per "
+#~ "render."
+
+#~ msgid "METADATA"
+#~ msgstr "METADATA"
+
+#~ msgid "Managed Folders"
+#~ msgstr "Cartellas manasgiadas"
+
+#~ msgid "Meaning"
+#~ msgstr "Significaziun"
+
+#~ msgid "Name A→Z"
+#~ msgstr "Num A→Z"
+
+#~ msgid "Name Z→A"
+#~ msgstr "Num Z→A"
+
+#~ msgid "New passphrase"
+#~ msgstr "Nova pled-clav"
+
+#~ msgid "New password"
+#~ msgstr "Nova pled-clav"
+
+#~ msgid "New password and confirmation do not match."
+#~ msgstr "La nova pled-clav e la conferma na correspundan betg."
+
+#~ msgid "New pattern, e.g.  @eaDir  or  *.tmp"
+#~ msgstr "Nov schema, p.ex.  @eaDir  u  *.tmp"
+
+#~ msgid "Newest first"
+#~ msgstr "Pli novas emprim"
+
+#~ msgid "Next match"
+#~ msgstr "Proxim resultaten"
+
+#~ msgid "No folders indexed yet"
+#~ msgstr "Anc naginas cartellas indexadas"
+
+#~ msgid ""
+#~ "No folders managed yet.\n"
+#~ "Click \"Add Folder\" to start tracking a folder."
+#~ msgstr ""
+#~ "Anc naginas cartellas manasgiadas.\n"
+#~ "Clicchai sin „Agiuntar cartella“ per cumenzar a trackar ina cartella."
+
+#~ msgid "Not found"
+#~ msgstr "Betg chattà"
+
+#~ msgid ""
+#~ "Number of parallel threads used for "
+#~ "indexing and thumbnail generation. Higher "
+#~ "values speed up processing but use "
+#~ "more CPU and memory."
+#~ msgstr ""
+#~ "Dumber da threads parallels per "
+#~ "indexaziun e creaziun da miniatures. "
+#~ "Valurs pli autas acceleran la tractaziun"
+#~ " ma duvran dapli CPU e memoria."
+
+#~ msgid "Oldest first"
+#~ msgstr "Pli vegl emprim"
+
+#~ msgid "OpenStreetMap"
+#~ msgstr "OpenStreetMap"
+
+#~ msgid "PREVIEW"
+#~ msgstr "PREVISTA"
+
+#~ msgid "Passphrases do not match"
+#~ msgstr "Las pled-clavs na correspundan betg"
+
+#~ msgid "Password"
+#~ msgstr "Pled-clav"
+
+#~ msgid "Password Changed"
+#~ msgstr "Pled-clav midada"
+
+#~ msgid "Path A→Z"
+#~ msgstr "Traject A→Z"
+
+#~ msgid "Path Z→A"
+#~ msgstr "Traject Z→A"
+
+#~ msgid ""
+#~ "Patterns are matched against individual "
+#~ "file or folder names (not full "
+#~ "paths). Wildcards: * matches any "
+#~ "characters, ? matches one character."
+#~ msgstr ""
+#~ "Ils schemes vegnan comparads cun nums"
+#~ " singuls da datotecas u cartella "
+#~ "(betg trajects cumplains). Caratters jolly:"
+#~ " * correspunda a insaquants caratters, "
+#~ "? correspunda ad in caracter."
+
+#~ msgid ""
+#~ "Permanently delete %1 marked image "
+#~ "file(s) from disk and remove them "
+#~ "from the index?\n"
+#~ "\n"
+#~ "This cannot be undone."
+#~ msgstr ""
+#~ "Stizzar definitivamente %1 datoteca(s) "
+#~ "d’immagine marcada(s) dal disk e stizzar"
+#~ " ellas da l’index?\n"
+#~ "\n"
+#~ "Quai na po betg vegnir annullà."
+
+#~ msgid ""
+#~ "Permanently deletes all indexed images "
+#~ "and folder records. This cannot be "
+#~ "undone."
+#~ msgstr ""
+#~ "Stizza definitivamente tuts ils maletgs "
+#~ "indexads e las registraziuns da "
+#~ "cartellas. Quai na po betg vegnir "
+#~ "annullà."
+
+#~ msgid "Preparing\\u2026"
+#~ msgstr "Preparaziun…"
+
+#~ msgid "Preview Cache Size"
+#~ msgstr "Grondezza dal cache da previstas"
+
+#~ msgid "Previous match"
+#~ msgstr "Resultaten precedent"
+
+#~ msgid "RESULTS"
+#~ msgstr "RESULTATS"
+
+#~ msgid ""
+#~ "Re-encrypts the database under a "
+#~ "new password. Existing thumbnails are "
+#~ "preserved."
+#~ msgstr ""
+#~ "Cifrescha la banca da datas dad "
+#~ "nov cun ina nova pled-clav. Las"
+#~ " miniaturas existentas vegnan mantegnidas."
+
+#~ msgid "Re-index this folder (incremental)"
+#~ msgstr "Re-indexar questa cartella (incremental)"
+
+#~ msgid "Recreate Preview"
+#~ msgstr "Crear danovamain la previsualisaziun"
+
+#~ msgid "Recreate Thumbnail"
+#~ msgstr "Crear danovamain il maletg en miniatura"
+
+#~ msgid "Remove"
+#~ msgstr "Stizzar"
+
+#~ msgid "Remove \"%1\" and delete all its indexed images from the database?"
+#~ msgstr "Stizzar „%1“ e tuts ses maletgs indexads da la banca da datas?"
+
+#~ msgid "Remove Folder"
+#~ msgstr "Stizzar cartella"
+
+#~ msgid "Remove this folder and delete its indexed images"
+#~ msgstr "Stizzar questa cartella e ses maletgs indexads"
+
+#~ msgid "Render preview-cache JPEGs for this folder"
+#~ msgstr "Crear JPEGs dal cache da previstas per questa cartella"
+
+#~ msgid "Rescan"
+#~ msgstr "Re-indexar"
+
+#~ msgid "Rescan All"
+#~ msgstr "Re-indexar tut"
+
+#~ msgid "Reset Database"
+#~ msgstr "Resettar banca da datas"
+
+#~ msgid "Reset Database\\u2026"
+#~ msgstr "Resettar banca da datas…"
+
+#~ msgid "Restart the application for language changes to take full effect."
+#~ msgstr "Restartad l’applicaziun per che la midada da lingua saja daditg activa."
+
+#~ msgid "SETTINGS"
+#~ msgstr "PARAMETERS"
+
+#~ msgid "Scanning for images\\u2026"
+#~ msgstr "Tscherca da maletgs…"
+
+#~ msgid "Search"
+#~ msgstr "Tschertgar"
+
+#~ msgid "Search EXIF metadata\\u2026"
+#~ msgstr "Tschertgar en metadata EXIF…"
+
+#~ msgid "Search failed"
+#~ msgstr "Tschertga buca reussida"
+
+#~ msgid "Search syntax"
+#~ msgstr "Sintaxa da tschertgar"
+
+#~ msgid "Select &All"
+#~ msgstr "Seletgar &tut"
+
+#~ msgid "Select Folder to Manage"
+#~ msgstr "Tscherner cartella per manaschar"
+
+#~ msgid "Select Images Without &Thumbnail"
+#~ msgstr "Seletgar maletgs senza &miniatura"
+
+#~ msgid "Select a folder"
+#~ msgstr "Tscherner ina cartella"
+
+#~ msgid "Select an image to see metadata"
+#~ msgstr "Tscherner in maletg per vesair metadata"
+
+#~ msgid "Select image"
+#~ msgstr "Seletgar maletg"
+
+#~ msgid "Settings"
+#~ msgstr "Parameters"
+
+#~ msgid "Show Original"
+#~ msgstr "Mussar original"
+
+#~ msgid "Show Preview"
+#~ msgstr "Mussar prevista"
+
+#~ msgid "Show all results"
+#~ msgstr "Mussar tuts ils resultats"
+
+#~ msgid "Show only selected images"
+#~ msgstr "Mussar mo ils maletgs seletgads"
+
+#~ msgid "Showing cached preview. Click to load the full-resolution source."
+#~ msgstr ""
+#~ "Prevista dal cache vegnida mussada. "
+#~ "Cliccar per chargegiar la sorgente en"
+#~ " plaina resoluziun."
+
+#~ msgid "Showing full-resolution source. Click to use cached preview."
+#~ msgstr ""
+#~ "Sorgente en plaina resoluziun vegnida "
+#~ "mussada. Cliccar per utilisar la "
+#~ "prevista dal cache."
+
+#~ msgid "Smallest"
+#~ msgstr "Pli pitschens"
+
+#~ msgid "Sort"
+#~ msgstr "Sortir"
+
+#~ msgid "Tag"
+#~ msgstr "Tag"
+
+#~ msgid "Theme"
+#~ msgstr "Tema"
+
+#~ msgid "Third-Party &Licenses"
+#~ msgstr "&Licenzas da terzas persunas"
+
+#~ msgid "Third-Party Licenses"
+#~ msgstr "Licenzas da terzas persunas"
+
+#~ msgid ""
+#~ "This passphrase encrypts your entire "
+#~ "image index. Use at least 12 "
+#~ "characters and a mix of letters, "
+#~ "numbers, and symbols. There is no "
+#~ "way to recover a lost passphrase."
+#~ msgstr ""
+#~ "Questa pled-clav cifrescha l’entir index"
+#~ " da maletgs. Duvrai almain 12 "
+#~ "caratters ed ina mesadad da lettras, "
+#~ "cifras e simbols. Ina pled-clav "
+#~ "persa na po betg vegnir recuperada."
+
+#~ msgid ""
+#~ "This will permanently delete all indexed"
+#~ " images and indexed folder records.\n"
+#~ "\n"
+#~ "Are you sure you want to continue?"
+#~ msgstr ""
+#~ "Quai stizzerà definitivamente tuts ils "
+#~ "maletgs indexads e las registraziuns da"
+#~ " cartellas.\n"
+#~ "\n"
+#~ "Es ti segir da vulair cuntinuar?"
+
+#~ msgid "Tips"
+#~ msgstr "Cussegls"
+
+#~ msgid "To confirm, type the number %1 below:"
+#~ msgstr "Per confermar, endatar il numer %1 qua sutvart:"
+
+#~ msgid "Unlock"
+#~ msgstr "Avrir"
+
+#~ msgid "Unlocking…"
+#~ msgstr "Avrir…"
+
+#~ msgid "Value"
+#~ msgstr "Valur"
+
+#~ msgid "Worker Threads"
+#~ msgstr "Threads da lavur"
+
+#~ msgid "\\u2190 Select a folder to browse images"
+#~ msgstr "← Tscherner ina cartella per navigar ils maletgs"
+
+#~ msgid "both tokens (implicit AND)"
+#~ msgstr "omadus ils terms (AND implizit)"
+
+#~ msgid "either token"
+#~ msgstr "in dals dus terms"
+
+#~ msgid "exact phrase"
+#~ msgstr "frasa exacta"
+
+#~ msgid "exclude token"
+#~ msgstr "excluder term"
+
+#~ msgid "files"
+#~ msgstr "datotecas"
+
+#~ msgid "images"
+#~ msgstr "maletgs"
+
+#~ msgid "indexed, scanning\\u2026"
+#~ msgstr "indexà, tscherta…"
+
+#~ msgid "pixels (long edge)"
+#~ msgstr "pixels (cantin lung)"
+
+#~ msgid "prefix wildcard"
+#~ msgstr "joker da prefix"
+
+#~ msgid "previews"
+#~ msgstr "previstas"
+
+#~ msgid "single token"
+#~ msgstr "singul term"
+
+#~ msgid "thread"
+#~ msgstr "thread"
+
+#~ msgid "threads"
+#~ msgstr "threads"
+
+#~ msgid ""
+#~ "• Operators AND, OR, NOT must be UPPERCASE\n"
+#~ "• Quote multi-word phrases\n"
+#~ "• In ExifTool keys (e.g. GPS:GPSLatitude) the colon acts as a separator"
+#~ msgstr ""
+#~ "• Ils operaturs AND, OR, NOT ston esser scrits en MAJUSCULAS\n"
+#~ "• Metter frasas da pliras pleds tranter virgulettas\n"
+#~ "• En las clavs ExifTool (p.ex. "
+#~ "GPS:GPSLatitude) ils dus puncts gioghan "
+#~ "il rolla d'in separatur"
 
