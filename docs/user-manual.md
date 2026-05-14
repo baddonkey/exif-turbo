@@ -338,14 +338,45 @@ Use the **Sort** dropdown at the top-right of the results panel:
 
 | Option | Description |
 |--------|-------------|
+| Date taken ↓ | EXIF capture date, newest first (default) |
+| Date taken ↑ | EXIF capture date, oldest first |
+| Newest first | Filesystem modification date, newest first |
+| Oldest first | Filesystem modification date, oldest first |
 | Name A→Z | Filename ascending |
 | Name Z→A | Filename descending |
-| Path A→Z | Full path ascending (default) |
+| Path A→Z | Full path ascending |
 | Path Z→A | Full path descending |
-| Newest first | Date taken, most recent first |
-| Oldest first | Date taken, oldest first |
 | Largest | File size, largest first |
 | Smallest | File size, smallest first |
+
+**Date taken ↓/↑** sorts by the EXIF `DateTimeOriginal` / `CreateDate` timestamp
+stored during indexing. Images with no EXIF date appear at the end of the list
+in both directions. **Newest/Oldest first** always sorts by the filesystem
+modification time.
+
+The chosen sort order is remembered per database and restored automatically
+the next time you open the application.
+
+### Filtering by capture year
+
+Whenever at least one indexed image has an EXIF capture date a **year histogram**
+appears below the format chips in the Search tab. Each bar represents one
+calendar year; its height is proportional to the number of matching images taken
+in that year relative to the busiest year.
+
+| Action | Effect |
+|--------|--------|
+| **Click a bar** | Filter results to images captured in that year |
+| **Shift-click a different bar** | Extend the selection to cover the range between the two bars |
+| **Click the active bar again** | Clear the year filter |
+| **× chip** (right side of histogram) | Clear the year filter |
+
+A tooltip on each bar shows the year and image count. When a filter is already
+active, hovering a bar that is not the sole selected year shows "Shift-click to
+extend range".
+
+Images that have no EXIF capture date are excluded from results while a year
+filter is active.
 
 ### Loading more results
 
@@ -583,7 +614,7 @@ database — not just the visible results.
 
 | Action | What it does |
 |--------|--------------|
-| **Export Metadata as JSON…** | Writes the EXIF metadata of every marked image to a JSON file you choose via a Save dialog. The export honours the current **Sort** order (filename, path, date, or size). When nothing is marked, the menu label changes to *"Export Metadata as JSON… (all results)"* and the action exports every image matching the current filters instead. |
+| **Export Metadata as JSON…** | Writes the EXIF metadata of every marked image to a JSON file you choose via a Save dialog. The export honours the current **Sort** order (date taken, filename, path, or size). When nothing is marked, the menu label changes to *"Export Metadata as JSON… (all results)"* and the action exports every image matching the current filters instead. |
 | **Delete Marked Images…** | Permanently deletes every marked image **from disk** and removes its row from the index. Cached thumbnails (`.png` / `.enc`), `.skip` sentinels, and any rendered preview (`.jpg` / `.jpg.enc`) for the deleted images are also cleaned up. Disabled when nothing is marked. The menu label includes the current count, e.g. *"Delete Marked Images… (12 selected)"*. |
 
 Both menu items report the live count in their label and run via the bulk-op
