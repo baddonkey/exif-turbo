@@ -191,6 +191,7 @@ def build_rpm(bundle_dir: Path, version: str) -> Path:
             Summary:        Fast EXIF full-text image search
             License:        MIT
             AutoReqProv:    no
+            Obsoletes:      exif-turbo < %{{version}}
 
             %description
             Cross-platform image EXIF metadata search and indexing tool.

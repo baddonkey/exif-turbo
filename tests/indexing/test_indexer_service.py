@@ -417,3 +417,37 @@ def test_resolve_captured_at_skips_invalid_exif_and_falls_back(tmp_path: Path) -
     from time import strptime
     expected = float(timegm(strptime("2021:03:04 12:00:00", "%Y:%m:%d %H:%M:%S")))
     assert result == expected
+
+
+def test_resolve_captured_at_uses_oldest_metadata_stamp_when_no_primary_keys(tmp_path: Path) -> None:
+    # Arrange — no primary key present; two non-primary date fields
+    img = _make_jpeg(tmp_path / "scan.jpg")
+    metadata = {
+        "IFD0:ModifyDate": "1991:03:27 21:31:21",
+        "XMP-dc:Date": "2005:06:01 00:00:00",
+    }
+
+    # Act
+    result = _resolve_captured_at(metadata, img, mtime=9999.0)
+
+    # Assert — oldest non-primary stamp wins
+    from calendar import timegm
+    from time import strptime
+    expected = float(timegm(strptime("1991:03:27 21:31:21", "%Y:%m:%d %H:%M:%S")))
+    assert result == expected
+
+
+def test_resolve_captured_at_oldest_fallback_rejects_pre_1900_dates(tmp_path: Path) -> None:
+    # Arrange — only a pre-1900 stamp; should be treated as a sentinel and ignored
+    img = _make_jpeg(tmp_path / "scan.jpg")
+    metadata = {"IFD0:ModifyDate": "1899:12:31 00:00:00"}
+
+    # Act
+    result = _resolve_captured_at(metadata, img, mtime=5555.0)
+
+    # Assert — pre-1900 date rejected; falls through to filesystem/mtime
+    from calendar import timegm
+    from time import strptime
+    rejected = float(timegm(strptime("1899:12:31 00:00:00", "%Y:%m:%d %H:%M:%S")))
+    assert result != rejected
+    assert result is not None

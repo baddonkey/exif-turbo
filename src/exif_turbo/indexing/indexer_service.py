@@ -45,6 +45,10 @@ _EXIF_DATE_KEYS = [
 ]
 # exiftool date format (with -n: numeric, dates keep string format).
 _EXIF_DT_FMT = "%Y:%m:%d %H:%M:%S"
+# Oldest timestamp accepted by the any-field fallback scan: 1900-01-01 UTC.
+_MIN_SANE_YEAR_TS: float = float(timegm((1900, 1, 1, 0, 0, 0, 0, 1, 0)))
+# exiftool groups that reflect filesystem state, not embedded metadata.
+_FILESYSTEM_GROUPS: frozenset[str] = frozenset({"System", "File"})
 
 
 def _resolve_captured_at(metadata: Dict[str, str], path: Path, mtime: float) -> float | None:
@@ -54,8 +58,12 @@ def _resolve_captured_at(metadata: Dict[str, str], path: Path, mtime: float) -> 
     1. EXIF date tags (DateTimeOriginal / CreateDate, etc.) — treated as local
        wall-clock time and stored as UTC epoch (no timezone conversion, same
        approach used by most EXIF consumers).
-    2. File creation time (st_birthtime on macOS, st_ctime on Windows).
-    3. File modification time (mtime) as last resort on Linux where no
+    2. Oldest parseable date stamp across all remaining embedded metadata
+       fields — skips filesystem-level groups (System:, File:) and values
+       predating 1900.  Useful for scanned/archival images that carry only a
+       ModifyDate or a custom XMP field.
+    3. File creation time (st_birthtime on macOS, st_ctime on Windows).
+    4. File modification time (mtime) as last resort on Linux where no
        creation time is available.
     Returns None only if everything fails.
     """
@@ -70,6 +78,29 @@ def _resolve_captured_at(metadata: Dict[str, str], path: Path, mtime: float) -> 
             return float(timegm(t))
         except ValueError:
             continue
+
+    # Second pass: scan all remaining embedded metadata fields and return the
+    # oldest parseable timestamp.  Filesystem-level exiftool groups (System:,
+    # File:) are skipped because they duplicate what os.stat() already
+    # provides.  Values predating 1900 are rejected as sentinel artefacts.
+    _tried = frozenset(_EXIF_DATE_KEYS)
+    candidates: list[float] = []
+    for key, raw in metadata.items():
+        if key in _tried or not raw:
+            continue
+        group = key.split(":")[0] if ":" in key else ""
+        if group in _FILESYSTEM_GROUPS:
+            continue
+        raw_base = raw.split(".")[0].strip()
+        try:
+            t = strptime(raw_base, _EXIF_DT_FMT)
+            ts = float(timegm(t))
+            if ts >= _MIN_SANE_YEAR_TS:
+                candidates.append(ts)
+        except ValueError:
+            continue
+    if candidates:
+        return min(candidates)
 
     # Fall back to file-system timestamps.
     try:
