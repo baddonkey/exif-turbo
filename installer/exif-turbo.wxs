@@ -32,8 +32,12 @@
       UpgradeCode="A7B3C1D5-E9F2-4A6B-8C3D-1E5F7A2B4C8D"
       Scope="perMachine">
 
-    <!-- Remove any older version before installing -->
-    <MajorUpgrade DowngradeErrorMessage="A newer version of exif-turbo is already installed." />
+    <!-- Remove any older version before installing new files to prevent
+         stale bundled-Python files (e.g. PYZ archive, .pyd extensions)
+         from mixing with new ones and causing version-mismatch crashes. -->
+    <MajorUpgrade
+        Schedule="afterInstallInitialize"
+        DowngradeErrorMessage="A newer version of exif-turbo is already installed." />
 
     <!-- Embed all files in a single .cab inside the MSI -->
     <MediaTemplate EmbedCab="yes" />

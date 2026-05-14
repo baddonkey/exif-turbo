@@ -180,7 +180,7 @@ def generate_icon() -> Path:
 
 
 def main() -> None:
-    find_tool("pyinstaller")
+    pyinstaller = find_tool("pyinstaller", venv_subpath=".venv/Scripts/pyinstaller.exe")
     wix = find_tool("wix")
 
     version = read_version()
@@ -188,7 +188,7 @@ def main() -> None:
 
     compile_translations()
 
-    run(["pyinstaller", "exif-turbo.spec", "--noconfirm", "--clean"])
+    run([pyinstaller, "exif-turbo.spec", "--noconfirm", "--clean"])
     print("  PyInstaller build complete.")
 
     commit_version_info(version)
