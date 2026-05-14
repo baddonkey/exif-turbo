@@ -43,6 +43,8 @@ class SearchWorker(QThread):
         restrict_to_enabled_folders: bool,
         marked_only: bool,
         serial: int,
+        date_from: int | None = None,
+        date_to: int | None = None,
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -56,6 +58,8 @@ class SearchWorker(QThread):
         self._restrict = restrict_to_enabled_folders
         self._marked_only = marked_only
         self._serial = serial
+        self._date_from = date_from
+        self._date_to = date_to
 
     def run(self) -> None:
         try:
@@ -67,6 +71,8 @@ class SearchWorker(QThread):
                 path_filter=self._path_filter,
                 restrict_to_enabled_folders=self._restrict,
                 marked_only=self._marked_only,
+                date_from=self._date_from,
+                date_to=self._date_to,
             )
             total: int = repo.count_images(
                 self._query,
@@ -74,6 +80,8 @@ class SearchWorker(QThread):
                 path_filter=self._path_filter,
                 restrict_to_enabled_folders=self._restrict,
                 marked_only=self._marked_only,
+                date_from=self._date_from,
+                date_to=self._date_to,
             )
             format_counts: list = repo.get_format_counts(
                 query=self._query,

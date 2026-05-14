@@ -89,6 +89,14 @@ class ImageIndexRepository:
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_images_marked ON images(marked)"
         )
+        if "captured_at" not in existing_cols:
+            self.conn.execute(
+                "ALTER TABLE images ADD COLUMN captured_at INTEGER"
+            )
+            self.conn.commit()
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_images_captured_at ON images(captured_at)"
+        )
         self.conn.commit()
         # Backfill image_folders for images indexed before this join table was
         # introduced (one-time migration, idempotent via INSERT OR IGNORE).
@@ -114,30 +122,32 @@ class ImageIndexRepository:
         metadata_text: str,
         *,
         folder_id: int | None = None,
+        captured_at: float | None = None,
     ) -> None:
-        self.upsert_images_batch([(path, filename, mtime, size, metadata, metadata_text, folder_id)])
+        self.upsert_images_batch([(path, filename, mtime, size, metadata, metadata_text, folder_id, captured_at)])
 
     def upsert_images_batch(
         self,
-        items: list[tuple[str, str, float, int, dict, str, int | None]],
+        items: list[tuple[str, str, float, int, dict, str, int | None, float | None]],
     ) -> None:
         """Write multiple images in a single transaction for bulk-insert efficiency."""
         if not items:
             return
         with self.conn:
-            for path, filename, mtime, size, metadata, metadata_text, folder_id in items:
+            for path, filename, mtime, size, metadata, metadata_text, folder_id, captured_at in items:
                 metadata_json = json.dumps(metadata, ensure_ascii=False)
                 self.conn.execute(
                     """
-                    INSERT INTO images (path, filename, mtime, size, metadata_json)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO images (path, filename, mtime, size, metadata_json, captured_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(path) DO UPDATE SET
                         filename=excluded.filename,
                         mtime=excluded.mtime,
                         size=excluded.size,
-                        metadata_json=excluded.metadata_json
+                        metadata_json=excluded.metadata_json,
+                        captured_at=excluded.captured_at
                     """,
-                    (path, filename, mtime, size, metadata_json),
+                    (path, filename, mtime, size, metadata_json, captured_at),
                 )
                 self.conn.execute(
                     """
@@ -320,14 +330,16 @@ class ImageIndexRepository:
         self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
     _SORT_MAP: Dict[str, str] = {
-        "filename_asc":  "images.filename COLLATE NOCASE ASC",
-        "filename_desc": "images.filename COLLATE NOCASE DESC",
-        "path_asc":      "images.path COLLATE NOCASE ASC",
-        "path_desc":     "images.path COLLATE NOCASE DESC",
-        "date_desc":     "images.mtime DESC",
-        "date_asc":      "images.mtime ASC",
-        "size_desc":     "images.size DESC",
-        "size_asc":      "images.size ASC",
+        "filename_asc":       "images.filename COLLATE NOCASE ASC",
+        "filename_desc":      "images.filename COLLATE NOCASE DESC",
+        "path_asc":           "images.path COLLATE NOCASE ASC",
+        "path_desc":          "images.path COLLATE NOCASE DESC",
+        "date_desc":          "images.mtime DESC",
+        "date_asc":           "images.mtime ASC",
+        "size_desc":          "images.size DESC",
+        "size_asc":           "images.size ASC",
+        "captured_desc":      "COALESCE(images.captured_at, images.mtime) DESC",
+        "captured_asc":       "COALESCE(images.captured_at, images.mtime) ASC",
     }
 
     _DEFAULT_SORT_SQL = "images.filename COLLATE NOCASE ASC"
@@ -399,6 +411,8 @@ class ImageIndexRepository:
         path_filter: List[str] | None = None,
         restrict_to_enabled_folders: bool = False,
         marked_only: bool = False,
+        date_from: int | None = None,
+        date_to: int | None = None,
     ) -> List[Tuple[int, str, str, str, int, float]]:
         order = self._resolve_sort(sort_by)
         ext_clause = ""
@@ -426,6 +440,7 @@ class ImageIndexRepository:
                 path_clause = f"AND ({parts})"
                 path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
 
+        date_clause, date_args = self._build_date_clause(date_from, date_to)
         marks_clause = "AND images.marked = 1" if marked_only else ""
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
 
@@ -437,20 +452,20 @@ class ImageIndexRepository:
                 "SELECT images.id, images.path, images.filename, images.metadata_json, images.size, images.mtime "
                 "FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {marks_clause} {enabled_clause} "
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} "
                 f"{order_expr} "
                 "LIMIT ? OFFSET ?"
             )
-            args = (fts_query,) + ext_args + path_args + (limit, offset)
+            args = (fts_query,) + ext_args + path_args + date_args + (limit, offset)
         else:
             sql = (
                 "SELECT id, path, filename, metadata_json, size, mtime "
                 "FROM images "
-                f"WHERE 1=1 {ext_clause} {path_clause} {marks_clause} {enabled_clause} "
+                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} "
                 f"ORDER BY {order} "
                 "LIMIT ? OFFSET ?"
             )
-            args = ext_args + path_args + (limit, offset)
+            args = ext_args + path_args + date_args + (limit, offset)
 
         cur = self.conn.execute(sql, args)
         return cur.fetchall()
@@ -462,6 +477,8 @@ class ImageIndexRepository:
         path_filter: List[str] | None = None,
         restrict_to_enabled_folders: bool = False,
         marked_only: bool = False,
+        date_from: int | None = None,
+        date_to: int | None = None,
     ) -> int:
         ext_clause = ""
         ext_args: tuple = ()
@@ -487,6 +504,7 @@ class ImageIndexRepository:
                 path_clause = f"AND ({parts})"
                 path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
 
+        date_clause, date_args = self._build_date_clause(date_from, date_to)
         marks_clause = "AND images.marked = 1" if marked_only else ""
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
 
@@ -495,15 +513,15 @@ class ImageIndexRepository:
             sql = (
                 "SELECT COUNT(*) FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {marks_clause} {enabled_clause}"
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
             )
-            args = (fts_query,) + ext_args + path_args
+            args = (fts_query,) + ext_args + path_args + date_args
         else:
             sql = (
                 f"SELECT COUNT(*) FROM images "
-                f"WHERE 1=1 {ext_clause} {path_clause} {marks_clause} {enabled_clause}"
+                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
             )
-            args = ext_args + path_args
+            args = ext_args + path_args + date_args
 
         cur = self.conn.execute(sql, args)
         return int(cur.fetchone()[0])
@@ -515,6 +533,8 @@ class ImageIndexRepository:
         path_filter: List[str] | None = None,
         restrict_to_enabled_folders: bool = False,
         marked_only: bool = False,
+        date_from: int | None = None,
+        date_to: int | None = None,
     ) -> List[str]:
         """Return all paths matching the current filter — no LIMIT."""
         ext_clause = ""
@@ -541,6 +561,7 @@ class ImageIndexRepository:
                 path_clause = f"AND ({parts})"
                 path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
 
+        date_clause, date_args = self._build_date_clause(date_from, date_to)
         marks_clause = "AND images.marked = 1" if marked_only else ""
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
 
@@ -549,18 +570,100 @@ class ImageIndexRepository:
             sql = (
                 "SELECT images.path FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {marks_clause} {enabled_clause}"
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+            )
+            args = (fts_query,) + ext_args + path_args + date_args
+        else:
+            sql = (
+                "SELECT path FROM images "
+                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+            )
+            args = ext_args + path_args + date_args
+
+        cur = self.conn.execute(sql, args)
+        return [row[0] for row in cur.fetchall()]
+
+    @staticmethod
+    def _build_date_clause(
+        date_from: int | None,
+        date_to: int | None,
+    ) -> tuple[str, tuple]:
+        """Build a SQL clause and args tuple for captured_at range filtering.
+
+        Images with NULL captured_at are excluded when either bound is set
+        (they have no known capture date, so they can't satisfy a date range).
+        """
+        parts: list[str] = []
+        args: list[int] = []
+        if date_from is not None:
+            parts.append("AND images.captured_at IS NOT NULL AND images.captured_at >= ?")
+            args.append(date_from)
+        if date_to is not None:
+            parts.append("AND images.captured_at IS NOT NULL AND images.captured_at <= ?")
+            args.append(date_to)
+        return " ".join(parts), tuple(args)
+
+    def get_year_counts(
+        self,
+        query: str = "",
+        ext_filter: str = "",
+        path_filter: List[str] | None = None,
+        restrict_to_enabled_folders: bool = False,
+    ) -> List[Tuple[int, int]]:
+        """Return [(year, count)] for all images that have a captured_at value.
+
+        Results are scoped to the current query / folder / ext context so the
+        timeline histogram reflects only the visible search results.
+        """
+        ext_clause = ""
+        ext_args: tuple = ()
+        if ext_filter:
+            canonical = ext_filter.lower().lstrip(".")
+            aliases = [
+                raw for raw, mapped in self._EXT_ALIASES.items() if mapped == canonical
+            ]
+            exts = [canonical] + aliases
+            placeholders = " OR ".join("LOWER(images.filename) LIKE ?" for _ in exts)
+            ext_clause = f"AND ({placeholders})"
+            ext_args = tuple(f"%.{e}" for e in exts)
+
+        path_clause = ""
+        path_args: tuple = ()
+        if path_filter:
+            if len(path_filter) == 1:
+                prefix = os.path.normpath(path_filter[0]) + os.sep
+                path_clause = "AND images.path LIKE ?"
+                path_args = (prefix + "%",)
+            else:
+                parts = " OR ".join("images.path LIKE ?" for _ in path_filter)
+                path_clause = f"AND ({parts})"
+                path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
+
+        enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
+
+        if query.strip():
+            fts_query = self._sanitize_fts_query(query)
+            sql = (
+                "SELECT CAST(strftime('%Y', datetime(images.captured_at, 'unixepoch')) AS INTEGER) AS yr, "
+                "COUNT(*) AS cnt "
+                "FROM images_fts "
+                "JOIN images ON images_fts.rowid = images.id "
+                f"WHERE images_fts MATCH ? AND images.captured_at IS NOT NULL {ext_clause} {path_clause} {enabled_clause} "
+                "GROUP BY yr ORDER BY yr"
             )
             args = (fts_query,) + ext_args + path_args
         else:
             sql = (
-                "SELECT path FROM images "
-                f"WHERE 1=1 {ext_clause} {path_clause} {marks_clause} {enabled_clause}"
+                "SELECT CAST(strftime('%Y', datetime(captured_at, 'unixepoch')) AS INTEGER) AS yr, "
+                "COUNT(*) AS cnt "
+                "FROM images "
+                f"WHERE captured_at IS NOT NULL {ext_clause} {path_clause} {enabled_clause} "
+                "GROUP BY yr ORDER BY yr"
             )
             args = ext_args + path_args
 
         cur = self.conn.execute(sql, args)
-        return [row[0] for row in cur.fetchall()]
+        return [(int(row[0]), int(row[1])) for row in cur.fetchall()]
 
     # Extensions that should be merged into a single facet key.
     _EXT_ALIASES: Dict[str, str] = {"jpeg": "jpg"}

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict
 
 
@@ -12,3 +12,4 @@ class IndexedImage:
     size: int
     metadata: Dict[str, str]
     metadata_text: str
+    captured_at: float | None = field(default=None)

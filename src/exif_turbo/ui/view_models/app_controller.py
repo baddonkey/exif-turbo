@@ -109,6 +109,8 @@ class AppController(QObject):
     exiftoolMissingChanged = Signal()
     exiftoolVersionChanged = Signal()
     clipboardCopyDone = Signal(str)  # message to show in toast
+    dateFilterChanged = Signal()
+    yearCountsChanged = Signal()
 
     def __init__(
         self,
@@ -193,6 +195,9 @@ class AppController(QObject):
         self._pending_thumb_restart = False
         self._search_worker: SearchWorker | None = None
         self._search_serial: int = 0
+        self._date_from: int | None = None
+        self._date_to: int | None = None
+        self._year_counts: str = "[]"
         # Workers that have emitted results_ready but whose QThread cleanup has
         # not yet completed.  We keep them in this set so the Python object is
         # not garbage-collected while QThreadWrapper::run() is still unwinding
@@ -479,6 +484,18 @@ class AppController(QObject):
     def exiftoolVersion(self) -> str:
         return self._exiftool_version
 
+    @Property(int, notify=dateFilterChanged)
+    def dateFrom(self) -> int:
+        return self._date_from if self._date_from is not None else 0
+
+    @Property(int, notify=dateFilterChanged)
+    def dateTo(self) -> int:
+        return self._date_to if self._date_to is not None else 0
+
+    @Property(str, notify=yearCountsChanged)
+    def yearCounts(self) -> str:
+        return self._year_counts
+
     @Slot()
     def checkExiftool(self) -> None:
         """Re-probe exiftool and update exiftoolMissing / exiftoolVersion."""
@@ -515,6 +532,8 @@ class AppController(QObject):
             path_filter=path_filter,
             restrict_to_enabled_folders=(self._folder_repo is not None),
             marked_only=True,
+            date_from=self._date_from,
+            date_to=self._date_to,
         )
 
     def _load_marks(self) -> None:
@@ -675,6 +694,8 @@ class AppController(QObject):
             file_path=file_path,
             sort_by=sort_by,
             cache_dir=cache_dir,
+            date_from=self._date_from,
+            date_to=self._date_to,
         )
         self._bulk_worker.progress.connect(self._on_bulk_progress)
         self._bulk_worker.finished.connect(self._on_bulk_finished)
@@ -784,6 +805,8 @@ class AppController(QObject):
             self._sort_by = "path_asc"
             self._folder_filter = ""
             self._search_folder_filters = set()
+            self._date_from = None
+            self._date_to = None
             self._status_text = ""
             self._is_unlocking = False
             self.isUnlockingChanged.emit()
@@ -1105,6 +1128,29 @@ class AppController(QObject):
         self.folderFilterChanged.emit()
         self._run_search()
 
+    @Slot(int, int)
+    def setDateFilter(self, date_from: int, date_to: int) -> None:
+        """Set captured_at filter bounds (Unix timestamps, 0 = unset)."""
+        new_from = date_from if date_from > 0 else None
+        new_to = date_to if date_to > 0 else None
+        if new_from == self._date_from and new_to == self._date_to:
+            return
+        self._date_from = new_from
+        self._date_to = new_to
+        self._current_result_row = 0
+        self.dateFilterChanged.emit()
+        self._run_search()
+
+    @Slot()
+    def clearDateFilter(self) -> None:
+        if self._date_from is None and self._date_to is None:
+            return
+        self._date_from = None
+        self._date_to = None
+        self._current_result_row = 0
+        self.dateFilterChanged.emit()
+        self._run_search()
+
     def _run_search(self) -> None:
         if self._repo is None or self._db_path is None:
             return
@@ -1118,6 +1164,8 @@ class AppController(QObject):
             path_filter=path_filter,
             restrict_to_enabled_folders=(self._folder_repo is not None),
             marked_only=self._checked_only_filter_active,
+            date_from=self._date_from,
+            date_to=self._date_to,
         )
         if self._search_worker is not None:
             # A search is already running.  Record the latest params so
@@ -1209,6 +1257,7 @@ class AppController(QObject):
         self.totalResultsChanged.emit()
         self.loadedResultsChanged.emit()
         self._apply_format_counts(format_counts)
+        self._load_year_counts()
         if results:
             row = self._current_result_row if 0 <= self._current_result_row < len(results) else 0
             self._select_source_row(row)
@@ -1239,6 +1288,18 @@ class AppController(QObject):
             items.append({"ext": self._ext_filter, "count": 0})
         self._available_formats = json.dumps(items)
         self.availableFormatsChanged.emit()
+
+    def _load_year_counts(self) -> None:
+        if self._repo is None:
+            return
+        counts = self._repo.get_year_counts(
+            query=self._query_text,
+            ext_filter=self._ext_filter,
+            path_filter=self._current_path_filter(),
+            restrict_to_enabled_folders=(self._folder_repo is not None),
+        )
+        self._year_counts = json.dumps([{"year": y, "count": c} for y, c in counts])
+        self.yearCountsChanged.emit()
 
     def _load_formats(
         self,
@@ -1288,6 +1349,8 @@ class AppController(QObject):
             path_filter=self._current_path_filter(),
             restrict_to_enabled_folders=(self._folder_repo is not None),
             marked_only=self._checked_only_filter_active,
+            date_from=self._date_from,
+            date_to=self._date_to,
         )
         results = [
             SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])

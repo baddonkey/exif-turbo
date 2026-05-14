@@ -309,3 +309,157 @@ def test_search_images_returns_mtime_in_column_5(repo: ImageIndexRepository, tmp
     rows = repo.search_images("", limit=10, offset=0)
     assert len(rows) == 1
     assert rows[0][5] == pytest.approx(1234567.89)
+
+
+# ── captured_at / date filter ────────────────────────────────────────────────
+
+_JAN_2022 = 1640995200  # 2022-01-01 00:00:00 UTC
+_JAN_2023 = 1672531200  # 2023-01-01 00:00:00 UTC
+_JAN_2024 = 1704067200  # 2024-01-01 00:00:00 UTC
+_DEC_2023 = 1703980800  # 2023-12-31 00:00:00 UTC
+
+
+def test_upsert_persists_captured_at(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange
+    path = str(make_jpeg(tmp_path / "photo.jpg"))
+
+    # Act
+    repo.upsert_image(path, "photo.jpg", 1.0, 100, {}, "photo jpg", captured_at=_JAN_2022)
+    repo.commit()
+
+    # Assert — captured_at survives a round-trip
+    row = repo.conn.execute("SELECT captured_at FROM images WHERE path = ?", (path,)).fetchone()
+    assert row is not None
+    assert row[0] == _JAN_2022
+
+
+def test_upsert_captured_at_none_stores_null(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    path = str(make_jpeg(tmp_path / "photo.jpg"))
+    repo.upsert_image(path, "photo.jpg", 1.0, 100, {}, "photo jpg", captured_at=None)
+    repo.commit()
+
+    row = repo.conn.execute("SELECT captured_at FROM images WHERE path = ?", (path,)).fetchone()
+    assert row is not None
+    assert row[0] is None
+
+
+def test_search_images_date_from_filters_out_earlier_images(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange
+    path_old = str(make_jpeg(tmp_path / "old.jpg"))
+    path_new = str(make_jpeg(tmp_path / "new.jpg"))
+    repo.upsert_image(path_old, "old.jpg", 1.0, 100, {}, "old jpg", captured_at=_JAN_2022)
+    repo.upsert_image(path_new, "new.jpg", 1.0, 100, {}, "new jpg", captured_at=_JAN_2023)
+    repo.commit()
+
+    # Act — filter from 2023-01-01 onward
+    rows = repo.search_images("", limit=10, offset=0, date_from=_JAN_2023)
+
+    # Assert
+    assert len(rows) == 1
+    assert rows[0][2] == "new.jpg"
+
+
+def test_search_images_date_to_filters_out_later_images(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange
+    path_old = str(make_jpeg(tmp_path / "old.jpg"))
+    path_new = str(make_jpeg(tmp_path / "new.jpg"))
+    repo.upsert_image(path_old, "old.jpg", 1.0, 100, {}, "old jpg", captured_at=_JAN_2022)
+    repo.upsert_image(path_new, "new.jpg", 1.0, 100, {}, "new jpg", captured_at=_JAN_2023)
+    repo.commit()
+
+    # Act — filter up to end of 2022
+    rows = repo.search_images("", limit=10, offset=0, date_to=_JAN_2023 - 1)
+
+    # Assert
+    assert len(rows) == 1
+    assert rows[0][2] == "old.jpg"
+
+
+def test_search_images_date_range_excludes_outside_images(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange — three years, filter to middle year only
+    paths = {
+        "y2022.jpg": _JAN_2022,
+        "y2023.jpg": _JAN_2023,
+        "y2024.jpg": _JAN_2024,
+    }
+    for fname, ts in paths.items():
+        p = str(make_jpeg(tmp_path / fname))
+        repo.upsert_image(p, fname, 1.0, 100, {}, fname, captured_at=ts)
+    repo.commit()
+
+    # Act — select 2023 only
+    rows = repo.search_images("", limit=10, offset=0, date_from=_JAN_2023, date_to=_DEC_2023)
+
+    # Assert
+    assert len(rows) == 1
+    assert rows[0][2] == "y2023.jpg"
+
+
+def test_search_images_date_filter_excludes_null_captured_at(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange — one image with captured_at, one without
+    path_dated = str(make_jpeg(tmp_path / "dated.jpg"))
+    path_nodates = str(make_jpeg(tmp_path / "nodate.jpg"))
+    repo.upsert_image(path_dated, "dated.jpg", 1.0, 100, {}, "dated jpg", captured_at=_JAN_2023)
+    repo.upsert_image(path_nodates, "nodate.jpg", 1.0, 100, {}, "nodate jpg", captured_at=None)
+    repo.commit()
+
+    # Act
+    rows = repo.search_images("", limit=10, offset=0, date_from=_JAN_2022)
+
+    # Assert — null captured_at image is excluded when a date filter is active
+    assert len(rows) == 1
+    assert rows[0][2] == "dated.jpg"
+
+
+def test_count_images_respects_date_filter(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    for i, ts in enumerate([_JAN_2022, _JAN_2023, _JAN_2024]):
+        p = str(make_jpeg(tmp_path / f"img{i}.jpg"))
+        repo.upsert_image(p, f"img{i}.jpg", 1.0, 100, {}, f"img{i} jpg", captured_at=ts)
+    repo.commit()
+
+    assert repo.count_images("", date_from=_JAN_2023) == 2
+    assert repo.count_images("", date_to=_JAN_2022) == 1
+    assert repo.count_images("", date_from=_JAN_2023, date_to=_DEC_2023) == 1
+
+
+def test_get_year_counts_returns_one_entry_per_year(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange — two 2022, three 2023
+    for i in range(2):
+        p = str(make_jpeg(tmp_path / f"y22_{i}.jpg"))
+        repo.upsert_image(p, f"y22_{i}.jpg", 1.0, 100, {}, f"y22 {i}", captured_at=_JAN_2022 + i)
+    for i in range(3):
+        p = str(make_jpeg(tmp_path / f"y23_{i}.jpg"))
+        repo.upsert_image(p, f"y23_{i}.jpg", 1.0, 100, {}, f"y23 {i}", captured_at=_JAN_2023 + i)
+    repo.commit()
+
+    # Act
+    counts = repo.get_year_counts()
+
+    # Assert
+    by_year = {yr: cnt for yr, cnt in counts}
+    assert by_year[2022] == 2
+    assert by_year[2023] == 3
+
+
+def test_get_year_counts_excludes_null_captured_at(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    p1 = str(make_jpeg(tmp_path / "dated.jpg"))
+    p2 = str(make_jpeg(tmp_path / "nodate.jpg"))
+    repo.upsert_image(p1, "dated.jpg", 1.0, 100, {}, "dated jpg", captured_at=_JAN_2022)
+    repo.upsert_image(p2, "nodate.jpg", 1.0, 100, {}, "nodate jpg", captured_at=None)
+    repo.commit()
+
+    counts = repo.get_year_counts()
+    by_year = {yr: cnt for yr, cnt in counts}
+    assert by_year == {2022: 1}

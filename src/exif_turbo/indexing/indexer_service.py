@@ -4,8 +4,10 @@ import json
 import logging
 import queue
 import threading
+from calendar import timegm
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait as cf_wait
 from pathlib import Path
+from time import strptime
 from typing import Callable, Dict, List
 
 _log = logging.getLogger(__name__)
@@ -31,6 +33,60 @@ def metadata_to_text(metadata: Dict[str, str]) -> str:
         parts.append(value)
     parts.append(json.dumps(metadata, ensure_ascii=False))
     return " ".join(parts)
+
+
+# EXIF date keys tried in priority order (exiftool -g1 format: "Group:Tag").
+_EXIF_DATE_KEYS = [
+    "ExifIFD:DateTimeOriginal",
+    "ExifIFD:CreateDate",
+    "IFD0:DateTimeOriginal",
+    "IFD0:CreateDate",
+    "Composite:SubSecDateTimeOriginal",
+]
+# exiftool date format (with -n: numeric, dates keep string format).
+_EXIF_DT_FMT = "%Y:%m:%d %H:%M:%S"
+
+
+def _resolve_captured_at(metadata: Dict[str, str], path: Path, mtime: float) -> float | None:
+    """Return a UTC Unix timestamp for when the image was captured.
+
+    Priority:
+    1. EXIF date tags (DateTimeOriginal / CreateDate, etc.) — treated as local
+       wall-clock time and stored as UTC epoch (no timezone conversion, same
+       approach used by most EXIF consumers).
+    2. File creation time (st_birthtime on macOS, st_ctime on Windows).
+    3. File modification time (mtime) as last resort on Linux where no
+       creation time is available.
+    Returns None only if everything fails.
+    """
+    for key in _EXIF_DATE_KEYS:
+        raw = metadata.get(key, "")
+        if not raw:
+            continue
+        # Some values have a sub-second suffix: "2023:06:15 12:34:56.789"
+        raw_base = raw.split(".")[0].strip()
+        try:
+            t = strptime(raw_base, _EXIF_DT_FMT)
+            return float(timegm(t))
+        except ValueError:
+            continue
+
+    # Fall back to file-system timestamps.
+    try:
+        st = path.stat()
+        # macOS / FreeBSD: st_birthtime is the true creation time.
+        birth = getattr(st, "st_birthtime", None)
+        if birth is not None:
+            return float(birth)
+        # Windows: st_ctime is the file creation time (not "change time").
+        import os as _os
+        if _os.name == "nt":
+            return float(st.st_ctime)
+    except OSError:
+        pass
+
+    # Linux last resort: use mtime.
+    return mtime
 
 
 class IndexerService:
@@ -139,6 +195,7 @@ class IndexerService:
                     return None
                 metadata = self.extractor.extract(path)
                 metadata_text = metadata_to_text(metadata)
+                captured_at = _resolve_captured_at(metadata, path, mtime)
                 return IndexedImage(
                     path=str(path),
                     filename=path.name,
@@ -146,6 +203,7 @@ class IndexerService:
                     size=size,
                     metadata=metadata,
                     metadata_text=metadata_text,
+                    captured_at=captured_at,
                 )
             except Exception as exc:
                 _log.warning("Skipping %s: %s", path, exc)
@@ -173,7 +231,7 @@ class IndexerService:
                 return
             _write_batch.append((
                 item.path, item.filename, item.mtime, item.size,
-                item.metadata, item.metadata_text, folder_id,
+                item.metadata, item.metadata_text, folder_id, item.captured_at,
             ))
             existing_paths.append(item.path)
             count += 1

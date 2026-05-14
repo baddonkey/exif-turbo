@@ -46,6 +46,9 @@ class BulkOpWorker(QThread):
         sort_by: str = "path_asc",
         # select_missing_thumbs
         cache_dir: Path | None = None,
+        # date filter
+        date_from: int | None = None,
+        date_to: int | None = None,
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -60,6 +63,8 @@ class BulkOpWorker(QThread):
         self._file_path = file_path
         self._sort_by = sort_by
         self._cache_dir = cache_dir
+        self._date_from = date_from
+        self._date_to = date_to
         self._cancel_event = threading.Event()
 
         # Output fields — read by the controller in the finished slot
@@ -108,6 +113,8 @@ class BulkOpWorker(QThread):
             path_filter=self._path_filter,
             restrict_to_enabled_folders=self._restrict_to_enabled_folders,
             marked_only=self._marked_only,
+            date_from=self._date_from,
+            date_to=self._date_to,
         )
 
         if self._is_canceled():
@@ -150,6 +157,8 @@ class BulkOpWorker(QThread):
             path_filter=self._path_filter,
             restrict_to_enabled_folders=self._restrict_to_enabled_folders,
             marked_only=self._marked_only,
+            date_from=self._date_from,
+            date_to=self._date_to,
         )
 
         if self._is_canceled():
@@ -203,6 +212,8 @@ class BulkOpWorker(QThread):
             path_filter=self._path_filter,
             restrict_to_enabled_folders=self._restrict_to_enabled_folders,
             marked_only=self._marked_only,
+            date_from=self._date_from,
+            date_to=self._date_to,
         )
         if self._is_canceled():
             self.canceled.emit()

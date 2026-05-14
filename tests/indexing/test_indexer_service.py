@@ -332,3 +332,88 @@ def test_build_index_calls_progress_callback(
     assert progress_calls[-1] == (0, 3, Path(""))   # scan-complete sentinel
     assert [c for c, _, _ in progress_calls[:-1]] == [1, 2, 3]
     assert all(t == 0 for _, t, _ in progress_calls[:-1])
+
+
+# ── _resolve_captured_at ─────────────────────────────────────────────────────
+
+from exif_turbo.indexing.indexer_service import _resolve_captured_at  # noqa: E402
+
+
+def test_resolve_captured_at_uses_datetime_original(tmp_path: Path) -> None:
+    # Arrange
+    img = _make_jpeg(tmp_path / "shot.jpg")
+    metadata = {"ExifIFD:DateTimeOriginal": "2023:06:15 10:30:00"}
+
+    # Act
+    result = _resolve_captured_at(metadata, img, mtime=9999.0)
+
+    # Assert — parsed as UTC epoch: 2023-06-15 10:30:00 UTC
+    from calendar import timegm
+    from time import strptime
+    expected = float(timegm(strptime("2023:06:15 10:30:00", "%Y:%m:%d %H:%M:%S")))
+    assert result == expected
+
+
+def test_resolve_captured_at_prefers_datetimeoriginal_over_createdate(tmp_path: Path) -> None:
+    # Arrange — both present; DateTimeOriginal should win
+    img = _make_jpeg(tmp_path / "shot.jpg")
+    metadata = {
+        "ExifIFD:DateTimeOriginal": "2022:01:01 00:00:00",
+        "ExifIFD:CreateDate": "2020:01:01 00:00:00",
+    }
+
+    # Act
+    result = _resolve_captured_at(metadata, img, mtime=9999.0)
+
+    # Assert
+    from calendar import timegm
+    from time import strptime
+    expected = float(timegm(strptime("2022:01:01 00:00:00", "%Y:%m:%d %H:%M:%S")))
+    assert result == expected
+
+
+def test_resolve_captured_at_strips_subsecond_suffix(tmp_path: Path) -> None:
+    # Arrange — exiftool sometimes returns fractional seconds
+    img = _make_jpeg(tmp_path / "shot.jpg")
+    metadata = {"ExifIFD:DateTimeOriginal": "2023:06:15 10:30:00.456"}
+
+    # Act
+    result = _resolve_captured_at(metadata, img, mtime=9999.0)
+
+    # Assert — fractional part stripped, same epoch as whole-second version
+    from calendar import timegm
+    from time import strptime
+    expected = float(timegm(strptime("2023:06:15 10:30:00", "%Y:%m:%d %H:%M:%S")))
+    assert result == expected
+
+
+def test_resolve_captured_at_falls_back_to_mtime_when_no_exif(tmp_path: Path) -> None:
+    # Arrange — no EXIF date keys in metadata; use a real file on disk
+    img = _make_jpeg(tmp_path / "shot.jpg")
+    mtime = 1234567.89
+
+    # Act
+    result = _resolve_captured_at({}, img, mtime=mtime)
+
+    # Assert — result is either fs creation time or mtime; both are non-None
+    # and non-negative.  We only guarantee non-None here.
+    assert result is not None
+    assert result > 0
+
+
+def test_resolve_captured_at_skips_invalid_exif_and_falls_back(tmp_path: Path) -> None:
+    # Arrange — malformed date string should be skipped
+    img = _make_jpeg(tmp_path / "shot.jpg")
+    metadata = {
+        "ExifIFD:DateTimeOriginal": "not-a-date",
+        "ExifIFD:CreateDate": "2021:03:04 12:00:00",
+    }
+
+    # Act
+    result = _resolve_captured_at(metadata, img, mtime=9999.0)
+
+    # Assert — falls through to CreateDate
+    from calendar import timegm
+    from time import strptime
+    expected = float(timegm(strptime("2021:03:04 12:00:00", "%Y:%m:%d %H:%M:%S")))
+    assert result == expected

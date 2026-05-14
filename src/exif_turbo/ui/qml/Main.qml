@@ -221,6 +221,13 @@ ApplicationWindow {
     readonly property int    _bulkProgressTotal:  controller ? controller.bulkProgressTotal  : 0
     readonly property bool   _isUnlocking:        controller ? controller.isUnlocking        : false
 
+    readonly property int    _dateFrom:   controller ? controller.dateFrom   : 0
+    readonly property int    _dateTo:     controller ? controller.dateTo     : 0
+    readonly property string _yearCounts: controller ? controller.yearCounts : "[]"
+    readonly property var    _years: {
+        try { return JSON.parse(_yearCounts) } catch(e) { return [] }
+    }
+
     // Settings model null-safe proxies
     readonly property int    _workerCount:         settingsModel ? settingsModel.workerCount   : 4
     readonly property int    _minWorkers:          settingsModel ? settingsModel.minWorkers    : 1
@@ -1355,6 +1362,165 @@ ApplicationWindow {
                                             onClicked: controller.setExtFilter(modelData.ext)
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Date-filter row ───────────────────────────────────
+                    // Shown whenever at least one image has a known captured_at.
+                    // Contains a mini histogram (year bars) + From/To year pickers.
+                    Rectangle {
+                        id: dateFilterRow
+                        Layout.fillWidth: true
+                        readonly property bool _hasYears: root._years.length > 0
+                        readonly property bool _filterActive: root._dateFrom > 0 || root._dateTo > 0
+                        implicitHeight: _hasYears ? 68 : 0
+                        visible: _hasYears
+                        color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.04)
+
+                        // Compute histogram max for bar height scaling.
+                        readonly property int _maxCount: {
+                            var m = 1
+                            var ys = root._years
+                            for (var i = 0; i < ys.length; i++)
+                                if (ys[i].count > m) m = ys[i].count
+                            return m
+                        }
+
+                        // Min/max year available
+                        readonly property int _minYear: root._years.length > 0 ? root._years[0].year : 0
+                        readonly property int _maxYear: root._years.length > 0 ? root._years[root._years.length - 1].year : 0
+
+                        // Active filter years (0 = unset → use min/max)
+                        readonly property int _activeFrom: root._dateFrom > 0
+                            ? new Date(root._dateFrom * 1000).getUTCFullYear()
+                            : _minYear
+                        readonly property int _activeTo:   root._dateTo > 0
+                            ? new Date(root._dateTo   * 1000).getUTCFullYear()
+                            : _maxYear
+
+                        RowLayout {
+                            anchors { fill: parent; leftMargin: 8; rightMargin: 8; topMargin: 4; bottomMargin: 4 }
+                            spacing: 8
+
+                            FloatingBadge { text: qsTr("TAKEN") }
+
+                            // ── Mini histogram ────────────────────────────
+                            Flickable {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                contentWidth: histRow.implicitWidth
+                                flickableDirection: Flickable.HorizontalFlick
+                                clip: true
+
+                                Row {
+                                    id: histRow
+                                    anchors.bottom: parent.bottom
+                                    spacing: 2
+
+                                    Repeater {
+                                        model: root._years
+                                        delegate: Item {
+                                            required property var modelData
+                                            width: 18
+                                            height: dateFilterRow.height - 8
+
+                                            readonly property bool _inRange:
+                                                modelData.year >= dateFilterRow._activeFrom &&
+                                                modelData.year <= dateFilterRow._activeTo
+                                            readonly property int _barH:
+                                                Math.max(3, Math.round(
+                                                    (modelData.count / dateFilterRow._maxCount) * (height - 18)
+                                                ))
+
+                                            // Year label
+                                            Label {
+                                                anchors { bottom: bar.top; horizontalCenter: parent.horizontalCenter; bottomMargin: 1 }
+                                                text: modelData.year.toString()
+                                                font.pixelSize: 8
+                                                rotation: -45
+                                                transformOrigin: Item.Center
+                                                opacity: _inRange ? 1.0 : 0.4
+                                                color: _inRange ? Material.foreground : Material.foreground
+                                            }
+
+                                            // Bar
+                                            Rectangle {
+                                                id: bar
+                                                anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
+                                                width: 14
+                                                height: parent._barH
+                                                radius: 2
+                                                color: parent._inRange
+                                                       ? root._accentColor
+                                                       : Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.25)
+
+                                                Behavior on height { NumberAnimation { duration: 150 } }
+                                            }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                hoverEnabled: true
+                                                onClicked: (mouse) => {
+                                                    var yr = modelData.year
+                                                    var yStart = Math.floor(Date.UTC(yr,   0, 1) / 1000)
+                                                    var yEnd   = Math.floor(Date.UTC(yr+1, 0, 1) / 1000) - 1
+                                                    if (dateFilterRow._activeFrom === yr && dateFilterRow._activeTo === yr
+                                                            && root._dateFrom > 0) {
+                                                        // clicking the already-selected single year → clear
+                                                        controller.clearDateFilter()
+                                                    } else if (root._dateFrom > 0 && (mouse.modifiers & Qt.ShiftModifier)) {
+                                                        // shift-click → extend range to include this year
+                                                        var fromTs = yr < dateFilterRow._activeFrom
+                                                            ? yStart
+                                                            : Math.floor(Date.UTC(dateFilterRow._activeFrom, 0, 1) / 1000)
+                                                        var toTs = yr > dateFilterRow._activeTo
+                                                            ? yEnd
+                                                            : Math.floor(Date.UTC(dateFilterRow._activeTo + 1, 0, 1) / 1000) - 1
+                                                        controller.setDateFilter(fromTs, toTs)
+                                                    } else {
+                                                        controller.setDateFilter(yStart, yEnd)
+                                                    }
+                                                }
+                                                ToolTip.text: {
+                                                    var base = modelData.year + ": " + modelData.count + " " + qsTr("images")
+                                                    if (root._dateFrom > 0 && !(dateFilterRow._activeFrom === modelData.year && dateFilterRow._activeTo === modelData.year))
+                                                        return base + "\n" + qsTr("Shift-click to extend range")
+                                                    return base
+                                                }
+                                                ToolTip.visible: containsMouse
+                                                ToolTip.delay: 400
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ── Clear chip ────────────────────────────────
+                            Rectangle {
+                                visible: dateFilterRow._filterActive
+                                implicitHeight: 22
+                                implicitWidth: _clearDateLabel.implicitWidth + 14
+                                radius: 11
+                                color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.15)
+
+                                Label {
+                                    id: _clearDateLabel
+                                    anchors.centerIn: parent
+                                    text: "\u2715"
+                                    font.pixelSize: 11
+                                    color: Material.foreground
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: controller.clearDateFilter()
+                                    ToolTip.text: qsTr("Clear date filter")
+                                    ToolTip.visible: containsMouse
+                                    ToolTip.delay: 400
                                 }
                             }
                         }
