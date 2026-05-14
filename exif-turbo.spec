@@ -78,10 +78,7 @@ _common_hiddenimports = [
     'sqlcipher3',
     'markdown',
     'markdown.extensions.tables',
-]
-
-# ── GUI executable ─────────────────────────────────────────────────────────────
-a_gui = Analysis(
+        'av',
     ['src\\exif_turbo\\app.py'],
     pathex=['src'],
     binaries=[],

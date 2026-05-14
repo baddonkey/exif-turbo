@@ -38,6 +38,7 @@ a = Analysis(
         'sqlcipher3',
         'markdown',
         'markdown.extensions.tables',
+        'av',
     ],
     hookspath=[],
     hooksconfig={},
