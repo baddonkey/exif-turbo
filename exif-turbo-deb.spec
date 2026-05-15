@@ -56,6 +56,12 @@ a_gui = Analysis(
     optimize=0,
 )
 
+# Exclude GCC runtime libs so the system versions are used at runtime.
+# Bundling them causes GLIBCXX version mismatches on distros newer than the
+# build container (e.g. Debian/Ubuntu with GCC 13 vs Ubuntu 24.04 with GCC 13).
+a_gui.binaries = [b for b in a_gui.binaries
+                  if not b[0].startswith(('libstdc++', 'libgcc_s'))]
+
 pyz_gui = PYZ(a_gui.pure)
 
 exe_gui = EXE(
