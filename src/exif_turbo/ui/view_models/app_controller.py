@@ -2157,6 +2157,16 @@ class AppController(QObject):
         self._set_status(_("Database reset"))
 
     @Slot(str)
+    def openUrl(self, url: str) -> None:
+        """Open an arbitrary URL (http/https/file) in the system default app."""
+        if not url:
+            return
+        if sys.platform == "linux":
+            subprocess.Popen(["xdg-open", url], env=_pyinstaller_clean_env())
+        else:
+            QDesktopServices.openUrl(QUrl(url))
+
+    @Slot(str)
     def openImage(self, path: str) -> None:
         if path and os.path.exists(path):
             if sys.platform == "linux":

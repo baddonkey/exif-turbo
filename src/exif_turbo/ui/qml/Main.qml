@@ -296,7 +296,7 @@ ApplicationWindow {
                 text: "<a href='https://exiftool.org/' style='color: " + Material.accent + ";'>https://exiftool.org/</a>"
                 font.pixelSize: 13
                 textFormat: Text.RichText
-                onLinkActivated: (link) => Qt.openUrlExternally(link)
+                onLinkActivated: (link) => controller.openUrl(link)
                 HoverHandler { cursorShape: Qt.PointingHandCursor }
             }
 
@@ -357,7 +357,7 @@ ApplicationWindow {
                 onNavigationRequested: (request) => {
                     // navigationType 0 = LinkClickedNavigation
                     if (request.navigationType === WebEngineNavigationRequest.LinkClickedNavigation) {
-                        Qt.openUrlExternally(request.url)
+                        controller.openUrl(request.url.toString())
                         request.action = WebEngineNavigationRequest.IgnoreRequest
                         request.accepted = false
                     }
@@ -452,7 +452,7 @@ ApplicationWindow {
             Action {
                 text: qsTr("&User Manual")
                 enabled: typeof userManualUrl !== "undefined" && userManualUrl !== ""
-                onTriggered: Qt.openUrlExternally(userManualUrl)
+                onTriggered: controller.openUrl(userManualUrl)
             }
             Action {
                 text: qsTr("Third-Party &Licenses")
@@ -2204,7 +2204,7 @@ ApplicationWindow {
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: Qt.openUrlExternally(_geoLocationUrl)
+                                    onClicked: controller.openUrl(_geoLocationUrl)
                                 }
                                 ToolTip.text: _geoLocationUrl
                                 ToolTip.visible: osmLinkHover.hovered
@@ -2223,7 +2223,7 @@ ApplicationWindow {
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: Qt.openUrlExternally(_geoGoogleMapsUrl)
+                                    onClicked: controller.openUrl(_geoGoogleMapsUrl)
                                 }
                                 ToolTip.text: _geoGoogleMapsUrl
                                 ToolTip.visible: gmapsLinkHover.hovered
@@ -2242,7 +2242,7 @@ ApplicationWindow {
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: Qt.openUrlExternally(_geoWikipediaUrl)
+                                    onClicked: controller.openUrl(_geoWikipediaUrl)
                                 }
                                 ToolTip.text: _geoWikipediaUrl
                                 ToolTip.visible: wikiLinkHover.hovered
@@ -3336,7 +3336,7 @@ ApplicationWindow {
                         text: "<a href='https://exiftool.org/' style='color: " + Material.accent + ";'>https://exiftool.org/</a>"
                         font.pixelSize: 12
                         textFormat: Text.RichText
-                        onLinkActivated: (link) => Qt.openUrlExternally(link)
+                        onLinkActivated: (link) => controller.openUrl(link)
                         Layout.bottomMargin: 2
                         HoverHandler { cursorShape: Qt.PointingHandCursor }
                     }
