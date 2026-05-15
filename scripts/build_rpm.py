@@ -22,7 +22,13 @@ CONTAINER_IMAGE = "almalinux:9"
 
 CONTAINER_SCRIPT = """\
 set -e
-dnf install -y -q python3.11 python3.11-devel python3-pip rpm-build
+dnf install -y -q \
+    python3.11 python3.11-devel python3-pip rpm-build \
+    nss libXfixes libxkbfile libxkbcommon libxkbcommon-x11 \
+    xcb-util xcb-util-wm xcb-util-image xcb-util-keysyms xcb-util-renderutil xcb-util-cursor \
+    libxcb mesa-libgbm pango alsa-lib pulseaudio-libs libtiff \
+    atk at-spi2-atk cups-libs \
+    libXcomposite libXdamage libXrandr libxshmfence
 python3.11 -m venv /build-venv
 . /build-venv/bin/activate
 pip install --quiet -e '.[build]'

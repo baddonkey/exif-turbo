@@ -224,6 +224,11 @@ def build_rpm(bundle_dir: Path, version: str) -> Path:
             License:        MIT
             AutoReqProv:    no
             Obsoletes:      exif-turbo < %{{version}}
+            Requires:       nss, libXfixes, libxkbfile, libxkbcommon, libxkbcommon-x11
+            Requires:       xcb-util, xcb-util-wm, xcb-util-image, xcb-util-keysyms, xcb-util-renderutil, xcb-util-cursor
+            Requires:       libxcb, mesa-libgbm, pango, alsa-lib, pulseaudio-libs, libtiff
+            Requires:       atk, at-spi2-atk, cups-libs
+            Requires:       libXcomposite, libXdamage, libXrandr, libxshmfence
 
             %description
             Cross-platform image EXIF metadata search and indexing tool.
