@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-14 13:51+0200\n"
+"POT-Creation-Date: 2026-05-15 21:11+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: rm\n"
@@ -18,123 +18,123 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:138
+#: src/exif_turbo/ui/view_models/app_controller.py:156
 msgid "Enter the database password to continue"
 msgstr "Endatar la pled-clav da la banca da datas per cuntinuar"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:591
+#: src/exif_turbo/ui/view_models/app_controller.py:609
 msgid "Selecting all matching images…"
 msgstr "Seleziun da tuts ils maletgs correspundentas…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:601
+#: src/exif_turbo/ui/view_models/app_controller.py:619
 msgid "Deselecting all matching images…"
 msgstr "Deseleziun da tuts ils maletgs correspundentas…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:611
+#: src/exif_turbo/ui/view_models/app_controller.py:629
 msgid "Inverting selection…"
 msgstr "Inversiun da la selecziun…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:625
+#: src/exif_turbo/ui/view_models/app_controller.py:643
 msgid "Selecting images without a cached thumbnail…"
 msgstr "Seleziun da maletgs senza miniatura en il cache…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:640
+#: src/exif_turbo/ui/view_models/app_controller.py:658
 msgid "No marked images to delete."
 msgstr "Nagins maletgs marcads per stizzar."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:644
+#: src/exif_turbo/ui/view_models/app_controller.py:662
 msgid "Deleting marked images…"
 msgstr "Maletgs marcads vegnan stizzads…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:654
+#: src/exif_turbo/ui/view_models/app_controller.py:672
 msgid "No marked images to export."
 msgstr "Nagins maletgs marcads per exportar."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:659
+#: src/exif_turbo/ui/view_models/app_controller.py:677
 msgid "Exporting metadata…"
 msgstr "Exportaziun da metadata…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:740
+#: src/exif_turbo/ui/view_models/app_controller.py:758
 #, python-brace-format
 msgid "Deleted {n} image(s)."
 msgstr "{n} maletg(s) stizzad(s)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:744
+#: src/exif_turbo/ui/view_models/app_controller.py:762
 #, python-brace-format
 msgid "{n} were already missing."
 msgstr "{n} eran gia betg chattabels."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:750
+#: src/exif_turbo/ui/view_models/app_controller.py:768
 #, python-brace-format
 msgid "{n} could not be deleted."
 msgstr "{n} n’han betg pudì vegnir stizzads."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:760
+#: src/exif_turbo/ui/view_models/app_controller.py:778
 #, python-brace-format
 msgid "Exported {count} image(s) to {name}"
 msgstr "{count} maletg(s) exportad(s) en {name}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:769
+#: src/exif_turbo/ui/view_models/app_controller.py:787
 #, python-brace-format
 msgid "Operation failed: {}"
 msgstr "Operaziun buca reussida: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:775
+#: src/exif_turbo/ui/view_models/app_controller.py:793
 msgid "Operation canceled."
 msgstr "Operaziun annullada."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:861
+#: src/exif_turbo/ui/view_models/app_controller.py:879
 msgid "Wrong password — please try again."
 msgstr "Pled-clav fauss — emprova p.pl. anc ina giada."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:873
+#: src/exif_turbo/ui/view_models/app_controller.py:891
 #, python-brace-format
 msgid "Failed to open database: {error}"
 msgstr "Impussibel da rir la banca da datas: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:899
+#: src/exif_turbo/ui/view_models/app_controller.py:917
 msgid "Database is locked."
 msgstr "La banca da datas è serrada."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:904
+#: src/exif_turbo/ui/view_models/app_controller.py:922
 msgid "Cannot change password while indexing or thumb-building is running."
 msgstr ""
 "Impussibel da midar la pled-clav durant l’indexaziun u la creaziun da "
 "miniaturas."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:908
+#: src/exif_turbo/ui/view_models/app_controller.py:926
 msgid "Current password is incorrect."
 msgstr "La pled-clav actuala n’è betg correcta."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:911
+#: src/exif_turbo/ui/view_models/app_controller.py:929
 msgid "New password must not be empty."
 msgstr "La nova pled-clav na dastga betg esser vida."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:915
+#: src/exif_turbo/ui/view_models/app_controller.py:933
 msgid "New password must differ from the current password."
 msgstr "La nova pled-clav sto esser differenta da quella actuala."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:933
+#: src/exif_turbo/ui/view_models/app_controller.py:951
 msgid "Changing password…"
 msgstr "Pled-clav vegn midada…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:974
+#: src/exif_turbo/ui/view_models/app_controller.py:992
 #, python-brace-format
 msgid "Database password changed, but reopening failed: {error}"
 msgstr ""
 "La pled-clav da la banca da datas è vegnida midada, ma la reaviertura n’è"
 " betg reussida: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:984
+#: src/exif_turbo/ui/view_models/app_controller.py:1002
 msgid "Password changed successfully."
 msgstr "Pled-clav midada cun success."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1025
+#: src/exif_turbo/ui/view_models/app_controller.py:1043
 #, python-brace-format
 msgid "Failed to change password: {error}"
 msgstr "Midada da la pled-clav betg reussida: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1030
+#: src/exif_turbo/ui/view_models/app_controller.py:1048
 #, python-brace-format
 msgid ""
 "Password changed but thumbnail cache could not be re-wrapped ({error}). "
@@ -143,95 +143,95 @@ msgstr ""
 "La pled-clav è vegnida midada, ma il cache da miniaturas n’è betg pudida "
 "vegnir cifrada da nov ({error}). Il cache è vegnì stizzad e vegn rebatgì."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1459
+#: src/exif_turbo/ui/view_models/app_controller.py:1477
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Cartella gia trackata: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1683
+#: src/exif_turbo/ui/view_models/app_controller.py:1701
 #, python-brace-format
 msgid "Indexing {}…"
 msgstr "Indexaziun {}…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1719
+#: src/exif_turbo/ui/view_models/app_controller.py:1737
 #, python-brace-format
 msgid "Indexed {count} images ({errors} skipped due to errors)"
 msgstr "{count} maletgs indexads ({errors} sursiglids pervia d’errurs)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1724
+#: src/exif_turbo/ui/view_models/app_controller.py:1742
 #, python-brace-format
 msgid "Indexed {} images"
 msgstr "{} maletgs indexads"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1757
+#: src/exif_turbo/ui/view_models/app_controller.py:1775
 #, python-brace-format
 msgid "Index failed: {}"
 msgstr "Indexaziun buca reussida: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1789
+#: src/exif_turbo/ui/view_models/app_controller.py:1807
 msgid "Index canceled"
 msgstr "Indexaziun interrutta"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1809
+#: src/exif_turbo/ui/view_models/app_controller.py:1827
 msgid "Canceling…"
 msgstr "Interruziun…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1904
+#: src/exif_turbo/ui/view_models/app_controller.py:1922
 #, python-brace-format
 msgid "Built {built} preview(s) of {total}."
 msgstr "{built} prevista(s) da {total} creada(s)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1912
+#: src/exif_turbo/ui/view_models/app_controller.py:1930
 #, python-brace-format
 msgid "Preview build failed: {error}"
 msgstr "Creaziun da previstas buca reussida: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1920
+#: src/exif_turbo/ui/view_models/app_controller.py:1938
 #, python-brace-format
 msgid "Preview build canceled ({built} of {total} done)."
 msgstr "Creaziun da previstas interrutta ({built} da {total} fatg)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1933
+#: src/exif_turbo/ui/view_models/app_controller.py:1951
 msgid "Cancel the running preview build before clearing the cache."
 msgstr "Interrumper la creaziun da previstas en cors avant da stizzar il cache."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1942
+#: src/exif_turbo/ui/view_models/app_controller.py:1960
 #, python-brace-format
 msgid "Failed to clear preview cache: {error}"
 msgstr "Stizzar il cache da previstas n’è betg reussì: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1948
+#: src/exif_turbo/ui/view_models/app_controller.py:1966
 #, python-brace-format
 msgid "Removed {n} cached preview(s)."
 msgstr "{n} prevista(s) dal cache vegnida(s) stizzada(s)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2077
+#: src/exif_turbo/ui/view_models/app_controller.py:2095
 msgid "Image copied to clipboard"
 msgstr "Maletg copià en la tavla d’interscambi"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2081
+#: src/exif_turbo/ui/view_models/app_controller.py:2099
 msgid "Path copied to clipboard"
 msgstr "Traject copià en la tavla d’interscambi"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2139
+#: src/exif_turbo/ui/view_models/app_controller.py:2157
 msgid "Database reset"
 msgstr "Banca da datas resettada"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2309
+#: src/exif_turbo/ui/view_models/app_controller.py:2343
 msgid "Cleaning up cache…"
 msgstr "Stizzar il cache…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2329
+#: src/exif_turbo/ui/view_models/app_controller.py:2363
 #, python-brace-format
 msgid "Indexing… {} (scanning)"
 msgstr "Indexaziun… {} (tscherta)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2331
+#: src/exif_turbo/ui/view_models/app_controller.py:2365
 #, python-brace-format
 msgid "Indexing… 0 / {}"
 msgstr "Indexaziun… 0 / {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2333
+#: src/exif_turbo/ui/view_models/app_controller.py:2367
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indexaziun… {} / {}"
@@ -246,7 +246,7 @@ msgstr "%1 cartellas"
 
 #: QML
 msgid "%1 of %2 previews cached"
-msgstr ""
+msgstr "%1 da %2 previstas en cache"
 
 #: QML
 msgid "&About"
@@ -258,7 +258,7 @@ msgstr "&Acziun"
 
 #: QML
 msgid "&Delete Marked Images\\u2026 (%1 selected)"
-msgstr ""
+msgstr "Stizzar maletgs marcads… (%1 seletgad(s))"
 
 #: QML
 msgid "&Deselect All"
@@ -306,7 +306,7 @@ msgstr "Tuts"
 
 #: QML
 msgid "All %1 previews are cached"
-msgstr ""
+msgstr "Tut las %1 previstas èn en cache"
 
 #: QML
 msgid "All files (*)"
@@ -322,11 +322,11 @@ msgstr "Navigar"
 
 #: QML
 msgid "Build Previews"
-msgstr ""
+msgstr "Crear previstas"
 
 #: QML
 msgid "Building Previews"
-msgstr ""
+msgstr "Creaziun da previstas"
 
 #: QML
 msgid "Building Thumbnails"
@@ -346,7 +346,7 @@ msgstr "Interrumper indexaziun"
 
 #: QML
 msgid "Cancel Previews"
-msgstr ""
+msgstr "Interrumper previstas"
 
 #: QML
 msgid "Cancel Thumbnails"
@@ -354,7 +354,7 @@ msgstr "Interrumper miniatures"
 
 #: QML
 msgid "Cancel the running preview build"
-msgstr ""
+msgstr "Interrumper la creaziun da previstas en cors"
 
 #: QML
 msgid "Canceling\\u2026"
@@ -378,11 +378,11 @@ msgstr "Controlliar"
 
 #: QML
 msgid "Clear Preview Cache"
-msgstr ""
+msgstr "Stizzar il cache da previstas"
 
 #: QML
 msgid "Clear Previews"
-msgstr ""
+msgstr "Stizzar previstas"
 
 #: QML
 msgid "Clear date filter"
@@ -445,14 +445,16 @@ msgid ""
 "Delete %1 cached preview(s) for \"%2\"?\n"
 "Thumbnails are unaffected."
 msgstr ""
+"Stizzar %1 prevista(s) en cache per „%2“?\n"
+"Las miniaturas n’èn betg tuccadas."
 
 #: QML
 msgid "Delete Marked Images"
-msgstr ""
+msgstr "Stizzar maletgs marcads"
 
 #: QML
 msgid "Delete all cached previews for this folder"
-msgstr ""
+msgstr "Stizzar tut las previstas en cache per questa cartella"
 
 #: QML
 msgid "Deselect image"
@@ -476,7 +478,7 @@ msgstr "TAGS EXIF"
 
 #: QML
 msgid "Enter %1"
-msgstr ""
+msgstr "Endatar %1"
 
 #: QML
 msgid "Enter the database password"
@@ -492,7 +494,7 @@ msgstr "Exempel"
 
 #: QML
 msgid "ExifTool"
-msgstr ""
+msgstr "ExifTool"
 
 #: QML
 msgid ""
@@ -600,15 +602,15 @@ msgstr "Re-indexaziun cumplaina da tut"
 
 #: QML
 msgid "GPS location —"
-msgstr ""
+msgstr "Posiziun GPS —"
 
 #: QML
 msgid "GeoHack"
-msgstr ""
+msgstr "GeoHack"
 
 #: QML
 msgid "Google Maps"
-msgstr ""
+msgstr "Google Maps"
 
 #: QML
 msgid "IMAGES"
@@ -636,7 +638,7 @@ msgstr "Indexaziun da la cartella %1 da %2"
 
 #: QML
 msgid "Indexing…"
-msgstr ""
+msgstr "Indexaziun…"
 
 #: QML
 msgid "JSON files (*.json)"
@@ -656,7 +658,7 @@ msgstr "Licenza: MIT"
 
 #: QML
 msgid "Loading original\\u2026"
-msgstr ""
+msgstr "Original vegn chargià…"
 
 #: QML
 msgid ""
@@ -664,6 +666,9 @@ msgid ""
 "give sharper detail when zooming but take more disk space and longer to "
 "render."
 msgstr ""
+"Resoluziun da la vart lunga utilisada dal constructor dal cache da "
+"previstas. Valurs pli autas procuran dapli detagls en il zoom, ma duvran "
+"dapli plaz sin il disc e pli lungas temps da render."
 
 #: QML
 msgid "METADATA"
@@ -739,7 +744,7 @@ msgstr "Pli vegl emprim"
 
 #: QML
 msgid "OpenStreetMap"
-msgstr ""
+msgstr "OpenStreetMap"
 
 #: QML
 msgid "PREVIEW"
@@ -781,6 +786,10 @@ msgid ""
 "\n"
 "This cannot be undone."
 msgstr ""
+"Stizzar definitivamente %1 datoteca(s) da maletg marcada(s) dal disc e "
+"stritgar d’il index?\n"
+"\n"
+"Quai na po betg vegnir annullà."
 
 #: QML
 msgid ""
@@ -796,7 +805,7 @@ msgstr "Preparaziun…"
 
 #: QML
 msgid "Preview Cache Size"
-msgstr ""
+msgstr "Grondezza dal cache da previstas"
 
 #: QML
 msgid "Previous match"
@@ -820,11 +829,11 @@ msgstr "Re-indexar questa cartella (incremental)"
 
 #: QML
 msgid "Recreate Preview"
-msgstr ""
+msgstr "Recrear prevista"
 
 #: QML
 msgid "Recreate Thumbnail"
-msgstr ""
+msgstr "Recrear miniatural"
 
 #: QML
 msgid "Remove"
@@ -844,7 +853,7 @@ msgstr "Stizzar questa cartella e ses maletgs indexads"
 
 #: QML
 msgid "Render preview-cache JPEGs for this folder"
-msgstr ""
+msgstr "Render JPEGs dal cache da previstas per questa cartella"
 
 #: QML
 msgid "Rescan"
@@ -884,7 +893,7 @@ msgstr "Tschertgar en metadata EXIF…"
 
 #: QML
 msgid "Search failed"
-msgstr ""
+msgstr "Tschertga buca reussida"
 
 #: QML
 msgid "Search syntax"
@@ -900,7 +909,7 @@ msgstr "Tscherner cartella per manaschar"
 
 #: QML
 msgid "Select Images Without &Thumbnail"
-msgstr ""
+msgstr "Seletgar maletgs senza &miniatural"
 
 #: QML
 msgid "Select a folder"
@@ -924,11 +933,11 @@ msgstr "Shift-clic per stender il rom"
 
 #: QML
 msgid "Show Original"
-msgstr ""
+msgstr "Mussar original"
 
 #: QML
 msgid "Show Preview"
-msgstr ""
+msgstr "Mussar prevista"
 
 #: QML
 msgid "Show all results"
@@ -941,10 +950,14 @@ msgstr "Mussar mo ils maletgs seletgads"
 #: QML
 msgid "Showing cached preview. Click to load the full-resolution source."
 msgstr ""
+"Prevista en cache musrada. Cliccar per chargiar la funtauna en resoluziun"
+" cumplaina."
 
 #: QML
 msgid "Showing full-resolution source. Click to use cached preview."
 msgstr ""
+"Funtauna en resoluziun cumplaina musrada. Cliccar per utilisar la "
+"prevista en cache."
 
 #: QML
 msgid "Smallest"
@@ -1002,7 +1015,7 @@ msgstr "Cussegls"
 
 #: QML
 msgid "To confirm, type the number %1 below:"
-msgstr ""
+msgstr "Per confermar, endatai il numer %1 sut:"
 
 #: QML
 msgid "Unlock"
@@ -1054,7 +1067,7 @@ msgstr "indexà, tscherta…"
 
 #: QML
 msgid "pixels (long edge)"
-msgstr ""
+msgstr "pixels (vart lunga)"
 
 #: QML
 msgid "prefix wildcard"
@@ -1062,7 +1075,7 @@ msgstr "joker da prefix"
 
 #: QML
 msgid "previews"
-msgstr ""
+msgstr "previstas"
 
 #: QML
 msgid "single token"

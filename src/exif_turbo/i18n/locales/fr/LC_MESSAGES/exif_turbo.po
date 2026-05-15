@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-14 13:51+0200\n"
+"POT-Creation-Date: 2026-05-15 21:11+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: fr\n"
@@ -18,123 +18,123 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:138
+#: src/exif_turbo/ui/view_models/app_controller.py:156
 msgid "Enter the database password to continue"
 msgstr "Saisir le mot de passe de la base de données pour continuer"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:591
+#: src/exif_turbo/ui/view_models/app_controller.py:609
 msgid "Selecting all matching images…"
 msgstr "Sélection de toutes les images correspondantes…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:601
+#: src/exif_turbo/ui/view_models/app_controller.py:619
 msgid "Deselecting all matching images…"
 msgstr "Désélection de toutes les images correspondantes…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:611
+#: src/exif_turbo/ui/view_models/app_controller.py:629
 msgid "Inverting selection…"
 msgstr "Inversion de la sélection…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:625
+#: src/exif_turbo/ui/view_models/app_controller.py:643
 msgid "Selecting images without a cached thumbnail…"
 msgstr "Sélection des images sans miniature en cache…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:640
+#: src/exif_turbo/ui/view_models/app_controller.py:658
 msgid "No marked images to delete."
 msgstr "Aucune image marquée à supprimer."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:644
+#: src/exif_turbo/ui/view_models/app_controller.py:662
 msgid "Deleting marked images…"
 msgstr "Suppression des images marquées…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:654
+#: src/exif_turbo/ui/view_models/app_controller.py:672
 msgid "No marked images to export."
 msgstr "Aucune image marquée à exporter."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:659
+#: src/exif_turbo/ui/view_models/app_controller.py:677
 msgid "Exporting metadata…"
 msgstr "Exportation des métadonnées…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:740
+#: src/exif_turbo/ui/view_models/app_controller.py:758
 #, python-brace-format
 msgid "Deleted {n} image(s)."
 msgstr "{n} image(s) supprimée(s)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:744
+#: src/exif_turbo/ui/view_models/app_controller.py:762
 #, python-brace-format
 msgid "{n} were already missing."
 msgstr "{n} étaient déjà manquantes."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:750
+#: src/exif_turbo/ui/view_models/app_controller.py:768
 #, python-brace-format
 msgid "{n} could not be deleted."
 msgstr "{n} n’ont pas pu être supprimées."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:760
+#: src/exif_turbo/ui/view_models/app_controller.py:778
 #, python-brace-format
 msgid "Exported {count} image(s) to {name}"
 msgstr "{count} image(s) exportée(s) vers {name}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:769
+#: src/exif_turbo/ui/view_models/app_controller.py:787
 #, python-brace-format
 msgid "Operation failed: {}"
 msgstr "Opération échouée : {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:775
+#: src/exif_turbo/ui/view_models/app_controller.py:793
 msgid "Operation canceled."
 msgstr "Opération annulée."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:861
+#: src/exif_turbo/ui/view_models/app_controller.py:879
 msgid "Wrong password — please try again."
 msgstr "Mot de passe incorrect — veuillez réessayer."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:873
+#: src/exif_turbo/ui/view_models/app_controller.py:891
 #, python-brace-format
 msgid "Failed to open database: {error}"
 msgstr "Échec de l’ouverture de la base de données : {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:899
+#: src/exif_turbo/ui/view_models/app_controller.py:917
 msgid "Database is locked."
 msgstr "La base de données est verrouillée."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:904
+#: src/exif_turbo/ui/view_models/app_controller.py:922
 msgid "Cannot change password while indexing or thumb-building is running."
 msgstr ""
 "Impossible de changer le mot de passe pendant l’indexation ou la création"
 " des miniatures."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:908
+#: src/exif_turbo/ui/view_models/app_controller.py:926
 msgid "Current password is incorrect."
 msgstr "Le mot de passe actuel est incorrect."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:911
+#: src/exif_turbo/ui/view_models/app_controller.py:929
 msgid "New password must not be empty."
 msgstr "Le nouveau mot de passe ne doit pas être vide."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:915
+#: src/exif_turbo/ui/view_models/app_controller.py:933
 msgid "New password must differ from the current password."
 msgstr "Le nouveau mot de passe doit être différent de l’actuel."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:933
+#: src/exif_turbo/ui/view_models/app_controller.py:951
 msgid "Changing password…"
 msgstr "Changement du mot de passe…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:974
+#: src/exif_turbo/ui/view_models/app_controller.py:992
 #, python-brace-format
 msgid "Database password changed, but reopening failed: {error}"
 msgstr ""
 "Mot de passe de la base de données modifié, mais la réouverture a échoué "
 ": {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:984
+#: src/exif_turbo/ui/view_models/app_controller.py:1002
 msgid "Password changed successfully."
 msgstr "Mot de passe modifié avec succès."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1025
+#: src/exif_turbo/ui/view_models/app_controller.py:1043
 #, python-brace-format
 msgid "Failed to change password: {error}"
 msgstr "Échec du changement de mot de passe : {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1030
+#: src/exif_turbo/ui/view_models/app_controller.py:1048
 #, python-brace-format
 msgid ""
 "Password changed but thumbnail cache could not be re-wrapped ({error}). "
@@ -143,95 +143,95 @@ msgstr ""
 "Mot de passe modifié, mais le cache des miniatures n’a pas pu être "
 "rechiffré ({error}). Le cache a été effacé et sera reconstruit."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1459
+#: src/exif_turbo/ui/view_models/app_controller.py:1477
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Dossier déjà suivi : {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1683
+#: src/exif_turbo/ui/view_models/app_controller.py:1701
 #, python-brace-format
 msgid "Indexing {}…"
 msgstr "Indexation de {}…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1719
+#: src/exif_turbo/ui/view_models/app_controller.py:1737
 #, python-brace-format
 msgid "Indexed {count} images ({errors} skipped due to errors)"
 msgstr "{count} images indexées ({errors} ignorées en raison d’erreurs)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1724
+#: src/exif_turbo/ui/view_models/app_controller.py:1742
 #, python-brace-format
 msgid "Indexed {} images"
 msgstr "{} images indexées"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1757
+#: src/exif_turbo/ui/view_models/app_controller.py:1775
 #, python-brace-format
 msgid "Index failed: {}"
 msgstr "Indexation échouée : {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1789
+#: src/exif_turbo/ui/view_models/app_controller.py:1807
 msgid "Index canceled"
 msgstr "Indexation annulée"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1809
+#: src/exif_turbo/ui/view_models/app_controller.py:1827
 msgid "Canceling…"
 msgstr "Annulation…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1904
+#: src/exif_turbo/ui/view_models/app_controller.py:1922
 #, python-brace-format
 msgid "Built {built} preview(s) of {total}."
 msgstr "{built} aperçu(s) créé(s) sur {total}."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1912
+#: src/exif_turbo/ui/view_models/app_controller.py:1930
 #, python-brace-format
 msgid "Preview build failed: {error}"
 msgstr "Création des aperçus échouée : {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1920
+#: src/exif_turbo/ui/view_models/app_controller.py:1938
 #, python-brace-format
 msgid "Preview build canceled ({built} of {total} done)."
 msgstr "Création des aperçus annulée ({built} sur {total} terminés)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1933
+#: src/exif_turbo/ui/view_models/app_controller.py:1951
 msgid "Cancel the running preview build before clearing the cache."
 msgstr "Annulez la création d’aperçus en cours avant de vider le cache."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1942
+#: src/exif_turbo/ui/view_models/app_controller.py:1960
 #, python-brace-format
 msgid "Failed to clear preview cache: {error}"
 msgstr "Échec du vidage du cache des aperçus : {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1948
+#: src/exif_turbo/ui/view_models/app_controller.py:1966
 #, python-brace-format
 msgid "Removed {n} cached preview(s)."
 msgstr "{n} aperçu(s) en cache supprimé(s)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2077
+#: src/exif_turbo/ui/view_models/app_controller.py:2095
 msgid "Image copied to clipboard"
 msgstr "Image copiée dans le presse-papiers"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2081
+#: src/exif_turbo/ui/view_models/app_controller.py:2099
 msgid "Path copied to clipboard"
 msgstr "Chemin copié dans le presse-papiers"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2139
+#: src/exif_turbo/ui/view_models/app_controller.py:2157
 msgid "Database reset"
 msgstr "Base de données réinitialisée"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2309
+#: src/exif_turbo/ui/view_models/app_controller.py:2343
 msgid "Cleaning up cache…"
 msgstr "Nettoyage du cache…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2329
+#: src/exif_turbo/ui/view_models/app_controller.py:2363
 #, python-brace-format
 msgid "Indexing… {} (scanning)"
 msgstr "Indexation… {} (analyse)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2331
+#: src/exif_turbo/ui/view_models/app_controller.py:2365
 #, python-brace-format
 msgid "Indexing… 0 / {}"
 msgstr "Indexation… 0 / {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2333
+#: src/exif_turbo/ui/view_models/app_controller.py:2367
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indexation… {} / {}"
@@ -246,7 +246,7 @@ msgstr "%1 dossiers"
 
 #: QML
 msgid "%1 of %2 previews cached"
-msgstr ""
+msgstr "%1 sur %2 aperçus en cache"
 
 #: QML
 msgid "&About"
@@ -258,7 +258,7 @@ msgstr "&Action"
 
 #: QML
 msgid "&Delete Marked Images\\u2026 (%1 selected)"
-msgstr ""
+msgstr "Supprimer les images marquées… (%1 sélectionnée(s))"
 
 #: QML
 msgid "&Deselect All"
@@ -306,7 +306,7 @@ msgstr "Tout"
 
 #: QML
 msgid "All %1 previews are cached"
-msgstr ""
+msgstr "Tous les %1 aperçus sont en cache"
 
 #: QML
 msgid "All files (*)"
@@ -322,11 +322,11 @@ msgstr "Parcourir"
 
 #: QML
 msgid "Build Previews"
-msgstr ""
+msgstr "Créer les aperçus"
 
 #: QML
 msgid "Building Previews"
-msgstr ""
+msgstr "Création des aperçus"
 
 #: QML
 msgid "Building Thumbnails"
@@ -346,7 +346,7 @@ msgstr "Annuler l’indexation"
 
 #: QML
 msgid "Cancel Previews"
-msgstr ""
+msgstr "Annuler les aperçus"
 
 #: QML
 msgid "Cancel Thumbnails"
@@ -354,7 +354,7 @@ msgstr "Annuler les miniatures"
 
 #: QML
 msgid "Cancel the running preview build"
-msgstr ""
+msgstr "Annuler la création d’aperçus en cours"
 
 #: QML
 msgid "Canceling\\u2026"
@@ -378,11 +378,11 @@ msgstr "Vérifier"
 
 #: QML
 msgid "Clear Preview Cache"
-msgstr ""
+msgstr "Vider le cache des aperçus"
 
 #: QML
 msgid "Clear Previews"
-msgstr ""
+msgstr "Effacer les aperçus"
 
 #: QML
 msgid "Clear date filter"
@@ -445,14 +445,16 @@ msgid ""
 "Delete %1 cached preview(s) for \"%2\"?\n"
 "Thumbnails are unaffected."
 msgstr ""
+"Supprimer %1 aperçu(s) en cache pour « %2 » ?\n"
+"Les miniatures ne sont pas concernées."
 
 #: QML
 msgid "Delete Marked Images"
-msgstr ""
+msgstr "Supprimer les images marquées"
 
 #: QML
 msgid "Delete all cached previews for this folder"
-msgstr ""
+msgstr "Supprimer tous les aperçus en cache pour ce dossier"
 
 #: QML
 msgid "Deselect image"
@@ -476,7 +478,7 @@ msgstr "TAGS EXIF"
 
 #: QML
 msgid "Enter %1"
-msgstr ""
+msgstr "Saisir %1"
 
 #: QML
 msgid "Enter the database password"
@@ -492,7 +494,7 @@ msgstr "Exemple"
 
 #: QML
 msgid "ExifTool"
-msgstr ""
+msgstr "ExifTool"
 
 #: QML
 msgid ""
@@ -601,15 +603,15 @@ msgstr "Réindexation complète de tout"
 
 #: QML
 msgid "GPS location —"
-msgstr ""
+msgstr "Position GPS —"
 
 #: QML
 msgid "GeoHack"
-msgstr ""
+msgstr "GeoHack"
 
 #: QML
 msgid "Google Maps"
-msgstr ""
+msgstr "Google Maps"
 
 #: QML
 msgid "IMAGES"
@@ -657,7 +659,7 @@ msgstr "Licence : MIT"
 
 #: QML
 msgid "Loading original\\u2026"
-msgstr ""
+msgstr "Chargement de l’original…"
 
 #: QML
 msgid ""
@@ -665,6 +667,9 @@ msgid ""
 "give sharper detail when zooming but take more disk space and longer to "
 "render."
 msgstr ""
+"Résolution du grand côté utilisée par le constructeur de cache d’aperçus."
+" Des valeurs plus élevées donnent plus de détails lors du zoom, mais "
+"utilisent plus d’espace disque et nécessitent plus de temps de rendu."
 
 #: QML
 msgid "METADATA"
@@ -741,7 +746,7 @@ msgstr "Plus ancien d’abord"
 
 #: QML
 msgid "OpenStreetMap"
-msgstr ""
+msgstr "OpenStreetMap"
 
 #: QML
 msgid "PREVIEW"
@@ -783,6 +788,10 @@ msgid ""
 "\n"
 "This cannot be undone."
 msgstr ""
+"Supprimer définitivement %1 fichier(s) image marqué(s) du disque et les "
+"retirer de l’index ?\n"
+"\n"
+"Cette opération ne peut pas être annulée."
 
 #: QML
 msgid ""
@@ -798,7 +807,7 @@ msgstr "Préparation…"
 
 #: QML
 msgid "Preview Cache Size"
-msgstr ""
+msgstr "Taille du cache d’aperçus"
 
 #: QML
 msgid "Previous match"
@@ -822,11 +831,11 @@ msgstr "Réindexer ce dossier (incrémentiel)"
 
 #: QML
 msgid "Recreate Preview"
-msgstr ""
+msgstr "Recréer l’aperçu"
 
 #: QML
 msgid "Recreate Thumbnail"
-msgstr ""
+msgstr "Recréer la miniature"
 
 #: QML
 msgid "Remove"
@@ -846,7 +855,7 @@ msgstr "Supprimer ce dossier et ses images indexées"
 
 #: QML
 msgid "Render preview-cache JPEGs for this folder"
-msgstr ""
+msgstr "Générer les JPEG du cache d’aperçus pour ce dossier"
 
 #: QML
 msgid "Rescan"
@@ -888,7 +897,7 @@ msgstr "Rechercher dans les métadonnées EXIF…"
 
 #: QML
 msgid "Search failed"
-msgstr ""
+msgstr "Recherche échouée"
 
 #: QML
 msgid "Search syntax"
@@ -904,7 +913,7 @@ msgstr "Sélectionner un dossier à gérer"
 
 #: QML
 msgid "Select Images Without &Thumbnail"
-msgstr ""
+msgstr "Sélectionner les images sans &miniature"
 
 #: QML
 msgid "Select a folder"
@@ -928,11 +937,11 @@ msgstr "Maj+clic pour étendre la plage"
 
 #: QML
 msgid "Show Original"
-msgstr ""
+msgstr "Afficher l’original"
 
 #: QML
 msgid "Show Preview"
-msgstr ""
+msgstr "Afficher l’aperçu"
 
 #: QML
 msgid "Show all results"
@@ -945,10 +954,14 @@ msgstr "Afficher uniquement les images sélectionnées"
 #: QML
 msgid "Showing cached preview. Click to load the full-resolution source."
 msgstr ""
+"Aperçu en cache affiché. Cliquez pour charger la source en pleine "
+"résolution."
 
 #: QML
 msgid "Showing full-resolution source. Click to use cached preview."
 msgstr ""
+"Source en pleine résolution affichée. Cliquez pour utiliser l’aperçu en "
+"cache."
 
 #: QML
 msgid "Smallest"
@@ -1006,7 +1019,7 @@ msgstr "Astuces"
 
 #: QML
 msgid "To confirm, type the number %1 below:"
-msgstr ""
+msgstr "Pour confirmer, saisissez le numéro %1 ci-dessous :"
 
 #: QML
 msgid "Unlock"
@@ -1058,7 +1071,7 @@ msgstr "indexé, analyse…"
 
 #: QML
 msgid "pixels (long edge)"
-msgstr ""
+msgstr "pixels (grand côté)"
 
 #: QML
 msgid "prefix wildcard"
@@ -1066,7 +1079,7 @@ msgstr "joker de préfixe"
 
 #: QML
 msgid "previews"
-msgstr ""
+msgstr "aperçus"
 
 #: QML
 msgid "single token"
