@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    groups:
+      security-patches:
+        update-types:
+          - "patch"
+      minor-and-major:
+        update-types:
+          - "minor"
+          - "major"
