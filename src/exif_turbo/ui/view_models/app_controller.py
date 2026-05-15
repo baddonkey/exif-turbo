@@ -56,6 +56,24 @@ _MAX_THUMB_WORKERS = 2
 _log = logging.getLogger(__name__)
 
 
+def _pyinstaller_clean_env() -> dict[str, str]:
+    """Return os.environ with LD_LIBRARY_PATH restored to its pre-bundle value.
+
+    PyInstaller's bootloader prepends the _internal/ bundle directory to
+    LD_LIBRARY_PATH so that bundled .so files are found.  Any subprocess
+    launched from the app inherits this polluted path, which causes system
+    tools like xdg-open to pick up incompatible bundled libraries and fail
+    silently.  PyInstaller saves the original value as LD_LIBRARY_PATH_ORIG.
+    """
+    env = os.environ.copy()
+    orig = env.pop("LD_LIBRARY_PATH_ORIG", None)
+    if orig is not None:
+        env["LD_LIBRARY_PATH"] = orig
+    else:
+        env.pop("LD_LIBRARY_PATH", None)
+    return env
+
+
 class AppController(QObject):
     statusTextChanged = Signal()
     isIndexingChanged = Signal()
@@ -2141,7 +2159,10 @@ class AppController(QObject):
     @Slot(str)
     def openImage(self, path: str) -> None:
         if path and os.path.exists(path):
-            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+            if sys.platform == "linux":
+                subprocess.Popen(["xdg-open", path], env=_pyinstaller_clean_env())
+            else:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
     @Slot(str)
     def openFolder(self, path: str) -> None:
@@ -2157,7 +2178,10 @@ class AppController(QObject):
             # -R reveals (selects) the item in Finder.
             subprocess.Popen(["open", "-R", path])
         else:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(path).parent)))
+            subprocess.Popen(
+                ["xdg-open", str(Path(path).parent)],
+                env=_pyinstaller_clean_env(),
+            )
 
     # ── Private helpers ───────────────────────────────────────────────────────
 
