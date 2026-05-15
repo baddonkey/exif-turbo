@@ -148,6 +148,37 @@ def build_deb(bundle_dir: Path, version: str) -> Path:
             sum(f.stat().st_size for f in staging.rglob("*") if f.is_file()) // 1024
         )
 
+        # System libraries required by Qt/WebEngine that are not bundled.
+        _deb_depends = ", ".join([
+            "libnss3",
+            "libxfixes3",
+            "libxkbfile1",
+            "libxkbcommon0",
+            "libxkbcommon-x11-0",
+            "libxcb-cursor0",
+            "libxcb-icccm4",
+            "libxcb-image0",
+            "libxcb-keysyms1",
+            "libxcb-render-util0",
+            "libxcb-render0",
+            "libxcb-shape0",
+            "libxcb-shm0",
+            "libxcb-util1",
+            "libxcb-xkb1",
+            "libxcb-glx0",
+            "libgbm1",
+            "libasound2t64 | libasound2",
+            "libpulse0",
+            "libtiff6 | libtiff5",
+            "libatk1.0-0",
+            "libatk-bridge2.0-0",
+            "libcups2",
+            "libxcomposite1",
+            "libxdamage1",
+            "libxrandr2",
+            "libpango-1.0-0",
+        ])
+
         debian_dir = staging / "DEBIAN"
         debian_dir.mkdir()
         (debian_dir / "control").write_text(
@@ -156,6 +187,7 @@ def build_deb(bundle_dir: Path, version: str) -> Path:
             f"Architecture: {arch}\n"
             f"Maintainer: exif-turbo contributors\n"
             f"Installed-Size: {installed_kb}\n"
+            f"Depends: {_deb_depends}\n"
             f"Description: Fast EXIF full-text image search\n"
             f" Cross-platform image EXIF metadata search and indexing tool.\n"
             f" Scans image folders, extracts EXIF metadata, stores it in a\n"
@@ -253,18 +285,22 @@ def main() -> None:
 
     compile_translations()
 
-    run(["pyinstaller", "--noconfirm", "--clean", "exif-turbo-linux.spec"])
-    print("  PyInstaller build complete.")
-
-    bundle_dir = REPO_ROOT / "dist" / "exif-turbo-linux"
-    artifacts: list[Path] = [bundle_dir]
+    artifacts: list[Path] = []
 
     if not args.rpm_only:
-        deb_out = build_deb(bundle_dir, version)
+        run(["pyinstaller", "--noconfirm", "--clean", "exif-turbo-deb.spec"])
+        print("  PyInstaller DEB build complete.")
+        deb_bundle = REPO_ROOT / "dist" / "exif-turbo-deb"
+        artifacts.append(deb_bundle)
+        deb_out = build_deb(deb_bundle, version)
         artifacts.append(deb_out)
 
     if not args.deb_only:
-        rpm_out = build_rpm(bundle_dir, version)
+        run(["pyinstaller", "--noconfirm", "--clean", "exif-turbo-rpm.spec"])
+        print("  PyInstaller RPM build complete.")
+        rpm_bundle = REPO_ROOT / "dist" / "exif-turbo-rpm"
+        artifacts.append(rpm_bundle)
+        rpm_out = build_rpm(rpm_bundle, version)
         artifacts.append(rpm_out)
 
     print()

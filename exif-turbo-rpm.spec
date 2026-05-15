@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Linux PyInstaller spec — produces a GUI onedir bundle.
-# Run via: python scripts/build_linux.py
+# RPM PyInstaller spec — produces a GUI onedir bundle for RPM packaging.
+# Run via: python scripts/build_linux.py --rpm-only
 import re
 from pathlib import Path
 
@@ -73,5 +73,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name='exif-turbo-linux',
+    name='exif-turbo-rpm',
 )
