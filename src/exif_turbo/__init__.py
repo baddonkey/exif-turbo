@@ -1,6 +1,6 @@
 """exif-turbo — Cross-platform image EXIF metadata search and indexing tool."""
 
-__version__ = "1.11.4"
+__version__ = "1.11.5"
 
 from .data.image_index_repository import ImageIndexRepository
 from .indexing.exif_metadata_extractor import ExifMetadataExtractor
