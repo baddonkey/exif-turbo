@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-15 21:11+0200\n"
+"POT-Creation-Date: 2026-05-16 11:49+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: fr\n"
@@ -257,7 +257,7 @@ msgid "&Action"
 msgstr "&Action"
 
 #: QML
-msgid "&Delete Marked Images\\u2026 (%1 selected)"
+msgid "&Delete Marked Images… (%1 selected)"
 msgstr "Supprimer les images marquées… (%1 sélectionnée(s))"
 
 #: QML
@@ -357,19 +357,15 @@ msgid "Cancel the running preview build"
 msgstr "Annuler la création d’aperçus en cours"
 
 #: QML
-msgid "Canceling\\u2026"
-msgstr "Annulation…"
-
-#: QML
 msgid "Change Password"
 msgstr "Changer le mot de passe"
 
 #: QML
-msgid "Change Password\\u2026"
+msgid "Change Password…"
 msgstr "Changer le mot de passe…"
 
 #: QML
-msgid "Changing password\\u2026 This may take a moment."
+msgid "Changing password… This may take a moment."
 msgstr "Changement du mot de passe… Cela peut prendre un moment."
 
 #: QML
@@ -518,12 +514,12 @@ msgstr ""
 "PATH."
 
 #: QML
-msgid "Export Metadata as &JSON\\u2026 (%1 selected)"
-msgstr "Exporter les métadonnées en &JSON\\u2026 (%1 sélectionnée(s))"
+msgid "Export Metadata as &JSON… (%1 selected)"
+msgstr "Exporter les métadonnées en &JSON… (%1 sélectionnée(s))"
 
 #: QML
-msgid "Export Metadata as &JSON\\u2026 (all results)"
-msgstr "Exporter les métadonnées en &JSON\\u2026 (tous les résultats)"
+msgid "Export Metadata as &JSON… (all results)"
+msgstr "Exporter les métadonnées en &JSON… (tous les résultats)"
 
 #: QML
 msgid "Export Metadata as JSON"
@@ -564,7 +560,7 @@ msgid "Find in metadata (Ctrl+F)"
 msgstr "Rechercher dans les métadonnées (Ctrl+F)"
 
 #: QML
-msgid "Find in metadata\\u2026"
+msgid "Find in metadata…"
 msgstr "Rechercher dans les métadonnées…"
 
 #: QML
@@ -658,7 +654,7 @@ msgid "License: MIT"
 msgstr "Licence : MIT"
 
 #: QML
-msgid "Loading original\\u2026"
+msgid "Loading original…"
 msgstr "Chargement de l’original…"
 
 #: QML
@@ -802,7 +798,7 @@ msgstr ""
 " de dossiers. Cette opération ne peut pas être annulée."
 
 #: QML
-msgid "Preparing\\u2026"
+msgid "Preparing…"
 msgstr "Préparation…"
 
 #: QML
@@ -870,7 +866,7 @@ msgid "Reset Database"
 msgstr "Réinitialiser la base de données"
 
 #: QML
-msgid "Reset Database\\u2026"
+msgid "Reset Database…"
 msgstr "Réinitialiser la base de données…"
 
 #: QML
@@ -884,7 +880,7 @@ msgid "SETTINGS"
 msgstr "PARAMÈTRES"
 
 #: QML
-msgid "Scanning for images\\u2026"
+msgid "Scanning for images…"
 msgstr "Recherche d’images…"
 
 #: QML
@@ -892,7 +888,7 @@ msgid "Search"
 msgstr "Rechercher"
 
 #: QML
-msgid "Search EXIF metadata\\u2026"
+msgid "Search EXIF metadata…"
 msgstr "Rechercher dans les métadonnées EXIF…"
 
 #: QML
@@ -1038,10 +1034,6 @@ msgid "Worker Threads"
 msgstr "Threads de travail"
 
 #: QML
-msgid "\\u2190 Select a folder to browse images"
-msgstr "← Sélectionner un dossier pour parcourir les images"
-
-#: QML
 msgid "both tokens (implicit AND)"
 msgstr "les deux termes (AND implicite)"
 
@@ -1066,7 +1058,7 @@ msgid "images"
 msgstr "images"
 
 #: QML
-msgid "indexed, scanning\\u2026"
+msgid "indexed, scanning…"
 msgstr "indexé, analyse…"
 
 #: QML
@@ -1104,6 +1096,10 @@ msgstr ""
 "• Dans les clés ExifTool (p. ex. GPS:GPSLatitude), le deux-points sert de"
 " séparateur"
 
+#: QML
+msgid "← Select a folder to browse images"
+msgstr "← Sélectionner un dossier pour parcourir les images"
+
 #~ msgid " images"
 #~ msgstr " images"
 
@@ -1120,7 +1116,7 @@ msgstr ""
 #~ msgstr "&Action"
 
 #~ msgid "&Delete Marked Images\\u2026 (%1 selected)"
-#~ msgstr "&Supprimer les images marquées\\u2026 (%1 sélectionnée(s))"
+#~ msgstr "Supprimer les images marquées… (%1 sélectionnée(s))"
 
 #~ msgid "&Deselect All"
 #~ msgstr "&Tout désélectionner"

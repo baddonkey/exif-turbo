@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-15 21:11+0200\n"
+"POT-Creation-Date: 2026-05-16 11:49+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: de\n"
@@ -260,8 +260,8 @@ msgid "&Action"
 msgstr "&Aktion"
 
 #: QML
-msgid "&Delete Marked Images\\u2026 (%1 selected)"
-msgstr "Markierte Bilder löschen… (%1 ausgewählt)"
+msgid "&Delete Marked Images (%1 selected)"
+msgstr "Markierte Bilder löschen (%1 ausgewählt)"
 
 #: QML
 msgid "&Deselect All"
@@ -360,19 +360,15 @@ msgid "Cancel the running preview build"
 msgstr "Laufende Vorschaubilderstellung abbrechen"
 
 #: QML
-msgid "Canceling\\u2026"
-msgstr "Abbrechen…"
-
-#: QML
 msgid "Change Password"
 msgstr "Passwort ändern"
 
 #: QML
-msgid "Change Password\\u2026"
+msgid "Change Password…"
 msgstr "Passwort ändern…"
 
 #: QML
-msgid "Changing password\\u2026 This may take a moment."
+msgid "Changing password… This may take a moment."
 msgstr "Passwort wird geändert… Dies kann einen Moment dauern."
 
 #: QML
@@ -520,12 +516,12 @@ msgstr ""
 "deaktiviert, bis ExifTool installiert und auf Ihrem PATH verfügbar ist."
 
 #: QML
-msgid "Export Metadata as &JSON\\u2026 (%1 selected)"
-msgstr "Metadaten als &JSON exportieren\\u2026 (%1 ausgewählt)"
+msgid "Export Metadata as &JSON… (%1 selected)"
+msgstr "Metadaten als &JSON exportieren… (%1 ausgewählt)"
 
 #: QML
-msgid "Export Metadata as &JSON\\u2026 (all results)"
-msgstr "Metadaten als &JSON exportieren\\u2026 (alle Ergebnisse)"
+msgid "Export Metadata as &JSON… (all results)"
+msgstr "Metadaten als &JSON exportieren… (alle Ergebnisse)"
 
 #: QML
 msgid "Export Metadata as JSON"
@@ -566,7 +562,7 @@ msgid "Find in metadata (Ctrl+F)"
 msgstr "In Metadaten suchen (Ctrl+F)"
 
 #: QML
-msgid "Find in metadata\\u2026"
+msgid "Find in metadata…"
 msgstr "In Metadaten suchen…"
 
 #: QML
@@ -658,7 +654,7 @@ msgid "License: MIT"
 msgstr "Lizenz: MIT"
 
 #: QML
-msgid "Loading original\\u2026"
+msgid "Loading original…"
 msgstr "Original wird geladen…"
 
 #: QML
@@ -802,7 +798,7 @@ msgstr ""
 "nicht rükgängig gemacht werden."
 
 #: QML
-msgid "Preparing\\u2026"
+msgid "Preparing…"
 msgstr "Vorbereitung…"
 
 #: QML
@@ -870,7 +866,7 @@ msgid "Reset Database"
 msgstr "Datenbank zurücksetzen"
 
 #: QML
-msgid "Reset Database\\u2026"
+msgid "Reset Database…"
 msgstr "Datenbank zurücksetzen…"
 
 #: QML
@@ -884,7 +880,7 @@ msgid "SETTINGS"
 msgstr "EINSTELLUNGEN"
 
 #: QML
-msgid "Scanning for images\\u2026"
+msgid "Scanning for images…"
 msgstr "Bilder werden gesucht…"
 
 #: QML
@@ -892,7 +888,7 @@ msgid "Search"
 msgstr "Suchen"
 
 #: QML
-msgid "Search EXIF metadata\\u2026"
+msgid "Search EXIF metadata…"
 msgstr "EXIF-Metadaten durchsuchen…"
 
 #: QML
@@ -1039,10 +1035,6 @@ msgid "Worker Threads"
 msgstr "Worker-Threads"
 
 #: QML
-msgid "\\u2190 Select a folder to browse images"
-msgstr "← Ordner auswählen, um Bilder zu durchsuchen"
-
-#: QML
 msgid "both tokens (implicit AND)"
 msgstr "beide Begriffe (implizites AND)"
 
@@ -1067,7 +1059,7 @@ msgid "images"
 msgstr "Bilder"
 
 #: QML
-msgid "indexed, scanning\\u2026"
+msgid "indexed, scanning…"
 msgstr "indiziert, Suche…"
 
 #: QML
@@ -1105,6 +1097,10 @@ msgstr ""
 "• In ExifTool-Schlüsseln (z.B. GPS:GPSLatitude) wirkt der Doppelpunkt als"
 " Trennzeichen"
 
+#: QML
+msgid "← Select a folder to browse images"
+msgstr "← Ordner auswählen, um Bilder zu durchsuchen"
+
 #~ msgid " images"
 #~ msgstr " Bilder"
 
@@ -1121,7 +1117,7 @@ msgstr ""
 #~ msgstr "&Aktion"
 
 #~ msgid "&Delete Marked Images\\u2026 (%1 selected)"
-#~ msgstr "Markierte Bilder &löschen\\u2026 (%1 ausgewählt)"
+#~ msgstr "Markierte Bilder löschen… (%1 ausgewählt)"
 
 #~ msgid "&Deselect All"
 #~ msgstr "Auswahl &aufheben"

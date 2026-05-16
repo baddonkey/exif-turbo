@@ -31,6 +31,7 @@ def extract_qml_strings() -> set[str]:
         for match in QSTR_RE.finditer(text):
             raw = match.group(1)
             raw = raw.replace('\\"', '"').replace("\\\\", "\\").replace("\\n", "\n")
+            raw = re.sub(r'\\u([0-9a-fA-F]{4})', lambda m: chr(int(m.group(1), 16)), raw)
             strings.add(raw)
     return strings
 
