@@ -15,6 +15,7 @@ from ...data.image_index_repository import ImageIndexRepository
 from ...indexing.image_finder import ImageFinder
 from ...indexing.indexer_service import IndexerService
 from ...utils.preview_cache import preview_dir
+from ._macos_activity import AppNapAssertion
 
 
 class IndexWorker(QThread):
@@ -66,6 +67,7 @@ class IndexWorker(QThread):
         return self._cancel_event.is_set()
 
     def run(self) -> None:
+        _nap = AppNapAssertion("Indexing images")
         try:
             if self._clear_cache_dir is not None:
                 if self._clear_cache_dir.exists():
@@ -110,6 +112,8 @@ class IndexWorker(QThread):
                 self.finished.emit(count, error_count)
         except Exception as exc:
             self.failed.emit(str(exc))
+        finally:
+            _nap.release()
 
     def _gc_orphaned_cache(self, repo: ImageIndexRepository) -> None:
         """Delete cache files whose SHA-1 prefix isn't present in the DB.
