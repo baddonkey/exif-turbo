@@ -3303,7 +3303,6 @@ ApplicationWindow {
                         Button {
                             id: checkExiftoolButton
                             text: qsTr("Check")
-                            implicitWidth: 100
                             onClicked: controller.checkExiftool()
                         }
 
