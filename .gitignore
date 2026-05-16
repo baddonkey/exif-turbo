@@ -38,6 +38,8 @@ MANIFEST
 !exif-turbo.spec
 !exif-turbo-macos.spec
 !exif-turbo-linux.spec
+!exif-turbo-macos-arm.spec
+!exif-turbo-macos-intel.spec
 
 # Installer logs
 pip-log.txt

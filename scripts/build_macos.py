@@ -132,8 +132,9 @@ def sign_bundle(app: Path, identity: str | None) -> None:
     print("  Code signing complete.")
 
 
-def build_dmg(app: Path, version: str) -> Path:
-    dmg_name = f"exif-turbo-{version}-macos.dmg"
+def build_dmg(app: Path, version: str, arch_suffix: str = "") -> Path:
+    suffix = f"-{arch_suffix}" if arch_suffix else ""
+    dmg_name = f"exif-turbo-{version}-macos{suffix}.dmg"
     dmg_out = REPO_ROOT / "dist" / dmg_name
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -173,6 +174,12 @@ Full documentation: https://github.com/baddonkey/exif-turbo
     return dmg_out
 
 
+ARCH_CONFIGS: dict[str, tuple[str, str]] = {
+    "arm64": ("exif-turbo-macos-arm.spec", "arm64"),
+    "intel": ("exif-turbo-macos-intel.spec", "intel"),
+}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -181,20 +188,29 @@ def main() -> None:
         default=None,
         help="Developer ID Application identity for codesign (omit for ad-hoc signing).",
     )
+    parser.add_argument(
+        "--arch",
+        dest="arch",
+        choices=list(ARCH_CONFIGS),
+        default="arm64",
+        help="Target architecture: arm64 (default, Apple Silicon) or intel (x86_64).",
+    )
     args = parser.parse_args()
 
+    spec_file, arch_suffix = ARCH_CONFIGS[args.arch]
+
     version = read_version()
-    print(f"Building exif-turbo {version} for macOS ...")
+    print(f"Building exif-turbo {version} for macOS ({args.arch}) ...")
 
     generate_icns()
     compile_translations()
 
-    run(["pyinstaller", "--noconfirm", "--clean", "exif-turbo-macos.spec"])
+    run(["pyinstaller", "--noconfirm", "--clean", spec_file])
     print("  PyInstaller build complete.")
 
     app = REPO_ROOT / "dist" / "exif-turbo.app"
     sign_bundle(app, args.sign_identity)
-    dmg_out = build_dmg(app, version)
+    dmg_out = build_dmg(app, version, arch_suffix)
 
     print()
     print("Done! Artifacts:")

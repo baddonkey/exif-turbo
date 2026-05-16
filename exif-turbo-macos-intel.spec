@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
-# macOS-specific PyInstaller spec — produces a .app bundle.
-# Run via: bash scripts/build_macos.sh
+# Intel (x86_64) macOS PyInstaller spec — produces a .app bundle.
+# Run via: python scripts/build_macos.py --arch intel
 import re
 from pathlib import Path
 
@@ -43,7 +43,24 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        # Qt3D modules are not used by this app; excluding avoids a PyInstaller
+        # bug where it tries to copy framework binaries into non-existent dirs.
+        'PySide6.QtQuick3D',
+        'PySide6.QtQuick3DAssetImport',
+        'PySide6.QtQuick3DAssetUtils',
+        'PySide6.QtQuick3DEffects',
+        'PySide6.QtQuick3DGlslParser',
+        'PySide6.QtQuick3DHelpers',
+        'PySide6.QtQuick3DHelpersImpl',
+        'PySide6.QtQuick3DIblBaker',
+        'PySide6.QtQuick3DParticleEffects',
+        'PySide6.QtQuick3DParticles',
+        'PySide6.QtQuick3DRuntimeRender',
+        'PySide6.QtQuick3DSpatialAudio',
+        'PySide6.QtQuick3DUtils',
+        'PySide6.QtQuick3DXr',
+    ],
     noarchive=False,
     optimize=0,
 )
@@ -63,7 +80,7 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch=None,
+    target_arch='x86_64',
     codesign_identity=None,
     entitlements_file=None,
     icon=_icon_arg,
@@ -79,7 +96,7 @@ coll = COLLECT(
     name='exif-turbo',
 )
 
-# ── .app bundle ────────────────────────────────────────────────────────────────
+# ── .app bundle ───────────────────────────────────────────────────────────────
 app = BUNDLE(
     coll,
     name='exif-turbo.app',
