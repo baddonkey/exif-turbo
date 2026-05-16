@@ -23,6 +23,7 @@ from ...data.image_index_repository import ImageIndexRepository
 from ...utils.preview_cache import preview_cache_name_from_stamp, preview_dir
 from ...utils.preview_render import render_preview
 from ...utils.thumb_crypto import ThumbCrypto
+from ._macos_activity import AppNapAssertion
 
 _log = logging.getLogger(__name__)
 
@@ -102,6 +103,7 @@ class PreviewBuildWorker(QThread):
     # ── QThread.run ──────────────────────────────────────────────────────
 
     def run(self) -> None:  # noqa: C901 — mirror of ThumbWorker structure
+        _nap = AppNapAssertion("Building image previews")
         try:
             repo = ImageIndexRepository(self._db_path, key=self._key)
             try:
@@ -192,6 +194,8 @@ class PreviewBuildWorker(QThread):
                 self.finished.emit(built, total)
         except Exception as exc:  # noqa: BLE001
             self.failed.emit(str(exc))
+        finally:
+            _nap.release()
 
 
 def _scan_existing(out_dir: Path, *, encrypted: bool) -> set[str]:

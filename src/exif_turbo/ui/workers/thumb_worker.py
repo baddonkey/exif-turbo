@@ -22,6 +22,7 @@ from ...indexing.image_utils import RAW_EXTENSIONS, VIDEO_EXTENSIONS, orient_raw
 from ...utils.thumb_cache import thumb_cache_name_from_stamp, thumb_cache_path
 from ...utils.thumb_crypto import ThumbCrypto
 from ...utils.video_frame import extract_video_frame
+from ._macos_activity import AppNapAssertion
 
 # Pillow 12 treats some valid-but-unusual files (e.g. 16-bit RGBA PNGs with
 # large metadata chunks) as truncated.  Allow truncated reads globally so
@@ -113,6 +114,7 @@ class ThumbWorker(QThread):
         self._resume_event.set()
 
     def run(self) -> None:
+        _nap = AppNapAssertion("Building image thumbnails")
         try:
             # Read paths and stamps from the DB on this background thread —
             # keeps the main thread free so QML can paint thumbnails immediately.
@@ -284,3 +286,5 @@ class ThumbWorker(QThread):
                 self.finished.emit(cached, total_all)
         except Exception as exc:
             self.failed.emit(str(exc))
+        finally:
+            _nap.release()
