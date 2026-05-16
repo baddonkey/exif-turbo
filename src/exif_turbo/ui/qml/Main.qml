@@ -433,8 +433,8 @@ ApplicationWindow {
                 id: exportJsonItem
                 readonly property int _cnt: controller ? controller.checkedCount : 0
                 text: _cnt > 0
-                      ? qsTr("Export Metadata as &JSON\u2026 (%1 selected)").arg(_cnt)
-                      : qsTr("Export Metadata as &JSON\u2026 (all results)")
+                      ? qsTr("Export Metadata as &JSON (%1 selected)").arg(_cnt)
+                      : qsTr("Export Metadata as &JSON (all results)")
                 enabled: !_isLocked
                 onTriggered: if (!_isLocked) exportJsonDialog.open()
             }
@@ -442,7 +442,7 @@ ApplicationWindow {
             Action {
                 id: deleteMarkedItem
                 readonly property int _cnt: controller ? controller.checkedCount : 0
-                text: qsTr("&Delete Marked Images\u2026 (%1 selected)").arg(_cnt)
+                text: qsTr("&Delete Marked Images (%1 selected)").arg(_cnt)
                 enabled: !_isLocked && _cnt > 0
                 onTriggered: if (!_isLocked && _cnt > 0) deleteMarkedDialog.open()
             }
@@ -3370,7 +3370,7 @@ ApplicationWindow {
                     }
                     Button {
                         id: changePasswordButton
-                        text: qsTr("Change Password\u2026")
+                        text: qsTr("Change Password")
                         enabled: !_isIndexing && !_isLocked
                         Layout.bottomMargin: 40
                         onClicked: {
@@ -3409,7 +3409,7 @@ ApplicationWindow {
 
                         Button {
                             id: resetDbButton
-                            text: qsTr("Reset Database\u2026")
+                            text: qsTr("Reset Database")
                             Material.background: Material.Red
                             Material.foreground: "white"
                             enabled: !_isIndexing && !_isLocked

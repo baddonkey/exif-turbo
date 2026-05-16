@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-16 11:49+0200\n"
+"POT-Creation-Date: 2026-05-16 13:20+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: it\n"
@@ -255,8 +255,8 @@ msgid "&Action"
 msgstr "&Azione"
 
 #: QML
-msgid "&Delete Marked Images… (%1 selected)"
-msgstr "Elimina immagini contrassegnate… (%1 selezionata/e)"
+msgid "&Delete Marked Images (%1 selected)"
+msgstr "Elimina immagini contrassegnate (%1 selezionata/e)"
 
 #: QML
 msgid "&Deselect All"
@@ -357,10 +357,6 @@ msgstr "Annulla la creazione anteprime in corso"
 #: QML
 msgid "Change Password"
 msgstr "Cambia password"
-
-#: QML
-msgid "Change Password…"
-msgstr "Cambia password…"
 
 #: QML
 msgid "Changing password… This may take a moment."
@@ -512,12 +508,12 @@ msgstr ""
 "tuo PATH."
 
 #: QML
-msgid "Export Metadata as &JSON… (%1 selected)"
-msgstr "Esporta metadati come &JSON… (%1 selezionata/e)"
+msgid "Export Metadata as &JSON (%1 selected)"
+msgstr "Esporta metadati come &JSON (%1 selezionata/e)"
 
 #: QML
-msgid "Export Metadata as &JSON… (all results)"
-msgstr "Esporta metadati come &JSON… (tutti i risultati)"
+msgid "Export Metadata as &JSON (all results)"
+msgstr "Esporta metadati come &JSON (tutti i risultati)"
 
 #: QML
 msgid "Export Metadata as JSON"
@@ -862,10 +858,6 @@ msgstr "Reindicizza tutto"
 #: QML
 msgid "Reset Database"
 msgstr "Ripristina database"
-
-#: QML
-msgid "Reset Database…"
-msgstr "Ripristina database…"
 
 #: QML
 msgid "Restart the application for language changes to take full effect."
@@ -1793,4 +1785,19 @@ msgstr "← Seleziona una cartella per sfogliare le immagini"
 #~ "• Nelle chiavi ExifTool (es. "
 #~ "GPS:GPSLatitude) i due punti fungono da"
 #~ " separatore"
+
+#~ msgid "&Delete Marked Images… (%1 selected)"
+#~ msgstr "Elimina immagini contrassegnate… (%1 selezionata/e)"
+
+#~ msgid "Change Password…"
+#~ msgstr "Cambia password…"
+
+#~ msgid "Export Metadata as &JSON… (%1 selected)"
+#~ msgstr "Esporta metadati come &JSON… (%1 selezionata/e)"
+
+#~ msgid "Export Metadata as &JSON… (all results)"
+#~ msgstr "Esporta metadati come &JSON… (tutti i risultati)"
+
+#~ msgid "Reset Database…"
+#~ msgstr "Ripristina database…"
 

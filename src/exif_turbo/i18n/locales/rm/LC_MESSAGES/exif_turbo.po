@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-16 11:49+0200\n"
+"POT-Creation-Date: 2026-05-16 13:20+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: rm\n"
@@ -257,8 +257,8 @@ msgid "&Action"
 msgstr "&Acziun"
 
 #: QML
-msgid "&Delete Marked Images… (%1 selected)"
-msgstr "Stizzar maletgs marcads… (%1 seletgad(s))"
+msgid "&Delete Marked Images (%1 selected)"
+msgstr "Stizzar maletgs marcads (%1 seletgad(s))"
 
 #: QML
 msgid "&Deselect All"
@@ -359,10 +359,6 @@ msgstr "Interrumper la creaziun da previstas en cors"
 #: QML
 msgid "Change Password"
 msgstr "Midar pled-clav"
-
-#: QML
-msgid "Change Password…"
-msgstr "Midar pled-clav…"
 
 #: QML
 msgid "Changing password… This may take a moment."
@@ -513,12 +509,12 @@ msgstr ""
 " fin che ExifTool è installà ed disponibel sin voss PATH."
 
 #: QML
-msgid "Export Metadata as &JSON… (%1 selected)"
-msgstr "Exportar metadata sco &JSON… (%1 seletgad(s))"
+msgid "Export Metadata as &JSON (%1 selected)"
+msgstr "Exportar metadata sco &JSON (%1 seletgad(s))"
 
 #: QML
-msgid "Export Metadata as &JSON… (all results)"
-msgstr "Exportar metadata sco &JSON… (tuts ils resultats)"
+msgid "Export Metadata as &JSON (all results)"
+msgstr "Exportar metadata sco &JSON (tuts ils resultats)"
 
 #: QML
 msgid "Export Metadata as JSON"
@@ -862,10 +858,6 @@ msgstr "Re-indexar tut"
 #: QML
 msgid "Reset Database"
 msgstr "Resettar banca da datas"
-
-#: QML
-msgid "Reset Database…"
-msgstr "Resettar banca da datas…"
 
 #: QML
 msgid "Restart the application for language changes to take full effect."
@@ -1786,4 +1778,19 @@ msgstr "← Tscherner ina cartella per navigar ils maletgs"
 #~ "• En las clavs ExifTool (p.ex. "
 #~ "GPS:GPSLatitude) ils dus puncts gioghan "
 #~ "il rolla d'in separatur"
+
+#~ msgid "&Delete Marked Images… (%1 selected)"
+#~ msgstr "Stizzar maletgs marcads… (%1 seletgad(s))"
+
+#~ msgid "Change Password…"
+#~ msgstr "Midar pled-clav…"
+
+#~ msgid "Export Metadata as &JSON… (%1 selected)"
+#~ msgstr "Exportar metadata sco &JSON… (%1 seletgad(s))"
+
+#~ msgid "Export Metadata as &JSON… (all results)"
+#~ msgstr "Exportar metadata sco &JSON… (tuts ils resultats)"
+
+#~ msgid "Reset Database…"
+#~ msgstr "Resettar banca da datas…"
 

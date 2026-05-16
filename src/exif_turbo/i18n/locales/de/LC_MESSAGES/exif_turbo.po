@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-16 11:49+0200\n"
+"POT-Creation-Date: 2026-05-16 13:20+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: de\n"
@@ -364,10 +364,6 @@ msgid "Change Password"
 msgstr "Passwort ändern"
 
 #: QML
-msgid "Change Password…"
-msgstr "Passwort ändern…"
-
-#: QML
 msgid "Changing password… This may take a moment."
 msgstr "Passwort wird geändert… Dies kann einen Moment dauern."
 
@@ -516,12 +512,12 @@ msgstr ""
 "deaktiviert, bis ExifTool installiert und auf Ihrem PATH verfügbar ist."
 
 #: QML
-msgid "Export Metadata as &JSON… (%1 selected)"
-msgstr "Metadaten als &JSON exportieren… (%1 ausgewählt)"
+msgid "Export Metadata as &JSON (%1 selected)"
+msgstr "Metadaten als &JSON exportieren (%1 ausgewählt)"
 
 #: QML
-msgid "Export Metadata as &JSON… (all results)"
-msgstr "Metadaten als &JSON exportieren… (alle Ergebnisse)"
+msgid "Export Metadata as &JSON (all results)"
+msgstr "Metadaten als &JSON exportieren (alle Ergebnisse)"
 
 #: QML
 msgid "Export Metadata as JSON"
@@ -864,10 +860,6 @@ msgstr "Alle erneut indizieren"
 #: QML
 msgid "Reset Database"
 msgstr "Datenbank zurücksetzen"
-
-#: QML
-msgid "Reset Database…"
-msgstr "Datenbank zurücksetzen…"
 
 #: QML
 msgid "Restart the application for language changes to take full effect."
@@ -1788,4 +1780,16 @@ msgstr "← Ordner auswählen, um Bilder zu durchsuchen"
 #~ "• In ExifTool-Schlüsseln (z.B. "
 #~ "GPS:GPSLatitude) wirkt der Doppelpunkt als "
 #~ "Trennzeichen"
+
+#~ msgid "Change Password…"
+#~ msgstr "Passwort ändern…"
+
+#~ msgid "Export Metadata as &JSON… (%1 selected)"
+#~ msgstr "Metadaten als &JSON exportieren… (%1 ausgewählt)"
+
+#~ msgid "Export Metadata as &JSON… (all results)"
+#~ msgstr "Metadaten als &JSON exportieren… (alle Ergebnisse)"
+
+#~ msgid "Reset Database…"
+#~ msgstr "Datenbank zurücksetzen…"
 

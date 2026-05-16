@@ -148,7 +148,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Index canceled": "Indizierung abgebrochen",
         "Indexing\u2026 {} / {}": "Indizierung\u2026 {} / {}",
         # ── QML-only strings ───────────────
-        "Reset Database\u2026": "Datenbank zur\u00fccksetzen\u2026",
         # ── New strings ──────────────────────────────────────────────────────
         "&User Manual": "&Benutzerhandbuch",
         "Third-Party &Licenses": "&Drittanbieter-Lizenzen",
@@ -189,8 +188,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "All files (*)": "Alle Dateien (*)",
         "Cancel": "Abbrechen",
         "Deselect image": "Bild abw\u00e4hlen",
-        "Export Metadata as &JSON\u2026 (%1 selected)": "Metadaten als &JSON exportieren\u2026 (%1 ausgew\u00e4hlt)",
-        "Export Metadata as &JSON\u2026 (all results)": "Metadaten als &JSON exportieren\u2026 (alle Ergebnisse)",
+        "Export Metadata as &JSON (%1 selected)": "Metadaten als &JSON exportieren (%1 ausgew\u00e4hlt)",
+        "Export Metadata as &JSON (all results)": "Metadaten als &JSON exportieren (alle Ergebnisse)",
         "Export Metadata as JSON": "Metadaten als JSON exportieren",
         "JSON files (*.json)": "JSON-Dateien (*.json)",
         "Select &All": "&Alle ausw\u00e4hlen",
@@ -199,7 +198,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Show only selected images": "Nur ausgew\u00e4hlte Bilder anzeigen",
         "Unlocking\u2026": "Wird entsperrt\u2026",        # ── Change password ─────────────────────────────────────────────────
         "Change Password": "Passwort ändern",
-        "Change Password\u2026": "Passwort ändern\u2026",
         "Changing password\u2026": "Passwort wird geändert\u2026",
         "Changing password\u2026 This may take a moment.": "Passwort wird geändert\u2026 Dies kann einen Moment dauern.",
         "Confirm new password": "Neues Passwort bestätigen",
@@ -232,7 +230,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Shift-click to extend range": "Shift-Klick zum Erweitern des Bereichs",
         "Clear date filter": "Datumsfilter zur\u00fccksetzen",
         # ── Preview cache & bulk-delete ──────────────────────────────────────
-        "&Delete Marked Images\u2026 (%1 selected)": "Markierte Bilder l\u00f6schen\u2026 (%1 ausgew\u00e4hlt)",
+        "&Delete Marked Images (%1 selected)": "Markierte Bilder l\u00f6schen (%1 ausgew\u00e4hlt)",
         "%1 of %2 previews cached": "%1 von %2 Vorschaubilder zwischengespeichert",
         "All %1 previews are cached": "Alle %1 Vorschaubilder zwischengespeichert",
         "Build Previews": "Vorschaubilder erstellen",
@@ -409,7 +407,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Index canceled": "Indexation annul\u00e9e",
         "Indexing\u2026 {} / {}": "Indexation\u2026 {} / {}",
         # ── QML-only strings ───────────────
-        "Reset Database\u2026": "R\u00e9initialiser la base de donn\u00e9es\u2026",
         # ── New strings ──────────────────────────────────────────────────────
         "&User Manual": "&Manuel utilisateur",
         "Third-Party &Licenses": "&Licences tierces",
@@ -452,8 +449,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "All files (*)": "Tous les fichiers (*)",
         "Cancel": "Annuler",
         "Deselect image": "D\u00e9s\u00e9lectionner l\u2019image",
-        "Export Metadata as &JSON\u2026 (%1 selected)": "Exporter les m\u00e9tadonn\u00e9es en &JSON\u2026 (%1 s\u00e9lectionn\u00e9e(s))",
-        "Export Metadata as &JSON\u2026 (all results)": "Exporter les m\u00e9tadonn\u00e9es en &JSON\u2026 (tous les r\u00e9sultats)",
+        "Export Metadata as &JSON (%1 selected)": "Exporter les m\u00e9tadonn\u00e9es en &JSON (%1 s\u00e9lectionn\u00e9e(s))",
+        "Export Metadata as &JSON (all results)": "Exporter les m\u00e9tadonn\u00e9es en &JSON (tous les r\u00e9sultats)",
         "Export Metadata as JSON": "Exporter les m\u00e9tadonn\u00e9es en JSON",
         "JSON files (*.json)": "Fichiers JSON (*.json)",
         "Select &All": "Tout &s\u00e9lectionner",
@@ -463,7 +460,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Unlocking\u2026": "D\u00e9verrouillage\u2026",
         # ── Change password ─────────────────────────────────────────────────
         "Change Password": "Changer le mot de passe",
-        "Change Password\u2026": "Changer le mot de passe\u2026",
         "Changing password\u2026": "Changement du mot de passe\u2026",
         "Changing password\u2026 This may take a moment.": "Changement du mot de passe\u2026 Cela peut prendre un moment.",
         "Confirm new password": "Confirmer le nouveau mot de passe",
@@ -496,7 +492,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Shift-click to extend range": "Maj+clic pour \u00e9tendre la plage",
         "Clear date filter": "Effacer le filtre de date",
         # ── Preview cache & bulk-delete ──────────────────────────────────────
-        "&Delete Marked Images\u2026 (%1 selected)": "Supprimer les images marqu\u00e9es\u2026 (%1 s\u00e9lectionn\u00e9e(s))",
+        "&Delete Marked Images (%1 selected)": "Supprimer les images marqu\u00e9es (%1 s\u00e9lectionn\u00e9e(s))",
         "%1 of %2 previews cached": "%1 sur %2 aper\u00e7us en cache",
         "All %1 previews are cached": "Tous les %1 aper\u00e7us sont en cache",
         "Build Previews": "Cr\u00e9er les aper\u00e7us",
@@ -678,7 +674,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Index canceled": "Indicizzazione annullata",
         "Indexing\u2026 {} / {}": "Indicizzazione\u2026 {} / {}",
         # ── QML-only strings ───────────────
-        "Reset Database\u2026": "Ripristina database\u2026",
         # ── New strings ──────────────────────────────────────────────────────
         "&User Manual": "&Manuale utente",
         "Third-Party &Licenses": "&Licenze di terze parti",
@@ -721,8 +716,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "All files (*)": "Tutti i file (*)",
         "Cancel": "Annulla",
         "Deselect image": "Deseleziona immagine",
-        "Export Metadata as &JSON\u2026 (%1 selected)": "Esporta metadati come &JSON\u2026 (%1 selezionata/e)",
-        "Export Metadata as &JSON\u2026 (all results)": "Esporta metadati come &JSON\u2026 (tutti i risultati)",
+        "Export Metadata as &JSON (%1 selected)": "Esporta metadati come &JSON (%1 selezionata/e)",
+        "Export Metadata as &JSON (all results)": "Esporta metadati come &JSON (tutti i risultati)",
         "Export Metadata as JSON": "Esporta metadati come JSON",
         "JSON files (*.json)": "File JSON (*.json)",
         "Select &All": "Seleziona &tutto",
@@ -732,7 +727,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Unlocking\u2026": "Sblocco in corso\u2026",
         # ── Change password ─────────────────────────────────────────────────
         "Change Password": "Cambia password",
-        "Change Password\u2026": "Cambia password…",
         "Changing password…": "Modifica password in corso…",
         "Changing password\u2026 This may take a moment.": "Modifica password in corso… Può richiedere qualche istante.",
         "Confirm new password": "Conferma nuova password",
@@ -765,7 +759,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Shift-click to extend range": "Maiusc+clic per estendere l\u2019intervallo",
         "Clear date filter": "Cancella filtro data",
         # ── Preview cache & bulk-delete ──────────────────────────────────────
-        "&Delete Marked Images\u2026 (%1 selected)": "Elimina immagini contrassegnate\u2026 (%1 selezionata/e)",
+        "&Delete Marked Images (%1 selected)": "Elimina immagini contrassegnate (%1 selezionata/e)",
         "%1 of %2 previews cached": "%1 di %2 anteprime in cache",
         "All %1 previews are cached": "Tutte le %1 anteprime sono in cache",
         "Build Previews": "Crea anteprime",
@@ -944,7 +938,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Index canceled": "Indexaziun interrutta",
         "Indexing\u2026 {} / {}": "Indexaziun\u2026 {} / {}",
         # ── QML-only strings ───────────────
-        "Reset Database\u2026": "Resettar banca da datas\u2026",
         # ── New strings ──────────────────────────────────────────────────────
         "&User Manual": "&Manual d\u2019utilisader",
         "Third-Party &Licenses": "&Licenzas da terzas persunas",
@@ -987,8 +980,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "All files (*)": "Tut las datotecas (*)",
         "Cancel": "Annullar",
         "Deselect image": "Deseletgar maletg",
-        "Export Metadata as &JSON\u2026 (%1 selected)": "Exportar metadata sco &JSON\u2026 (%1 seletgad(s))",
-        "Export Metadata as &JSON\u2026 (all results)": "Exportar metadata sco &JSON\u2026 (tuts ils resultats)",
+        "Export Metadata as &JSON (%1 selected)": "Exportar metadata sco &JSON (%1 seletgad(s))",
+        "Export Metadata as &JSON (all results)": "Exportar metadata sco &JSON (tuts ils resultats)",
         "Export Metadata as JSON": "Exportar metadata sco JSON",
         "JSON files (*.json)": "Datotecas JSON (*.json)",
         "Select &All": "Seletgar &tut",
@@ -998,7 +991,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Unlocking\u2026": "Avrir\u2026",
         # ── Change password ─────────────────────────────────────────────────
         "Change Password": "Midar pled-clav",
-        "Change Password\u2026": "Midar pled-clav\u2026",
         "Changing password\u2026": "Pled-clav vegn midada\u2026",
         "Changing password\u2026 This may take a moment.": "Pled-clav vegn midada\u2026 Quai po durar in mument.",
         "Confirm new password": "Confermar la nova pled-clav",
@@ -1031,7 +1023,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Shift-click to extend range": "Shift-clic per stender il rom",
         "Clear date filter": "Stizzar il filter da data",
         # ── Preview cache & bulk-delete ──────────────────────────────────────
-        "&Delete Marked Images\u2026 (%1 selected)": "Stizzar maletgs marcads\u2026 (%1 seletgad(s))",
+        "&Delete Marked Images (%1 selected)": "Stizzar maletgs marcads (%1 seletgad(s))",
         "%1 of %2 previews cached": "%1 da %2 previstas en cache",
         "All %1 previews are cached": "Tut las %1 previstas \u00e8n en cache",
         "Build Previews": "Crear previstas",
