@@ -225,3 +225,4 @@ data/index.db-wal
 data/index.db
 data/**
 tests/.DS_Store
+.DS_Store
