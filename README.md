@@ -44,6 +44,13 @@ Fully generated using VS Code Copilot.
 
 ## Recent changes
 
+### Bug fixes
+
+- **macOS App Nap suppression** — Background indexing, thumbnail building, and
+  preview rendering no longer stall when the display sleeps or the screen locks.
+  An `NSActivityUserInitiated` assertion is now held for the duration of each
+  background worker, preventing macOS from throttling the worker threads.
+
 ### Capture-date indexing and timeline filter
 
 Every image now stores a `captured_at` UTC timestamp in the database, resolved
