@@ -1560,6 +1560,7 @@ ApplicationWindow {
 
                     ListView {
                         id: resultsList
+                        objectName: "resultsList"
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
@@ -1567,18 +1568,6 @@ ApplicationWindow {
                         model: filteredSearchModel
                         currentIndex: controller ? controller.currentProxyResultRow : -1
                         ScrollBar.vertical: ScrollBar {}
-
-                        WheelHandler {
-                            onWheel: (event) => {
-                                var delta = event.pixelDelta.y !== 0
-                                    ? -event.pixelDelta.y
-                                    : -event.angleDelta.y / 120.0 * 210
-                                resultsList.contentY = Math.max(0,
-                                    Math.min(resultsList.contentY + delta,
-                                             Math.max(0, resultsList.contentHeight - resultsList.height)))
-                                event.accepted = true
-                            }
-                        }
 
                         delegate: Rectangle {
                             id: cardDelegate
@@ -2583,6 +2572,7 @@ ApplicationWindow {
                     // Image list
                     ListView {
                         id: browseImageList
+                        objectName: "browseImageList"
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
@@ -2590,18 +2580,6 @@ ApplicationWindow {
                         model: root._folderFilter !== "" ? filteredSearchModel : null
                         currentIndex: controller ? controller.currentProxyResultRow : -1
                         ScrollBar.vertical: ScrollBar {}
-
-                        WheelHandler {
-                            onWheel: (event) => {
-                                var delta = event.pixelDelta.y !== 0
-                                    ? -event.pixelDelta.y
-                                    : -event.angleDelta.y / 120.0 * 210
-                                browseImageList.contentY = Math.max(0,
-                                    Math.min(browseImageList.contentY + delta,
-                                             Math.max(0, browseImageList.contentHeight - browseImageList.height)))
-                                event.accepted = true
-                            }
-                        }
 
                         delegate: Rectangle {
                             id: browseCardDelegate
