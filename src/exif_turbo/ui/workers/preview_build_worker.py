@@ -28,6 +28,9 @@ from ._macos_activity import AppNapAssertion
 _log = logging.getLogger(__name__)
 
 _JPEG_QUALITY = 85
+# Preview cache building is memory-heavy. Keep it single-threaded so one bad
+# source image cannot fan out into an OOM across many simultaneous decodes.
+_MAX_PREVIEW_WORKERS = 1
 
 
 def _lower_thread_priority() -> None:
@@ -73,6 +76,7 @@ class PreviewBuildWorker(QThread):
     failed = Signal(str)                 # error message
     progress = Signal(int, int, str)     # done, total_missing, current_path
     canceled = Signal(int, int)          # built, total_in_folder
+    oversized = Signal(int)              # count of images skipped for being too large
 
     def __init__(
         self,
@@ -89,7 +93,7 @@ class PreviewBuildWorker(QThread):
         self._cache_dir = cache_dir
         self._folder_id = folder_id
         self._target = target_long_edge
-        self._workers = max(1, workers)
+        self._workers = max(1, min(workers, _MAX_PREVIEW_WORKERS))
         self._key = key
         self._cancel_event = threading.Event()
 
@@ -137,13 +141,16 @@ class PreviewBuildWorker(QThread):
             self.progress.emit(0, missing, "")
 
             built = 0
+            oversized_count = 0
 
-            def build_one(path: str) -> bool:
+            def build_one(path: str) -> tuple[bool, bool]:
+                """Return (rendered_ok, was_oversized)."""
                 if self._cancel_event.is_set():
-                    return False
+                    return False, False
                 if not os.path.exists(path):
-                    return False
+                    return False, False
                 try:
+                    _log.info("Building preview for %r", path)
                     img = render_preview(path, self._target)
                     buf = io.BytesIO()
                     # Drop alpha for JPEG; flatten transparent pixels onto white.
@@ -156,10 +163,17 @@ class PreviewBuildWorker(QThread):
                         out_path.write_bytes(crypto.encrypt(buf.getvalue()))
                     else:
                         out_path.write_bytes(buf.getvalue())
-                    return True
+                    return True, False
+                except RuntimeError as exc:
+                    msg = str(exc)
+                    if msg.startswith("preview source too large"):
+                        _log.warning("[oversized] Skipping %r: %s", path, msg)
+                        return False, True
+                    _log.warning("Preview build failed for %r: %s", path, exc)
+                    return False, False
                 except Exception as exc:  # noqa: BLE001
                     _log.warning("Preview build failed for %r: %s", path, exc)
-                    return False
+                    return False, False
 
             if self._workers > 1 and missing > 0:
                 with ThreadPoolExecutor(
@@ -176,8 +190,11 @@ class PreviewBuildWorker(QThread):
                         path = futures[future]
                         completed += 1
                         self.progress.emit(completed, missing, path)
-                        if future.result():
+                        ok, too_big = future.result()
+                        if ok:
                             built += 1
+                        elif too_big:
+                            oversized_count += 1
             else:
                 _lower_thread_priority()
                 for idx, path in enumerate(paths, start=1):
@@ -185,9 +202,14 @@ class PreviewBuildWorker(QThread):
                         self.canceled.emit(built, total)
                         return
                     self.progress.emit(idx, missing, path)
-                    if build_one(path):
+                    ok, too_big = build_one(path)
+                    if ok:
                         built += 1
+                    elif too_big:
+                        oversized_count += 1
 
+            if oversized_count > 0:
+                self.oversized.emit(oversized_count)
             if self._cancel_event.is_set():
                 self.canceled.emit(built, total)
             else:

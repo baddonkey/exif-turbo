@@ -204,6 +204,7 @@ class AppController(QObject):
         self._preview_current: int = 0
         self._preview_total: int = 0
         self._preview_current_file: str = ""
+        self._preview_oversized_skipped: int = 0
         self._use_raw_preview: bool = False
         self._scanning_folder_id: int | None = None
         self._scan_queue: list[tuple[int, bool]] = []
@@ -1882,11 +1883,13 @@ class AppController(QObject):
         self._preview_worker.finished.connect(self._on_preview_done)
         self._preview_worker.failed.connect(self._on_preview_failed)
         self._preview_worker.canceled.connect(self._on_preview_canceled)
+        self._preview_worker.oversized.connect(self._on_preview_oversized)
         self._is_building_previews = True
         self._preview_build_folder_id = folder_id
         self._preview_current = 0
         self._preview_total = 0
         self._preview_current_file = ""
+        self._preview_oversized_skipped = 0
         self.isBuildingPreviewsChanged.emit()
         self.previewBuildFolderIdChanged.emit()
         self.previewCurrentChanged.emit()
@@ -1913,14 +1916,23 @@ class AppController(QObject):
         self.isBuildingPreviewsChanged.emit()
         self.previewBuildFolderIdChanged.emit()
 
+    def _on_preview_oversized(self, count: int) -> None:
+        self._preview_oversized_skipped = count
+
     def _on_preview_done(self, built: int, total: int) -> None:
         folder_id = self._preview_build_folder_id
+        oversized = self._preview_oversized_skipped
         self._clear_preview_build_state()
         if folder_id > 0:
             self._refresh_preview_count(folder_id)
-        self._set_status(
-            _("Built {built} preview(s) of {total}.").format(built=built, total=total)
+        msg = _("Built {built} preview(s) of {total}.").format(
+            built=built, total=total
         )
+        if oversized:
+            msg += " " + _("{n} image(s) skipped — too large to decode safely.").format(
+                n=oversized
+            )
+        self._set_status(msg)
 
     def _on_preview_failed(self, error: str) -> None:
         folder_id = self._preview_build_folder_id
@@ -2397,7 +2409,6 @@ class AppController(QObject):
         self._thumb_worker = ThumbWorker(
             self._db_path,
             self._search_model.cache_dir,
-            self._search_model.max_thumb_bytes,
             workers=min(
                 self._settings.workerCount if self._settings else _DEFAULT_WORKERS,
                 _MAX_THUMB_WORKERS,

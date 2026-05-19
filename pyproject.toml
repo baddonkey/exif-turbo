@@ -15,6 +15,7 @@ dependencies = [
   "sqlcipher3>=0.5",
   "markdown>=3.4",
   "cryptography>=42.0",
+  "pyvips>=2.2",
 ]
 
 [project.scripts]

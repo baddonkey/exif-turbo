@@ -16,6 +16,7 @@ from PySide6.QtGui import QImage
 from PySide6.QtQuick import QQuickImageProvider
 
 from ...indexing.image_utils import VIDEO_EXTENSIONS
+from ...utils.preview_render import MAX_PREVIEW_PX, MAX_PREVIEW_SOURCE_PX, render_preview
 from ...utils.video_frame import extract_video_frame
 
 
@@ -124,6 +125,22 @@ def _load_full_resolution(path: str) -> Image.Image | None:
                 rgb = raw.postprocess(use_camera_wb=True)
             return Image.fromarray(rgb)
         except Exception:
+            return None
+    # Probe dimensions before committing to a full decode.  Giant TIFFs
+    # (>100 MP) can require hundreds of MB to load at full resolution, which
+    # causes an OOM kill that bypasses Python exception handling entirely.
+    # In that case we fall back to the same size-protected render path that
+    # the preview cache builder uses.
+    _w = _h = 0
+    try:
+        with Image.open(path) as _probe:
+            _w, _h = _probe.width, _probe.height
+    except Exception:  # noqa: BLE001
+        pass
+    if _w * _h > MAX_PREVIEW_SOURCE_PX:
+        try:
+            return render_preview(path, MAX_PREVIEW_PX)
+        except Exception:  # noqa: BLE001
             return None
     try:
         img = Image.open(path)

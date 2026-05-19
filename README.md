@@ -107,9 +107,6 @@ ExifTool exactly as for photos. Thumbnails and previews are produced via
    not surface `stream.side_data` for are rotated correctly via direct atom
    parsing.
 
-The `ThumbWorker` skips the file-size guard for video files so a 4 GB MP4
-still produces a thumbnail (only one frame is decoded, not the whole file).
-
 ### Recreate Thumbnail / Recreate Preview
 
 Right-clicking the preview image now exposes two extra context-menu items in

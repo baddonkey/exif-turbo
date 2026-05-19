@@ -68,7 +68,6 @@ class SearchListModel(QAbstractListModel):
         self._display_cache: List[Optional[Dict[str, str]]] = []
         self._cache_dir = cache_dir
         self._cache_dir.mkdir(parents=True, exist_ok=True)
-        self._max_thumb_bytes = 1024 * 1024 * 1024
         self._encrypted: bool = False
         self._cached_files: set[str] = self._scan_cache_dir()
         self._checked: set[str] = set()  # file paths — persists across searches
@@ -79,10 +78,6 @@ class SearchListModel(QAbstractListModel):
     @property
     def cache_dir(self) -> Path:
         return self._cache_dir
-
-    @property
-    def max_thumb_bytes(self) -> int:
-        return self._max_thumb_bytes
 
     def roleNames(self) -> dict:
         return {

@@ -155,3 +155,65 @@ def test_preview_worker_writes_encrypted_files_when_keyed(
         f.name.endswith(".jpg.enc") for f in files
     )
     assert not any(f.name.endswith(".jpg") and not f.name.endswith(".jpg.enc") for f in files)
+
+
+def test_preview_worker_clamps_parallel_workers_to_one(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    db = tmp_path / "test.db"
+    cache = tmp_path / "cache"
+
+    # Act
+    worker = PreviewBuildWorker(db, cache, folder_id=1, target_long_edge=128, workers=8)
+
+    # Assert
+    assert worker._workers == 1
+
+
+def test_preview_worker_emits_oversized_signal_for_too_large_images(
+    tmp_path: Path, qtbot: QtBot
+) -> None:
+    # Arrange — seed one normal image and one that is "too large" according to the
+    # pixel-budget guard.  We fake the oversized condition by monkey-patching
+    # render_preview to raise the expected RuntimeError for that specific file.
+    import exif_turbo.ui.workers.preview_build_worker as _mod
+
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    ok_src = src_dir / "ok.jpg"
+    big_src = src_dir / "big.jpg"
+    _make_jpeg(ok_src)
+    _make_jpeg(big_src)
+
+    db = tmp_path / "test.db"
+    cache = tmp_path / "cache"
+    folder_id = _seed_db(db, [ok_src, big_src])
+
+    original_render = _mod.render_preview
+
+    def _fake_render(path: str, target: int) -> Image.Image:
+        if path == str(big_src):
+            raise RuntimeError(f"preview source too large: {path!r} (9999x9999)")
+        return original_render(path, target)
+
+    oversized_counts: list[int] = []
+    worker = PreviewBuildWorker(db, cache, folder_id, target_long_edge=128)
+    worker.oversized.connect(oversized_counts.append)
+
+    _mod.render_preview = _fake_render  # type: ignore[assignment]
+    try:
+        with qtbot.waitSignal(worker.finished, timeout=10_000):
+            worker.start()
+    finally:
+        _mod.render_preview = original_render  # type: ignore[assignment]
+
+    # Assert — one oversized skip was reported, one preview was built.
+    assert oversized_counts == [1]
+    out_dir = preview_dir(cache)
+    ok_st = ok_src.stat()
+    ok_name = preview_cache_name_from_stamp(str(ok_src), ok_st.st_mtime, ok_st.st_size)
+    assert (out_dir / ok_name).exists(), "normal image should still be rendered"
+    big_st = big_src.stat()
+    big_name = preview_cache_name_from_stamp(str(big_src), big_st.st_mtime, big_st.st_size)
+    assert not (out_dir / big_name).exists(), "oversized image must not be rendered"

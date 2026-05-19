@@ -19,6 +19,7 @@ from PySide6.QtCore import QThread, Signal
 
 from ...data.image_index_repository import ImageIndexRepository
 from ...indexing.image_utils import RAW_EXTENSIONS, VIDEO_EXTENSIONS, orient_raw_thumb
+from ...utils.preview_render import MAX_PREVIEW_SOURCE_PX, render_preview
 from ...utils.thumb_cache import thumb_cache_name_from_stamp, thumb_cache_path
 from ...utils.thumb_crypto import ThumbCrypto
 from ...utils.video_frame import extract_video_frame
@@ -62,6 +63,22 @@ def _open_image(path: str) -> Image.Image:
     # Read all bytes first so the codec decodes from memory rather than making
     # many small seeks over a network share (NFS/SMB TIFF codecs are especially
     # seek-heavy — reading bytes sequentially first is orders of magnitude faster).
+    # But first probe the dimensions: giant TIFFs (>100 MP) can require hundreds
+    # of MB to decode at full resolution before the thumbnail step shrinks them.
+    # For those we use pyvips via render_preview, which streams the source and
+    # only decodes the tiles needed to produce the target thumbnail size.
+    _w = _h = 0
+    try:
+        with Image.open(path) as _probe:
+            _w, _h = _probe.width, _probe.height
+    except Exception:  # noqa: BLE001
+        pass
+    if _w * _h > MAX_PREVIEW_SOURCE_PX:
+        # render_preview routes through pyvips for large images and returns a
+        # Pillow Image already scaled to _THUMB_SIZE; the .thumbnail() call in
+        # build_thumb becomes a no-op.  RuntimeError (oversized beyond vips cap)
+        # propagates to build_thumb which writes a .skip sentinel.
+        return render_preview(path, _THUMB_SIZE[0])
     with open(path, "rb") as f:
         data = f.read()
     buf = io.BytesIO(data)
@@ -87,14 +104,12 @@ class ThumbWorker(QThread):
         self,
         db_path: Path,
         cache_dir: Path,
-        max_thumb_bytes: int,
         workers: int = 1,
         key: str = "",
     ) -> None:
         super().__init__()
         self._db_path = db_path
         self.cache_dir = cache_dir
-        self.max_thumb_bytes = max_thumb_bytes
         self.workers = max(1, workers)
         self._key = key
         self._cancel_event = threading.Event()
@@ -221,23 +236,8 @@ class ThumbWorker(QThread):
                 if stamp is not None:
                     cache_name = thumb_cache_name_from_stamp(path, stamp[0], stamp[1])
                     cache_path_obj = self.cache_dir / cache_name
-                    # Use the DB-recorded size to avoid an extra NAS lstat().
-                    # 21 K images × 2 redundant lstats = 42 K unnecessary NAS
-                    # round-trips on macOS SMB (each one also bounces the GIL).
-                    file_size = stamp[1]
                 else:
                     cache_path_obj = thumb_cache_path(path, self.cache_dir)
-                    try:
-                        file_size = os.path.getsize(path)
-                    except OSError:
-                        return False  # transient (e.g. NAS offline)
-                if file_size > self.max_thumb_bytes and ext not in VIDEO_EXTENSIONS:
-                    # Videos are never fully loaded into memory — only a single
-                    # decoded frame is used — so the file-size guard does not
-                    # apply to them.
-                    size_mb = file_size // (1024 * 1024)
-                    _mark_skip(cache_path_obj, f"file too large ({size_mb} MB): {path}")
-                    return False
                 try:
                     img = _open_image(path)
                     img.thumbnail(_THUMB_SIZE, Image.LANCZOS)
