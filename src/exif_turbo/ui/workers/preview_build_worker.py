@@ -171,6 +171,15 @@ class PreviewBuildWorker(QThread):
                         return False, True
                     _log.warning("Preview build failed for %r: %s", path, exc)
                     return False, False
+                except TimeoutError:
+                    _log.warning("Preview decode timed out for %r — writing skip sentinel", path)
+                    try:
+                        (out_dir / (expected_name(path) + ".skip")).write_text(
+                            "timeout", encoding="utf-8"
+                        )
+                    except OSError:
+                        pass
+                    return False, False
                 except Exception as exc:  # noqa: BLE001
                     _log.warning("Preview build failed for %r: %s", path, exc)
                     return False, False
@@ -229,6 +238,9 @@ def _scan_existing(out_dir: Path, *, encrypted: bool) -> set[str]:
             for entry in it:
                 if entry.name.endswith(suffix):
                     found.add(entry.name)
+                elif entry.name.endswith(".skip"):
+                    # "abc.jpg.skip" or "abc.jpg.enc.skip" → exclude "abc.jpg" / "abc.jpg.enc"
+                    found.add(entry.name[:-5])
     except OSError:
         pass
     return found

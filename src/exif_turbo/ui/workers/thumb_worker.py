@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import os
 import threading
 import time
@@ -36,6 +37,37 @@ _THUMB_SIZE = (144, 144)
 
 # Alias for readability within this module
 _RAW_EXTENSIONS = RAW_EXTENSIONS
+
+_log = logging.getLogger(__name__)
+
+# Per-file timeout for rawpy/PyAV decode calls — mirrors preview_render.py.
+# 300 s is generous enough for a 2 GB RAW file on a slow NAS (~20 MB/s).
+_DECODE_TIMEOUT_S = 300.0
+
+
+def _call_with_timeout(fn, *args, timeout_s: float = _DECODE_TIMEOUT_S):  # type: ignore[no-untyped-def]
+    """Run *fn*(*args*) in a daemon thread; raise ``TimeoutError`` if it does
+    not finish within *timeout_s* seconds.  The stuck thread is leaked.
+    """
+    result: list = []
+    error: list[BaseException] = []
+
+    def _run() -> None:
+        try:
+            result.append(fn(*args))
+        except Exception as exc:  # noqa: BLE001
+            error.append(exc)
+
+    t = threading.Thread(target=_run, daemon=True, name=f"decode-timeout-{fn.__name__}")
+    t.start()
+    t.join(timeout_s)
+    if t.is_alive():
+        raise TimeoutError(
+            f"Decode of {args[0]!r} timed out after {timeout_s:.0f} s"
+        )
+    if error:
+        raise error[0]
+    return result[0]
 
 
 def _open_image(path: str) -> Image.Image:
@@ -239,7 +271,7 @@ class ThumbWorker(QThread):
                 else:
                     cache_path_obj = thumb_cache_path(path, self.cache_dir)
                 try:
-                    img = _open_image(path)
+                    img = _call_with_timeout(_open_image, path)
                     img.thumbnail(_THUMB_SIZE, Image.LANCZOS)
                     if crypto.is_active:
                         buf = io.BytesIO()
@@ -251,6 +283,12 @@ class ThumbWorker(QThread):
                         img.save(str(cache_path_obj), "PNG")
                         existing.add(cache_path_obj.name)
                     return True
+                except TimeoutError:
+                    _mark_skip(
+                        cache_path_obj,
+                        f"decode timeout after {_DECODE_TIMEOUT_S:.0f}s: {path}",
+                    )
+                    return False
                 except Exception as exc:
                     _mark_skip(cache_path_obj, f"{type(exc).__name__}: {exc} — {path}")
                     return False

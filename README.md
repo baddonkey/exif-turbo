@@ -46,6 +46,24 @@ Fully generated using VS Code Copilot.
 
 ### Bug fixes
 
+- **Thumbnail/preview worker no longer hangs on corrupt or unusual files** —
+  `rawpy` (libraw) and PyAV (FFmpeg) are C-level libraries whose blocking calls
+  cannot be interrupted by Python. A corrupt or malformed RAW file or video could
+  cause the worker to stall indefinitely at the last few files, with no response
+  to the Cancel button and the process unkillable from Task Manager. Each decode
+  call now runs in a daemon thread with a **300-second timeout** (generous enough
+  for a 2 GB RAW file on a slow NAS). On timeout the file is skipped and a
+  `.skip` sentinel is written so it is never retried; the reason is logged to
+  `thumbs_skipped.log` in the cache directory.
+
+- **Windows MSI upgrades now work across different admin users** — The Start Menu
+  shortcut component used `HKCU` as its WiX KeyPath. Windows Installer uses the
+  KeyPath to track component state, so when a different admin account tried to
+  upgrade a version installed by another user the key was not found in their hive
+  and the installer aborted with **error 2755**. The KeyPath now uses `HKLM`
+  (machine-wide), so any admin can install, upgrade, or uninstall regardless of
+  who originally ran the MSI.
+
 - **macOS App Nap suppression** — Background indexing, thumbnail building, and
   preview rendering no longer stall when the display sleeps or the screen locks.
   An `NSActivityUserInitiated` assertion is now held for the duration of each
