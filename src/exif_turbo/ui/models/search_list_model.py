@@ -244,6 +244,33 @@ class SearchListModel(QAbstractListModel):
             return None
         return (item.mtime, item.size)
 
+    def get_pixel_count(self, row: int) -> int | None:
+        """Return ``width * height`` parsed from stored exiftool metadata, or ``None``.
+
+        Used by the preview/raw providers to skip a live file probe and route
+        large images directly to pyvips without opening the source file.
+        """
+        if not (0 <= row < len(self._rows)):
+            return None
+        item = self._rows[row]
+        if not item.metadata_json:
+            return None
+        try:
+            meta = json.loads(item.metadata_json)
+            for w_key, h_key in (
+                ("File:ImageWidth", "File:ImageHeight"),
+                ("ExifIFD:ExifImageWidth", "ExifIFD:ExifImageHeight"),
+                ("IFD0:ImageWidth", "IFD0:ImageHeight"),
+                ("PNG:ImageWidth", "PNG:ImageHeight"),
+            ):
+                w = meta.get(w_key)
+                h = meta.get(h_key)
+                if w and h:
+                    return int(float(w)) * int(float(h))
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+
     def get_metadata_json(self, row: int) -> str | None:
         if 0 <= row < len(self._rows):
             return self._rows[row].metadata_json

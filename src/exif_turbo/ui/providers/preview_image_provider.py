@@ -66,10 +66,10 @@ class PreviewImageProvider(QQuickImageProvider):
         self, id: str, size: QSize, requestedSize: QSize
     ) -> QImage:
         QThread.currentThread().setPriority(QThread.Priority.HighPriority)
-        path, stamp = _parse_id(id)
+        path, stamp, pixel_count = _parse_id(id)
         target = _effective_target(requestedSize)
         try:
-            img = self._load_cached_or_live(path, stamp, target)
+            img = self._load_cached_or_live(path, stamp, target, pixel_count)
         except Exception as exc:  # noqa: BLE001
             _log.error("Preview failed for %r: %s", path, exc)
             img = QImage()
@@ -80,12 +80,13 @@ class PreviewImageProvider(QQuickImageProvider):
     # ── Internal ─────────────────────────────────────────────────────────
 
     def _load_cached_or_live(
-        self, path: str, stamp: tuple[float, int] | None, target: int
+        self, path: str, stamp: tuple[float, int] | None, target: int,
+        pixel_count: int | None = None,
     ) -> QImage:
         cached = self._try_load_cached(path, stamp)
         if cached is not None:
             return _pil_to_qimage(cached)
-        pil_img = render_preview(path, target)
+        pil_img = render_preview(path, target, known_pixel_count=pixel_count)
         return _pil_to_qimage(pil_img)
 
     def _try_load_cached(
@@ -132,24 +133,29 @@ class PreviewImageProvider(QQuickImageProvider):
 # ── helpers ──────────────────────────────────────────────────────────────
 
 
-def _parse_id(raw_id: str) -> tuple[str, tuple[float, int] | None]:
-    """Split a provider id into ``(path, stamp)``.
+def _parse_id(raw_id: str) -> tuple[str, tuple[float, int] | None, int | None]:
+    """Split a provider id into ``(path, stamp, pixel_count)``.
 
-    The id format is ``<encoded-path>[?m=<mtime>&s=<size>]`` — the optional
-    query string carries DB-stored stamps so the cache lookup does not need
-    to stat the source file (which may live on a disconnected drive).
+    The id format is ``<encoded-path>[?m=<mtime>&s=<size>[&px=<pixel_count>]]``.
+    The optional ``px`` parameter carries the DB-stored pixel count (width *
+    height from exiftool metadata) so the provider can route large images to
+    pyvips without opening the source file.
     """
     qpos = raw_id.find("?")
     if qpos < 0:
-        return urllib.parse.unquote(raw_id), None
+        return urllib.parse.unquote(raw_id), None, None
     path = urllib.parse.unquote(raw_id[:qpos])
     params = urllib.parse.parse_qs(raw_id[qpos + 1 :])
     try:
         mtime = float(params["m"][0])
         size_b = int(params["s"][0])
     except (KeyError, IndexError, ValueError):
-        return path, None
-    return path, (mtime, size_b)
+        return path, None, None
+    try:
+        px = int(params["px"][0])
+    except (KeyError, IndexError, ValueError):
+        px = None
+    return path, (mtime, size_b), px
 
 
 def _effective_target(requested: QSize) -> int:

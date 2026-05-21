@@ -5,9 +5,20 @@ import logging
 import os
 import threading
 import time
+import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional
+
+# Pillow emits UserWarning for malformed EXIF fields in TIFF files
+# (e.g. "Corrupt EXIF data. Expecting to read 12 bytes but only got 6").
+# The image still decodes correctly — suppress the noise.
+warnings.filterwarnings(
+    "ignore",
+    message="Corrupt EXIF data",
+    category=UserWarning,
+    module=r"PIL\.TiffImagePlugin",
+)
 
 try:
     import rawpy
@@ -70,8 +81,12 @@ def _call_with_timeout(fn, *args, timeout_s: float = _DECODE_TIMEOUT_S):  # type
     return result[0]
 
 
-def _open_image(path: str) -> Image.Image:
-    """Open any image as a Pillow Image, using rawpy for RAW files."""
+def _open_image(path: str, known_pixel_count: int | None = None) -> Image.Image:
+    """Open any image as a Pillow Image, using rawpy for RAW files.
+
+    *known_pixel_count* — when provided (e.g. from DB-stored exiftool
+    metadata), the file-header probe is skipped.
+    """
     ext = Path(path).suffix.lower()
     if ext in VIDEO_EXTENSIONS:
         # Extract frame at 1/3 of video duration; returns a PIL RGB Image
@@ -92,25 +107,25 @@ def _open_image(path: str) -> Image.Image:
                 rgb = raw.postprocess(use_camera_wb=True, half_size=True)
                 return Image.fromarray(rgb)
         return orient_raw_thumb(img, raw_flip)
-    # Read all bytes first so the codec decodes from memory rather than making
-    # many small seeks over a network share (NFS/SMB TIFF codecs are especially
-    # seek-heavy — reading bytes sequentially first is orders of magnitude faster).
-    # But first probe the dimensions: giant TIFFs (>100 MP) can require hundreds
-    # of MB to decode at full resolution before the thumbnail step shrinks them.
-    # For those we use pyvips via render_preview, which streams the source and
-    # only decodes the tiles needed to produce the target thumbnail size.
-    _w = _h = 0
-    try:
-        with Image.open(path) as _probe:
-            _w, _h = _probe.width, _probe.height
-    except Exception:  # noqa: BLE001
-        pass
-    if _w * _h > MAX_PREVIEW_SOURCE_PX:
+    # Determine the pixel count: use the DB-stored exiftool value when
+    # available so the file header is not read a second time.  Fall back to
+    # a live probe when no metadata is available (first-run, unindexed file).
+    if known_pixel_count is not None:
+        pixel_count = known_pixel_count
+    else:
+        _w = _h = 0
+        try:
+            with Image.open(path) as _probe:
+                _w, _h = _probe.width, _probe.height
+        except Exception:  # noqa: BLE001
+            pass
+        pixel_count = _w * _h
+    if pixel_count > MAX_PREVIEW_SOURCE_PX:
         # render_preview routes through pyvips for large images and returns a
         # Pillow Image already scaled to _THUMB_SIZE; the .thumbnail() call in
         # build_thumb becomes a no-op.  RuntimeError (oversized beyond vips cap)
         # propagates to build_thumb which writes a .skip sentinel.
-        return render_preview(path, _THUMB_SIZE[0])
+        return render_preview(path, _THUMB_SIZE[0], known_pixel_count=known_pixel_count)
     with open(path, "rb") as f:
         data = f.read()
     buf = io.BytesIO(data)
@@ -163,10 +178,13 @@ class ThumbWorker(QThread):
     def run(self) -> None:
         _nap = AppNapAssertion("Building image thumbnails")
         try:
-            # Read paths and stamps from the DB on this background thread —
-            # keeps the main thread free so QML can paint thumbnails immediately.
+            # Read paths, stamps, and pixel counts from the DB on this
+            # background thread — keeps the main thread free so QML can paint
+            # thumbnails immediately.  Pixel counts (w*h from exiftool metadata)
+            # let the probe-before-decode step be skipped entirely.
             repo = ImageIndexRepository(self._db_path, key=self._key)
             stamps = repo.get_enabled_stamps()
+            pixel_counts = repo.get_enabled_image_pixel_counts()
             repo.close()
 
             if self._cancel_event.is_set():
@@ -271,7 +289,7 @@ class ThumbWorker(QThread):
                 else:
                     cache_path_obj = thumb_cache_path(path, self.cache_dir)
                 try:
-                    img = _call_with_timeout(_open_image, path)
+                    img = _call_with_timeout(_open_image, path, pixel_counts.get(path))
                     img.thumbnail(_THUMB_SIZE, Image.LANCZOS)
                     if crypto.is_active:
                         buf = io.BytesIO()

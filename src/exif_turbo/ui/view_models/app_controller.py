@@ -196,6 +196,9 @@ class AppController(QObject):
         # DB-stored (mtime, size) for the pending preview; used to compute the
         # on-disk cache filename without statting the (possibly missing) source.
         self._pending_preview_stamp: tuple[float, int] | None = None
+        # Pixel count (width * height) from indexed exiftool metadata; passed
+        # to providers so they can route large images to pyvips without probing.
+        self._pending_preview_pixel_count: int | None = None
         self._index_worker: IndexWorker | None = None
         self._thumb_worker: ThumbWorker | None = None
         self._preview_worker: PreviewBuildWorker | None = None
@@ -1424,6 +1427,7 @@ class AppController(QObject):
         # list render before the heavier preview decode starts.
         self._pending_preview_path = path or ""
         self._pending_preview_stamp = self._search_model.get_stamp(row)
+        self._pending_preview_pixel_count = self._search_model.get_pixel_count(row)
         # Selecting a new image always falls back to the cached preview
         # (per-image scope for the toggle).  When no cached preview exists
         # for this image we transparently switch to the original instead;
@@ -2137,9 +2141,11 @@ class AppController(QObject):
         """
         encoded = urllib.parse.quote(path, safe="")
         stamp = self._pending_preview_stamp
+        px = self._pending_preview_pixel_count
         bust = f"&t={self._preview_bust}" if self._preview_bust else ""
         if stamp is not None:
-            return f"image://{scheme}/{encoded}?m={stamp[0]}&s={stamp[1]}{bust}"
+            px_param = f"&px={px}" if px else ""
+            return f"image://{scheme}/{encoded}?m={stamp[0]}&s={stamp[1]}{px_param}{bust}"
         if bust:
             return f"image://{scheme}/{encoded}?{bust[1:]}"  # strip leading &
         return f"image://{scheme}/{encoded}"
@@ -2216,6 +2222,7 @@ class AppController(QObject):
         self._preview_delay_timer.stop()
         self._pending_preview_path = ""
         self._pending_preview_stamp = None
+        self._pending_preview_pixel_count = None
         self._details_plain_text = ""
         self._details_html = ""
         self.detailsHtmlChanged.emit()

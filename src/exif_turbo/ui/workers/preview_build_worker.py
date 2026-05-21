@@ -112,6 +112,7 @@ class PreviewBuildWorker(QThread):
             repo = ImageIndexRepository(self._db_path, key=self._key)
             try:
                 stamps = repo.get_folder_stamps(self._folder_id)
+                pixel_counts = repo.get_folder_image_pixel_counts(self._folder_id)
             finally:
                 repo.close()
 
@@ -150,8 +151,10 @@ class PreviewBuildWorker(QThread):
                 if not os.path.exists(path):
                     return False, False
                 try:
-                    _log.info("Building preview for %r", path)
-                    img = render_preview(path, self._target)
+                    img = render_preview(
+                        path, self._target,
+                        known_pixel_count=pixel_counts.get(path),
+                    )
                     buf = io.BytesIO()
                     # Drop alpha for JPEG; flatten transparent pixels onto white.
                     if img.mode in ("RGBA", "LA", "P"):

@@ -20,7 +20,18 @@ from __future__ import annotations
 import io
 import logging
 import threading
+import warnings
 from pathlib import Path
+
+# Pillow emits UserWarning for malformed EXIF fields in TIFF files
+# (e.g. "Corrupt EXIF data. Expecting to read 12 bytes but only got 6").
+# The image still decodes correctly — suppress the noise.
+warnings.filterwarnings(
+    "ignore",
+    message="Corrupt EXIF data",
+    category=UserWarning,
+    module=r"PIL\.TiffImagePlugin",
+)
 
 try:  # pragma: no cover - optional dep, tested separately
     import rawpy
@@ -43,6 +54,12 @@ try:  # pragma: no cover - optional dep, tested separately
     # sequential large-TIFF calls until the process is OOM-killed.
     _pyvips.cache_set_max(0)
     _pyvips.cache_set_max_mem(0)
+    # Register a shutdown hook so libvips cleans up its worker threads before
+    # the process exits.  Without this, libvips threads can still be running
+    # during Python's interpreter shutdown, causing a segfault (SIGSEGV) in
+    # the process teardown path (observed in pytest and on app quit).
+    import atexit as _atexit
+    _atexit.register(_pyvips.shutdown)
     _PYVIPS_AVAILABLE = True
 except (ImportError, OSError):  # pragma: no cover
     _PYVIPS_AVAILABLE = False
@@ -105,11 +122,20 @@ def _call_with_timeout(fn, *args, timeout_s: float = _DECODE_TIMEOUT_S):  # type
 MAX_PREVIEW_SOURCE_PX = 100_000_000
 
 
-def render_preview(path: str, target_long_edge: int) -> Image.Image:
+def render_preview(
+    path: str,
+    target_long_edge: int,
+    *,
+    known_pixel_count: int | None = None,
+) -> Image.Image:
     """Decode *path* into a Pillow image sized to ``target_long_edge``.
 
     Caller passes the raw long-edge target (e.g. 2048).  The result will
     have ``max(width, height) <= target_long_edge`` after thumbnailing.
+
+    *known_pixel_count* — when provided (e.g. from the DB-stored exiftool
+    metadata), the file-header probe is skipped so no extra I/O is needed
+    to decide whether to route through libvips.
     """
     target_long_edge = max(1, min(target_long_edge, MAX_PREVIEW_PX))
     target = (target_long_edge, target_long_edge)
@@ -118,25 +144,41 @@ def render_preview(path: str, target_long_edge: int) -> Image.Image:
         return _call_with_timeout(extract_video_frame, path, target_long_edge)
     if ext in RAW_EXTENSIONS and _RAWPY_AVAILABLE:
         return _call_with_timeout(_load_raw, path, target)
-    return _load_standard(path, target)
+    return _load_standard(path, target, known_pixel_count=known_pixel_count)
 
 
-def _load_standard(path: str, target: tuple[int, int]) -> Image.Image:
-    # Probe dimensions from the file header before reading pixel data.
-    # For large TIFFs on a NAS this avoids pulling hundreds of MB across the
-    # network just to discover the file must be routed through libvips.
-    _w = _h = 0
-    try:
-        with Image.open(path) as _probe:
-            _w, _h = _probe.width, _probe.height
-    except Exception:  # noqa: BLE001 — any probe failure falls through to PIL
-        pass
-    if _w * _h > MAX_PREVIEW_SOURCE_PX:
+def _load_standard(
+    path: str,
+    target: tuple[int, int],
+    *,
+    known_pixel_count: int | None = None,
+) -> Image.Image:
+    # Use the DB-stored exiftool pixel count when available so the file
+    # header does not need to be read twice (once here and once by the
+    # calling worker's own probe).  Fall back to the live Image.open probe
+    # when no metadata is available (e.g. on-demand provider calls).
+    _probe_failed = False
+    if known_pixel_count is not None:
+        pixel_count = known_pixel_count
+    else:
+        # Probe dimensions from the file header before reading pixel data.
+        # For large TIFFs on a NAS this avoids pulling hundreds of MB across
+        # the network just to discover the file must be routed through libvips.
+        _w = _h = 0
+        try:
+            with Image.open(path) as _probe:
+                _w, _h = _probe.width, _probe.height
+        except Exception:  # noqa: BLE001 — probe failure → try pyvips below
+            _probe_failed = True
+        pixel_count = _w * _h
+    if pixel_count > MAX_PREVIEW_SOURCE_PX or _probe_failed:
         if _PYVIPS_AVAILABLE:
             return _load_vips(path, target)
-        raise RuntimeError(
-            f"preview source too large: {path!r} ({_w}x{_h})"
-        )
+        if pixel_count > MAX_PREVIEW_SOURCE_PX:
+            raise RuntimeError(
+                f"preview source too large: {path!r} ({pixel_count} px)"
+            )
+        # probe failed and pyvips unavailable — fall through to PIL attempt
 
     # Normal path: read into BytesIO so the codec decodes from memory
     # (CPython releases the GIL during ReadFile(), keeping Qt's event loop alive).

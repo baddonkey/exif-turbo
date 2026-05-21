@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import os
 import urllib.parse
 
@@ -18,6 +19,8 @@ from PySide6.QtQuick import QQuickImageProvider
 from ...indexing.image_utils import VIDEO_EXTENSIONS
 from ...utils.preview_render import MAX_PREVIEW_PX, MAX_PREVIEW_SOURCE_PX, render_preview
 from ...utils.video_frame import extract_video_frame
+
+_log = logging.getLogger(__name__)
 
 
 class RawImageProvider(QQuickImageProvider):
@@ -42,13 +45,9 @@ class RawImageProvider(QQuickImageProvider):
     def requestImage(  # type: ignore[override]
         self, id: str, size: QSize, requestedSize: QSize
     ) -> QImage:
-        # Strip the optional ``?m=<mtime>&s=<size>`` query (used by the preview
-        # cache lookup) before unquoting — the raw provider only needs the
-        # file path itself.
-        raw_id = id.split("?", 1)[0]
-        path = urllib.parse.unquote(raw_id)
+        path, pixel_count = _parse_id(id)
         try:
-            img = _decode_raw(path, requestedSize)
+            img = _decode_raw(path, requestedSize, pixel_count)
         except Exception:
             img = QImage()
         size.setWidth(img.width())
@@ -56,7 +55,7 @@ class RawImageProvider(QQuickImageProvider):
         return img
 
 
-def _decode_raw(path: str, requested_size: QSize) -> QImage:
+def _decode_raw(path: str, requested_size: QSize, known_pixel_count: int | None = None) -> QImage:
     """Decode the source image at full resolution for the "Raw" toggle.
 
     The toggle's job is to escape the cached preview and show the actual
@@ -64,14 +63,14 @@ def _decode_raw(path: str, requested_size: QSize) -> QImage:
     run a full demosaic via ``rawpy.postprocess``; for everything else
     (JPEG, TIFF, PNG, HEIC, …) we just decode the original file with
     Pillow. Either way the returned image is at full source resolution —
-    QML scales it down to fit, and zooming past 100 % then reveals real
+    QML scales it down to fit, and zooming past 100 % then reveals real
     pixels instead of the upscaled thumb.
 
     ``requested_size`` is intentionally ignored.
     """
     del requested_size  # full-resolution by design — see docstring
 
-    img = _load_full_resolution(path)
+    img = _load_full_resolution(path, known_pixel_count)
     if img is None:
         return QImage()
 
@@ -96,7 +95,27 @@ _RAW_EXTS = frozenset({
 })
 
 
-def _load_full_resolution(path: str) -> Image.Image | None:
+def _parse_id(raw_id: str) -> tuple[str, int | None]:
+    """Split a provider id into ``(path, pixel_count)``.
+
+    The id format is ``<encoded-path>[?m=<mtime>&s=<size>[&px=<pixel_count>]]``.
+    The optional ``px`` parameter carries the DB-stored pixel count (width *
+    height from exiftool metadata) so the provider can route large images to
+    pyvips without probing the source file.
+    """
+    qpos = raw_id.find("?")
+    path = urllib.parse.unquote(raw_id[:qpos] if qpos >= 0 else raw_id)
+    if qpos < 0:
+        return path, None
+    params = urllib.parse.parse_qs(raw_id[qpos + 1:])
+    try:
+        px = int(params["px"][0])
+    except (KeyError, IndexError, ValueError):
+        px = None
+    return path, px
+
+
+def _load_full_resolution(path: str, known_pixel_count: int | None = None) -> Image.Image | None:
     """Return the source image at full resolution, or ``None`` on failure."""
     ext = os.path.splitext(path)[1].lower()
     if ext in VIDEO_EXTENSIONS:
@@ -126,21 +145,22 @@ def _load_full_resolution(path: str) -> Image.Image | None:
             return Image.fromarray(rgb)
         except Exception:
             return None
-    # Probe dimensions before committing to a full decode.  Giant TIFFs
-    # (>100 MP) can require hundreds of MB to load at full resolution, which
-    # causes an OOM kill that bypasses Python exception handling entirely.
-    # In that case we fall back to the same size-protected render path that
-    # the preview cache builder uses.
-    _w = _h = 0
-    try:
-        with Image.open(path) as _probe:
-            _w, _h = _probe.width, _probe.height
-    except Exception:  # noqa: BLE001
-        pass
-    if _w * _h > MAX_PREVIEW_SOURCE_PX:
+    # Use the indexed exiftool pixel count when available; otherwise probe the
+    # file header.  If the probe fails (e.g. unsupported TIFF codec) treat the
+    # image as potentially oversized so pyvips gets a chance to decode it.
+    if known_pixel_count is not None:
+        pixel_count: int | None = known_pixel_count
+    else:
         try:
-            return render_preview(path, MAX_PREVIEW_PX)
+            with Image.open(path) as _probe:
+                pixel_count = _probe.width * _probe.height
         except Exception:  # noqa: BLE001
+            pixel_count = None  # probe failed — fall through to pyvips
+    if pixel_count is None or pixel_count > MAX_PREVIEW_SOURCE_PX:
+        try:
+            return render_preview(path, MAX_PREVIEW_PX, known_pixel_count=known_pixel_count)
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("pyvips render failed for %r: %s", path, exc)
             return None
     try:
         img = Image.open(path)

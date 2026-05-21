@@ -192,7 +192,7 @@ def test_preview_worker_emits_oversized_signal_for_too_large_images(
 
     original_render = _mod.render_preview
 
-    def _fake_render(path: str, target: int) -> Image.Image:
+    def _fake_render(path: str, target: int, *, known_pixel_count: int | None = None) -> Image.Image:
         if path == str(big_src):
             raise RuntimeError(f"preview source too large: {path!r} (9999x9999)")
         return original_render(path, target)
