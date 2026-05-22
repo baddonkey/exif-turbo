@@ -31,6 +31,7 @@ Fully generated using VS Code Copilot.
 - Scoped rescan — rescanning a single folder only updates that folder's records; other indexed folders are never touched
 - Reset Database — wipes all indexed images, folder records, and thumbnail cache in one step; database file shrinks immediately
 - RAW format support: CR2, CR3, NEF, ARW, DNG, ORF, RW2, PEF, RAF, RWL, SRW
+- **Large image rendering via libvips** — images exceeding 100 megapixels (stitched panoramas, medium-format scans, large TIFFs) are decoded via **libvips** (`pyvips`) rather than Pillow; libvips streams only the tiles needed for the downscaled preview so memory use stays constant regardless of source file size. Bundled in the Windows MSI, Linux DEB, and Linux RPM packages.
 - EXIF orientation correction for thumbnails (all formats including RAW)
 - Encrypted database at rest (SQLCipher); passphrase set on first launch, unlocked via the UI
 - **Mark / select images** — select all results (or deselect all) with a single menu action; individual checkbox per result row
@@ -43,6 +44,18 @@ Fully generated using VS Code Copilot.
 - **Fast NAS scanning** — on macOS/Linux, `ImageFinder` spawns up to 8 parallel `find` subprocesses (one per top-level subdirectory) so all `getdents()`/`lstat()` calls happen inside a C binary outside the Python GIL; a live "N files found…" counter updates the progress panel while discovery is still running
 
 ## Recent changes
+
+### Large image rendering via libvips
+
+Images exceeding **100 megapixels** (stitched panoramas, medium-format scanner output, large TIFFs) are now decoded via **libvips** (the `pyvips` binding) rather than Pillow. libvips uses tiled, streaming I/O — only the pixels needed for the downscaled preview are ever decompressed — keeping memory use constant regardless of source file size. Pillow continues to handle all images below the 100 MP threshold.
+
+libvips is initialised lazily on first use (not at app startup) to avoid a GLib/Qt thread-pool conflict on macOS that causes `abort()` during Qt event processing on macOS arm64.
+
+libvips is now **bundled in every package**:
+
+- **Windows MSI** — `_libvips.pyd` and `libvips-42-*.dll` ship inside `_internal/`; a runtime `os.add_dll_directory` call before the first import adds `_internal/` to the Windows DLL search path so the CFFI extension can locate its native library (Python 3.8+ restricts the default DLL search path via `SetDefaultDllDirectories`).
+- **Linux DEB / RPM** — `_libvips.abi3.so` and the companion shared library ship in `_internal/pyvips_binary.libs/`; the `$ORIGIN/pyvips_binary.libs` rpath embedded in the extension resolves correctly at runtime.
+- **macOS DMG** — was already working; no changes required.
 
 ### Bug fixes
 

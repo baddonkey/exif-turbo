@@ -47,18 +47,31 @@ except ImportError:  # pragma: no cover
 _pyvips_mod = None  # type: ignore[assignment]  — set by _ensure_pyvips()
 _PYVIPS_AVAILABLE: bool | None = None  # None = not yet probed
 _pyvips_lock = threading.Lock()
+# Holds the os.add_dll_directory cookie on Windows/PyInstaller so that the
+# _internal/ directory stays in the DLL search path for the process lifetime.
+_vips_dll_dir: object = None
 
 
 def _ensure_pyvips() -> bool:  # pragma: no cover — tested via integration path
     """Initialise pyvips on first use; return True if available."""
-    global _pyvips_mod, _PYVIPS_AVAILABLE
+    global _pyvips_mod, _PYVIPS_AVAILABLE, _vips_dll_dir
     if _PYVIPS_AVAILABLE is not None:
         return _PYVIPS_AVAILABLE
     with _pyvips_lock:
         if _PYVIPS_AVAILABLE is not None:  # re-check under lock
             return _PYVIPS_AVAILABLE
         try:
+            import sys as _sys
             import os as _os
+            # On Windows (Python 3.8+), SetDefaultDllDirectories restricts the
+            # DLL search path.  When PyInstaller bundles the app the _internal/
+            # directory is NOT automatically in the Windows DLL search path for
+            # extension-module dependencies.  Explicitly add it so that loading
+            # _libvips.pyd can find libvips-42-*.dll from _internal/.
+            # We store the cookie in a module-level variable so that it is not
+            # garbage-collected (GC would remove the directory from the path).
+            if hasattr(_sys, "_MEIPASS") and hasattr(_os, "add_dll_directory"):
+                _vips_dll_dir = _os.add_dll_directory(_sys._MEIPASS)
             # Cap libvips's internal thread-pool to 1 so concurrent _load_vips
             # calls don't each spawn cpu_count() threads, exhausting memory on
             # large TIFFs.  setdefault preserves any explicit user override.
