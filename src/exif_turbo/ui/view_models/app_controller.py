@@ -196,6 +196,9 @@ class AppController(QObject):
         # DB-stored (mtime, size) for the pending preview; used to compute the
         # on-disk cache filename without statting the (possibly missing) source.
         self._pending_preview_stamp: tuple[float, int] | None = None
+        # Pixel count (width * height) from indexed exiftool metadata; passed
+        # to providers so they can route large images to pyvips without probing.
+        self._pending_preview_pixel_count: int | None = None
         self._index_worker: IndexWorker | None = None
         self._thumb_worker: ThumbWorker | None = None
         self._preview_worker: PreviewBuildWorker | None = None
@@ -204,6 +207,7 @@ class AppController(QObject):
         self._preview_current: int = 0
         self._preview_total: int = 0
         self._preview_current_file: str = ""
+        self._preview_oversized_skipped: int = 0
         self._use_raw_preview: bool = False
         self._scanning_folder_id: int | None = None
         self._scan_queue: list[tuple[int, bool]] = []
@@ -1423,6 +1427,7 @@ class AppController(QObject):
         # list render before the heavier preview decode starts.
         self._pending_preview_path = path or ""
         self._pending_preview_stamp = self._search_model.get_stamp(row)
+        self._pending_preview_pixel_count = self._search_model.get_pixel_count(row)
         # Selecting a new image always falls back to the cached preview
         # (per-image scope for the toggle).  When no cached preview exists
         # for this image we transparently switch to the original instead;
@@ -1882,11 +1887,13 @@ class AppController(QObject):
         self._preview_worker.finished.connect(self._on_preview_done)
         self._preview_worker.failed.connect(self._on_preview_failed)
         self._preview_worker.canceled.connect(self._on_preview_canceled)
+        self._preview_worker.oversized.connect(self._on_preview_oversized)
         self._is_building_previews = True
         self._preview_build_folder_id = folder_id
         self._preview_current = 0
         self._preview_total = 0
         self._preview_current_file = ""
+        self._preview_oversized_skipped = 0
         self.isBuildingPreviewsChanged.emit()
         self.previewBuildFolderIdChanged.emit()
         self.previewCurrentChanged.emit()
@@ -1913,14 +1920,23 @@ class AppController(QObject):
         self.isBuildingPreviewsChanged.emit()
         self.previewBuildFolderIdChanged.emit()
 
+    def _on_preview_oversized(self, count: int) -> None:
+        self._preview_oversized_skipped = count
+
     def _on_preview_done(self, built: int, total: int) -> None:
         folder_id = self._preview_build_folder_id
+        oversized = self._preview_oversized_skipped
         self._clear_preview_build_state()
         if folder_id > 0:
             self._refresh_preview_count(folder_id)
-        self._set_status(
-            _("Built {built} preview(s) of {total}.").format(built=built, total=total)
+        msg = _("Built {built} preview(s) of {total}.").format(
+            built=built, total=total
         )
+        if oversized:
+            msg += " " + _("{n} image(s) skipped — too large to decode safely.").format(
+                n=oversized
+            )
+        self._set_status(msg)
 
     def _on_preview_failed(self, error: str) -> None:
         folder_id = self._preview_build_folder_id
@@ -2125,9 +2141,11 @@ class AppController(QObject):
         """
         encoded = urllib.parse.quote(path, safe="")
         stamp = self._pending_preview_stamp
+        px = self._pending_preview_pixel_count
         bust = f"&t={self._preview_bust}" if self._preview_bust else ""
         if stamp is not None:
-            return f"image://{scheme}/{encoded}?m={stamp[0]}&s={stamp[1]}{bust}"
+            px_param = f"&px={px}" if px else ""
+            return f"image://{scheme}/{encoded}?m={stamp[0]}&s={stamp[1]}{px_param}{bust}"
         if bust:
             return f"image://{scheme}/{encoded}?{bust[1:]}"  # strip leading &
         return f"image://{scheme}/{encoded}"
@@ -2204,6 +2222,7 @@ class AppController(QObject):
         self._preview_delay_timer.stop()
         self._pending_preview_path = ""
         self._pending_preview_stamp = None
+        self._pending_preview_pixel_count = None
         self._details_plain_text = ""
         self._details_html = ""
         self.detailsHtmlChanged.emit()
@@ -2397,7 +2416,6 @@ class AppController(QObject):
         self._thumb_worker = ThumbWorker(
             self._db_path,
             self._search_model.cache_dir,
-            self._search_model.max_thumb_bytes,
             workers=min(
                 self._settings.workerCount if self._settings else _DEFAULT_WORKERS,
                 _MAX_THUMB_WORKERS,

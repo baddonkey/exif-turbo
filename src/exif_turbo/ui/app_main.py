@@ -132,7 +132,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig(level=logging.INFO)
     qInstallMessageHandler(_qt_message_handler)
     _ensure_pyside6_dll_search_path()
     if os.name == "nt":

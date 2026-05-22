@@ -10,6 +10,31 @@ import sqlcipher3
 
 from ._connection import open_encrypted_connection, rekey_connection
 
+# Width/height key-pairs tried in priority order (exiftool -g1 format).
+_DIM_KEY_PAIRS: tuple[tuple[str, str], ...] = (
+    ("File:ImageWidth", "File:ImageHeight"),
+    ("ExifIFD:ExifImageWidth", "ExifIFD:ExifImageHeight"),
+    ("IFD0:ImageWidth", "IFD0:ImageHeight"),
+    ("PNG:ImageWidth", "PNG:ImageHeight"),
+)
+
+
+def _pixel_count_from_meta(meta_json: str) -> int:
+    """Parse width * height from stored exiftool JSON metadata.
+
+    Returns 0 when no recognised dimension keys are found.
+    """
+    try:
+        meta = json.loads(meta_json)
+        for w_key, h_key in _DIM_KEY_PAIRS:
+            w = meta.get(w_key)
+            h = meta.get(h_key)
+            if w and h:
+                return int(float(w)) * int(float(h))
+    except Exception:  # noqa: BLE001
+        pass
+    return 0
+
 
 class ImageIndexRepository:
     def __init__(self, db_path: Path, key: str = "") -> None:
@@ -885,6 +910,51 @@ class ImageIndexRepository:
             for row in rows:
                 result[row[0]] = (row[1], row[2])
         return result
+
+    def _get_pixel_counts_query(
+        self, sql: str, params: tuple = ()
+    ) -> dict[str, int]:
+        result: dict[str, int] = {}
+        cur = self.conn.execute(sql, params)
+        while True:
+            rows = cur.fetchmany(2000)
+            if not rows:
+                break
+            for path, meta_json in rows:
+                px = _pixel_count_from_meta(meta_json)
+                if px:
+                    result[path] = px
+        return result
+
+    def get_enabled_image_pixel_counts(self) -> dict[str, int]:
+        """Return {path: pixel_count} for images in enabled folders.
+
+        Uses File:ImageWidth/Height (and fallback keys) from the stored
+        exiftool metadata so thumbnail/preview workers can skip the
+        file-probe step.
+        """
+        cur = self.conn.execute("SELECT COUNT(*) FROM image_folders")
+        if cur.fetchone()[0] == 0:
+            return self._get_pixel_counts_query(
+                "SELECT path, metadata_json FROM images"
+            )
+        return self._get_pixel_counts_query(
+            "SELECT i.path, i.metadata_json FROM images i "
+            "WHERE EXISTS ("
+            "  SELECT 1 FROM image_folders imf "
+            "  JOIN indexed_folders f ON f.id = imf.folder_id "
+            "  WHERE imf.image_id = i.id AND f.enabled = 1"
+            ")"
+        )
+
+    def get_folder_image_pixel_counts(self, folder_id: int) -> dict[str, int]:
+        """Return {path: pixel_count} for images in *folder_id*."""
+        return self._get_pixel_counts_query(
+            "SELECT i.path, i.metadata_json FROM images i "
+            "JOIN image_folders imf ON imf.image_id = i.id "
+            "WHERE imf.folder_id = ?",
+            (folder_id,),
+        )
 
     def delete_folder_associations(self, folder_id: int) -> None:
         """Remove all image_folders rows for the given folder_id."""

@@ -20,13 +20,80 @@ from __future__ import annotations
 import io
 import logging
 import threading
+import warnings
 from pathlib import Path
+
+# Pillow emits UserWarning for malformed EXIF fields in TIFF files
+# (e.g. "Corrupt EXIF data. Expecting to read 12 bytes but only got 6").
+# The image still decodes correctly — suppress the noise.
+warnings.filterwarnings(
+    "ignore",
+    message="Corrupt EXIF data",
+    category=UserWarning,
+    module=r"PIL\.TiffImagePlugin",
+)
 
 try:  # pragma: no cover - optional dep, tested separately
     import rawpy
     _RAWPY_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _RAWPY_AVAILABLE = False
+
+# pyvips is initialised lazily — only when a >100 MP image is first encountered.
+# Eager initialisation at module-import time starts libvips's internal thread pool
+# before Qt's event loop is established, which triggers a GLib/Qt conflict on
+# macOS: a libvips thread calls abort() during Qt event processing (observed in
+# the test runner and in practice on macOS arm64 with pyvips-binary).
+_pyvips_mod = None  # type: ignore[assignment]  — set by _ensure_pyvips()
+_PYVIPS_AVAILABLE: bool | None = None  # None = not yet probed
+_pyvips_lock = threading.Lock()
+# Holds the os.add_dll_directory cookie on Windows/PyInstaller so that the
+# _internal/ directory stays in the DLL search path for the process lifetime.
+_vips_dll_dir: object = None
+
+
+def _ensure_pyvips() -> bool:  # pragma: no cover — tested via integration path
+    """Initialise pyvips on first use; return True if available."""
+    global _pyvips_mod, _PYVIPS_AVAILABLE, _vips_dll_dir
+    if _PYVIPS_AVAILABLE is not None:
+        return _PYVIPS_AVAILABLE
+    with _pyvips_lock:
+        if _PYVIPS_AVAILABLE is not None:  # re-check under lock
+            return _PYVIPS_AVAILABLE
+        try:
+            import sys as _sys
+            import os as _os
+            # On Windows (Python 3.8+), SetDefaultDllDirectories restricts the
+            # DLL search path.  When PyInstaller bundles the app the _internal/
+            # directory is NOT automatically in the Windows DLL search path for
+            # extension-module dependencies.  Explicitly add it so that loading
+            # _libvips.pyd can find libvips-42-*.dll from _internal/.
+            # We store the cookie in a module-level variable so that it is not
+            # garbage-collected (GC would remove the directory from the path).
+            if hasattr(_sys, "_MEIPASS") and hasattr(_os, "add_dll_directory"):
+                _vips_dll_dir = _os.add_dll_directory(_sys._MEIPASS)
+            # Cap libvips's internal thread-pool to 1 so concurrent _load_vips
+            # calls don't each spawn cpu_count() threads, exhausting memory on
+            # large TIFFs.  setdefault preserves any explicit user override.
+            _os.environ.setdefault("VIPS_CONCURRENCY", "1")
+            import pyvips as _mod
+            # Disable the operation cache.  We process unique images (never the
+            # same path twice in a session) so the cache buys nothing, and
+            # leaving it enabled causes processed image data to accumulate
+            # across sequential large-TIFF calls until the process is OOM-killed.
+            _mod.cache_set_max(0)
+            _mod.cache_set_max_mem(0)
+            # Register a shutdown hook so libvips cleans up its worker threads
+            # before the process exits.  Without this, libvips threads can still
+            # be running during Python's interpreter shutdown, causing a segfault
+            # (SIGSEGV) in the process teardown path.
+            import atexit as _atexit
+            _atexit.register(_mod.shutdown)
+            _pyvips_mod = _mod
+            _PYVIPS_AVAILABLE = True
+        except (ImportError, OSError):
+            _PYVIPS_AVAILABLE = False
+    return bool(_PYVIPS_AVAILABLE)
 
 from PIL import Image, ImageFile, ImageOps, UnidentifiedImageError
 
@@ -78,23 +145,74 @@ def _call_with_timeout(fn, *args, timeout_s: float = _DECODE_TIMEOUT_S):  # type
         raise error[0]
     return result[0]
 
+# Hard cap on source images we are willing to decode for previews with Pillow.
+# Large panoramas and giant RAW-derived bitmaps can explode memory before the
+# thumbnail step has a chance to shrink them down.  Above this threshold we
+# route through libvips, which streams the source and only decodes the tiles
+# needed to produce the target size.
+MAX_PREVIEW_SOURCE_PX = 100_000_000
 
-def render_preview(path: str, target_long_edge: int) -> Image.Image:
+
+def render_preview(
+    path: str,
+    target_long_edge: int,
+    *,
+    known_pixel_count: int | None = None,
+) -> Image.Image:
     """Decode *path* into a Pillow image sized to ``target_long_edge``.
 
     Caller passes the raw long-edge target (e.g. 2048).  The result will
     have ``max(width, height) <= target_long_edge`` after thumbnailing.
+
+    *known_pixel_count* — when provided (e.g. from the DB-stored exiftool
+    metadata), the file-header probe is skipped so no extra I/O is needed
+    to decide whether to route through libvips.
     """
+    target_long_edge = max(1, min(target_long_edge, MAX_PREVIEW_PX))
     target = (target_long_edge, target_long_edge)
     ext = Path(path).suffix.lower()
     if ext in VIDEO_EXTENSIONS:
         return _call_with_timeout(extract_video_frame, path, target_long_edge)
     if ext in RAW_EXTENSIONS and _RAWPY_AVAILABLE:
         return _call_with_timeout(_load_raw, path, target)
-    return _load_standard(path, target)
+    return _load_standard(path, target, known_pixel_count=known_pixel_count)
 
 
-def _load_standard(path: str, target: tuple[int, int]) -> Image.Image:
+def _load_standard(
+    path: str,
+    target: tuple[int, int],
+    *,
+    known_pixel_count: int | None = None,
+) -> Image.Image:
+    # Use the DB-stored exiftool pixel count when available so the file
+    # header does not need to be read twice (once here and once by the
+    # calling worker's own probe).  Fall back to the live Image.open probe
+    # when no metadata is available (e.g. on-demand provider calls).
+    _probe_failed = False
+    if known_pixel_count is not None:
+        pixel_count = known_pixel_count
+    else:
+        # Probe dimensions from the file header before reading pixel data.
+        # For large TIFFs on a NAS this avoids pulling hundreds of MB across
+        # the network just to discover the file must be routed through libvips.
+        _w = _h = 0
+        try:
+            with Image.open(path) as _probe:
+                _w, _h = _probe.width, _probe.height
+        except Exception:  # noqa: BLE001 — probe failure → try pyvips below
+            _probe_failed = True
+        pixel_count = _w * _h
+    if pixel_count > MAX_PREVIEW_SOURCE_PX or _probe_failed:
+        if _ensure_pyvips():
+            return _load_vips(path, target)
+        if pixel_count > MAX_PREVIEW_SOURCE_PX:
+            raise RuntimeError(
+                f"preview source too large: {path!r} ({pixel_count} px)"
+            )
+        # probe failed and pyvips unavailable — fall through to PIL attempt
+
+    # Normal path: read into BytesIO so the codec decodes from memory
+    # (CPython releases the GIL during ReadFile(), keeping Qt's event loop alive).
     with open(path, "rb") as f:
         data = f.read()
     buf = io.BytesIO(data)
@@ -117,9 +235,35 @@ def _load_standard(path: str, target: tuple[int, int]) -> Image.Image:
     return img
 
 
+def _load_vips(path: str, target: tuple[int, int]) -> Image.Image:
+    """Thumbnail *path* with libvips — memory-efficient for very large images.
+
+    libvips streams the source, decoding only the tiles needed to produce the
+    output size, so peak RAM scales with the *output* rather than the source.
+    EXIF rotation is applied automatically.
+    """
+    vips = _pyvips_mod.Image.thumbnail(path, target[0], height=target[1], size="down")
+    if vips.hasalpha():
+        vips = vips.flatten(background=[255, 255, 255])
+    if vips.interpretation != "srgb":
+        try:
+            vips = vips.colourspace("srgb")
+        except Exception:  # noqa: BLE001 — some ICC profiles are not convertible
+            pass
+    mode = "RGB" if vips.bands == 3 else "L"
+    result = Image.frombytes(mode, (vips.width, vips.height), vips.write_to_memory())
+    del vips  # release libvips image memory promptly
+    return result
+
+
 def _load_raw(path: str, target: tuple[int, int]) -> Image.Image:
     with rawpy.imread(path) as raw:
         raw_flip = raw.sizes.flip
+        raw_pixels = int(raw.sizes.width) * int(raw.sizes.height)
+        if raw_pixels > MAX_PREVIEW_SOURCE_PX:
+            raise RuntimeError(
+                f"preview source too large: {path!r} ({raw.sizes.width}x{raw.sizes.height})"
+            )
         try:
             thumb = raw.extract_thumb()
             if thumb.format == rawpy.ThumbFormat.JPEG:

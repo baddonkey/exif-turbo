@@ -14,17 +14,43 @@ from __future__ import annotations
 
 import logging
 import struct
+import threading
 from typing import Any
 
 from PIL import Image
 
 _log = logging.getLogger(__name__)
 
-try:
-    import av as _av
-    _AV_AVAILABLE = True
-except ImportError:  # pragma: no cover
-    _AV_AVAILABLE = False
+# ── lazy PyAV initialisation ──────────────────────────────────────────────────
+#
+# Importing ``av`` eagerly loads libavformat / libavcodec into the process.
+# When QtWebEngine is also present (it ships its own bundled FFmpeg) the two
+# libav stacks share / overwrite global state — codec registration tables,
+# logging callbacks, hardware-accel pools — which results in non-deterministic
+# ``abort()`` crashes on macOS during otherwise unrelated Qt event processing.
+#
+# We defer the import until ``extract_video_frame`` is actually called so that
+# the GUI tests (and the GUI itself, when no video is opened) never pull av in.
+_av: Any = None  # populated by _ensure_av()
+_AV_AVAILABLE: bool | None = None  # None = not yet probed
+_av_lock = threading.Lock()
+
+
+def _ensure_av() -> bool:
+    """Initialise PyAV on first use; return True if importable."""
+    global _av, _AV_AVAILABLE
+    if _AV_AVAILABLE is not None:
+        return _AV_AVAILABLE
+    with _av_lock:
+        if _AV_AVAILABLE is not None:
+            return _AV_AVAILABLE
+        try:
+            import av as _mod
+            _av = _mod
+            _AV_AVAILABLE = True
+        except ImportError:  # pragma: no cover
+            _AV_AVAILABLE = False
+    return bool(_AV_AVAILABLE)
 
 
 def _get_video_rotation(container: Any, stream: Any, path: str = "") -> int:
@@ -115,7 +141,7 @@ def _is_attached_pic(stream: Any) -> bool:
 
 def is_av_available() -> bool:
     """Return True if PyAV (FFmpeg) is importable."""
-    return _AV_AVAILABLE
+    return _ensure_av()
 
 
 def extract_video_frame(
@@ -141,7 +167,7 @@ def extract_video_frame(
     RuntimeError
         If PyAV is not installed or no image can be produced.
     """
-    if not _AV_AVAILABLE:
+    if not _ensure_av():
         raise RuntimeError("PyAV is not installed; cannot decode video frames")
 
     with _av.open(path) as container:
