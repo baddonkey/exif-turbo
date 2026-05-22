@@ -39,30 +39,48 @@ try:  # pragma: no cover - optional dep, tested separately
 except ImportError:  # pragma: no cover
     _RAWPY_AVAILABLE = False
 
-try:  # pragma: no cover - optional dep, tested separately
-    import os as _os
-    # Cap libvips's internal thread-pool to 1 before the first import so
-    # concurrent _load_vips calls (preview provider async pool + build worker)
-    # don't each spawn cpu_count() libvips threads, exhausting memory on large
-    # TIFFs and causing a hard crash (SIGSEGV / OOM-kill) that bypasses Python
-    # exception handling.  setdefault preserves any explicit user override.
-    _os.environ.setdefault("VIPS_CONCURRENCY", "1")
-    import pyvips as _pyvips
-    # Disable the libvips operation cache entirely.  We process unique images
-    # (never the same path twice in a session) so the cache buys nothing, and
-    # leaving it enabled causes processed image data to accumulate across
-    # sequential large-TIFF calls until the process is OOM-killed.
-    _pyvips.cache_set_max(0)
-    _pyvips.cache_set_max_mem(0)
-    # Register a shutdown hook so libvips cleans up its worker threads before
-    # the process exits.  Without this, libvips threads can still be running
-    # during Python's interpreter shutdown, causing a segfault (SIGSEGV) in
-    # the process teardown path (observed in pytest and on app quit).
-    import atexit as _atexit
-    _atexit.register(_pyvips.shutdown)
-    _PYVIPS_AVAILABLE = True
-except (ImportError, OSError):  # pragma: no cover
-    _PYVIPS_AVAILABLE = False
+# pyvips is initialised lazily — only when a >100 MP image is first encountered.
+# Eager initialisation at module-import time starts libvips's internal thread pool
+# before Qt's event loop is established, which triggers a GLib/Qt conflict on
+# macOS: a libvips thread calls abort() during Qt event processing (observed in
+# the test runner and in practice on macOS arm64 with pyvips-binary).
+_pyvips_mod = None  # type: ignore[assignment]  — set by _ensure_pyvips()
+_PYVIPS_AVAILABLE: bool | None = None  # None = not yet probed
+_pyvips_lock = threading.Lock()
+
+
+def _ensure_pyvips() -> bool:  # pragma: no cover — tested via integration path
+    """Initialise pyvips on first use; return True if available."""
+    global _pyvips_mod, _PYVIPS_AVAILABLE
+    if _PYVIPS_AVAILABLE is not None:
+        return _PYVIPS_AVAILABLE
+    with _pyvips_lock:
+        if _PYVIPS_AVAILABLE is not None:  # re-check under lock
+            return _PYVIPS_AVAILABLE
+        try:
+            import os as _os
+            # Cap libvips's internal thread-pool to 1 so concurrent _load_vips
+            # calls don't each spawn cpu_count() threads, exhausting memory on
+            # large TIFFs.  setdefault preserves any explicit user override.
+            _os.environ.setdefault("VIPS_CONCURRENCY", "1")
+            import pyvips as _mod
+            # Disable the operation cache.  We process unique images (never the
+            # same path twice in a session) so the cache buys nothing, and
+            # leaving it enabled causes processed image data to accumulate
+            # across sequential large-TIFF calls until the process is OOM-killed.
+            _mod.cache_set_max(0)
+            _mod.cache_set_max_mem(0)
+            # Register a shutdown hook so libvips cleans up its worker threads
+            # before the process exits.  Without this, libvips threads can still
+            # be running during Python's interpreter shutdown, causing a segfault
+            # (SIGSEGV) in the process teardown path.
+            import atexit as _atexit
+            _atexit.register(_mod.shutdown)
+            _pyvips_mod = _mod
+            _PYVIPS_AVAILABLE = True
+        except (ImportError, OSError):
+            _PYVIPS_AVAILABLE = False
+    return bool(_PYVIPS_AVAILABLE)
 
 from PIL import Image, ImageFile, ImageOps, UnidentifiedImageError
 
@@ -172,7 +190,7 @@ def _load_standard(
             _probe_failed = True
         pixel_count = _w * _h
     if pixel_count > MAX_PREVIEW_SOURCE_PX or _probe_failed:
-        if _PYVIPS_AVAILABLE:
+        if _ensure_pyvips():
             return _load_vips(path, target)
         if pixel_count > MAX_PREVIEW_SOURCE_PX:
             raise RuntimeError(
@@ -211,7 +229,7 @@ def _load_vips(path: str, target: tuple[int, int]) -> Image.Image:
     output size, so peak RAM scales with the *output* rather than the source.
     EXIF rotation is applied automatically.
     """
-    vips = _pyvips.Image.thumbnail(path, target[0], height=target[1], size="down")
+    vips = _pyvips_mod.Image.thumbnail(path, target[0], height=target[1], size="down")
     if vips.hasalpha():
         vips = vips.flatten(background=[255, 255, 255])
     if vips.interpretation != "srgb":
