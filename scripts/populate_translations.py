@@ -229,6 +229,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "TAKEN": "AUFNAHMEDATUM",
         "Shift-click to extend range": "Shift-Klick zum Erweitern des Bereichs",
         "Clear date filter": "Datumsfilter zur\u00fccksetzen",
+        "Filter by capture date \u2014 click a year to select it, Shift-click to extend the range": "Nach Aufnahmedatum filtern \u2014 Klicke auf ein Jahr zum Ausw\u00e4hlen, Shift-Klick zum Erweitern des Bereichs",
         # ── Preview cache & bulk-delete ──────────────────────────────────────
         "&Delete Marked Images (%1 selected)": "Markierte Bilder l\u00f6schen (%1 ausgew\u00e4hlt)",
         "%1 of %2 previews cached": "%1 von %2 Vorschaubilder zwischengespeichert",
@@ -492,6 +493,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "TAKEN": "PRISE DE VUE",
         "Shift-click to extend range": "Maj+clic pour \u00e9tendre la plage",
         "Clear date filter": "Effacer le filtre de date",
+        "Filter by capture date \u2014 click a year to select it, Shift-click to extend the range": "Filtrer par date de prise de vue \u2014 cliquez sur une ann\u00e9e pour la s\u00e9lectionner, Maj+clic pour \u00e9tendre la plage",
         # ── Preview cache & bulk-delete ──────────────────────────────────────
         "&Delete Marked Images (%1 selected)": "Supprimer les images marqu\u00e9es (%1 s\u00e9lectionn\u00e9e(s))",
         "%1 of %2 previews cached": "%1 sur %2 aper\u00e7us en cache",
@@ -760,6 +762,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "TAKEN": "DATA SCATTO",
         "Shift-click to extend range": "Maiusc+clic per estendere l\u2019intervallo",
         "Clear date filter": "Cancella filtro data",
+        "Filter by capture date \u2014 click a year to select it, Shift-click to extend the range": "Filtra per data di scatto \u2014 clicca su un anno per selezionarlo, Maiusc+clic per estendere l\u2019intervallo",
         # ── Preview cache & bulk-delete ──────────────────────────────────────
         "&Delete Marked Images (%1 selected)": "Elimina immagini contrassegnate (%1 selezionata/e)",
         "%1 of %2 previews cached": "%1 di %2 anteprime in cache",
@@ -1025,6 +1028,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "TAKEN": "FOTOGRAFÀ",
         "Shift-click to extend range": "Shift-clic per stender il rom",
         "Clear date filter": "Stizzar il filter da data",
+        "Filter by capture date \u2014 click a year to select it, Shift-click to extend the range": "Filtrar tenor data da fotografar \u2014 clicca sin in onn per selecziunar, Shift-clic per stender il rom",
         # ── Preview cache & bulk-delete ──────────────────────────────────────
         "&Delete Marked Images (%1 selected)": "Stizzar maletgs marcads (%1 seletgad(s))",
         "%1 of %2 previews cached": "%1 da %2 previstas en cache",
