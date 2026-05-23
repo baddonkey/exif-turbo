@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-22 16:47+0200\n"
+"POT-Creation-Date: 2026-05-23 10:45+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: it\n"
@@ -553,6 +553,14 @@ msgid "File size"
 msgstr "Dimensione file"
 
 #: QML
+msgid ""
+"Filter by capture date — click a year to select it, Shift-click to extend"
+" the range"
+msgstr ""
+"Filtra per data di scatto — clicca su un anno per selezionarlo, "
+"Maiusc+clic per estendere l’intervallo"
+
+#: QML
 msgid "Find"
 msgstr "Trova"
 
@@ -963,10 +971,6 @@ msgstr "Più piccolo"
 #: QML
 msgid "Sort"
 msgstr "Ordina"
-
-#: QML
-msgid "TAKEN"
-msgstr "DATA SCATTO"
 
 #: QML
 msgid "Tag"
@@ -1807,4 +1811,7 @@ msgstr "← Seleziona una cartella per sfogliare le immagini"
 
 #~ msgid "Reset Database…"
 #~ msgstr "Ripristina database…"
+
+#~ msgid "TAKEN"
+#~ msgstr "DATA SCATTO"
 

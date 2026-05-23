@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-22 16:47+0200\n"
+"POT-Creation-Date: 2026-05-23 10:45+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: de\n"
@@ -140,8 +140,8 @@ msgid ""
 "Password changed but thumbnail cache could not be re-wrapped ({error}). "
 "The cache has been cleared and will be rebuilt."
 msgstr ""
-"Das Passwort wurde geändert, aber der Miniaturansicht-Cache konnte nicht"
-" neu verschlüsselt werden ({error}). Der Cache wurde geleert und wird neu "
+"Das Passwort wurde geändert, aber der Miniaturansicht-Cache konnte nicht "
+"neu verschlüsselt werden ({error}). Der Cache wurde geleert und wird neu "
 "erstellt."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:1482
@@ -555,6 +555,14 @@ msgid "File size"
 msgstr "Dateigrösse"
 
 #: QML
+msgid ""
+"Filter by capture date — click a year to select it, Shift-click to extend"
+" the range"
+msgstr ""
+"Nach Aufnahmedatum filtern — Klicke auf ein Jahr zum Auswählen, Shift-"
+"Klick zum Erweitern des Bereichs"
+
+#: QML
 msgid "Find"
 msgstr "Suchen"
 
@@ -963,10 +971,6 @@ msgstr "Kleinste"
 #: QML
 msgid "Sort"
 msgstr "Sortieren"
-
-#: QML
-msgid "TAKEN"
-msgstr "AUFNAHMEDATUM"
 
 #: QML
 msgid "Tag"
@@ -1797,4 +1801,7 @@ msgstr "← Ordner auswählen, um Bilder zu durchsuchen"
 
 #~ msgid "Reset Database…"
 #~ msgstr "Datenbank zurücksetzen…"
+
+#~ msgid "TAKEN"
+#~ msgstr "AUFNAHMEDATUM"
 
