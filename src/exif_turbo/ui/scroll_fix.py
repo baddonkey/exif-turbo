@@ -1,27 +1,26 @@
-"""Linux wheel-scroll fix for QML ListView / Flickable items.
+"""Wheel-scroll fix for QML ListView / Flickable items (all platforms).
 
-On Linux (X11), Qt synthesises a small non-zero ``pixelDelta`` from
-``angleDelta``, causing ``QQuickFlickable`` to scroll in tiny steps instead
-of advancing by one full row per notch.
+Qt's ``QQuickFlickable`` does not guarantee exactly one row of scroll per
+mouse-wheel notch.  On Linux/X11 it may take the ``pixelDelta`` branch and
+scroll only a few pixels; on Windows and macOS the Flickable's own inertia
+and deceleration can over- or under-shoot row boundaries.
 
 This module provides :class:`ListScrollFix`, an ``eventFilter`` installed on
 the ``QQuickWindow``.  It intercepts wheel events that land inside a named
 ``ListView``, computes the correct row-based scroll delta, sets ``contentY``
 directly, and returns ``True`` so that the ``Flickable`` never sees the event.
 
-On Wayland with libinput high-resolution scroll, one physical notch may be
-delivered as several sub-notch events each carrying a small ``angleDelta``.
-An accumulator batches those events until they sum to ±120 (one full notch)
-before advancing the list.
+Sub-notch events (e.g. Wayland/libinput high-resolution scroll, where one
+physical notch arrives as several events each carrying a small ``angleDelta``)
+are batched in an accumulator until they sum to ±120 before advancing the list.
 
-For Wayland/trackpad events where ``angleDelta`` is zero, the raw
-``pixelDelta`` is used as a fallback.
+For trackpad events where ``angleDelta`` is zero, the raw ``pixelDelta`` is
+used as a fallback so smooth trackpad scrolling is preserved.
 
-Usage (Linux only)::
+Usage::
 
-    if sys.platform == "linux":
-        fix = ListScrollFix(window, "resultsList")
-        window.installEventFilter(fix)
+    fix = ListScrollFix(window, "resultsList")
+    window.installEventFilter(fix)
 """
 
 from __future__ import annotations

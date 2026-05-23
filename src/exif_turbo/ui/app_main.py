@@ -299,17 +299,15 @@ def main() -> None:
     if not engine.rootObjects():
         sys.exit(1)
 
-    # On Linux, Qt synthesises a small pixelDelta from angleDelta for ordinary
-    # mouse-wheel events (X11 behaviour), causing Flickable to scroll in tiny
-    # steps.  Install event filters that intercept wheel events over the result
-    # lists and apply correct row-by-row scrolling instead.
-    if sys.platform == "linux":
-        from .linux_scroll_fix import ListScrollFix
+    # Qt's QQuickFlickable does not guarantee exactly one row per mouse-wheel
+    # notch on any platform.  Install event filters that intercept wheel events
+    # over the result lists and apply consistent row-by-row scrolling instead.
+    from .scroll_fix import ListScrollFix
 
-        _window = engine.rootObjects()[0]
-        for _list_name in ("resultsList", "browseImageList"):
-            _fix = ListScrollFix(_window, _list_name)
-            _window.installEventFilter(_fix)
+    _window = engine.rootObjects()[0]
+    for _list_name in ("resultsList", "browseImageList"):
+        _fix = ListScrollFix(_window, _list_name)
+        _window.installEventFilter(_fix)
 
     # Re-evaluate all qsTr() bindings in live QML objects when language changes.
     # remove+install sends QEvent::LanguageChange which causes the QML engine

@@ -1,18 +1,18 @@
 """E2E tests: mouse-wheel scroll in the Search-tab results list.
 
-Scrolling invariant on Linux (X11 and Wayland)
-───────────────────────────────────────────────
+Scrolling invariant (all platforms)
+────────────────────────────────────
 One physical mouse-wheel notch (angleDelta.y = ±120) must always advance
 the list by exactly one row (210 px), regardless of what pixelDelta.y
-reports.  On Linux, Qt may report a small non-zero pixelDelta for an
-ordinary mouse-wheel event (X11 behaviour) or split a single notch into
-many sub-notch events (Wayland/libinput high-resolution scroll).
+reports.  Qt may report a small non-zero pixelDelta for an ordinary
+mouse-wheel event (Linux/X11 behaviour) or split a single notch into many
+sub-notch events (Wayland/libinput high-resolution scroll).
 
 The fix is a Python ``QObject.eventFilter`` (:class:`ListScrollFix`) installed
 on the ``QQuickWindow``.  It intercepts wheel events before the Flickable
 sees them, uses an ``angleDelta`` accumulator, and sets ``contentY`` directly.
 
-These tests verify both the X11 and Wayland scenarios.
+These tests verify the notch accumulation and X11/Wayland sub-notch scenarios.
 
 Run with:
     pytest tests/ui/test_results_scroll.py -v -s
@@ -20,7 +20,6 @@ Run with:
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Generator
 
@@ -39,7 +38,7 @@ from PySide6.QtQuick import QQuickItem, QQuickWindow
 from pytestqt.qtbot import QtBot
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
-from exif_turbo.ui.linux_scroll_fix import ListScrollFix
+from exif_turbo.ui.scroll_fix import ListScrollFix
 from exif_turbo.ui.models.checked_filter_proxy_model import CheckedFilterProxyModel
 from exif_turbo.ui.models.exif_list_model import ExifListModel
 from exif_turbo.ui.models.folder_list_model import FolderListModel
@@ -180,26 +179,25 @@ def _send_wheel(
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="Linux-specific scroll fix")
 class TestResultsListWheelScroll:
-    """WheelHandler scrolls exactly one row per notch on Linux."""
+    """WheelHandler scrolls exactly one row per notch on all platforms."""
 
     def test_single_notch_with_small_pixeldelta_scrolls_one_row(
         self,
         qtbot: QtBot,
         scroll_window: tuple[AppController, QQuickItem, QQuickWindow],
     ) -> None:
-        """X11: angleDelta=120 + small pixelDelta → exactly one row (210 px).
+        """angleDelta=120 + small pixelDelta → exactly one row (210 px).
 
-        Before the fix, the pixelDelta branch was taken on Linux,
-        scrolling only 3 px instead of 210 px.
+        On Linux/X11, Qt synthesises a small pixelDelta alongside angleDelta.
+        Without the fix the pixelDelta branch is taken, scrolling only 3 px.
         """
         # Arrange
         controller, results_list, qml_window = scroll_window
         results_list.setProperty("contentY", 0.0)
         QCoreApplication.processEvents()
 
-        # Act — simulate one X11 notch: angleDelta=-120, pixelDelta=-3 (small, unreliable)
+        # Act — simulate one notch with a small pixelDelta (as seen on Linux/X11)
         _send_wheel(results_list, qml_window, angle_delta_y=-120, pixel_delta_y=-3)
         qtbot.wait(50)
 
@@ -215,7 +213,7 @@ class TestResultsListWheelScroll:
         qtbot: QtBot,
         scroll_window: tuple[AppController, QQuickItem, QQuickWindow],
     ) -> None:
-        """Wayland: 8 sub-notch events (angleDelta=15 each) accumulate to one row.
+        """8 sub-notch events (angleDelta=15 each) accumulate to one row.
 
         libinput on Wayland may split one physical notch into 8 events,
         each reporting angleDelta.y=15.  The accumulator must batch these
