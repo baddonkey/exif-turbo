@@ -36,7 +36,7 @@ msgstr "Auswahl wird umgekehrt…"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:647
 msgid "Selecting images without a cached thumbnail…"
-msgstr "Bilder ohne gecachtes Vorschaubild werden ausgewählt…"
+msgstr "Bilder ohne gecachte Miniaturansicht werden ausgewählt…"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:662
 msgid "No marked images to delete."
@@ -100,7 +100,7 @@ msgstr "Die Datenbank ist gesperrt."
 msgid "Cannot change password while indexing or thumb-building is running."
 msgstr ""
 "Das Passwort kann nicht geändert werden, während Indizierung oder "
-"Vorschaubilderstellung läuft."
+"Miniaturansichterstellung läuft."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:930
 msgid "Current password is incorrect."
@@ -140,8 +140,8 @@ msgid ""
 "Password changed but thumbnail cache could not be re-wrapped ({error}). "
 "The cache has been cleared and will be rebuilt."
 msgstr ""
-"Das Passwort wurde geändert, aber der Vorschaubild-Cache konnte nicht neu"
-" verschlüsselt werden ({error}). Der Cache wurde geleert und wird neu "
+"Das Passwort wurde geändert, aber der Miniaturansicht-Cache konnte nicht"
+" neu verschlüsselt werden ({error}). Der Cache wurde geleert und wird neu "
 "erstellt."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:1482
@@ -338,7 +338,7 @@ msgstr "Vorschaubilder werden erstellt"
 
 #: QML
 msgid "Building Thumbnails"
-msgstr "Vorschaubilder werden erstellt"
+msgstr "Miniaturansichten werden erstellt"
 
 #: QML
 msgid "Camera"
@@ -358,7 +358,7 @@ msgstr "Vorschaubilder abbrechen"
 
 #: QML
 msgid "Cancel Thumbnails"
-msgstr "Vorschaubilder abbrechen"
+msgstr "Miniaturansichten abbrechen"
 
 #: QML
 msgid "Cancel the running preview build"
@@ -733,7 +733,7 @@ msgid ""
 "Number of parallel threads used for indexing and thumbnail generation. "
 "Higher values speed up processing but use more CPU and memory."
 msgstr ""
-"Anzahl paralleler Threads für Indizierung und Vorschaubilderstellung. "
+"Anzahl paralleler Threads für Indizierung und Miniaturansichterstellung. "
 "Höhere Werte beschleunigen die Verarbeitung, benötigen jedoch mehr CPU "
 "und Speicher."
 
@@ -820,7 +820,7 @@ msgid ""
 "preserved."
 msgstr ""
 "Verschlüsselt die Datenbank mit einem neuem Passwort neu. Bestehende "
-"Vorschaubilder bleiben erhalten."
+"Miniaturansichten bleiben erhalten."
 
 #: QML
 msgid "Re-index this folder (incremental)"
