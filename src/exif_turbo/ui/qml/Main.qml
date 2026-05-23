@@ -1343,70 +1343,64 @@ ApplicationWindow {
                     Rectangle {
                         Layout.fillWidth: true
                         readonly property bool _showChips: root._formats.length > 1 || root._extFilter !== ""
-                        implicitHeight: _showChips ? 36 : 0
+                        implicitHeight: _showChips ? chipFlow.implicitHeight + 8 : 0
                         visible: _showChips
                         color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.04)
 
-                        Flickable {
-                            anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                            contentWidth: chipRow.implicitWidth
-                            flickableDirection: Flickable.HorizontalFlick
-                            clip: true
+                        Flow {
+                            id: chipFlow
+                            anchors { left: parent.left; right: parent.right; top: parent.top
+                                      leftMargin: 8; rightMargin: 8; topMargin: 4 }
+                            spacing: 6
 
-                            Row {
-                                id: chipRow
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: 6
+                            // "All" chip
+                            Rectangle {
+                                height: 22
+                                width: allChipLabel.implicitWidth + 16
+                                radius: 11
+                                color: root._extFilter === ""
+                                       ? root._accentColor
+                                       : Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.15)
 
-                                // "All" chip
-                                Rectangle {
+                                Label {
+                                    id: allChipLabel
+                                    anchors.centerIn: parent
+                                    text: qsTr("All")
+                                    font.pixelSize: 11
+                                    font.weight: root._extFilter === "" ? Font.DemiBold : Font.Normal
+                                    color: root._extFilter === "" ? "white" : Material.foreground
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: controller.setExtFilter("")
+                                }
+                            }
+
+                            Repeater {
+                                model: root._formats
+                                delegate: Rectangle {
                                     height: 22
-                                    width: allChipLabel.implicitWidth + 16
+                                    width: fmtLabel.implicitWidth + 16
                                     radius: 11
-                                    color: root._extFilter === ""
+                                    color: root._extFilter === modelData.ext
                                            ? root._accentColor
                                            : Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.15)
 
                                     Label {
-                                        id: allChipLabel
+                                        id: fmtLabel
                                         anchors.centerIn: parent
-                                        text: qsTr("All")
+                                        text: modelData.ext.toUpperCase() + " \u00b7 " + modelData.count
                                         font.pixelSize: 11
-                                        font.weight: root._extFilter === "" ? Font.DemiBold : Font.Normal
-                                        color: root._extFilter === "" ? "white" : Material.foreground
+                                        font.weight: root._extFilter === modelData.ext ? Font.DemiBold : Font.Normal
+                                        color: root._extFilter === modelData.ext ? "white" : Material.foreground
                                     }
 
                                     MouseArea {
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: controller.setExtFilter("")
-                                    }
-                                }
-
-                                Repeater {
-                                    model: root._formats
-                                    delegate: Rectangle {
-                                        height: 22
-                                        width: fmtLabel.implicitWidth + 16
-                                        radius: 11
-                                        color: root._extFilter === modelData.ext
-                                               ? root._accentColor
-                                               : Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.15)
-
-                                        Label {
-                                            id: fmtLabel
-                                            anchors.centerIn: parent
-                                            text: modelData.ext.toUpperCase() + " \u00b7 " + modelData.count
-                                            font.pixelSize: 11
-                                            font.weight: root._extFilter === modelData.ext ? Font.DemiBold : Font.Normal
-                                            color: root._extFilter === modelData.ext ? "white" : Material.foreground
-                                        }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: controller.setExtFilter(modelData.ext)
-                                        }
+                                        onClicked: controller.setExtFilter(modelData.ext)
                                     }
                                 }
                             }
