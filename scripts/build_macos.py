@@ -174,6 +174,25 @@ Full documentation: https://github.com/baddonkey/exif-turbo
     return dmg_out
 
 
+# Languages declared in CFBundleLocalizations in the .app Info.plist.
+# Physical .lproj directories for each language must also exist inside the
+# bundle — macOS requires both to correctly resolve native Cocoa menu strings.
+_SUPPORTED_LANGS = ["en", "de", "fr", "it", "rm"]
+
+
+def create_lproj_dirs(app: Path) -> None:
+    """Create empty .lproj directories so macOS resolves native menu language.
+
+    CFBundleLocalizations in Info.plist is not sufficient on its own; macOS
+    also needs a physical <lang>.lproj directory to choose that language for
+    Cocoa-provided menu strings (Quit, Hide, Services, …).
+    """
+    resources = app / "Contents" / "Resources"
+    for lang in _SUPPORTED_LANGS:
+        (resources / f"{lang}.lproj").mkdir(exist_ok=True)
+    print(f"  Created .lproj dirs: {', '.join(l + '.lproj' for l in _SUPPORTED_LANGS)}")
+
+
 ARCH_CONFIGS: dict[str, tuple[str, str]] = {
     "arm64": ("exif-turbo-macos-arm.spec", "arm64"),
     "intel": ("exif-turbo-macos-intel.spec", "intel"),
@@ -209,6 +228,7 @@ def main() -> None:
     print("  PyInstaller build complete.")
 
     app = REPO_ROOT / "dist" / "exif-turbo.app"
+    create_lproj_dirs(app)
     sign_bundle(app, args.sign_identity)
     dmg_out = build_dmg(app, version, arch_suffix)
 

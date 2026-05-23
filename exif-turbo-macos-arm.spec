@@ -97,8 +97,11 @@ app = BUNDLE(
         'LSMinimumSystemVersion': '10.15',
         'NSPrincipalClass': 'NSApplication',
         'NSRequiresAquaSystemAppearance': False,  # supports Dark Mode
-        # Declare supported languages so macOS doesn't fall back to an
-        # unrelated system language for native menu items (Quit, Hide, …).
+        # Declare supported languages so macOS uses the correct language for
+        # native Cocoa menu items (Quit, Hide, …). Both CFBundleDevelopmentRegion
+        # and physical .lproj directories (created by build_macos.py) are needed;
+        # CFBundleLocalizations alone is not sufficient.
+        'CFBundleDevelopmentRegion': 'en',
         'CFBundleLocalizations': ['en', 'de', 'fr', 'it', 'rm'],
     },
 )
