@@ -130,6 +130,46 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+_SUPPORTED_MENU_LANGS = ("en", "de", "fr", "it", "rm")
+
+
+def _force_macos_menu_language() -> None:
+    """Pin AppKit's native menu language to one of our supported languages.
+
+    On macOS the standard application-menu items (Quit, Hide, Services, …) are
+    drawn by AppKit, not Qt, and AppKit picks their language from the user's
+    AppleLanguages preference list — filtered by what the .app bundle claims
+    to support. When that filter is unreliable (e.g. multi-language systems),
+    AppKit can fall through to its own bundled languages and end up showing
+    the menu in, for example, Portuguese.
+
+    NSUserDefaults respects ``-AppleLanguages '(<code>)'`` on the command
+    line, so injecting it into ``sys.argv`` *before* QGuiApplication starts
+    forces AppKit to use the requested language for this process only,
+    without touching global user preferences.
+    """
+    if sys.platform != "darwin":
+        return
+    # Don't override if already supplied (e.g. user is debugging).
+    if any(a == "-AppleLanguages" for a in sys.argv):
+        return
+
+    try:
+        from exif_turbo.i18n import _get as _get_translator  # local import
+
+        lang = _get_translator().current_language()
+    except Exception as exc:
+        sys.stderr.write(f"[menu-lang] translator lookup failed: {exc!r}\n")
+        lang = "en"
+    if lang not in _SUPPORTED_MENU_LANGS:
+        sys.stderr.write(f"[menu-lang] unsupported lang {lang!r}, falling back to en\n")
+        lang = "en"
+
+    sys.argv.extend(["-AppleLanguages", f"({lang})"])
+    sys.stderr.write(f"[menu-lang] forced AppKit menu language to {lang!r}; argv={sys.argv!r}\n")
+    sys.stderr.flush()
+
+
 def main() -> None:
     args = parse_args()
     logging.basicConfig(level=logging.INFO)
@@ -147,6 +187,7 @@ def main() -> None:
 
     QQuickStyle.setStyle("Material")
     QtWebEngineQuick.initialize()  # must be called before QGuiApplication
+    _force_macos_menu_language()  # must be called before QGuiApplication
     app = QGuiApplication(sys.argv)
     app.setApplicationName("Exif-Turbo")
     icon_path = Path(__file__).resolve().parent.parent / "assets" / "logo.png"

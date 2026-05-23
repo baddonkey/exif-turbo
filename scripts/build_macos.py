@@ -181,15 +181,25 @@ _SUPPORTED_LANGS = ["en", "de", "fr", "it", "rm"]
 
 
 def create_lproj_dirs(app: Path) -> None:
-    """Create empty .lproj directories so macOS resolves native menu language.
+    """Create populated .lproj directories so macOS resolves native menu language.
 
     CFBundleLocalizations in Info.plist is not sufficient on its own; macOS
-    also needs a physical <lang>.lproj directory to choose that language for
-    Cocoa-provided menu strings (Quit, Hide, Services, …).
+    also needs a physical ``<lang>.lproj`` directory containing at least one
+    resource file (typically ``InfoPlist.strings``) to consider that
+    localization available. Without a real file the directory is silently
+    ignored and AppKit falls back to one of its own bundled languages
+    (frequently Portuguese on multi-language systems) for the standard
+    application menu (Quit, Hide, Services, …).
     """
     resources = app / "Contents" / "Resources"
+    plist_strings = (
+        'CFBundleDisplayName = "exif-turbo";\n'
+        'CFBundleName = "exif-turbo";\n'
+    )
     for lang in _SUPPORTED_LANGS:
-        (resources / f"{lang}.lproj").mkdir(exist_ok=True)
+        lproj = resources / f"{lang}.lproj"
+        lproj.mkdir(exist_ok=True)
+        (lproj / "InfoPlist.strings").write_text(plist_strings, encoding="utf-8")
     print(f"  Created .lproj dirs: {', '.join(l + '.lproj' for l in _SUPPORTED_LANGS)}")
 
 
