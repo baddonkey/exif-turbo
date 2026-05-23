@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-05-23 10:45+0200\n"
+"POT-Creation-Date: 2026-05-23 11:18+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: de\n"
@@ -221,25 +221,41 @@ msgstr "Bild in Zwischenablage kopiert"
 msgid "Path copied to clipboard"
 msgstr "Pfad in Zwischenablage kopiert"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2175
+#: src/exif_turbo/ui/view_models/app_controller.py:2129
+msgid "Save Preview As"
+msgstr "Vorschau speichern unter"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:2144
+msgid "Preview saved"
+msgstr "Vorschau gespeichert"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:2161
+msgid "Save Original As"
+msgstr "Original speichern unter"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:2169
+msgid "Original saved"
+msgstr "Original gespeichert"
+
+#: src/exif_turbo/ui/view_models/app_controller.py:2231
 msgid "Database reset"
 msgstr "Datenbank zurückgesetzt"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2362
+#: src/exif_turbo/ui/view_models/app_controller.py:2418
 msgid "Cleaning up cache…"
 msgstr "Cache wird bereinigt…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2382
+#: src/exif_turbo/ui/view_models/app_controller.py:2438
 #, python-brace-format
 msgid "Indexing… {} (scanning)"
 msgstr "Indizierung… {} (Suche)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2384
+#: src/exif_turbo/ui/view_models/app_controller.py:2440
 #, python-brace-format
 msgid "Indexing… 0 / {}"
 msgstr "Indizierung… 0 / {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2386
+#: src/exif_turbo/ui/view_models/app_controller.py:2442
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indizierung… {} / {}"
@@ -883,6 +899,22 @@ msgstr ""
 #: QML
 msgid "SETTINGS"
 msgstr "EINSTELLUNGEN"
+
+#: QML
+msgid "Save Original As…"
+msgstr "Original speichern unter…"
+
+#: QML
+msgid "Save Preview As…"
+msgstr "Vorschau speichern unter…"
+
+#: QML
+msgid "Save original file as…"
+msgstr "Originaldatei speichern unter…"
+
+#: QML
+msgid "Save preview image as…"
+msgstr "Vorschaubild speichern unter…"
 
 #: QML
 msgid "Scanning for images…"

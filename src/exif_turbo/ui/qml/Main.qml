@@ -30,6 +30,21 @@ ApplicationWindow {
     function _toRgb(c) {
         return "rgb(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + ")"
     }
+    function _nativePathToFileUrl(nativePath) {
+        return "file:///" + nativePath.replace(/\\/g, '/')
+    }
+    function _suggestedPreviewUrl() {
+        var p = controller ? controller.pendingPreviewPath : ""
+        if (!p) return ""
+        var fwd = p.replace(/\\/g, '/')
+        var stem = fwd.replace(/.*\//, '').replace(/\.[^.]*$/, '')
+        var dir  = fwd.replace(/\/[^/]*$/, '/')
+        return "file:///" + dir + stem + "_preview.jpg"
+    }
+    function _suggestedOriginalUrl() {
+        var p = controller ? controller.pendingPreviewPath : ""
+        return p ? _nativePathToFileUrl(p) : ""
+    }
     // Automation helper: used by the screenshot script to open the folder filter popup
     function openFolderFilterPopup() { folderMultiCombo.popup.open() }
     // Automation helper: used by the screenshot script to close the folder filter popup
@@ -116,12 +131,10 @@ ApplicationWindow {
     // ── Preview context menu (right-click on either preview pane) ─────────
     Menu {
         id: previewContextMenu
-        // Drive the popup width from the widest item's natural (untruncated) text.
-        // contentItem.implicitWidth always reflects the full text width regardless
-        // of the width that the Menu assigns to the item, so there is no circular
-        // dependency and elision is avoided for any text length or locale.
         width: Math.max(
             _copyImageMenuItem.leftPadding + _copyImageMenuItem.contentItem.implicitWidth + _copyImageMenuItem.rightPadding,
+            _savePreviewMenuItem.leftPadding + _savePreviewMenuItem.contentItem.implicitWidth + _savePreviewMenuItem.rightPadding,
+            _saveOriginalMenuItem.leftPadding + _saveOriginalMenuItem.contentItem.implicitWidth + _saveOriginalMenuItem.rightPadding,
             _recreateThumbMenuItem.leftPadding + _recreateThumbMenuItem.contentItem.implicitWidth + _recreateThumbMenuItem.rightPadding,
             _recreatePreviewMenuItem.leftPadding + _recreatePreviewMenuItem.contentItem.implicitWidth + _recreatePreviewMenuItem.rightPadding
         )
@@ -130,6 +143,18 @@ ApplicationWindow {
             text: qsTr("Copy Image to Clipboard")
             enabled: _selectedImageSource !== ""
             onTriggered: { if (controller) controller.copyPreviewToClipboard() }
+        }
+        MenuItem {
+            id: _savePreviewMenuItem
+            text: qsTr("Save Preview As\u2026")
+            enabled: _selectedImageSource !== ""
+            onTriggered: { savePreviewDialog.currentFile = _suggestedPreviewUrl(); savePreviewDialog.open() }
+        }
+        MenuItem {
+            id: _saveOriginalMenuItem
+            text: qsTr("Save Original As\u2026")
+            enabled: _selectedImageSource !== ""
+            onTriggered: { saveOriginalDialog.currentFile = _suggestedOriginalUrl(); saveOriginalDialog.open() }
         }
         MenuSeparator {}
         MenuItem {
@@ -473,6 +498,25 @@ ApplicationWindow {
         nameFilters: [qsTr("JSON files (*.json)"), qsTr("All files (*)")]
         defaultSuffix: "json"
         onAccepted: controller.exportMarkedMetadataJson(selectedFile)
+    }
+
+    // ── Save-preview file dialog ──────────────────────────────────────────
+    FileDialog {
+        id: savePreviewDialog
+        title: qsTr("Save Preview As\u2026")
+        fileMode: FileDialog.SaveFile
+        nameFilters: ["JPEG (*.jpg *.jpeg)", "PNG (*.png)", qsTr("All files (*)")]
+        defaultSuffix: "jpg"
+        onAccepted: { if (controller) controller.doSavePreview(selectedFile.toString()) }
+    }
+
+    // ── Save-original file dialog ─────────────────────────────────────────
+    FileDialog {
+        id: saveOriginalDialog
+        title: qsTr("Save Original As\u2026")
+        fileMode: FileDialog.SaveFile
+        nameFilters: [qsTr("All files (*)")]
+        onAccepted: { if (controller) controller.doSaveOriginal(selectedFile.toString()) }
     }
 
     // ── Delete-marked confirmation dialog ─────────────────────────────────
@@ -1759,8 +1803,8 @@ ApplicationWindow {
                         Rectangle {
                             id: copyToClipboardBtn
                             anchors {
-                                right: previewSourceToggle.visible ? previewSourceToggle.left : parent.right
-                                rightMargin: previewSourceToggle.visible ? 6 : 8
+                                right: savePreviewBtn.left
+                                rightMargin: 6
                                 verticalCenter: parent.verticalCenter
                             }
                             width: copyToClipboardLabel.implicitWidth + 28
@@ -1796,8 +1840,75 @@ ApplicationWindow {
                             ToolTip.delay: 400
                         }
 
-                        // Preview / Raw source toggle — lets the user override
-                        // the cached preview to load the full-resolution raw
+                        // ── Save preview button ───────────────────────────
+                        Rectangle {
+                            id: savePreviewBtn
+                            anchors {
+                                right: saveOriginalBtn.left
+                                rightMargin: 4
+                                verticalCenter: parent.verticalCenter
+                            }
+                            width: 26; height: 22; radius: 11
+                            color: Qt.rgba(0, 0, 0, savePreviewBtnArea.containsMouse ? 0.75 : 0.45)
+                            border.color: Qt.rgba(1, 1, 1, 0.25)
+                            border.width: 1
+                            visible: _selectedImageSource !== ""
+                            opacity: savePreviewBtnArea.containsMouse ? 1.0 : 0.5
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                            Label {
+                                anchors.centerIn: parent
+                                text: "\u2913"
+                                font.pixelSize: 13
+                                color: "#ffffff"
+                            }
+                            MouseArea {
+                                id: savePreviewBtnArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: { savePreviewDialog.currentFile = _suggestedPreviewUrl(); savePreviewDialog.open() }
+                            }
+                            ToolTip.text: qsTr("Save preview image as\u2026")
+                            ToolTip.visible: savePreviewBtnArea.containsMouse
+                            ToolTip.delay: 400
+                        }
+
+                        // ── Save original button ──────────────────────────
+                        Rectangle {
+                            id: saveOriginalBtn
+                            anchors {
+                                right: previewSourceToggle.visible ? previewSourceToggle.left : parent.right
+                                rightMargin: previewSourceToggle.visible ? 4 : 8
+                                verticalCenter: parent.verticalCenter
+                            }
+                            width: 26; height: 22; radius: 11
+                            color: Qt.rgba(0, 0, 0, saveOriginalBtnArea.containsMouse ? 0.75 : 0.45)
+                            border.color: Qt.rgba(1, 1, 1, 0.25)
+                            border.width: 1
+                            visible: _selectedImageSource !== ""
+                            opacity: saveOriginalBtnArea.containsMouse ? 1.0 : 0.5
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                            Label {
+                                anchors.centerIn: parent
+                                text: "\u2913"
+                                font.pixelSize: 13
+                                color: "#ff9800"
+                            }
+                            MouseArea {
+                                id: saveOriginalBtnArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: { saveOriginalDialog.currentFile = _suggestedOriginalUrl(); saveOriginalDialog.open() }
+                            }
+                            ToolTip.text: qsTr("Save original file as\u2026")
+                            ToolTip.visible: saveOriginalBtnArea.containsMouse
+                            ToolTip.delay: 400
+                        }
+
+                        // Preview / Raw source toggle — lets the user override                        // the cached preview to load the full-resolution raw
                         // file when zooming in for detail.
                         Rectangle {
                             id: previewSourceToggle

@@ -364,6 +364,10 @@ class AppController(QObject):
     def selectedImageSource(self) -> str:
         return self._selected_image_source
 
+    @Property(str, notify=selectedImageSourceChanged)
+    def pendingPreviewPath(self) -> str:
+        return self._pending_preview_path
+
     @Property(str, notify=selectedThumbSourceChanged)
     def selectedThumbSource(self) -> str:
         return self._selected_thumb_source
@@ -2113,6 +2117,36 @@ class AppController(QObject):
             _log.exception("copyPreviewToClipboard failed for %r, falling back to path", path)
             QGuiApplication.clipboard().setText(path)
             self.clipboardCopyDone.emit(_("Path copied to clipboard"))
+
+    @Slot(str)
+    def doSavePreview(self, file_url: str) -> None:
+        """Save the currently displayed preview image to the path chosen in QML."""
+        path = self._pending_preview_path
+        if not path:
+            return
+        dest = Path(QUrl(file_url).toLocalFile())
+        try:
+            pil_img = self._load_preview_for_clipboard(path)
+            if dest.suffix.lower() == ".png":
+                pil_img.save(str(dest), format="PNG")
+            else:
+                pil_img.convert("RGB").save(str(dest), format="JPEG", quality=95)
+            self.clipboardCopyDone.emit(_("Preview saved"))
+        except Exception:  # noqa: BLE001
+            _log.exception("doSavePreview failed for %r → %r", path, dest)
+
+    @Slot(str)
+    def doSaveOriginal(self, file_url: str) -> None:
+        """Copy the original source file to the path chosen in QML."""
+        path = self._pending_preview_path
+        if not path:
+            return
+        dest = Path(QUrl(file_url).toLocalFile())
+        try:
+            shutil.copy2(path, str(dest))
+            self.clipboardCopyDone.emit(_("Original saved"))
+        except Exception:  # noqa: BLE001
+            _log.exception("doSaveOriginal failed for %r → %r", path, dest)
 
     @Slot(bool)
     def setUseRawPreview(self, use_raw: bool) -> None:

@@ -43,6 +43,167 @@ Fully generated using VS Code Copilot.
 - **Capture-date indexing & timeline filter** — `DateTimeOriginal` / `CreateDate` EXIF tags are stored as a UTC epoch timestamp (`captured_at`). After indexing, a **year histogram** appears in the Search tab: click a bar to filter to that year, shift-click a second bar to extend the range, click the active bar again to clear, or hit the `×` chip. Images without an EXIF date fall back to the file-system creation time (macOS/Windows) or mtime (Linux).
 - **Fast NAS scanning** — on macOS/Linux, `ImageFinder` spawns up to 8 parallel `find` subprocesses (one per top-level subdirectory) so all `getdents()`/`lstat()` calls happen inside a C binary outside the Python GIL; a live "N files found…" counter updates the progress panel while discovery is still running
 
+
+## Test suite
+
+178 automated tests across four layers:
+
+| Suite | Count | What it covers |
+|-------|-------|----------------|
+| `tests/data/` | 64 | Repository: upsert, FTS5 search, delete_missing (scoped), clear_all, excluded paths, folder management, rekey, `captured_at` persistence, date-range filter, `get_year_counts` |
+| `tests/indexing/` | 31 | Image utils, metadata text, IndexerService e2e (real JPEG/PNG files), scoped rescan, `_resolve_captured_at` (EXIF parse, sub-second suffix, fallback chain) |
+| `tests/ui/` | 64 | Live QML window driven via pytest-qt — unlock, search, filter, folder add/remove/enable, controller state, ext filter, zoom, thumbnail loading, preview build worker, raw preview toggle, metadata panel scroll, sort combo |
+| `tests/utils/` | 19 | Preview cache naming/clearing, thumb crypto (encrypt/decrypt, password change, legacy migration) |
+
+**Total: 178**
+
+## Requirements
+
+### ExifTool
+
+This application requires **ExifTool** to be installed and on `PATH`.
+ExifTool reads EXIF, IPTC, XMP, and other metadata from image files.
+
+Download: https://exiftool.org/
+
+**Windows (MSI install):** ExifTool is **bundled inside the MSI** — no separate download needed.
+A system-wide `exiftool.exe` on your `PATH` takes priority if you have one installed.
+
+**Windows (source install):** download the standalone `.exe`, rename to `exiftool.exe`, place on `PATH`.
+
+**macOS:**
+```bash
+brew install exiftool
+```
+
+If Homebrew is not installed yet:
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install exiftool
+```
+
+## Installation
+
+### Windows / macOS installer (recommended)
+
+Download the latest installer from the [Releases page](https://github.com/baddonkey/exif-turbo/releases):
+
+- **Windows**: `exif-turbo-<version>-windows.msi` — installs to `%ProgramFiles%\exif-turbo\`, adds Start Menu shortcut; **ExifTool is bundled inside the MSI** so no separate download is needed
+- **macOS**: `exif-turbo-<version>-macos.dmg` — drag-and-drop installer; signed app bundle
+- **Linux**: `exif-turbo_<version>_amd64.deb` (Debian/Ubuntu) and `exif-turbo-<version>-1.x86_64.rpm` (Fedora/openSUSE) — installs to `/opt/exif-turbo/` with a `.desktop` entry and `/usr/bin/exif-turbo` symlink
+
+### From source
+
+```bash
+pip install -e .
+```
+
+## Usage
+
+### Launch the GUI
+
+```bash
+exif-turbo
+```
+
+Use `--db <name>` to open a named database (stored under
+`~/.exif-turbo/data/<name>.db`):
+
+```bash
+exif-turbo --db holidays
+```
+
+Print the installed version and exit:
+
+```bash
+exif-turbo --version
+```
+
+Folders to index are managed inside the GUI on the **Indexed Folders** tab.
+
+### Python module invocation
+
+```bash
+python -m exif_turbo.app
+python -m exif_turbo.app --db holidays
+```
+
+## Configuration
+
+Control whether dotfiles (filenames starting with `.`) are indexed:
+
+| Method | Value |
+|--------|-------|
+| Environment variable | `EXIF_TURBO_SKIP_DOTFILES=true\|false` (default: `true`) |
+
+## FTS5 Query Syntax
+
+```
+term                    # single keyword
+"exact phrase"          # phrase search
+term1 AND term2
+term1 OR term2
+term1 NOT term2
+prefix*                 # prefix wildcard
+```
+
+ExifTool group-prefixed keys (e.g. `GPS:GPSLatitude`, `ExifIFD:FocalLength`)
+can be typed verbatim — the colon is treated as a word separator.
+
+Examples:
+
+```
+Canon 50mm
+"red car" AND mexico
+GPS:GPSLatitude
+ExifIFD:FocalLength
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+Third-party software credits: [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).
+
+## Building from source
+
+### Windows MSI
+
+Requirements: `pip install pyinstaller babel pillow`, [WiX Toolset v4](https://wixtoolset.org/)
+
+```powershell
+python scripts\build_windows.py
+# Produces: dist\exif-turbo\  and  dist\exif-turbo-<version>-windows.msi
+```
+
+### macOS DMG
+
+Requirements: `pip install pyinstaller babel pillow`, Xcode Command Line Tools
+
+```bash
+python scripts/build_macos.py
+# Produces: dist/exif-turbo.app  and  dist/exif-turbo-<version>-macos.dmg
+```
+
+### Tagging a release
+
+Use the `/release` prompt in VS Code Copilot Chat.
+
+## Sample Image Credits
+
+The sample images used in tests and screenshots are photographs by
+**[Giles Laurent](https://commons.wikimedia.org/wiki/User:Giles_Laurent)**,
+published on Wikimedia Commons under the
+[Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/) license.
+
+Mandatory attribution: © Giles Laurent, gileslaurent.com, License CC BY-SA
+
+See [tests/sample-data/ATTRIBUTION.md](tests/sample-data/ATTRIBUTION.md) for the full list of images and their Wikimedia Commons links.
+
 ## Recent changes
 
 ### Large image rendering via libvips
@@ -243,163 +404,3 @@ still running.
 
 On Windows, `os.walk()` is used instead — SMB returns file attributes inline so
 no extra `stat()` calls are needed.
-
-## Test suite
-
-178 automated tests across four layers:
-
-| Suite | Count | What it covers |
-|-------|-------|----------------|
-| `tests/data/` | 64 | Repository: upsert, FTS5 search, delete_missing (scoped), clear_all, excluded paths, folder management, rekey, `captured_at` persistence, date-range filter, `get_year_counts` |
-| `tests/indexing/` | 31 | Image utils, metadata text, IndexerService e2e (real JPEG/PNG files), scoped rescan, `_resolve_captured_at` (EXIF parse, sub-second suffix, fallback chain) |
-| `tests/ui/` | 64 | Live QML window driven via pytest-qt — unlock, search, filter, folder add/remove/enable, controller state, ext filter, zoom, thumbnail loading, preview build worker, raw preview toggle, metadata panel scroll, sort combo |
-| `tests/utils/` | 19 | Preview cache naming/clearing, thumb crypto (encrypt/decrypt, password change, legacy migration) |
-
-**Total: 178**
-
-## Requirements
-
-### ExifTool
-
-This application requires **ExifTool** to be installed and on `PATH`.
-ExifTool reads EXIF, IPTC, XMP, and other metadata from image files.
-
-Download: https://exiftool.org/
-
-**Windows (MSI install):** ExifTool is **bundled inside the MSI** — no separate download needed.
-A system-wide `exiftool.exe` on your `PATH` takes priority if you have one installed.
-
-**Windows (source install):** download the standalone `.exe`, rename to `exiftool.exe`, place on `PATH`.
-
-**macOS:**
-```bash
-brew install exiftool
-```
-
-If Homebrew is not installed yet:
-```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
-
-**Linux (Debian/Ubuntu):**
-```bash
-sudo apt install exiftool
-```
-
-## Installation
-
-### Windows / macOS installer (recommended)
-
-Download the latest installer from the [Releases page](https://github.com/baddonkey/exif-turbo/releases):
-
-- **Windows**: `exif-turbo-<version>-windows.msi` — installs to `%ProgramFiles%\exif-turbo\`, adds Start Menu shortcut; **ExifTool is bundled inside the MSI** so no separate download is needed
-- **macOS**: `exif-turbo-<version>-macos.dmg` — drag-and-drop installer; signed app bundle
-- **Linux**: `exif-turbo_<version>_amd64.deb` (Debian/Ubuntu) and `exif-turbo-<version>-1.x86_64.rpm` (Fedora/openSUSE) — installs to `/opt/exif-turbo/` with a `.desktop` entry and `/usr/bin/exif-turbo` symlink
-
-### From source
-
-```bash
-pip install -e .
-```
-
-## Usage
-
-### Launch the GUI
-
-```bash
-exif-turbo
-```
-
-Use `--db <name>` to open a named database (stored under
-`~/.exif-turbo/data/<name>.db`):
-
-```bash
-exif-turbo --db holidays
-```
-
-Print the installed version and exit:
-
-```bash
-exif-turbo --version
-```
-
-Folders to index are managed inside the GUI on the **Indexed Folders** tab.
-
-### Python module invocation
-
-```bash
-python -m exif_turbo.app
-python -m exif_turbo.app --db holidays
-```
-
-## Configuration
-
-Control whether dotfiles (filenames starting with `.`) are indexed:
-
-| Method | Value |
-|--------|-------|
-| Environment variable | `EXIF_TURBO_SKIP_DOTFILES=true\|false` (default: `true`) |
-
-## FTS5 Query Syntax
-
-```
-term                    # single keyword
-"exact phrase"          # phrase search
-term1 AND term2
-term1 OR term2
-term1 NOT term2
-prefix*                 # prefix wildcard
-```
-
-ExifTool group-prefixed keys (e.g. `GPS:GPSLatitude`, `ExifIFD:FocalLength`)
-can be typed verbatim — the colon is treated as a word separator.
-
-Examples:
-
-```
-Canon 50mm
-"red car" AND mexico
-GPS:GPSLatitude
-ExifIFD:FocalLength
-```
-
-## License
-
-MIT — see [LICENSE](LICENSE).
-
-Third-party software credits: [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).
-
-## Building from source
-
-### Windows MSI
-
-Requirements: `pip install pyinstaller babel pillow`, [WiX Toolset v4](https://wixtoolset.org/)
-
-```powershell
-python scripts\build_windows.py
-# Produces: dist\exif-turbo\  and  dist\exif-turbo-<version>-windows.msi
-```
-
-### macOS DMG
-
-Requirements: `pip install pyinstaller babel pillow`, Xcode Command Line Tools
-
-```bash
-python scripts/build_macos.py
-# Produces: dist/exif-turbo.app  and  dist/exif-turbo-<version>-macos.dmg
-```
-
-### Tagging a release
-
-Use the `/release` prompt in VS Code Copilot Chat.
-
-## Sample Image Credits
-
-The sample images used in tests and screenshots are photographs by
-**[Giles Laurent](https://commons.wikimedia.org/wiki/User:Giles_Laurent)**,
-published on Wikimedia Commons under the
-[Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/) license.
-
-Mandatory attribution: © Giles Laurent, gileslaurent.com, License CC BY-SA
-
-See [tests/sample-data/ATTRIBUTION.md](tests/sample-data/ATTRIBUTION.md) for the full list of images and their Wikimedia Commons links.
