@@ -114,5 +114,8 @@ app = BUNDLE(
         'LSMinimumSystemVersion': '10.15',
         'NSPrincipalClass': 'NSApplication',
         'NSRequiresAquaSystemAppearance': False,  # supports Dark Mode
+        # Declare supported languages so macOS doesn't fall back to an
+        # unrelated system language for native menu items (Quit, Hide, …).
+        'CFBundleLocalizations': ['en', 'de', 'fr', 'it', 'rm'],
     },
 )
