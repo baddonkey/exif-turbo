@@ -11,12 +11,12 @@ Fully generated using VS Code Copilot.
 
 ## Features
 
-- **Video indexing** — MP4, MOV, AVI, MKV, WMV, M4V, MTS, M2TS, 3GP, WebM, FLV are indexed alongside still images; thumbnails and previews are decoded via PyAV/FFmpeg using the embedded thumbnail when present, otherwise a representative frame at 1/3 of the video duration. Rotation is applied from the QuickTime `tkhd` display matrix so portrait iPhone clips render upright.
+- **Video indexing** — MP4, MOV, AVI, MKV, WMV, M4V, MTS, M2TS, 3GP, WebM, FLV are indexed alongside still images; thumbnails and previews are decoded via PyAV/FFmpeg (embedded thumbnail when present, otherwise a frame at 1/3 of duration); rotation from the `tkhd` display matrix keeps portrait clips upright.
 - **Recreate Thumbnail / Recreate Preview** — right-click the preview image to rebuild a single thumbnail or preview if it ever looks wrong (e.g. video frame extracted before the rotation fix); the left-grid thumbnail refreshes immediately via a cache-busting URL.
 - **Self-healing cache** — after every folder index run a fast garbage-collection pass deletes orphaned thumbnail and preview files (those whose source image no longer exists in the database). Status bar reports *“Cleaning up cache…”* during the sweep.
 - **Encrypted thumbnail and preview cache** — thumbnails and rendered previews are stored AES-256-GCM encrypted on disk; the encryption key is derived from the user’s password using a wrapped-key model so changing the password does not require rebuilding the cache
 - **Change Password** — re-encrypts the SQLCipher database under a new passphrase without rebuilding thumbnails; existing encrypted thumbnails remain valid
-- **Copy to Clipboard** — right-click the preview image or click the **Copy** pill button to copy the rendered preview to the system clipboard; a toast notification confirms the copy; falls back to copying the file path as text if rendering fails
+- **Preview panel toolbar** — pill buttons and right-click context menu for clipboard and file actions: **Copy** copies the rendered preview to the system clipboard (falls back to the file path as text); **Save Preview As** (white ⤓) saves the displayed preview as JPEG or PNG with a suggested filename; **Save Original As** (orange ⤓) copies the source file byte-for-byte; a toast confirms each action
 - **Build Previews** — per-folder action builds a cache of downscaled preview JPEGs for instant display; configurable long-edge resolution in Settings
 - **`×` clear button** — when the search field contains text a `×` button clears it immediately (equivalent to pressing **Enter** with an empty bar)
 - **ExifTool not-found dialog** — if ExifTool is absent at unlock time a modal dialog explains that indexing is disabled and links to exiftool.org; search and browse of existing data continue normally
@@ -31,7 +31,7 @@ Fully generated using VS Code Copilot.
 - Scoped rescan — rescanning a single folder only updates that folder's records; other indexed folders are never touched
 - Reset Database — wipes all indexed images, folder records, and thumbnail cache in one step; database file shrinks immediately
 - RAW format support: CR2, CR3, NEF, ARW, DNG, ORF, RW2, PEF, RAF, RWL, SRW
-- **Large image rendering via libvips** — images exceeding 100 megapixels (stitched panoramas, medium-format scans, large TIFFs) are decoded via **libvips** (`pyvips`) rather than Pillow; libvips streams only the tiles needed for the downscaled preview so memory use stays constant regardless of source file size. Bundled in the Windows MSI, Linux DEB, and Linux RPM packages.
+- **Large image rendering via libvips** — images exceeding 100 MP (panoramas, medium-format scans, large TIFFs) are decoded via **libvips** (`pyvips`) instead of Pillow, streaming only the tiles needed so memory use stays constant; bundled in the Windows MSI, Linux DEB, and Linux RPM packages.
 - EXIF orientation correction for thumbnails (all formats including RAW)
 - Encrypted database at rest (SQLCipher); passphrase set on first launch, unlocked via the UI
 - **Mark / select images** — select all results (or deselect all) with a single menu action; individual checkbox per result row
@@ -40,8 +40,7 @@ Fully generated using VS Code Copilot.
 - **Delete marked images** — `Action → Delete Marked Images…` permanently removes every marked image from disk *and* from the index, including any cached thumbnail and rendered preview; a confirmation dialog requires you to type the exact count to proceed
 - **Bulk-op progress overlay** — modal overlay with a progress bar and live `X / Y` count during select-all, deselect-all, and export operations; cancelable at any time
 - **Unlock spinner** — animated indicator shown on the lock screen while the encrypted database is being opened
-- **Capture-date indexing & timeline filter** — `DateTimeOriginal` / `CreateDate` EXIF tags are stored as a UTC epoch timestamp (`captured_at`). After indexing, a **year histogram** appears in the Search tab: click a bar to filter to that year, shift-click a second bar to extend the range, click the active bar again to clear, or hit the `×` chip. Images without an EXIF date fall back to the file-system creation time (macOS/Windows) or mtime (Linux).
-- **Fast NAS scanning** — on macOS/Linux, `ImageFinder` spawns up to 8 parallel `find` subprocesses (one per top-level subdirectory) so all `getdents()`/`lstat()` calls happen inside a C binary outside the Python GIL; a live "N files found…" counter updates the progress panel while discovery is still running
+- **Capture-date indexing & timeline filter** — `DateTimeOriginal` / `CreateDate` are stored as a UTC epoch timestamp (`captured_at`); a **year histogram** in the Search tab lets you click or shift-click bars to filter by year range; images without an EXIF date fall back to file-system creation time (macOS/Windows) or mtime (Linux).
 
 
 ## Test suite
@@ -385,22 +384,12 @@ re-probes on demand.
 When the search field contains text a `×` button appears to its left.
 Clicking it clears the field and immediately shows all images.
 
-### macOS worker-count lock
+### Save Preview As / Save Original As
 
-On macOS the indexing worker count is automatically locked to **1** to prevent
-Python GIL starvation that can occur with network-share folders. The spinner in
-Settings is disabled in this configuration.
+Two new pill buttons in the preview header toolbar and matching right-click context-menu items let you save images directly from the preview panel:
 
-### Fast NAS scanning (macOS/Linux)
+- **Save Preview As** (white ⤓) — opens a native Save File dialog with the filename pre-filled as `<stem>_preview.jpg`; saves the displayed preview as JPEG or PNG. When **Show Original** is active the full-resolution source is used; otherwise the cached preview is saved.
+- **Save Original As** (orange ⤓) — opens a native Save File dialog with the original filename pre-filled; copies the source file byte-for-byte via `shutil.copy2` (no re-encoding).
 
-On macOS and Linux, `ImageFinder` spawns up to 8 parallel `find` subprocesses
-— one per top-level subdirectory — via a `ThreadPoolExecutor` backed by a
-shared `queue.Queue`. All `getdents()`/`lstat()` calls happen inside a C binary,
-completely outside the Python GIL. This prevents the event-loop freezes
-previously caused by macOS SMB mounts (where every `scandir()` entry has
-`DT_UNKNOWN`, forcing a per-file `lstat()` through the GIL). Results stream
-back live, so the **"N files found…"** count label updates while discovery is
-still running.
+A brief toast notification confirms each save. Both actions use `FileDialog` from `QtQuick.Dialogs` (the same pattern as the existing JSON export dialog), since the app uses `QGuiApplication` rather than `QApplication` and Qt Widgets are therefore unavailable.
 
-On Windows, `os.walk()` is used instead — SMB returns file attributes inline so
-no extra `stat()` calls are needed.
