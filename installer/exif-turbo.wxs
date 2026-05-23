@@ -70,9 +70,7 @@
               Name="exif-turbo"
               Description="Image EXIF metadata search and indexing tool"
               Target="[INSTALLFOLDER]exif-turbo.exe"
-              WorkingDirectory="INSTALLFOLDER"
-              Icon="ExifTurboIcon"
-              IconIndex="0">
+              WorkingDirectory="INSTALLFOLDER">
             <!-- Ensures the running process merges onto the pinned taskbar icon -->
             <ShortcutProperty Key="System.AppUserModel.ID" Value="exif-turbo" />
           </Shortcut>
