@@ -53,7 +53,7 @@ def main() -> None:
     print(f"Building RPM package inside {CONTAINER_IMAGE} ...")
     run([
         "podman", "run", "--rm",
-        "-v", f"{REPO_ROOT}:/workspace",
+        "-v", f"{REPO_ROOT}:/workspace:Z",
         "-w", "/workspace",
         CONTAINER_IMAGE,
         "bash", "-c", CONTAINER_SCRIPT,

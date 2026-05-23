@@ -24,6 +24,7 @@ import re
 import shutil
 import subprocess
 import sys
+import sysconfig
 import tempfile
 import textwrap
 from pathlib import Path
@@ -199,10 +200,40 @@ def build_deb(bundle_dir: Path, version: str) -> Path:
     return deb_out
 
 
+def _restore_libvips_original(bundle_dir: Path) -> None:
+    """Restore wheel-original libvips into the RPM bundle.
+
+    Some build environments rewrite ELF metadata in bundled libraries during
+    packaging. Restoring the original pyvips-binary libvips keeps runtime
+    behavior aligned with the tested upstream wheel.
+    """
+    purelib = sysconfig.get_path("purelib")
+    if not purelib:
+        print("  WARNING: could not determine site-packages path; skipping libvips restore")
+        return
+
+    source_candidates = sorted(Path(purelib).glob("pyvips_binary.libs/libvips*.so.*"))
+    target_candidates = sorted((bundle_dir / "_internal").glob("libvips*.so.*"))
+
+    if not source_candidates:
+        print("  WARNING: original pyvips libvips not found in site-packages; skipping restore")
+        return
+    if not target_candidates:
+        print("  WARNING: bundled libvips not found in _internal; skipping restore")
+        return
+
+    source = source_candidates[0]
+    target = target_candidates[0]
+    shutil.copy2(source, target)
+    print(f"  Restored original libvips: {source.name} -> _internal/{target.name}")
+
+
 def build_rpm(bundle_dir: Path, version: str) -> Path:
     arch = rpm_arch()
     rpm_out = REPO_ROOT / "dist" / f"exif-turbo-{version}-linux-{arch}.rpm"
     print(f"  Building RPM package ({arch}) ...")
+
+    _restore_libvips_original(bundle_dir)
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
