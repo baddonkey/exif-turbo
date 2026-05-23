@@ -307,6 +307,10 @@ class ThumbWorker(QThread):
                         f"decode timeout after {_DECODE_TIMEOUT_S:.0f}s: {path}",
                     )
                     return False
+                except OSError:
+                    # Network / drive errors are transient — skip without writing a
+                    # permanent .skip sentinel so the file is retried after reconnect.
+                    return False
                 except Exception as exc:
                     _mark_skip(cache_path_obj, f"{type(exc).__name__}: {exc} — {path}")
                     return False

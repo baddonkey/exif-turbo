@@ -1672,6 +1672,21 @@ class AppController(QObject):
             # and then tried to start a scan from the folder actions.
             self.exiftoolMissingChanged.emit()
             return
+        # Bail out early if the folder is not reachable (network drive detached).
+        if not Path(folder_obj.path).exists():
+            if self._folder_repo:
+                self._folder_repo.update_status(
+                    folder_obj.id, "error",
+                    error_message=_("Folder not accessible"),
+                )
+                updated = self._folder_repo.get_by_id(folder_obj.id)
+                if updated:
+                    self._folder_model.update_folder(updated)
+            self._set_status(
+                _("Folder not accessible: {}").format(folder_obj.display_name)
+            )
+            self._process_next_in_queue()
+            return
         # Cancel any thumb worker that is still running (e.g. the one started at
         # unlock time).  A definitive build will be triggered after indexing
         # finishes, so there is no value in letting the two workers race.
@@ -2090,6 +2105,10 @@ class AppController(QObject):
         path = self._pending_preview_path
         if not path:
             return
+        if not os.path.exists(path):
+            QGuiApplication.clipboard().setText(path)
+            self.clipboardCopyDone.emit(_("File not accessible \u2014 path copied"))
+            return
         try:
             import io
             from PySide6.QtCore import QByteArray, QMimeData
@@ -2124,6 +2143,9 @@ class AppController(QObject):
         path = self._pending_preview_path
         if not path:
             return
+        if not os.path.exists(path):
+            self.clipboardCopyDone.emit(_("File not accessible"))
+            return
         dest = Path(QUrl(file_url).toLocalFile())
         try:
             pil_img = self._load_preview_for_clipboard(path)
@@ -2140,6 +2162,9 @@ class AppController(QObject):
         """Copy the original source file to the path chosen in QML."""
         path = self._pending_preview_path
         if not path:
+            return
+        if not os.path.exists(path):
+            self.clipboardCopyDone.emit(_("File not accessible"))
             return
         dest = Path(QUrl(file_url).toLocalFile())
         try:
@@ -2220,15 +2245,22 @@ class AppController(QObject):
 
     @Slot(str)
     def openImage(self, path: str) -> None:
-        if path and os.path.exists(path):
-            if sys.platform == "linux":
-                subprocess.Popen(["xdg-open", path], env=_pyinstaller_clean_env())
-            else:
-                QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+        if not path:
+            return
+        if not os.path.exists(path):
+            self._set_status(_("File not found: {}").format(Path(path).name))
+            return
+        if sys.platform == "linux":
+            subprocess.Popen(["xdg-open", path], env=_pyinstaller_clean_env())
+        else:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
     @Slot(str)
     def openFolder(self, path: str) -> None:
         if not path:
+            return
+        if not os.path.exists(path):
+            self._set_status(_("File not found: {}").format(Path(path).name))
             return
         if os.name == "nt":
             # /select,"<path>" must be passed as a shell string so the quoted
