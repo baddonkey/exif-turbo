@@ -164,6 +164,10 @@ def _load_full_resolution(path: str, known_pixel_count: int | None = None) -> Im
             return None
     try:
         img = Image.open(path)
+        if img.mode not in {"RGB", "RGBA", "L", "LA", "P"}:
+            # Non-standard modes (e.g. I;16) — route through pyvips which
+            # handles the full bit-depth range correctly.
+            return render_preview(path, MAX_PREVIEW_PX, known_pixel_count=known_pixel_count)
         img.load()
         return ImageOps.exif_transpose(img)
     except Exception:

@@ -130,14 +130,13 @@ def _open_image(path: str, known_pixel_count: int | None = None) -> Image.Image:
         data = f.read()
     buf = io.BytesIO(data)
     img = Image.open(buf)
+    # Check mode before load() — I;16 and similar non-standard modes must be
+    # routed through pyvips.  Pillow's convert("RGB") on I;16 produces all-white
+    # output due to a 32-bit signed integer bit-shift bug.
+    if img.mode not in ("RGB", "RGBA", "L", "LA", "P"):
+        return render_preview(path, _THUMB_SIZE[0], known_pixel_count=known_pixel_count)
     img.load()
     img = ImageOps.exif_transpose(img)
-    # Convert 16-bit / raw-mode images (e.g. mode "I;16" from 16-bit TIFFs) to
-    # RGB before resampling.  LANCZOS on Pillow's integer/float modes is
-    # extremely slow — converting to 8-bit first gives identical visual quality
-    # for a 144×144 thumbnail and avoids multi-minute hangs.
-    if img.mode not in ("RGB", "RGBA", "L", "LA", "P"):
-        img = img.convert("RGB")
     return img
 
 

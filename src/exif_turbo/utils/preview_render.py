@@ -226,11 +226,27 @@ def _load_standard(
                 img = Image.open(buf)
             finally:
                 ImageFile.LOAD_TRUNCATED_IMAGES = False
+    # Check mode before draft/load: draft("RGB") silently corrupts I;16 and
+    # similar non-standard modes, making them appear as "RGB" after load()
+    # with incorrect pixel values.  Route to pyvips while we still know the
+    # real mode.
+    if img.mode not in {"RGB", "RGBA", "L", "LA", "P"}:
+        _log.debug("Non-standard Pillow mode %r for %r — retrying with pyvips", img.mode, path)
+        if _ensure_pyvips():
+            return _load_vips(path, target)
+        img = img.convert("RGB")  # pyvips unavailable — best-effort fallback
     img.draft("RGB", target)
-    img.load()
+    with warnings.catch_warnings(record=True) as _decode_warnings:
+        warnings.simplefilter("always")
+        img.load()
+    if any("code not yet in table" in str(w.message) for w in _decode_warnings):
+        # Pillow encountered a TIFF compression codec it doesn't support
+        # (e.g. old-style JPEG-in-TIFF, codec 6).  It returns blank/white
+        # pixel data instead of raising — fall back to pyvips (libtiff).
+        _log.debug("Pillow TIFF unsupported codec (%r) — retrying with pyvips", path)
+        if _ensure_pyvips():
+            return _load_vips(path, target)
     img = ImageOps.exif_transpose(img)
-    if img.mode not in ("RGB", "RGBA", "L", "LA", "P"):
-        img = img.convert("RGB")
     img.thumbnail(target, Image.LANCZOS)
     return img
 
@@ -250,6 +266,11 @@ def _load_vips(path: str, target: tuple[int, int]) -> Image.Image:
             vips = vips.colourspace("srgb")
         except Exception:  # noqa: BLE001 — some ICC profiles are not convertible
             pass
+    # HDR and wide-gamut sources may produce float/16-bit output even after
+    # colourspace("srgb").  Cast to uint8 so Image.frombytes() gets the right
+    # byte width per pixel (float32 would be misinterpreted as uint8 otherwise).
+    if vips.format != "uchar":
+        vips = vips.cast("uchar")
     mode = "RGB" if vips.bands == 3 else "L"
     result = Image.frombytes(mode, (vips.width, vips.height), vips.write_to_memory())
     del vips  # release libvips image memory promptly
