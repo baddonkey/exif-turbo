@@ -1374,12 +1374,23 @@ ApplicationWindow {
                     // Contains a mini histogram (year bars) + From/To year pickers.
                     Rectangle {
                         id: dateFilterRow
+                        objectName: "dateFilterRow"
                         Layout.fillWidth: true
                         readonly property bool _hasYears: root._years.length > 0
                         readonly property bool _filterActive: root._dateFrom > 0 || root._dateTo > 0
-                        implicitHeight: _hasYears ? 68 : 0
+                        implicitHeight: _hasYears ? histFlow.implicitHeight + 8 : 0
                         visible: _hasYears
                         color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.04)
+
+                        // Tooltip for the whole filter strip (non-blocking).
+                        MouseArea {
+                            anchors.fill: parent
+                            acceptedButtons: Qt.NoButton
+                            hoverEnabled: true
+                            ToolTip.text: qsTr("Filter by capture date — click a year to select it, Shift-click to extend the range")
+                            ToolTip.visible: containsMouse
+                            ToolTip.delay: 600
+                        }
 
                         // Compute histogram max for bar height scaling.
                         readonly property int _maxCount: {
@@ -1406,95 +1417,85 @@ ApplicationWindow {
                             anchors { fill: parent; leftMargin: 8; rightMargin: 8; topMargin: 4; bottomMargin: 4 }
                             spacing: 8
 
-                            FloatingBadge { text: qsTr("TAKEN") }
-
                             // ── Mini histogram ────────────────────────────
-                            Flickable {
+                            Flow {
+                                id: histFlow
                                 Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                contentWidth: histRow.implicitWidth
-                                flickableDirection: Flickable.HorizontalFlick
-                                clip: true
+                                spacing: 2
 
-                                Row {
-                                    id: histRow
-                                    anchors.bottom: parent.bottom
-                                    spacing: 2
+                                Repeater {
+                                    model: root._years
+                                    delegate: Item {
+                                        required property var modelData
+                                        width: 18
+                                        height: 60
 
-                                    Repeater {
-                                        model: root._years
-                                        delegate: Item {
-                                            required property var modelData
-                                            width: 18
-                                            height: dateFilterRow.height - 8
+                                        readonly property bool _inRange:
+                                            modelData.year >= dateFilterRow._activeFrom &&
+                                            modelData.year <= dateFilterRow._activeTo
+                                        readonly property int _barH:
+                                            Math.max(3, Math.round(
+                                                (modelData.count / dateFilterRow._maxCount) * (height - 18)
+                                            ))
 
-                                            readonly property bool _inRange:
-                                                modelData.year >= dateFilterRow._activeFrom &&
-                                                modelData.year <= dateFilterRow._activeTo
-                                            readonly property int _barH:
-                                                Math.max(3, Math.round(
-                                                    (modelData.count / dateFilterRow._maxCount) * (height - 18)
-                                                ))
+                                        // Year label
+                                        Label {
+                                            anchors { bottom: bar.top; horizontalCenter: parent.horizontalCenter; bottomMargin: 1 }
+                                            text: modelData.year.toString()
+                                            font.pixelSize: 8
+                                            rotation: -45
+                                            transformOrigin: Item.Center
+                                            opacity: _inRange ? 1.0 : 0.4
+                                            color: _inRange ? Material.foreground : Material.foreground
+                                        }
 
-                                            // Year label
-                                            Label {
-                                                anchors { bottom: bar.top; horizontalCenter: parent.horizontalCenter; bottomMargin: 1 }
-                                                text: modelData.year.toString()
-                                                font.pixelSize: 8
-                                                rotation: -45
-                                                transformOrigin: Item.Center
-                                                opacity: _inRange ? 1.0 : 0.4
-                                                color: _inRange ? Material.foreground : Material.foreground
-                                            }
+                                        // Bar
+                                        Rectangle {
+                                            id: bar
+                                            anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
+                                            width: 14
+                                            height: parent._barH
+                                            radius: 2
+                                            color: parent._inRange
+                                                   ? root._accentColor
+                                                   : Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.25)
 
-                                            // Bar
-                                            Rectangle {
-                                                id: bar
-                                                anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
-                                                width: 14
-                                                height: parent._barH
-                                                radius: 2
-                                                color: parent._inRange
-                                                       ? root._accentColor
-                                                       : Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.25)
+                                            Behavior on height { NumberAnimation { duration: 150 } }
+                                        }
 
-                                                Behavior on height { NumberAnimation { duration: 150 } }
-                                            }
-
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                cursorShape: Qt.PointingHandCursor
-                                                hoverEnabled: true
-                                                onClicked: (mouse) => {
-                                                    var yr = modelData.year
-                                                    var yStart = Math.floor(Date.UTC(yr,   0, 1) / 1000)
-                                                    var yEnd   = Math.floor(Date.UTC(yr+1, 0, 1) / 1000) - 1
-                                                    if (dateFilterRow._activeFrom === yr && dateFilterRow._activeTo === yr
-                                                            && root._dateFrom > 0) {
-                                                        // clicking the already-selected single year → clear
-                                                        controller.clearDateFilter()
-                                                    } else if (root._dateFrom > 0 && (mouse.modifiers & Qt.ShiftModifier)) {
-                                                        // shift-click → extend range to include this year
-                                                        var fromTs = yr < dateFilterRow._activeFrom
-                                                            ? yStart
-                                                            : Math.floor(Date.UTC(dateFilterRow._activeFrom, 0, 1) / 1000)
-                                                        var toTs = yr > dateFilterRow._activeTo
-                                                            ? yEnd
-                                                            : Math.floor(Date.UTC(dateFilterRow._activeTo + 1, 0, 1) / 1000) - 1
-                                                        controller.setDateFilter(fromTs, toTs)
-                                                    } else {
-                                                        controller.setDateFilter(yStart, yEnd)
-                                                    }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            hoverEnabled: true
+                                            onClicked: (mouse) => {
+                                                var yr = modelData.year
+                                                var yStart = Math.floor(Date.UTC(yr,   0, 1) / 1000)
+                                                var yEnd   = Math.floor(Date.UTC(yr+1, 0, 1) / 1000) - 1
+                                                if (dateFilterRow._activeFrom === yr && dateFilterRow._activeTo === yr
+                                                        && root._dateFrom > 0) {
+                                                    // clicking the already-selected single year → clear
+                                                    controller.clearDateFilter()
+                                                } else if (root._dateFrom > 0 && (mouse.modifiers & Qt.ShiftModifier)) {
+                                                    // shift-click → extend range to include this year
+                                                    var fromTs = yr < dateFilterRow._activeFrom
+                                                        ? yStart
+                                                        : Math.floor(Date.UTC(dateFilterRow._activeFrom, 0, 1) / 1000)
+                                                    var toTs = yr > dateFilterRow._activeTo
+                                                        ? yEnd
+                                                        : Math.floor(Date.UTC(dateFilterRow._activeTo + 1, 0, 1) / 1000) - 1
+                                                    controller.setDateFilter(fromTs, toTs)
+                                                } else {
+                                                    controller.setDateFilter(yStart, yEnd)
                                                 }
-                                                ToolTip.text: {
-                                                    var base = modelData.year + ": " + modelData.count + " " + qsTr("images")
-                                                    if (root._dateFrom > 0 && !(dateFilterRow._activeFrom === modelData.year && dateFilterRow._activeTo === modelData.year))
-                                                        return base + "\n" + qsTr("Shift-click to extend range")
-                                                    return base
-                                                }
-                                                ToolTip.visible: containsMouse
-                                                ToolTip.delay: 400
                                             }
+                                            ToolTip.text: {
+                                                var base = modelData.year + ": " + modelData.count + " " + qsTr("images")
+                                                if (root._dateFrom > 0 && !(dateFilterRow._activeFrom === modelData.year && dateFilterRow._activeTo === modelData.year))
+                                                    return base + "\n" + qsTr("Shift-click to extend range")
+                                                return base
+                                            }
+                                            ToolTip.visible: containsMouse
+                                            ToolTip.delay: 400
                                         }
                                     }
                                 }
