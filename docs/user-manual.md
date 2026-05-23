@@ -503,8 +503,8 @@ being decoded (large RAW files may take a few seconds).
 You can copy the currently displayed preview image to the system clipboard in
 two ways:
 
-- Click the **Copy** pill button at the right of the **PREVIEW** header bar
-  (to the left of the **Show Preview / Show Original** toggle).
+- Click the **Copy** pill button in the **PREVIEW** header bar toolbar
+  (the leftmost of the pill buttons).
 - **Right-click** anywhere on the preview image and choose
   **Copy Image to Clipboard** from the context menu.
 
@@ -512,6 +512,39 @@ Both actions are available in the **Search** and **Browse** tabs. A brief
 toast notification at the bottom of the window confirms that the image has
 been placed on the clipboard. If rendering fails for any reason, the file
 path is copied as plain text instead.
+
+#### Saving the preview image
+
+A **Save Preview As** button (white ⤓) appears in the **PREVIEW** header bar
+toolbar — the second pill from the left — when an image is selected. Clicking
+it opens a native **Save File** dialog with the filename pre-filled as
+`<stem>_preview.jpg`, where `<stem>` is the original file's base name without
+its extension. The available save formats are:
+
+- **JPEG** (`.jpg` / `.jpeg`)
+- **PNG** (`.png`)
+
+The saved image is the currently displayed preview. If the **Show Original**
+toggle is active, the high-resolution source is used; otherwise the cached
+preview JPEG is saved.
+
+A brief toast notification **"Preview saved"** confirms the export.
+
+You can also trigger this action by right-clicking anywhere on the preview
+image and choosing **Save Preview As…** from the context menu.
+
+#### Saving the original file
+
+A **Save Original As** button (orange ⤓) appears in the **PREVIEW** header bar
+toolbar — the third pill from the left — when an image is selected. Clicking
+it opens a native **Save File** dialog with the original filename pre-filled as
+the suggested name. The source file is copied byte-for-byte to the chosen
+destination — no re-encoding takes place.
+
+A brief toast notification **"Original saved"** confirms the copy.
+
+You can also trigger this action by right-clicking anywhere on the preview
+image and choosing **Save Original As…** from the context menu.
 
 #### Recreate Thumbnail / Recreate Preview
 
