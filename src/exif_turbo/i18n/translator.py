@@ -72,10 +72,10 @@ class _JsonSettings:
 class Translator:
     """Loads gettext translations and exposes a switchable ``gettext`` callable.
 
-    The language choice is persisted to a global settings file
-    (``~/.exif-turbo/settings.json`` on Linux, platform equivalent elsewhere)
-    so it survives across database switches.
+    The language choice is managed externally (by ``SettingsModel``) and
+    persisted per-database.  This class only applies the language at runtime.
 
+    The optional *settings* parameter is kept for theme persistence only.
     Pass ``settings=None`` to skip persistence entirely — useful in
     unit tests where you only want in-memory language switching.
     """
@@ -100,10 +100,8 @@ class Translator:
         return self._gt.gettext(message)
 
     def set_language(self, lang: str) -> None:
-        """Switch the active language and persist the choice."""
+        """Switch the active language (persistence is handled by SettingsModel)."""
         self._apply_language(lang)
-        if self._settings is not None:
-            self._settings.set_value("language", lang)
 
     def apply_language(self, lang: str) -> None:
         """Switch the active language **without** persisting."""
@@ -138,11 +136,7 @@ class Translator:
         self._gt = self._load(lang)
 
     def _load_saved_language(self) -> None:
-        if self._settings is None:
-            self._apply_language("en")
-            return
-        lang = str(self._settings.value("language", "en"))
-        self._apply_language(lang)
+        self._apply_language("en")
 
     @staticmethod
     def _load(lang: str) -> gettext.GNUTranslations | gettext.NullTranslations:

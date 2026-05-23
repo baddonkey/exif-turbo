@@ -7,7 +7,7 @@ from typing import List
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
-from exif_turbo.i18n import available_languages, current_language, current_theme, set_language, set_theme
+from exif_turbo.i18n import apply_language, available_languages, current_theme, set_theme
 
 
 _CPU_COUNT = os.cpu_count() or 2
@@ -63,7 +63,7 @@ class SettingsModel(QObject):
         self._worker_count: int = _DEFAULT_WORKERS
         self._blacklist: List[str] = list(_DEFAULT_BLACKLIST)
         self._theme: str = current_theme()
-        self._language: str = current_language()
+        self._language: str = "en"
         self._preview_max_size: int = _DEFAULT_PREVIEW_SIZE
         self._sort_by: str = _DEFAULT_SORT
         self._load()
@@ -139,9 +139,10 @@ class SettingsModel(QObject):
     def _set_language(self, value: str) -> None:
         if self._language != value:
             self._language = value
-            set_language(value)
+            apply_language(value)
             self.languageChanged.emit()
             self.retranslateRequested.emit()
+            self._save()
 
     language = Property(str, _get_language, _set_language, notify=languageChanged)
 
@@ -226,6 +227,9 @@ class SettingsModel(QObject):
                 self._preview_max_size = data["previewMaxSize"]
             if isinstance(data.get("sortBy"), str) and data["sortBy"] in _VALID_SORTS:
                 self._sort_by = data["sortBy"]
+            if isinstance(data.get("language"), str) and data["language"] in {c for c, _ in available_languages()}:
+                self._language = data["language"]
+                apply_language(self._language)
         except Exception:
             pass  # corrupt/missing file — use defaults
 
@@ -239,6 +243,7 @@ class SettingsModel(QObject):
                         "blacklist": self._blacklist,
                         "previewMaxSize": self._preview_max_size,
                         "sortBy": self._sort_by,
+                        "language": self._language,
                     },
                     indent=2,
                 ),
