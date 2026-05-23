@@ -1966,7 +1966,7 @@ ApplicationWindow {
                         clip: true
 
                         property real _zoom: 1.0
-                        readonly property real _maxZoom: 8.0
+                        readonly property real _maxZoom: 16.0
 
                         Flickable {
                             id: previewFlick
@@ -2898,7 +2898,7 @@ ApplicationWindow {
                         clip: true
 
                         property real _zoom: 1.0
-                        readonly property real _maxZoom: 8.0
+                        readonly property real _maxZoom: 16.0
 
                         Flickable {
                             id: previewFlick2
