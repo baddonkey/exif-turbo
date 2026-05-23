@@ -1159,8 +1159,8 @@ class AppController(QObject):
     @Slot(int, int)
     def setDateFilter(self, date_from: int, date_to: int) -> None:
         """Set captured_at filter bounds (Unix timestamps, 0 = unset)."""
-        new_from = date_from if date_from > 0 else None
-        new_to = date_to if date_to > 0 else None
+        new_from = date_from if date_from != 0 else None
+        new_to = date_to if date_to != 0 else None
         if new_from == self._date_from and new_to == self._date_to:
             return
         self._date_from = new_from
