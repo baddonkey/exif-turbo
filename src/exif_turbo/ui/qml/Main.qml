@@ -109,6 +109,48 @@ ApplicationWindow {
         }
     }
 
+    // ── Browse-tab navigation (mirror of the Search-tab shortcuts) ────────
+    Shortcut {
+        sequences: [ StandardKey.MoveToNextPage ]
+        enabled: mainTabBar.currentIndex === 1 && controller && controller.currentResultRow < browseImageList.count - 1
+        onActivated: {
+            var step = Math.max(1, Math.floor(browseImageList.height / 210))
+            var next = Math.min(controller.currentResultRow + step, browseImageList.count - 1)
+            controller.selectResult(next)
+            browseImageList.positionViewAtIndex(next, ListView.Contain)
+        }
+    }
+    Shortcut {
+        sequences: [ StandardKey.MoveToPreviousPage ]
+        enabled: mainTabBar.currentIndex === 1 && controller && controller.currentResultRow > 0
+        onActivated: {
+            var step = Math.max(1, Math.floor(browseImageList.height / 210))
+            var prev = Math.max(controller.currentResultRow - step, 0)
+            controller.selectResult(prev)
+            browseImageList.positionViewAtIndex(prev, ListView.Contain)
+        }
+    }
+    Shortcut {
+        sequences: [ StandardKey.MoveToNextLine ]
+        enabled: mainTabBar.currentIndex === 1 && controller && controller.currentResultRow < browseImageList.count - 1
+        onActivated: {
+            var next = controller.currentResultRow + 1
+            root._previewNavigating = true
+            controller.selectResult(next)
+            browseImageList.positionViewAtIndex(next, ListView.Contain)
+        }
+    }
+    Shortcut {
+        sequences: [ StandardKey.MoveToPreviousLine ]
+        enabled: mainTabBar.currentIndex === 1 && controller && controller.currentResultRow > 0
+        onActivated: {
+            var prev = controller.currentResultRow - 1
+            root._previewNavigating = true
+            controller.selectResult(prev)
+            browseImageList.positionViewAtIndex(prev, ListView.Contain)
+        }
+    }
+
     property bool findBarVisible: false
     property bool _previewNavigating: false
 
@@ -2592,9 +2634,17 @@ ApplicationWindow {
                         Layout.fillHeight: true
                         clip: true
                         visible: root._folderFilter !== ""
+                        focus: visible
+                        activeFocusOnTab: true
                         model: root._folderFilter !== "" ? filteredSearchModel : null
                         currentIndex: controller ? controller.currentProxyResultRow : -1
-                        ScrollBar.vertical: ScrollBar {}
+                        ScrollBar.vertical: ScrollBar {
+                            policy: ScrollBar.AlwaysOn
+                            width: 12
+                            active: true
+                        }
+
+                        onVisibleChanged: { if (visible) forceActiveFocus() }
 
                         delegate: Rectangle {
                             id: browseCardDelegate

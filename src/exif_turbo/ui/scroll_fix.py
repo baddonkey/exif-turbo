@@ -66,6 +66,14 @@ class ListScrollFix(QObject):
         if lst is None:
             return False
 
+        # Skip lists that are not actually visible on screen (e.g. the
+        # Search-tab resultsList while the user is on the Browse tab).
+        # Otherwise an invisible list whose layout geometry happens to
+        # overlap the cursor would silently consume the wheel event and
+        # scroll its hidden contentY, with no visible effect.
+        if not lst.isVisible():
+            return False
+
         # Is the cursor inside this list?
         local = lst.mapFromScene(event.position())  # type: ignore[attr-defined]
         if not lst.boundingRect().contains(local):
