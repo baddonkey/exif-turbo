@@ -134,22 +134,6 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
-            // WheelHandler on the stationary wrapper Item — attaching it on
-            // the ListView itself reparents it into the scrolling contentItem,
-            // which slides out from under the cursor after scrolling down.
-            WheelHandler {
-                target: null
-                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                onWheel: (event) => {
-                    var pixels = event.pixelDelta.y !== 0
-                                 ? event.pixelDelta.y
-                                 : (event.angleDelta.y / 120.0) * 60
-                    var maxY = Math.max(0, foldersList.contentHeight - foldersList.height)
-                    foldersList.contentY = Math.max(0, Math.min(maxY, foldersList.contentY - pixels))
-                    event.accepted = true
-                }
-            }
-
             Label {
                 anchors.centerIn: parent
                 visible: foldersList.count === 0
@@ -171,7 +155,6 @@ Item {
                     objectName: "foldersScrollBar"
                     policy: ScrollBar.AlwaysOn
                 }
-
             delegate: Rectangle {
                 id: folderDelegate
                 width: foldersList.width

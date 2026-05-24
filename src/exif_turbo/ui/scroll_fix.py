@@ -45,10 +45,16 @@ class ListScrollFix(QObject):
     #: ``angleDelta.y`` units that constitute one full mouse-wheel notch.
     NOTCH: int = 120
 
-    def __init__(self, window: QObject, list_object_name: str) -> None:
+    def __init__(
+        self,
+        window: QObject,
+        list_object_name: str,
+        row_height: int | None = None,
+    ) -> None:
         super().__init__(window)
         self._window = window
         self._name = list_object_name
+        self._row_height = row_height if row_height is not None else self.ROW_HEIGHT
         self._accumulated: float = 0.0
 
     # ------------------------------------------------------------------
@@ -75,7 +81,7 @@ class ListScrollFix(QObject):
                 # Accumulate sub-notch events; consume so Flickable stays quiet.
                 return True
             self._accumulated -= rows * self.NOTCH
-            delta = -rows * self.ROW_HEIGHT
+            delta = -rows * self._row_height
         elif pixel_y != 0:
             # Wayland/trackpad: angleDelta absent, use pixelDelta directly.
             delta = -pixel_y

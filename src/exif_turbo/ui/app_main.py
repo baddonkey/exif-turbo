@@ -308,6 +308,9 @@ def main() -> None:
     for _list_name in ("resultsList", "browseImageList"):
         _fix = ListScrollFix(_window, _list_name)
         _window.installEventFilter(_fix)
+    # foldersList rows are 76 px (see FoldersPanel.qml delegate)
+    _folders_fix = ListScrollFix(_window, "foldersList", row_height=76)
+    _window.installEventFilter(_folders_fix)
 
     # Re-evaluate all qsTr() bindings in live QML objects when language changes.
     # remove+install sends QEvent::LanguageChange which causes the QML engine
