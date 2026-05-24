@@ -453,9 +453,23 @@ pinch-to-zoom, drag-to-pan, double-tap to reset — see
 [Zooming and panning](#zooming-and-panning)). **Double-click** an image to open
 it in your system's default viewer. (Unlike the Search tab, double-clicking in
 Browse always opens the image — there is no folder-open shortcut.) The Metadata
-panel, EXIF Tags panel, GPS location bar, and **Show Preview / Show Original**
-toggle are not shown in the Browse tab — use the **Search** tab for the full
-metadata view and preview source options.
+panel, EXIF Tags panel, and GPS location bar are not shown in the Browse tab —
+use the **Search** tab for the full metadata view.
+
+The Browse tab preview pane has the same toolbar pill buttons as the Search tab:
+
+- **Copy** — copies the currently displayed preview image to the system
+  clipboard. A brief toast notification confirms the action.
+- **Save Preview As** (white ⤓) — opens a **Save File** dialog to save the
+  preview as JPEG or PNG.
+- **Save Original As** (orange ⤓) — copies the original source file
+  byte-for-byte to a destination you choose.
+- **Show Original / Show Preview** toggle — switches between the cached preview
+  (green dot) and the full-resolution source file (orange dot). Only shown when
+  the selected image has a cached preview.
+
+While a full-resolution original is loading, a **"Loading original…"** spinner
+overlay appears over the preview area (only when **Show Original** is active).
 
 ### Navigating the Browse image list
 
@@ -483,6 +497,19 @@ you left them — Browse navigation never affects the Search state.
 Switching back to the **Search** tab restores the search state exactly as you
 left it. Any image previously selected while browsing is not automatically
 highlighted in Search.
+
+### Jumping between Search and Browse
+
+Each result card in the **Search** tab has a **Browse →** pill button in its
+bottom-right corner (to the left of the selection checkbox). Clicking it:
+
+1. Switches to the **Browse** tab.
+2. Navigates to the folder that contains that image.
+3. Scrolls the Browse image list to that exact image and selects it.
+
+The Browse tab image list header has a **← Search** back button. Clicking it
+returns to the **Search** tab and restores the exact scroll position and
+previously-selected image — no need to re-enter the search query.
 
 ---
 
@@ -522,8 +549,8 @@ While a full-resolution original is loading, a small **"Loading original…"**
 overlay with a spinner appears over the preview area so you know the image is
 being decoded (large RAW files may take a few seconds).
 
-> The **Show Preview / Show Original** toggle is only present in the **Search**
-> tab. The Browse tab preview always shows the image directly.
+> The **Show Preview / Show Original** toggle is available in both the
+> **Search** and **Browse** tabs.
 
 #### Copying the preview image
 
@@ -603,7 +630,7 @@ The preview supports cursor-anchored zoom and drag-to-pan:
 | **Plain scroll wheel / two-finger scroll** | Pan vertically when zoomed in |
 | **Double-click** / **double-tap** | Reset zoom to fit |
 
-Zoom is capped at **8×**. A badge in the bottom-right corner of the preview shows
+Zoom is capped at **16×**. A badge in the bottom-right corner of the preview shows
 the current zoom level when it is above 1×. Selecting a new image always resets
 the zoom to fit.
 
