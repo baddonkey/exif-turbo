@@ -2418,8 +2418,10 @@ ApplicationWindow {
                 Connections {
                     target: controller
                     function onFindScrollFractionChanged() {
-                        detailsScrollView.contentY = controller.findScrollFraction
-                            * Math.max(0, detailsScrollView.contentHeight - detailsScrollView.height)
+                        Qt.callLater(function() {
+                            detailsScrollView.contentY = controller.findScrollFraction
+                                * Math.max(0, detailsScrollView.contentHeight - detailsScrollView.height)
+                        })
                     }
                     function onGeoLocationUrlChanged() {
                         // Defer until after the ColumnLayout has finished its resize pass.

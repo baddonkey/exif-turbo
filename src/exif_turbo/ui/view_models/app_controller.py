@@ -1457,8 +1457,8 @@ class AppController(QObject):
         if not self._find_positions:
             return
         self._find_index = (self._find_index + 1) % len(self._find_positions)
-        self._update_find_scroll()
         self._update_details_html()
+        self._update_find_scroll()
 
     @Slot(str)
     def findPrev(self, find_text: str) -> None:
@@ -1469,8 +1469,8 @@ class AppController(QObject):
         if not self._find_positions:
             return
         self._find_index = (self._find_index - 1) % len(self._find_positions)
-        self._update_find_scroll()
         self._update_details_html()
+        self._update_find_scroll()
 
     # ── Indexed-folder management slots ──────────────────────────────────
 
