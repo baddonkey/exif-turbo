@@ -20,6 +20,13 @@ Item {
         }
     }
 
+    // ── Panel-level pending-action state (set before opening a confirm dialog) ──
+    // Storing these at panel level prevents crashes caused by the ListView
+    // recycling a delegate while a Dialog nested inside it is still alive.
+    property int    _pendingFolderId:     -1
+    property string _pendingFolderName:   ""
+    property int    _pendingPreviewCount: 0
+
     // ── FolderDialog for adding managed folders ───────────────────────────
     FolderDialog {
         id: addFolderDialog
@@ -27,10 +34,53 @@ Item {
         onAccepted: controller.addIndexedFolder(selectedFolder.toString())
     }
 
+    // ── Confirm dialogs — declared OUTSIDE the ListView delegate ──────────
+    // Keeping them here means they are never destroyed when a delegate is
+    // recycled during scroll, which previously caused a segfault.
+    Dialog {
+        id: clearPreviewsConfirmDialog
+        title: qsTr("Clear Preview Cache")
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        anchors.centerIn: Overlay.overlay
+        width: 420
+        Label {
+            text: qsTr("Delete %1 cached preview(s) for \"%2\"?\nThumbnails are unaffected.")
+                    .arg(foldersPanel._pendingPreviewCount)
+                    .arg(foldersPanel._pendingFolderName)
+            wrapMode: Text.WordWrap
+            width: 340
+        }
+        onAccepted: controller.clearPreviewsForFolder(foldersPanel._pendingFolderId)
+    }
+
+    Dialog {
+        id: removeConfirmDialog
+        title: qsTr("Remove Folder")
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        anchors.centerIn: Overlay.overlay
+        width: 420
+        Label {
+            text: qsTr("Remove \"%1\" and delete all its indexed images from the database?")
+                    .arg(foldersPanel._pendingFolderName)
+            wrapMode: Text.WordWrap
+            width: 340
+        }
+        onAccepted: controller.removeIndexedFolder(foldersPanel._pendingFolderId)
+    }
+
     // ── Layout ────────────────────────────────────────────────────────────
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
+
+        // ── Top pane: folder list ─────────────────────────────────────────
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 0
 
         // Header row
         Rectangle {
@@ -84,6 +134,22 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
+            // WheelHandler on the stationary wrapper Item — attaching it on
+            // the ListView itself reparents it into the scrolling contentItem,
+            // which slides out from under the cursor after scrolling down.
+            WheelHandler {
+                target: null
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                onWheel: (event) => {
+                    var pixels = event.pixelDelta.y !== 0
+                                 ? event.pixelDelta.y
+                                 : (event.angleDelta.y / 120.0) * 60
+                    var maxY = Math.max(0, foldersList.contentHeight - foldersList.height)
+                    foldersList.contentY = Math.max(0, Math.min(maxY, foldersList.contentY - pixels))
+                    event.accepted = true
+                }
+            }
+
             Label {
                 anchors.centerIn: parent
                 visible: foldersList.count === 0
@@ -96,10 +162,15 @@ Item {
             // Folder list
             ListView {
                 id: foldersList
+                objectName: "foldersList"
                 anchors.fill: parent
                 clip: true
                 model: folderListModel
-                ScrollBar.vertical: ScrollBar {}
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar {
+                    objectName: "foldersScrollBar"
+                    policy: ScrollBar.AlwaysOn
+                }
 
             delegate: Rectangle {
                 id: folderDelegate
@@ -291,22 +362,11 @@ Item {
                                   || controller.previewBuildFolderId !== model.folderId)
                         ToolTip.text: qsTr("Delete all cached previews for this folder")
                         ToolTip.visible: hovered
-                        onClicked: clearPreviewsConfirmDialog.open()
-
-                        Dialog {
-                            id: clearPreviewsConfirmDialog
-                            title: qsTr("Clear Preview Cache")
-                            standardButtons: Dialog.Ok | Dialog.Cancel
-                            anchors.centerIn: Overlay.overlay
-                            width: 420
-                            Label {
-                                text: qsTr("Delete %1 cached preview(s) for \"%2\"?\nThumbnails are unaffected.")
-                                        .arg(model.previewCachedCount)
-                                        .arg(model.displayName)
-                                wrapMode: Text.WordWrap
-                                width: 340
-                            }
-                            onAccepted: controller.clearPreviewsForFolder(model.folderId)
+                        onClicked: {
+                            foldersPanel._pendingFolderId = model.folderId
+                            foldersPanel._pendingFolderName = model.displayName
+                            foldersPanel._pendingPreviewCount = model.previewCachedCount
+                            clearPreviewsConfirmDialog.open()
                         }
                     }
 
@@ -319,20 +379,10 @@ Item {
                         Material.foreground: Material.Red
                         ToolTip.text: qsTr("Remove this folder and delete its indexed images")
                         ToolTip.visible: hovered
-                        onClicked: removeConfirmDialog.open()
-
-                        Dialog {
-                            id: removeConfirmDialog
-                            title: qsTr("Remove Folder")
-                            standardButtons: Dialog.Ok | Dialog.Cancel
-                            anchors.centerIn: Overlay.overlay
-                            width: 420
-                            Label {
-                                text: qsTr("Remove \"%1\" and delete all its indexed images from the database?").arg(model.displayName)
-                                wrapMode: Text.WordWrap
-                                width: 340
-                            }
-                            onAccepted: controller.removeIndexedFolder(model.folderId)
+                        onClicked: {
+                            foldersPanel._pendingFolderId = model.folderId
+                            foldersPanel._pendingFolderName = model.displayName
+                            removeConfirmDialog.open()
                         }
                     }
                 }
@@ -347,5 +397,121 @@ Item {
             }
         }
     }
-}
+            }
+        }
+
+        // ── Bottom pane: activity / progress ──────────────────────────────
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: 200
+
+            // Idle placeholder
+            Label {
+                anchors.centerIn: parent
+                visible: !controller || (!controller.isIndexing && !controller.isBuildingThumbs && !controller.isBuildingPreviews)
+                text: qsTr("No activity")
+                opacity: 0.3
+                font.pixelSize: 13
+            }
+
+            // Active progress
+            ColumnLayout {
+                visible: controller && (controller.isIndexing || controller.isBuildingThumbs || controller.isBuildingPreviews)
+                anchors { top: parent.top; left: parent.left; right: parent.right; margins: 24 }
+                spacing: 14
+
+                Label {
+                    Layout.fillWidth: true
+                    text: {
+                        if (!controller) return ""
+                        if (controller.isIndexing) {
+                            return controller.indexQueueTotal > 1
+                                ? qsTr("Indexing folder %1 of %2").arg(controller.indexQueuePosition).arg(controller.indexQueueTotal)
+                                : qsTr("Indexing")
+                        }
+                        if (controller.isBuildingPreviews) return qsTr("Building Previews")
+                        return qsTr("Building Thumbnails")
+                    }
+                    font.pixelSize: 14
+                    font.weight: Font.Medium
+                    wrapMode: Text.WordWrap
+                }
+
+                ProgressBar {
+                    Layout.fillWidth: true
+                    from: 0
+                    to: {
+                        if (!controller) return 1
+                        if (controller.isIndexing) return controller.indexTotal > 0 ? controller.indexTotal : 1
+                        if (controller.isBuildingPreviews) return controller.previewTotal > 0 ? controller.previewTotal : 1
+                        return controller.thumbTotal > 0 ? controller.thumbTotal : 1
+                    }
+                    value: !controller ? 0
+                           : controller.isIndexing ? controller.indexCurrent
+                           : controller.isBuildingPreviews ? controller.previewCurrent
+                           : controller.thumbCurrent
+                    indeterminate: !controller ? false
+                           : controller.isIndexing ? controller.indexTotal === 0
+                           : controller.isBuildingPreviews ? controller.previewTotal === 0
+                           : controller.thumbTotal === 0
+                }
+
+                Label {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: {
+                        if (!controller) return ""
+                        if (controller.isIndexing)
+                            return controller.indexTotal > 0
+                                ? controller.indexCurrent + " / " + controller.indexTotal + " " + qsTr("files")
+                                : controller.indexCurrent > 0
+                                    ? controller.indexCurrent + " " + qsTr("indexed, scanning\u2026")
+                                    : qsTr("Scanning for images\u2026")
+                        if (controller.isBuildingPreviews)
+                            return controller.previewTotal > 0
+                                ? controller.previewCurrent + " / " + controller.previewTotal + " " + qsTr("images")
+                                : qsTr("Preparing\u2026")
+                        return controller.thumbTotal > 0
+                            ? controller.thumbCurrent + " / " + controller.thumbTotal + " " + qsTr("images")
+                            : qsTr("Preparing\u2026")
+                    }
+                    font.pixelSize: 12
+                    opacity: 0.7
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    text: !controller ? ""
+                          : controller.isIndexing ? controller.indexCurrentFile
+                          : controller.isBuildingPreviews ? controller.previewCurrentFile
+                          : controller.thumbCurrentFile
+                    font.pixelSize: 10
+                    opacity: 0.5
+                    elide: Text.ElideMiddle
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WrapAnywhere
+                }
+
+                Button {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: {
+                        var canceling = controller ? controller.isCanceling : false
+                        if (!controller) return ""
+                        if (controller.isIndexing) return canceling ? qsTr("Canceling\u2026") : qsTr("Cancel Indexing")
+                        if (controller.isBuildingPreviews) return qsTr("Cancel Previews")
+                        return canceling ? qsTr("Canceling\u2026") : qsTr("Cancel Thumbnails")
+                    }
+                    enabled: !(controller ? controller.isCanceling : false)
+                    highlighted: true
+                    Material.accent: Material.Red
+                    implicitHeight: 36
+                    implicitWidth: 160
+                    onClicked: {
+                        if (controller.isIndexing) controller.cancelIndex()
+                        else if (controller.isBuildingPreviews) controller.cancelPreviewBuild()
+                        else controller.cancelThumbnails()
+                    }
+                }
+            }
+        }
+    }
 }
