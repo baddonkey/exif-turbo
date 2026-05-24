@@ -1803,7 +1803,7 @@ ApplicationWindow {
                                         controller.selectResult(index)
                                         root._pendingBrowseTargetId = targetId
                                         mainTabBar.currentIndex = 1
-                                        controller.browseFolder(folder)
+                                        controller.browseFolder(folder, targetId)
                                     }
                                 }
                             }

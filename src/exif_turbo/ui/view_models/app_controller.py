@@ -199,6 +199,9 @@ class AppController(QObject):
         # the previously-selected image (identified by its DB id) is included in
         # the model.  0 means no pending restore.
         self._pending_restore_image_id: int = 0
+        # When jumping from Search → Browse, preload pages until the target
+        # image id is in the model.  0 means no pending jump.
+        self._pending_browse_jump_id: int = 0
         self._folder_tree: str = "[]"
         self._folder_tree_dirty: bool = False
         self._pending_preview_path: str = ""
@@ -1151,17 +1154,24 @@ class AppController(QObject):
         self._run_search()
 
     @Slot(str)
-    def browseFolder(self, path: str) -> None:
+    @Slot(str, int)
+    def browseFolder(self, path: str, target_id: int = 0) -> None:
         """Navigate to a folder in the Browse tab.
 
         Clears any active search query so the full folder contents are shown.
         Clicking the already-selected folder clears the filter.
+
+        *target_id* is the DB primary key of the image to pre-scroll to once
+        the folder results have loaded (passed from the "Browse →" button in
+        QML).  0 means no pre-scroll target.
         """
         if self._folder_filter == path:
             self._folder_filter = ""
+            self._pending_browse_jump_id = 0
         else:
             self._query_text = ""
             self._folder_filter = path
+            self._pending_browse_jump_id = target_id
         self.folderFilterChanged.emit()
         self._run_search()
 
@@ -1213,6 +1223,9 @@ class AppController(QObject):
         """
         snapshot = self._search_state_snapshot
         self._search_state_snapshot = None
+        # Discard any in-flight forward Browse-jump target — it belongs to
+        # the Browse session we are now leaving.
+        self._pending_browse_jump_id = 0
         # Always drop the Browse-tab folder filter when returning.
         if self._folder_filter:
             self._folder_filter = ""
@@ -1382,6 +1395,38 @@ class AppController(QObject):
             target_id = self._pending_restore_image_id
             while (
                 self._search_model.find_row_by_id(target_id) < 0
+                and self._loaded_results < self._total_results
+            ):
+                more_rows = self._repo.search_images(
+                    self._query_text,
+                    _PAGE_SIZE,
+                    self._loaded_results,
+                    sort_by=self._sort_by,
+                    ext_filter=self._ext_filter,
+                    path_filter=self._current_path_filter(),
+                    restrict_to_enabled_folders=(self._folder_repo is not None),
+                    marked_only=self._checked_only_filter_active,
+                    date_from=self._date_from,
+                    date_to=self._date_to,
+                )
+                if not more_rows:
+                    break
+                more_results = [
+                    SearchResult(
+                        image_id=r[0], path=r[1], filename=r[2], metadata_json=r[3],
+                        size=r[4], mtime=r[5],
+                    )
+                    for r in more_rows
+                ]
+                self._search_model.append_rows(more_results)
+                self._loaded_results += len(more_results)
+        # Forward Browse jump (Search → Browse): preload pages until the target
+        # image is in the model so QML's selectResultById call succeeds.
+        if self._pending_browse_jump_id and self._repo is not None:
+            jump_id = self._pending_browse_jump_id
+            self._pending_browse_jump_id = 0
+            while (
+                self._search_model.find_row_by_id(jump_id) < 0
                 and self._loaded_results < self._total_results
             ):
                 more_rows = self._repo.search_images(

@@ -297,6 +297,67 @@ class TestBrowseNavigation:
         # Assert — the correct image (by id) is selected, not the shifted row.
         assert search_model.get_path(controller.currentResultRow) == selected_path
 
+    def test_browseFolder_with_target_id_preloads_beyond_first_page(
+        self,
+        qtbot: QtBot,
+        tmp_path: Path,
+    ) -> None:
+        """browseFolder(folder, target_id) must preload pages until the
+        target image is in the model, even when it falls beyond the first
+        page (page size = 50).  Regression test for the bug where
+        selectResultById always failed because the folder had >50 images.
+        """
+        from exif_turbo.ui.models.exif_list_model import ExifListModel
+        from exif_turbo.ui.models.folder_list_model import FolderListModel
+        from exif_turbo.ui.models.settings_model import SettingsModel
+
+        folder = tmp_path / "large_folder"
+        folder.mkdir()
+
+        repo = ImageIndexRepository(tmp_path / "large.db", key="")
+        # Index 55 images so the last one is on page 2 (page size = 50).
+        for i in range(55):
+            fname = f"img_{i:04d}.jpg"
+            img_path = folder / fname
+            Image.new("RGB", (8, 8)).save(str(img_path), format="JPEG")
+            stat = img_path.stat()
+            repo.upsert_image(str(img_path), fname, stat.st_mtime, stat.st_size, {}, "")
+        repo.commit()
+
+        # The last image by filename sort order will be on page 2.
+        target_fname = "img_0054.jpg"
+        target_path = str(folder / target_fname)
+        repo_r = ImageIndexRepository(tmp_path / "large.db", key="")
+        rows = repo_r.search_images("", 200, 0, sort_by="filename")
+        target_id = next(r[0] for r in rows if r[2] == target_fname)
+        repo_r.close()
+        repo.close()
+
+        search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
+        controller = AppController(
+            tmp_path / "large.db", search_model,
+            ExifListModel(), FolderListModel(),
+            SettingsModel(tmp_path / "settings.json"),
+        )
+        with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
+            controller.unlock("")
+        qtbot.wait(_PAUSE_MS)
+
+        controller.enterBrowseTab("")
+        with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
+            controller.browseFolder(str(folder), target_id)
+        qtbot.wait(_PAUSE_MS)
+
+        # Act — QML would call this once onLoadedResultsChanged fires.
+        proxy_row = controller.selectResultById(target_id)
+
+        # Assert — preloading brought the target into the model.
+        assert proxy_row >= 0
+        assert search_model.get_path(controller.currentResultRow) == target_path
+
+        controller.close()
+        qtbot.wait(100)
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
