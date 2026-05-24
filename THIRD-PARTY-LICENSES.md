@@ -14,7 +14,12 @@ These packages are required at runtime by the application.
 | [PySide6](https://pypi.org/project/PySide6/) | Qt bindings — QML engine, Qt Quick / Material UI, threading (`QThread`), file dialogs, and the application event loop | LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only | https://pyside.org |
 | [Pillow](https://pypi.org/project/Pillow/) | Thumbnail generation — opens JPEG / PNG / TIFF images, applies EXIF orientation correction via `ImageOps.exif_transpose`, resizes to cache-sized PNGs | HPND (Historical Permission Notice and Disclaimer) | https://pillow.readthedocs.io |
 | [rawpy](https://pypi.org/project/rawpy/) | RAW image decoding — wraps libraw to extract embedded JPEG previews or full-colour bitmaps from CR2, CR3, NEF, ARW, DNG, ORF, RW2, PEF, RAF, RWL, SRW files | MIT | https://github.com/letmaik/rawpy |
+| [av (PyAV)](https://pypi.org/project/av/) | Video thumbnail and preview extraction — wraps FFmpeg to decode frames from MP4, MOV, AVI, MKV, WMV, M4V, MTS, M2TS, 3GP, WebM, and FLV files; uses the embedded thumbnail when present, otherwise extracts a frame at 1/3 of the duration; applies rotation from the `tkhd` display matrix | BSD-3-Clause | https://github.com/PyAV-Org/PyAV |
 | [sqlcipher3](https://pypi.org/project/sqlcipher3/) | Encrypted SQLite database — stores the image index at rest using AES-256 via SQLCipher; exposes the standard Python `sqlite3` API | MIT | https://github.com/coleifer/sqlcipher3 |
+| [cryptography](https://pypi.org/project/cryptography/) | Thumbnail and preview cache encryption — AES-256-GCM symmetric encryption of cached thumbnail PNGs and preview JPEGs on disk; key derivation and wrapped-key model for password changes | Apache-2.0 OR BSD-3-Clause | https://cryptography.io |
+| [markdown](https://pypi.org/project/Markdown/) | User manual export — converts `docs/user-manual.md` to HTML as an intermediate step when generating the PDF via `export_manual_pdf.py` | BSD-2-Clause | https://python-markdown.github.io |
+| [pyvips](https://pypi.org/project/pyvips/) | Large-image rendering — Python bindings for libvips; used to decode images exceeding 100 MP (panoramas, large TIFFs, medium-format scans) via streaming tile I/O so memory use stays constant; initialised lazily | MIT | https://github.com/libvips/pyvips |
+| [pyvips-binary](https://pypi.org/project/pyvips-binary/) | Pre-built libvips shared library — bundled libvips binary wheels that provide the native library for `pyvips` on Windows and Linux without a separate system install | MIT | https://github.com/libvips/pyvips |
 
 ---
 
@@ -124,3 +129,15 @@ Mandatory attribution per the license:
 
 Full per-file attribution is listed in
 [tests/sample-data/ATTRIBUTION.md](tests/sample-data/ATTRIBUTION.md).
+
+---
+
+## GPS Screenshot Image Credit
+
+The GPS location bar screenshot (`docs/screenshots/08_gps_location_bar.png`) uses
+a photograph of the Xenakis UPIC system published on
+[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Xenakis_UPIC_system_computer_unit_2.jpg)
+under the [Creative Commons CC0 1.0 Universal Public Domain Dedication](https://creativecommons.org/publicdomain/zero/1.0/).
+
+- **Author:** 1904.CC (Manuel Schmalstieg)
+- **Attribution (voluntary):** 1904.CC (Manuel Schmalstieg), CC0, via Wikimedia Commons
