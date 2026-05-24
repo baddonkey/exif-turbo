@@ -190,6 +190,11 @@ class AppController(QObject):
         self._available_formats: str = "[]"
         self._folder_filter: str = ""
         self._search_folder_filters: set[str] = set()
+        # Snapshot of Search-tab filter state, captured when the user switches
+        # to the Browse tab so the Browse view can show un-filtered folder
+        # contents. Restored when the user returns to the Search tab.
+        # `None` means no snapshot is currently held.
+        self._search_state_snapshot: dict | None = None
         self._folder_tree: str = "[]"
         self._folder_tree_dirty: bool = False
         self._pending_preview_path: str = ""
@@ -1155,6 +1160,79 @@ class AppController(QObject):
             self._folder_filter = path
         self.folderFilterChanged.emit()
         self._run_search()
+
+    @Slot(str)
+    def enterBrowseTab(self, query_text: str = "") -> None:
+        """Snapshot Search-tab filter state and clear it for Browse mode.
+
+        Called by QML when the user switches from the Search tab to the
+        Browse tab. Captures the current query text (passed in from the
+        searchField QML control), search-folder-filters, extension filter
+        and date range so they can be restored on return. The cleared
+        state ensures Browse shows un-filtered folder contents.
+
+        No-op if a snapshot is already held (e.g. Browse -> Settings ->
+        Browse navigation should not overwrite the original snapshot).
+        """
+        if self._search_state_snapshot is not None:
+            return
+        self._search_state_snapshot = {
+            "query_text": query_text,
+            "search_folder_filters": set(self._search_folder_filters),
+            "ext_filter": self._ext_filter,
+            "date_from": self._date_from,
+            "date_to": self._date_to,
+        }
+        self._query_text = ""
+        if self._search_folder_filters:
+            self._search_folder_filters.clear()
+            self.searchFolderFiltersChanged.emit()
+        if self._ext_filter:
+            self._ext_filter = ""
+            self.extFilterChanged.emit()
+        if self._date_from is not None or self._date_to is not None:
+            self._date_from = None
+            self._date_to = None
+            self.dateFilterChanged.emit()
+        # Do not run a search here — the Browse tab triggers its own
+        # query when the user picks a folder (browseFolder).
+
+    @Slot(result=str)
+    def leaveBrowseTab(self) -> str:
+        """Restore the Search-tab filter snapshot captured by enterBrowseTab.
+
+        Clears the Browse-side folder filter, restores the saved search
+        state and re-runs the search. Returns the previously-saved query
+        text so the QML searchField can be repopulated. Returns an empty
+        string if no snapshot was held.
+        """
+        snapshot = self._search_state_snapshot
+        self._search_state_snapshot = None
+        # Always drop the Browse-tab folder filter when returning.
+        if self._folder_filter:
+            self._folder_filter = ""
+            self.folderFilterChanged.emit()
+        if snapshot is None:
+            self._query_text = ""
+            self._run_search()
+            return ""
+        self._query_text = snapshot["query_text"]
+        restored_search_folders = snapshot["search_folder_filters"]
+        if restored_search_folders != self._search_folder_filters:
+            self._search_folder_filters = restored_search_folders
+            self.searchFolderFiltersChanged.emit()
+        if snapshot["ext_filter"] != self._ext_filter:
+            self._ext_filter = snapshot["ext_filter"]
+            self.extFilterChanged.emit()
+        if (
+            snapshot["date_from"] != self._date_from
+            or snapshot["date_to"] != self._date_to
+        ):
+            self._date_from = snapshot["date_from"]
+            self._date_to = snapshot["date_to"]
+            self.dateFilterChanged.emit()
+        self._run_search()
+        return self._query_text
 
     @Slot(int, int)
     def setDateFilter(self, date_from: int, date_to: int) -> None:

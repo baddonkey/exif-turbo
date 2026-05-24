@@ -841,10 +841,18 @@ ApplicationWindow {
         }
 
         onCurrentIndexChanged: {
-            if (currentIndex === 0) {
-                // Returning to Search: clear folder filter and re-run last query
-                controller.setFolderFilter("")
-                controller.search(searchField.text)
+            if (currentIndex === 1) {
+                // Entering Browse: snapshot Search filters (incl. searchField
+                // text) and clear them so Browse shows un-filtered folder
+                // contents. enterBrowseTab is a no-op if a snapshot is held.
+                controller.enterBrowseTab(searchField.text)
+                searchField.text = ""
+            } else if (currentIndex === 0) {
+                // Returning to Search: restore the snapshot and repopulate
+                // searchField from the saved query text.
+                var savedQuery = controller.leaveBrowseTab()
+                searchField.text = savedQuery
+                controller.search(savedQuery)
             }
         }
     }
