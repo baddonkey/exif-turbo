@@ -169,17 +169,24 @@ ApplicationWindow {
             clipboardToast.show(message)
         }
         // Called after every search finishes (Browse folder load or Search tab restore).
+        // Called after every search finishes (Browse folder load or Search tab restore).
         function onLoadedResultsChanged() {
             // Browse tab: jump to the pending target image once folder results are loaded.
-            // Using loadedResultsChanged (not browseImageList.countChanged) avoids a
-            // premature fire that happens when the model switches from null to the stale
-            // pre-browse filteredSearchModel before the actual folder search completes.
             if (mainTabBar.currentIndex === 1 && root._pendingBrowseTarget !== "") {
                 var target = root._pendingBrowseTarget
                 root._pendingBrowseTarget = ""
                 var proxyRow = controller.selectResultByPath(target)
-                if (proxyRow >= 0)
-                    Qt.callLater(function() { browseImageList.contentY = proxyRow * 210 })
+                if (proxyRow >= 0) {
+                    // Use positionViewAtIndex (delegate-height-agnostic) and a
+                    // double Qt.callLater to run after the ListView's own layout
+                    // pass triggered by the currentProxyResultRow change inside
+                    // selectResultByPath.
+                    Qt.callLater(function() {
+                        Qt.callLater(function() {
+                            browseImageList.positionViewAtIndex(proxyRow, ListView.Beginning)
+                        })
+                    })
+                }
                 return
             }
             // Search tab: restore scroll position after returning from Browse tab.
@@ -928,14 +935,12 @@ ApplicationWindow {
                 controller.enterBrowseTab(searchField.text)
                 searchField.text = ""
             } else if (currentIndex === 0) {
-                // Returning to Search: restore the snapshot and repopulate
-                // searchField from the saved query text.  Request a one-shot
-                // scroll restore once the results have loaded.
+                // Returning to Search: restore the snapshot, repopulate searchField,
+                // and request a one-shot scroll restore once results have loaded.
                 root._pendingBrowseTarget = ""
                 root._restoreSearchPosition = true
                 var savedQuery = controller.leaveBrowseTab()
                 searchField.text = savedQuery
-                controller.search(savedQuery)
             }
         }
     }
@@ -1737,6 +1742,7 @@ ApplicationWindow {
 
                             // Selection checkbox — bottom-right corner, above MouseArea
                             CheckBox {
+                                id: _cardCheckBox
                                 anchors {
                                     right: parent.right
                                     bottom: parent.bottom
@@ -1752,13 +1758,12 @@ ApplicationWindow {
                                 ToolTip.delay: 600
                             }
 
-                            // "Browse →" shortcut — bottom-left corner, above MouseArea
+                            // "Browse →" shortcut — right side, left of the checkbox
                             Rectangle {
                                 anchors {
-                                    left: parent.left
-                                    bottom: parent.bottom
-                                    leftMargin: 14
-                                    bottomMargin: 7
+                                    right: _cardCheckBox.left
+                                    verticalCenter: _cardCheckBox.verticalCenter
+                                    rightMargin: 4
                                 }
                                 z: 2
                                 width:  _browseNavLabel.implicitWidth + 16
@@ -1792,6 +1797,10 @@ ApplicationWindow {
                                     onClicked: {
                                         var targetPath = model.path
                                         var folder = targetPath.replace(/[/\\][^/\\]*$/, "")
+                                        // Select this card BEFORE switching tabs so enterBrowseTab
+                                        // snapshots the row of this image (not the previously
+                                        // selected card) for restoration on return.
+                                        controller.selectResult(index)
                                         root._pendingBrowseTarget = targetPath
                                         mainTabBar.currentIndex = 1
                                         controller.browseFolder(folder)

@@ -195,6 +195,9 @@ class AppController(QObject):
         # contents. Restored when the user returns to the Search tab.
         # `None` means no snapshot is currently held.
         self._search_state_snapshot: dict | None = None
+        # When restoring from Browse → Search, load enough pages of results so
+        # the previously-selected row is included in the (proxy) model.
+        self._pending_restore_target_row: int | None = None
         self._folder_tree: str = "[]"
         self._folder_tree_dirty: bool = False
         self._pending_preview_path: str = ""
@@ -1219,6 +1222,10 @@ class AppController(QObject):
             return ""
         self._query_text = snapshot["query_text"]
         self._current_result_row = snapshot.get("current_result_row", 0)
+        # Remember the target row so _on_search_finished can load enough
+        # pages to make it reachable in the model/proxy before scroll-restore.
+        if self._current_result_row >= 0:
+            self._pending_restore_target_row = self._current_result_row
         restored_search_folders = snapshot["search_folder_filters"]
         if restored_search_folders != self._search_folder_filters:
             self._search_folder_filters = restored_search_folders
@@ -1350,6 +1357,12 @@ class AppController(QObject):
             SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
             for r in rows
         ]
+        # Block loadMore for the duration of the model reset.  Without this
+        # guard, endResetModel() causes the Browse ListView to fire loadMore
+        # (stale _loaded_results < _total_results), which emits
+        # loadedResultsChanged prematurely and consumes _pendingBrowseTarget
+        # before the real emission at the end of this method.
+        self._loading = True
         self._search_model.set_rows(results)
         # When the "checked only" filter is active, every row is marked,
         # so total == checked-in-results. Otherwise recompute against the
@@ -1361,13 +1374,56 @@ class AppController(QObject):
         self.checkedCountChanged.emit()
         self._total_results = total
         self._loaded_results = len(results)
-        self._loading = False
+        # Returning from Browse: synchronously load enough additional pages
+        # so the previously-selected row (and its saved scroll position) is
+        # reachable in the model before the QML scroll-restore handler runs.
+        if (
+            self._pending_restore_target_row is not None
+            and self._repo is not None
+        ):
+            target = self._pending_restore_target_row
+            self._pending_restore_target_row = None
+            while (
+                self._loaded_results <= target
+                and self._loaded_results < self._total_results
+            ):
+                more_rows = self._repo.search_images(
+                    self._query_text,
+                    _PAGE_SIZE,
+                    self._loaded_results,
+                    sort_by=self._sort_by,
+                    ext_filter=self._ext_filter,
+                    path_filter=self._current_path_filter(),
+                    restrict_to_enabled_folders=(self._folder_repo is not None),
+                    marked_only=self._checked_only_filter_active,
+                    date_from=self._date_from,
+                    date_to=self._date_to,
+                )
+                if not more_rows:
+                    break
+                more_results = [
+                    SearchResult(
+                        path=r[1], filename=r[2], metadata_json=r[3],
+                        size=r[4], mtime=r[5],
+                    )
+                    for r in more_rows
+                ]
+                self._search_model.append_rows(more_results)
+                self._loaded_results += len(more_results)
+        # Keep _loading=True through both emits so loadMore cannot fire
+        # prematurely during totalResultsChanged or loadedResultsChanged and
+        # consume _pendingBrowseTarget before onLoadedResultsChanged handles it.
         self.totalResultsChanged.emit()
         self.loadedResultsChanged.emit()
+        self._loading = False
         self._apply_format_counts(format_counts)
         self._load_year_counts()
-        if results:
-            row = self._current_result_row if 0 <= self._current_result_row < len(results) else 0
+        if self._loaded_results > 0:
+            row = (
+                self._current_result_row
+                if 0 <= self._current_result_row < self._loaded_results
+                else 0
+            )
             self._select_source_row(row)
         else:
             self._clear_details()
@@ -1487,11 +1543,12 @@ class AppController(QObject):
         for source_row in range(n):
             if self._search_model.get_path(source_row) == path:
                 self._select_source_row(source_row)
-                return (
+                pr = (
                     self._filter_proxy.proxy_row_for(source_row)
                     if self._filter_proxy
                     else source_row
                 )
+                return pr
         return -1
 
     def _select_source_row(self, row: int) -> None:
