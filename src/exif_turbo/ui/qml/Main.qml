@@ -2946,7 +2946,12 @@ ApplicationWindow {
 
                         // Copy to clipboard button
                         Rectangle {
-                            anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                            id: copyToClipboardBtn2
+                            anchors {
+                                right: savePreviewBtn2.left
+                                rightMargin: 6
+                                verticalCenter: parent.verticalCenter
+                            }
                             width: copyToClipboardLabel2.implicitWidth + 28
                             height: 22
                             radius: 11
@@ -2977,6 +2982,125 @@ ApplicationWindow {
 
                             ToolTip.text: qsTr("Copy preview image to clipboard")
                             ToolTip.visible: copyBtnArea2.containsMouse
+                            ToolTip.delay: 400
+                        }
+
+                        // ── Save preview button ───────────────────────────
+                        Rectangle {
+                            id: savePreviewBtn2
+                            anchors {
+                                right: saveOriginalBtn2.left
+                                rightMargin: 4
+                                verticalCenter: parent.verticalCenter
+                            }
+                            width: 26; height: 22; radius: 11
+                            color: Qt.rgba(0, 0, 0, savePreviewBtnArea2.containsMouse ? 0.75 : 0.45)
+                            border.color: Qt.rgba(1, 1, 1, 0.25)
+                            border.width: 1
+                            visible: _selectedImageSource !== ""
+                            opacity: savePreviewBtnArea2.containsMouse ? 1.0 : 0.5
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                            Label {
+                                anchors.centerIn: parent
+                                text: "\u2913"
+                                font.pixelSize: 13
+                                color: "#ffffff"
+                            }
+                            MouseArea {
+                                id: savePreviewBtnArea2
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: { savePreviewDialog.currentFile = _suggestedPreviewUrl(); savePreviewDialog.open() }
+                            }
+                            ToolTip.text: qsTr("Save preview image as\u2026")
+                            ToolTip.visible: savePreviewBtnArea2.containsMouse
+                            ToolTip.delay: 400
+                        }
+
+                        // ── Save original button ──────────────────────────
+                        Rectangle {
+                            id: saveOriginalBtn2
+                            anchors {
+                                right: previewSourceToggle2.visible ? previewSourceToggle2.left : parent.right
+                                rightMargin: previewSourceToggle2.visible ? 4 : 8
+                                verticalCenter: parent.verticalCenter
+                            }
+                            width: 26; height: 22; radius: 11
+                            color: Qt.rgba(0, 0, 0, saveOriginalBtnArea2.containsMouse ? 0.75 : 0.45)
+                            border.color: Qt.rgba(1, 1, 1, 0.25)
+                            border.width: 1
+                            visible: _selectedImageSource !== ""
+                            opacity: saveOriginalBtnArea2.containsMouse ? 1.0 : 0.5
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                            Label {
+                                anchors.centerIn: parent
+                                text: "\u2913"
+                                font.pixelSize: 13
+                                color: "#ff9800"
+                            }
+                            MouseArea {
+                                id: saveOriginalBtnArea2
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: { saveOriginalDialog.currentFile = _suggestedOriginalUrl(); saveOriginalDialog.open() }
+                            }
+                            ToolTip.text: qsTr("Save original file as\u2026")
+                            ToolTip.visible: saveOriginalBtnArea2.containsMouse
+                            ToolTip.delay: 400
+                        }
+
+                        // Preview / Raw source toggle
+                        Rectangle {
+                            id: previewSourceToggle2
+                            anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                            width: previewSourceLabel2.implicitWidth + 28
+                            height: 22
+                            radius: 11
+                            color: Qt.rgba(0, 0, 0, sourceToggleArea2.containsMouse ? 0.75 : 0.45)
+                            border.color: Qt.rgba(1, 1, 1, 0.25)
+                            border.width: 1
+                            visible: _selectedImageSource !== "" && controller && controller.selectedHasPreview
+                            opacity: sourceToggleArea2.containsMouse ? 1.0 : 0.5
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
+
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 6
+                                Rectangle {
+                                    width: 8; height: 8; radius: 4
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    color: (controller && controller.useRawPreview) ? "#ff9800" : "#4caf50"
+                                }
+                                Label {
+                                    id: previewSourceLabel2
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: (controller && controller.useRawPreview) ? qsTr("Show Preview") : qsTr("Show Original")
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                    color: "#ffffff"
+                                }
+                            }
+
+                            MouseArea {
+                                id: sourceToggleArea2
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (controller)
+                                        controller.setUseRawPreview(!controller.useRawPreview)
+                                }
+                            }
+
+                            ToolTip.text: (controller && controller.useRawPreview)
+                                          ? qsTr("Showing full-resolution source. Click to use cached preview.")
+                                          : qsTr("Showing cached preview. Click to load the full-resolution source.")
+                            ToolTip.visible: sourceToggleArea2.containsMouse
                             ToolTip.delay: 400
                         }
                     }
@@ -3124,6 +3248,38 @@ ApplicationWindow {
                                 text: Math.round(previewHost2._zoom * 100) + "%"
                                 font.pixelSize: 11
                                 color: "#ffffff"
+                            }
+                        }
+
+                        // Loading overlay — shown while the full preview /
+                        // original image is decoding.
+                        Rectangle {
+                            id: previewLoadingOverlay2
+                            anchors.centerIn: parent
+                            width: previewLoadingRow2.implicitWidth + 24
+                            height: previewLoadingRow2.implicitHeight + 14
+                            radius: 6
+                            color: Qt.rgba(0, 0, 0, 0.55)
+                            visible: opacity > 0.0
+                            opacity: (fullPreview2.status === Image.Loading
+                                      && controller && controller.useRawPreview) ? 1.0 : 0.0
+                            Behavior on opacity { NumberAnimation { duration: 150 } }
+
+                            Row {
+                                id: previewLoadingRow2
+                                anchors.centerIn: parent
+                                spacing: 8
+                                BusyIndicator {
+                                    width: 18; height: 18
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    running: previewLoadingOverlay2.visible
+                                }
+                                Label {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: qsTr("Loading original\u2026")
+                                    font.pixelSize: 12
+                                    color: "#ffffff"
+                                }
                             }
                         }
                     }
