@@ -312,6 +312,10 @@ any active filter; tick one or more folder names to restrict results to those
 folders only. Multiple folders can be selected simultaneously. Hovering over a
 folder name shows its full path as a tooltip.
 
+> **Drive roots on Windows** — when an entire drive (e.g. `C:\`) is added as
+> an indexed folder it appears in the dropdown with a friendly label such as
+> **"OS (C:)"** (volume name + drive letter), rather than a blank entry.
+
 ![Folder filter popup](screenshots/07_folder_filter.png)
 
 ### The selection chip
@@ -453,8 +457,31 @@ panel, EXIF Tags panel, GPS location bar, and **Show Preview / Show Original**
 toggle are not shown in the Browse tab — use the **Search** tab for the full
 metadata view and preview source options.
 
-Switching to the **Search** tab clears the folder filter and re-runs the current
-search query. Any image previously selected while browsing is not automatically
+### Navigating the Browse image list
+
+The image list takes keyboard focus as soon as a folder is selected. You can
+move through images without touching the mouse:
+
+| Key | Action |
+|-----|--------|
+| `↓` | Select the next image |
+| `↑` | Select the previous image |
+| `Page Down` | Jump one page forward |
+| `Page Up` | Jump one page backward |
+
+A permanently visible vertical scrollbar (12 px) is always shown on the right
+edge of the list so you can drag it or click to jump to any position without
+first hovering the right edge.
+
+### Search-tab filter state is preserved
+
+The Browse tab has its own independent navigation context. When you switch from
+Search to Browse and back, your active Search query, format chip, date range,
+sort order, extension filter, and folder filters are all restored exactly as
+you left them — Browse navigation never affects the Search state.
+
+Switching back to the **Search** tab restores the search state exactly as you
+left it. Any image previously selected while browsing is not automatically
 highlighted in Search.
 
 ---
@@ -802,10 +829,10 @@ The **Reset Database…** button is disabled while indexing is in progress.
 | `Escape` | Close the find-in-metadata bar |
 | `F3` | Jump to next match in metadata |
 | `Shift+F3` | Jump to previous match in metadata |
-| `↓` | Select the next result (Search tab) |
-| `↑` | Select the previous result (Search tab) |
-| `Page Down` | Jump one page forward in results (Search tab) |
-| `Page Up` | Jump one page backward in results (Search tab) |
+| `↓` | Select the next result (Search tab) / next image (Browse tab) |
+| `↑` | Select the previous result (Search tab) / previous image (Browse tab) |
+| `Page Down` | Jump one page forward in results (Search tab) / Browse image list |
+| `Page Up` | Jump one page backward in results (Search tab) / Browse image list |
 | `Ctrl+Q` | Exit the application (File → Exit) |
 
 ---
