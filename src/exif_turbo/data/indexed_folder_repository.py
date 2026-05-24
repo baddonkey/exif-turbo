@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List
 
 from ..models.indexed_folder import IndexedFolder
+from ..utils.folder_labels import friendly_folder_label
 from ._connection import open_encrypted_connection
 
 
@@ -38,10 +39,12 @@ class IndexedFolderRepository:
 
     @staticmethod
     def _row_to_folder(row: tuple) -> IndexedFolder:
+        path = row[1]
+        display_name = row[2] or friendly_folder_label(path)
         return IndexedFolder(
             id=row[0],
-            path=row[1],
-            display_name=row[2],
+            path=path,
+            display_name=display_name,
             enabled=bool(row[3]),
             recursive=bool(row[4]),
             status=row[5],
@@ -110,7 +113,7 @@ class IndexedFolderRepository:
         recursive: bool = True,
     ) -> IndexedFolder:
         normalised = os.path.normpath(path)
-        name = display_name or Path(normalised).name
+        name = display_name or friendly_folder_label(normalised)
         with self.conn:
             self.conn.execute(
                 "INSERT OR IGNORE INTO indexed_folders "
