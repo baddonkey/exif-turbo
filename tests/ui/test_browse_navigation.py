@@ -1,10 +1,10 @@
 """E2E tests for the "Browse →" / "← Search" cross-tab navigation feature.
 
 Covers:
-  * selectResultByPath — finds an image by path, selects it, returns proxy row
-  * selectResultByPath with an unknown path — returns -1
+  * selectResultById — finds an image by integer id, selects it, returns proxy row
+  * selectResultById with an unknown id — returns -1
   * Full flow: search results → enterBrowseTab + browseFolder →
-    selectResultByPath locates and selects the correct image in Browse
+    selectResultById locates and selects the correct image in Browse
   * Returning to Search after Browse navigation preserves the previously
     selected search result row
 
@@ -90,28 +90,28 @@ def controller_with_images(
     qtbot.wait(100)
 
 
-# ── selectResultByPath ────────────────────────────────────────────────────────
+# ── selectResultById ──────────────────────────────────────────────────────────
 
 
-class TestSelectResultByPath:
-    def test_selectResultByPath_known_path_returns_proxy_row(
+class TestSelectResultById:
+    def test_selectResultById_known_id_returns_proxy_row(
         self,
         qtbot: QtBot,
         controller_with_images: tuple[AppController, SearchListModel, Path, Path],
     ) -> None:
-        # Arrange — all 5 images are loaded; pick any path from the model.
+        # Arrange — all 5 images are loaded; pick any id from the model.
         controller, search_model, _, _ = controller_with_images
         target_source_row = 2
-        target_path = search_model.get_path(target_source_row)
-        assert target_path is not None
+        target_id = search_model.get_image_id(target_source_row)
+        assert target_id is not None
 
         # Act
-        proxy_row = controller.selectResultByPath(target_path)
+        proxy_row = controller.selectResultById(target_id)
 
         # Assert — a valid (≥ 0) proxy row is returned
         assert proxy_row >= 0
 
-    def test_selectResultByPath_unknown_path_returns_minus_one(
+    def test_selectResultById_unknown_id_returns_minus_one(
         self,
         qtbot: QtBot,
         controller_with_images: tuple[AppController, SearchListModel, Path, Path],
@@ -120,12 +120,12 @@ class TestSelectResultByPath:
         controller, _, _, _ = controller_with_images
 
         # Act
-        result = controller.selectResultByPath("/no/such/image.jpg")
+        result = controller.selectResultById(-999)
 
         # Assert
         assert result == -1
 
-    def test_selectResultByPath_selects_matching_image(
+    def test_selectResultById_selects_matching_image(
         self,
         qtbot: QtBot,
         controller_with_images: tuple[AppController, SearchListModel, Path, Path],
@@ -133,28 +133,29 @@ class TestSelectResultByPath:
         # Arrange — pick the last image in the model (non-trivial row index).
         controller, search_model, _, _ = controller_with_images
         last_row = search_model.rowCount() - 1
+        target_id = search_model.get_image_id(last_row)
         target_path = search_model.get_path(last_row)
-        assert target_path is not None
+        assert target_id is not None
 
         # Act
-        controller.selectResultByPath(target_path)
+        controller.selectResultById(target_id)
         qtbot.wait(_PAUSE_MS)
 
         # Assert — the controller's selected source row matches the target.
         assert search_model.get_path(controller.currentResultRow) == target_path
 
-    def test_selectResultByPath_proxy_row_matches_currentProxyResultRow(
+    def test_selectResultById_proxy_row_matches_currentProxyResultRow(
         self,
         qtbot: QtBot,
         controller_with_images: tuple[AppController, SearchListModel, Path, Path],
     ) -> None:
         # Arrange
         controller, search_model, _, _ = controller_with_images
-        target_path = search_model.get_path(1)
-        assert target_path is not None
+        target_id = search_model.get_image_id(1)
+        assert target_id is not None
 
         # Act
-        returned_proxy_row = controller.selectResultByPath(target_path)
+        returned_proxy_row = controller.selectResultById(target_id)
         qtbot.wait(_PAUSE_MS)
 
         # Assert — returned value matches the property exposed to QML.
@@ -165,15 +166,22 @@ class TestSelectResultByPath:
 
 
 class TestBrowseNavigation:
-    def test_selectResultByPath_after_browseFolder_selects_image_in_browse(
+    def test_selectResultById_after_browseFolder_selects_image_in_browse(
         self,
         qtbot: QtBot,
         controller_with_images: tuple[AppController, SearchListModel, Path, Path],
     ) -> None:
-        # Arrange — simulate the "Browse →" button: save the path of a
-        # folder_b image, enter Browse, load that folder.
-        controller, _, _, folder_b = controller_with_images
+        # Arrange — simulate the "Browse →" button: save the id of a
+        # folder_b image from Search results, enter Browse, load that folder.
+        controller, search_model, _, folder_b = controller_with_images
         target_path = str(folder_b / "delta.jpg")
+        # Find the id in the current Search results (all images are loaded).
+        target_id: int | None = None
+        for i in range(search_model.rowCount()):
+            if search_model.get_path(i) == target_path:
+                target_id = search_model.get_image_id(i)
+                break
+        assert target_id is not None
 
         controller.enterBrowseTab("")
         with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
@@ -181,21 +189,27 @@ class TestBrowseNavigation:
         qtbot.wait(_PAUSE_MS)
 
         # Act — QML would call this once browseImageList.countChanged fires.
-        proxy_row = controller.selectResultByPath(target_path)
+        proxy_row = controller.selectResultById(target_id)
         qtbot.wait(_PAUSE_MS)
 
         # Assert — the image is found and selected.
         assert proxy_row >= 0
         assert search_model_path(controller) == target_path
 
-    def test_selectResultByPath_image_not_in_current_browse_folder_returns_minus_one(
+    def test_selectResultById_image_not_in_current_browse_folder_returns_minus_one(
         self,
         qtbot: QtBot,
         controller_with_images: tuple[AppController, SearchListModel, Path, Path],
     ) -> None:
-        # Arrange — browse folder_b, but look for a folder_a image.
-        controller, _, folder_a, folder_b = controller_with_images
-        path_from_other_folder = str(folder_a / "alpha.jpg")
+        # Arrange — browse folder_b, but look for a folder_a image id.
+        controller, search_model, folder_a, folder_b = controller_with_images
+        alpha_path = str(folder_a / "alpha.jpg")
+        alpha_id: int | None = None
+        for i in range(search_model.rowCount()):
+            if search_model.get_path(i) == alpha_path:
+                alpha_id = search_model.get_image_id(i)
+                break
+        assert alpha_id is not None
 
         controller.enterBrowseTab("")
         with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
@@ -203,7 +217,7 @@ class TestBrowseNavigation:
         qtbot.wait(_PAUSE_MS)
 
         # Act
-        result = controller.selectResultByPath(path_from_other_folder)
+        result = controller.selectResultById(alpha_id)
 
         # Assert — image is not in the Browse results, so -1 is returned.
         assert result == -1
@@ -227,7 +241,14 @@ class TestBrowseNavigation:
             controller.browseFolder(str(folder_b))
         qtbot.wait(_PAUSE_MS)
         # Select a different image while in Browse — delta.jpg is typically row 0.
-        controller.selectResultByPath(str(folder_b / "delta.jpg"))
+        delta_path = str(folder_b / "delta.jpg")
+        delta_id: int | None = None
+        for i in range(search_model.rowCount()):
+            if search_model.get_path(i) == delta_path:
+                delta_id = search_model.get_image_id(i)
+                break
+        assert delta_id is not None
+        controller.selectResultById(delta_id)
         qtbot.wait(_PAUSE_MS)
 
         # Act — return to Search tab.
@@ -240,6 +261,41 @@ class TestBrowseNavigation:
         assert controller.totalResults == len(_IMAGES)
         assert controller.currentResultRow == search_row_before
         assert search_model.get_path(controller.currentResultRow) == search_path_before
+
+    def test_leave_browse_tab_restores_correct_image_after_index_insert(
+        self,
+        qtbot: QtBot,
+        controller_with_images: tuple[AppController, SearchListModel, Path, Path],
+    ) -> None:
+        # Arrange — select a non-zero row and record its image id.
+        controller, search_model, folder_a, folder_b = controller_with_images
+        controller.selectResult(2)
+        qtbot.wait(_PAUSE_MS)
+        selected_id = search_model.get_image_id(controller.currentResultRow)
+        selected_path = search_model.get_path(controller.currentResultRow)
+        assert selected_id is not None
+
+        controller.enterBrowseTab("")
+        with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+            controller.browseFolder(str(folder_b))
+        qtbot.wait(_PAUSE_MS)
+
+        # Simulate the indexer inserting a new image that sorts before the
+        # selected one, which would shift the saved row number by 1.
+        new_img = folder_a / "aardvark.jpg"
+        Image.new("RGB", (32, 32)).save(str(new_img), format="JPEG")
+        stat = new_img.stat()
+        repo = controller._repo  # type: ignore[attr-defined]
+        repo.upsert_image(str(new_img), "aardvark.jpg", stat.st_mtime, stat.st_size, {}, "")
+        repo.commit()
+
+        # Act — return to Search tab; the row number is now stale.
+        with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+            controller.leaveBrowseTab()
+        qtbot.wait(_PAUSE_MS)
+
+        # Assert — the correct image (by id) is selected, not the shifted row.
+        assert search_model.get_path(controller.currentResultRow) == selected_path
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

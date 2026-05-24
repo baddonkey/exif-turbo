@@ -60,6 +60,7 @@ class SearchListModel(QAbstractListModel):
     DateRole = Qt.UserRole + 8
     DimsRole = Qt.UserRole + 9
     LensRole = Qt.UserRole + 10
+    ImageIdRole = Qt.UserRole + 11
 
     def __init__(self, cache_dir: Path) -> None:
         super().__init__()
@@ -91,6 +92,7 @@ class SearchListModel(QAbstractListModel):
             self.DateRole: b"date",
             self.DimsRole: b"dims",
             self.LensRole: b"lens",
+            self.ImageIdRole: b"imageId",
         }
 
     def _scan_cache_dir(self) -> set[str]:
@@ -173,6 +175,8 @@ class SearchListModel(QAbstractListModel):
             return item.size
         if role == self.CheckedRole:
             return item.path in self._checked
+        if role == self.ImageIdRole:
+            return item.image_id
         if role in (self.CameraRole, self.DateRole, self.DimsRole, self.LensRole):
             if self._display_cache[row] is None:
                 self._display_cache[row] = _extract_display(item.metadata_json)
@@ -228,6 +232,18 @@ class SearchListModel(QAbstractListModel):
     def get_path(self, row: int) -> str | None:
         if 0 <= row < len(self._rows):
             return self._rows[row].path
+
+    def get_image_id(self, row: int) -> int | None:
+        if 0 <= row < len(self._rows):
+            return self._rows[row].image_id
+        return None
+
+    def find_row_by_id(self, image_id: int) -> int:
+        """Return the source row index for *image_id*, or -1 if not loaded."""
+        for i, row in enumerate(self._rows):
+            if row.image_id == image_id:
+                return i
+        return -1
         return None
 
     def get_stamp(self, row: int) -> tuple[float, int] | None:
