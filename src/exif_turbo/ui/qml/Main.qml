@@ -168,6 +168,35 @@ ApplicationWindow {
         function onClipboardCopyDone(message) {
             clipboardToast.show(message)
         }
+        // Called after every search finishes (Browse folder load or Search tab restore).
+        function onLoadedResultsChanged() {
+            // Browse tab: jump to the pending target image once folder results are loaded.
+            // Using loadedResultsChanged (not browseImageList.countChanged) avoids a
+            // premature fire that happens when the model switches from null to the stale
+            // pre-browse filteredSearchModel before the actual folder search completes.
+            if (mainTabBar.currentIndex === 1 && root._pendingBrowseTarget !== "") {
+                var target = root._pendingBrowseTarget
+                root._pendingBrowseTarget = ""
+                var proxyRow = controller.selectResultByPath(target)
+                if (proxyRow >= 0)
+                    Qt.callLater(function() { browseImageList.contentY = proxyRow * 210 })
+                return
+            }
+            // Search tab: restore scroll position after returning from Browse tab.
+            // _restoreSearchPosition is set as a one-shot flag in onCurrentIndexChanged.
+            if (!root._restoreSearchPosition || mainTabBar.currentIndex !== 0) return
+            root._restoreSearchPosition = false
+            var row = controller.currentProxyResultRow
+            if (row >= 0) {
+                Qt.callLater(function() {
+                    if (root._savedSearchScrollY >= 0.0) {
+                        resultsList.contentY = root._savedSearchScrollY
+                    }
+                    resultsList.positionViewAtIndex(row, ListView.Contain)
+                    root._savedSearchScrollY = -1.0
+                })
+            }
+        }
     }
 
     // ── Preview context menu (right-click on either preview pane) ─────────
@@ -301,6 +330,14 @@ ApplicationWindow {
     readonly property int    _maxWorkers:          settingsModel ? settingsModel.maxWorkers    : 16
     readonly property int    _defaultWorkers:      settingsModel ? settingsModel.defaultWorkers : 1
     readonly property int    _cpuCount:             settingsModel ? settingsModel.cpuCount        : 1
+
+    // ── Browse / Search cross-tab navigation state ─────────────────────────
+    // contentY of resultsList captured when entering Browse; -1 = nothing saved
+    property real   _savedSearchScrollY:    -1.0
+    // Full image path to locate and scroll to once Browse results finish loading
+    property string _pendingBrowseTarget:   ""
+    // One-shot flag: restore resultsList position after the next search load
+    property bool   _restoreSearchPosition: false
 
     // Parsed format list — updated reactively when _availableFormats changes
     readonly property var _formats: {
@@ -887,11 +924,15 @@ ApplicationWindow {
                 // Entering Browse: snapshot Search filters (incl. searchField
                 // text) and clear them so Browse shows un-filtered folder
                 // contents. enterBrowseTab is a no-op if a snapshot is held.
+                root._savedSearchScrollY = resultsList.contentY
                 controller.enterBrowseTab(searchField.text)
                 searchField.text = ""
             } else if (currentIndex === 0) {
                 // Returning to Search: restore the snapshot and repopulate
-                // searchField from the saved query text.
+                // searchField from the saved query text.  Request a one-shot
+                // scroll restore once the results have loaded.
+                root._pendingBrowseTarget = ""
+                root._restoreSearchPosition = true
                 var savedQuery = controller.leaveBrowseTab()
                 searchField.text = savedQuery
                 controller.search(savedQuery)
@@ -1552,6 +1593,7 @@ ApplicationWindow {
                         visible: root._searchError === ""
                         model: filteredSearchModel
                         currentIndex: controller ? controller.currentProxyResultRow : -1
+                        highlightMoveDuration: 0
                         ScrollBar.vertical: ScrollBar {}
 
                         delegate: Rectangle {
@@ -1708,6 +1750,53 @@ ApplicationWindow {
                                 ToolTip.text: checked ? qsTr("Deselect image") : qsTr("Select image")
                                 ToolTip.visible: hovered
                                 ToolTip.delay: 600
+                            }
+
+                            // "Browse →" shortcut — bottom-left corner, above MouseArea
+                            Rectangle {
+                                anchors {
+                                    left: parent.left
+                                    bottom: parent.bottom
+                                    leftMargin: 14
+                                    bottomMargin: 7
+                                }
+                                z: 2
+                                width:  _browseNavLabel.implicitWidth + 16
+                                height: 20
+                                radius: 10
+                                color: Qt.rgba(root._accentColor.r, root._accentColor.g,
+                                               root._accentColor.b,
+                                               _browseNavArea.containsMouse ? 0.28 : 0.12)
+                                border.color: Qt.rgba(root._accentColor.r, root._accentColor.g,
+                                                      root._accentColor.b,
+                                                      _browseNavArea.containsMouse ? 0.6 : 0.35)
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 100 } }
+                                ToolTip.text:    qsTr("Jump to this image in the Browse tab")
+                                ToolTip.visible: _browseNavArea.containsMouse
+                                ToolTip.delay:   600
+
+                                Label {
+                                    id: _browseNavLabel
+                                    anchors.centerIn: parent
+                                    text:           qsTr("Browse \u2192")
+                                    font.pixelSize: 10
+                                    color:          root._accentColor
+                                }
+
+                                MouseArea {
+                                    id: _browseNavArea
+                                    anchors.fill:  parent
+                                    hoverEnabled:  true
+                                    cursorShape:   Qt.PointingHandCursor
+                                    onClicked: {
+                                        var targetPath = model.path
+                                        var folder = targetPath.replace(/[/\\][^/\\]*$/, "")
+                                        root._pendingBrowseTarget = targetPath
+                                        mainTabBar.currentIndex = 1
+                                        controller.browseFolder(folder)
+                                    }
+                                }
                             }
                         }
 
@@ -2604,6 +2693,41 @@ ApplicationWindow {
                             anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
                             FloatingBadge { text: qsTr("IMAGES") }
                             Item { Layout.fillWidth: true }
+
+                            // "← Search" back button — returns to Search tab and restores position
+                            Rectangle {
+                                height: 22
+                                width:  _backToSearchLabel.implicitWidth + 16
+                                radius: 11
+                                color: Qt.rgba(root._accentColor.r, root._accentColor.g,
+                                               root._accentColor.b,
+                                               _backToSearchArea.containsMouse ? 0.28 : 0.12)
+                                border.color: Qt.rgba(root._accentColor.r, root._accentColor.g,
+                                                      root._accentColor.b,
+                                                      _backToSearchArea.containsMouse ? 0.6 : 0.35)
+                                border.width: 1
+                                Behavior on color { ColorAnimation { duration: 100 } }
+                                ToolTip.text:    qsTr("Return to Search tab")
+                                ToolTip.visible: _backToSearchArea.containsMouse
+                                ToolTip.delay:   400
+
+                                Label {
+                                    id: _backToSearchLabel
+                                    anchors.centerIn: parent
+                                    text:           qsTr("\u2190 Search")
+                                    font.pixelSize: 10
+                                    color:          root._accentColor
+                                }
+
+                                MouseArea {
+                                    id: _backToSearchArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape:  Qt.PointingHandCursor
+                                    onClicked:    mainTabBar.currentIndex = 0
+                                }
+                            }
+
                             Label {
                                 text: root._folderFilter !== ""
                                       ? browseImageList.count + qsTr(" images")
@@ -2638,6 +2762,7 @@ ApplicationWindow {
                         activeFocusOnTab: true
                         model: root._folderFilter !== "" ? filteredSearchModel : null
                         currentIndex: controller ? controller.currentProxyResultRow : -1
+                        highlightMoveDuration: 0
                         ScrollBar.vertical: ScrollBar {
                             policy: ScrollBar.AlwaysOn
                             width: 12

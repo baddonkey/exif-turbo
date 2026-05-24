@@ -1,9 +1,23 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 from PIL import Image
+
+# Guard: refuse to run outside the project venv to prevent hard-to-diagnose
+# failures (e.g. missing optional deps like PyAV).
+_venv = Path(__file__).resolve().parents[1] / ".venv"
+if not Path(sys.executable).resolve().is_relative_to(_venv):
+    pytest.exit(
+        f"Tests must be run inside the project venv.\n"
+        f"  Expected: {_venv / 'Scripts' / 'python.exe'} (Windows) "
+        f"or {_venv / 'bin' / 'python'} (Unix)\n"
+        f"  Got:      {sys.executable}\n"
+        f"Activate the venv first:  .venv\\Scripts\\Activate.ps1",
+        returncode=1,
+    )
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 

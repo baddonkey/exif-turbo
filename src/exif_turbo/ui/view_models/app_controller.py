@@ -1182,6 +1182,7 @@ class AppController(QObject):
             "ext_filter": self._ext_filter,
             "date_from": self._date_from,
             "date_to": self._date_to,
+            "current_result_row": self._current_result_row,
         }
         self._query_text = ""
         if self._search_folder_filters:
@@ -1217,6 +1218,7 @@ class AppController(QObject):
             self._run_search()
             return ""
         self._query_text = snapshot["query_text"]
+        self._current_result_row = snapshot.get("current_result_row", 0)
         restored_search_folders = snapshot["search_folder_filters"]
         if restored_search_folders != self._search_folder_filters:
             self._search_folder_filters = restored_search_folders
@@ -1472,6 +1474,25 @@ class AppController(QObject):
         # Map proxy row → source row when the checked-only filter is active.
         row = self._filter_proxy.source_row_for(proxy_row) if self._filter_proxy else proxy_row
         self._select_source_row(row)
+
+    @Slot(str, result=int)
+    def selectResultByPath(self, path: str) -> int:
+        """Find the image at *path* in the current results, select it, and
+        return its proxy row (or -1 if not found).
+
+        Used by QML to scroll Browse tab to a specific image after
+        navigating from a Search result card.
+        """
+        n = self._search_model.rowCount()
+        for source_row in range(n):
+            if self._search_model.get_path(source_row) == path:
+                self._select_source_row(source_row)
+                return (
+                    self._filter_proxy.proxy_row_for(source_row)
+                    if self._filter_proxy
+                    else source_row
+                )
+        return -1
 
     def _select_source_row(self, row: int) -> None:
         """Select a result by its source-model row (no proxy mapping)."""
