@@ -16,7 +16,7 @@ Fully generated using VS Code Copilot.
 - **Self-healing cache** — after every folder index run a fast garbage-collection pass deletes orphaned thumbnail and preview files (those whose source image no longer exists in the database). Status bar reports *“Cleaning up cache…”* during the sweep.
 - **Encrypted thumbnail and preview cache** — thumbnails and rendered previews are stored AES-256-GCM encrypted on disk; the encryption key is derived from the user’s password using a wrapped-key model so changing the password does not require rebuilding the cache
 - **Change Password** — re-encrypts the SQLCipher database under a new passphrase without rebuilding thumbnails; existing encrypted thumbnails remain valid
-- **Preview panel toolbar** — pill buttons and right-click context menu for clipboard and file actions: **Copy** copies the rendered preview to the system clipboard (falls back to the file path as text); **Save Preview As** (white ⤓) saves the displayed preview as JPEG or PNG with a suggested filename; **Save Original As** (orange ⤓) copies the source file byte-for-byte; a toast confirms each action
+- **Preview panel toolbar** — identical pill buttons on **both the Search and Browse tab** preview panes, plus a right-click context menu: **Copy** copies the rendered preview to the system clipboard (falls back to the file path as text); **Save Preview As** (white ⤓) saves the displayed preview as JPEG or PNG with a suggested filename; **Save Original As** (orange ⤓) copies the source file byte-for-byte; **Show Original / Show Preview** toggle switches between the cached preview and the full-resolution source; a loading overlay with a spinner appears while a full-resolution original is decoding; a toast confirms each save/copy action
 - **Build Previews** — per-folder action builds a cache of downscaled preview JPEGs for instant display; configurable long-edge resolution in Settings
 - **`×` clear button** — when the search field contains text a `×` button clears it immediately (equivalent to pressing **Enter** with an empty bar)
 - **ExifTool not-found dialog** — if ExifTool is absent at unlock time a modal dialog explains that indexing is disabled and links to exiftool.org; search and browse of existing data continue normally
@@ -26,6 +26,8 @@ Fully generated using VS Code Copilot.
 - PySide6 QML UI with Material Design — light, dark, or system theme
 - Multilanguage UI: English, German, French, Italian, Romansh
 - Search and Browse tabs with 50/50 split-pane thumbnail preview
+- **"Browse →" button** — each search result card has a `Browse →` pill in the bottom-right corner; clicking it switches directly to the Browse tab and scrolls to that exact image in its folder, preserving the Search-tab state (query, filters, scroll position) for seamless return
+- **"← Search" back button** — a `← Search` pill in the Browse-tab image list header switches back to the Search tab and restores the exact scroll position and selected image from before the Browse jump
 - Folder management — add, remove, enable/disable indexed folders with per-folder status
 - Multi-folder filter — when multiple folders are indexed, a **Folder(s)** dropdown in the search RESULTS header filters results to one or more selected folders simultaneously; drive roots (e.g. `C:\`) appear with a friendly label such as `OS (C:)` instead of an empty name
 - Scoped rescan — rescanning a single folder only updates that folder's records; other indexed folders are never touched
