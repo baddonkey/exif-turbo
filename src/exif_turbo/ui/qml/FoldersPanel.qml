@@ -400,116 +400,138 @@ Item {
             }
         }
 
-        // ── Bottom pane: activity / progress ──────────────────────────────
+        // ── Bottom pane: activity / progress (3 equal columns) ────────────
         Item {
             Layout.fillWidth: true
             implicitHeight: 200
 
-            // Idle placeholder
-            Label {
-                anchors.centerIn: parent
-                visible: !controller || (!controller.isIndexing && !controller.isBuildingThumbs && !controller.isBuildingPreviews)
-                text: qsTr("No activity")
-                opacity: 0.3
-                font.pixelSize: 13
+            // Top divider so the pane reads as a separate region
+            Rectangle {
+                anchors { top: parent.top; left: parent.left; right: parent.right }
+                height: 1
+                color: Material.dividerColor
+                opacity: 0.5
             }
 
-            // Active progress
-            ColumnLayout {
-                visible: controller && (controller.isIndexing || controller.isBuildingThumbs || controller.isBuildingPreviews)
-                anchors { top: parent.top; left: parent.left; right: parent.right; margins: 24 }
-                spacing: 14
+            RowLayout {
+                anchors { fill: parent; margins: 12; topMargin: 16 }
+                spacing: 12
 
-                Label {
+                // Reusable progress column inlined three times
+                component ProgressColumn: Rectangle {
                     Layout.fillWidth: true
-                    text: {
-                        if (!controller) return ""
-                        if (controller.isIndexing) {
-                            return controller.indexQueueTotal > 1
-                                ? qsTr("Indexing folder %1 of %2").arg(controller.indexQueuePosition).arg(controller.indexQueueTotal)
-                                : qsTr("Indexing")
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: 1   // equal 1/3 distribution
+                    radius: 6
+                    color: active
+                        ? Qt.rgba(Material.accentColor.r, Material.accentColor.g, Material.accentColor.b, 0.08)
+                        : Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.04)
+                    border.width: 1
+                    border.color: active
+                        ? Qt.rgba(Material.accentColor.r, Material.accentColor.g, Material.accentColor.b, 0.35)
+                        : Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.10)
+
+                    property string title: ""
+                    property bool   active: false
+                    property int    current: 0
+                    property int    total: 0
+                    property string currentFile: ""
+                    property string cancelText: ""
+                    property bool   canceling: false
+                    signal cancelRequested()
+
+                    ColumnLayout {
+                        anchors { fill: parent; margins: 12 }
+                        spacing: 8
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: title
+                            font.pixelSize: 13
+                            font.weight: Font.DemiBold
+                            opacity: active ? 1.0 : 0.5
+                            horizontalAlignment: Text.AlignHCenter
                         }
-                        if (controller.isBuildingPreviews) return qsTr("Building Previews")
-                        return qsTr("Building Thumbnails")
+
+                        ProgressBar {
+                            Layout.fillWidth: true
+                            from: 0
+                            to: total > 0 ? total : 1
+                            value: current
+                            indeterminate: active && total === 0
+                            opacity: active ? 1.0 : 0.35
+                        }
+
+                        Label {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: active
+                                  ? (total > 0
+                                     ? current + " / " + total
+                                     : (current > 0 ? current + " " + qsTr("done\u2026") : qsTr("Preparing\u2026")))
+                                  : qsTr("Idle")
+                            font.pixelSize: 11
+                            opacity: 0.7
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            text: active ? currentFile : ""
+                            font.pixelSize: 10
+                            opacity: 0.5
+                            elide: Text.ElideMiddle
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignTop
+                            wrapMode: Text.WrapAnywhere
+                        }
+
+                        Button {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: canceling ? qsTr("Canceling\u2026") : cancelText
+                            visible: active
+                            enabled: active && !canceling
+                            highlighted: true
+                            Material.accent: Material.Red
+                            implicitHeight: 30
+                            font.pixelSize: 11
+                            onClicked: parent.parent.cancelRequested()
+                        }
                     }
-                    font.pixelSize: 14
-                    font.weight: Font.Medium
-                    wrapMode: Text.WordWrap
                 }
 
-                ProgressBar {
-                    Layout.fillWidth: true
-                    from: 0
-                    to: {
-                        if (!controller) return 1
-                        if (controller.isIndexing) return controller.indexTotal > 0 ? controller.indexTotal : 1
-                        if (controller.isBuildingPreviews) return controller.previewTotal > 0 ? controller.previewTotal : 1
-                        return controller.thumbTotal > 0 ? controller.thumbTotal : 1
-                    }
-                    value: !controller ? 0
-                           : controller.isIndexing ? controller.indexCurrent
-                           : controller.isBuildingPreviews ? controller.previewCurrent
-                           : controller.thumbCurrent
-                    indeterminate: !controller ? false
-                           : controller.isIndexing ? controller.indexTotal === 0
-                           : controller.isBuildingPreviews ? controller.previewTotal === 0
-                           : controller.thumbTotal === 0
+                ProgressColumn {
+                    title: controller && controller.isIndexing && controller.indexQueueTotal > 1
+                           ? qsTr("Indexing (%1/%2)").arg(controller.indexQueuePosition).arg(controller.indexQueueTotal)
+                           : qsTr("Indexing")
+                    active: controller ? controller.isIndexing : false
+                    current: controller ? controller.indexCurrent : 0
+                    total: controller ? controller.indexTotal : 0
+                    currentFile: controller ? controller.indexCurrentFile : ""
+                    cancelText: qsTr("Cancel")
+                    canceling: controller ? controller.isCanceling : false
+                    onCancelRequested: controller.cancelIndex()
                 }
 
-                Label {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: {
-                        if (!controller) return ""
-                        if (controller.isIndexing)
-                            return controller.indexTotal > 0
-                                ? controller.indexCurrent + " / " + controller.indexTotal + " " + qsTr("files")
-                                : controller.indexCurrent > 0
-                                    ? controller.indexCurrent + " " + qsTr("indexed, scanning\u2026")
-                                    : qsTr("Scanning for images\u2026")
-                        if (controller.isBuildingPreviews)
-                            return controller.previewTotal > 0
-                                ? controller.previewCurrent + " / " + controller.previewTotal + " " + qsTr("images")
-                                : qsTr("Preparing\u2026")
-                        return controller.thumbTotal > 0
-                            ? controller.thumbCurrent + " / " + controller.thumbTotal + " " + qsTr("images")
-                            : qsTr("Preparing\u2026")
-                    }
-                    font.pixelSize: 12
-                    opacity: 0.7
+                ProgressColumn {
+                    title: qsTr("Thumbnails")
+                    active: controller ? controller.isBuildingThumbs : false
+                    current: controller ? controller.thumbCurrent : 0
+                    total: controller ? controller.thumbTotal : 0
+                    currentFile: controller ? controller.thumbCurrentFile : ""
+                    cancelText: qsTr("Cancel")
+                    canceling: controller ? controller.isCanceling : false
+                    onCancelRequested: controller.cancelThumbnails()
                 }
 
-                Label {
-                    Layout.fillWidth: true
-                    text: !controller ? ""
-                          : controller.isIndexing ? controller.indexCurrentFile
-                          : controller.isBuildingPreviews ? controller.previewCurrentFile
-                          : controller.thumbCurrentFile
-                    font.pixelSize: 10
-                    opacity: 0.5
-                    elide: Text.ElideMiddle
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.WrapAnywhere
-                }
-
-                Button {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: {
-                        var canceling = controller ? controller.isCanceling : false
-                        if (!controller) return ""
-                        if (controller.isIndexing) return canceling ? qsTr("Canceling\u2026") : qsTr("Cancel Indexing")
-                        if (controller.isBuildingPreviews) return qsTr("Cancel Previews")
-                        return canceling ? qsTr("Canceling\u2026") : qsTr("Cancel Thumbnails")
-                    }
-                    enabled: !(controller ? controller.isCanceling : false)
-                    highlighted: true
-                    Material.accent: Material.Red
-                    implicitHeight: 36
-                    implicitWidth: 160
-                    onClicked: {
-                        if (controller.isIndexing) controller.cancelIndex()
-                        else if (controller.isBuildingPreviews) controller.cancelPreviewBuild()
-                        else controller.cancelThumbnails()
-                    }
+                ProgressColumn {
+                    title: qsTr("Previews")
+                    active: controller ? controller.isBuildingPreviews : false
+                    current: controller ? controller.previewCurrent : 0
+                    total: controller ? controller.previewTotal : 0
+                    currentFile: controller ? controller.previewCurrentFile : ""
+                    cancelText: qsTr("Cancel")
+                    canceling: false  // preview cancel always allowed
+                    onCancelRequested: controller.cancelPreviewBuild()
                 }
             }
         }
