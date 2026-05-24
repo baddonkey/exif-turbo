@@ -147,6 +147,7 @@ derive stable thumbnail cache names without a live `os.stat` call.
 | `providers/thumb_image_provider.py` | `ThumbnailImageProvider(QQuickImageProvider)` — serves `image://thumb/<sha1_hex>` URIs; reads `.enc` files (encrypted mode) or `.png` files (plain mode) from the cache dir, decrypts via `ThumbCrypto` (AES-256-GCM) when needed, decodes PNG bytes to `QImage`; thread-safe (key set once on unlock). Strips an optional `?t=N` cache-bust query string from the request id so the same SHA-1 can be re-served after a thumbnail rebuild. |
 | `qml/Main.qml` | Main application window: tab bar (Search, Browse), split-pane layout, EXIF detail panel, Settings sheet, lock screen; **preview toolbar** — **Copy** pill calls `controller.copyPreviewToClipboard()`; **Save Preview As** (white ⤓) and **Save Original As** (orange ⤓) pills open `savePreviewDialog` / `saveOriginalDialog` (`FileDialog`, `SaveFile` mode) with suggested filenames from `_suggestedPreviewUrl()` / `_suggestedOriginalUrl()` JS helpers; matching *Save Preview As…* / *Save Original As…* items in the shared `previewContextMenu`; a pill-shaped toast `Rectangle` (`id: clipboardToast`) fades in/out (z:9999) and auto-hides after 2 s via `Timer`, driven by `onClipboardCopyDone`; **GPS location bar** in the Metadata panel (visible when the selected image has GPS coordinates — shows links to OpenStreetMap, Google Maps, and GeoHack); **search-syntax tooltip** — a `?` icon button (`searchHelpButton`) at the right edge of the search field, with a custom `ToolTip` `contentItem` (ColumnLayout with accent-coloured section headers, a two-column `GridLayout` of examples, and a tips bullet list); translated via `qsTr()`; **ExifTool section in Settings** — **Check** button calls `controller.checkExiftool()`; colour-coded status badge (green dot + version string / red dot + "Not found") bound to `controller.exiftoolVersion` and `controller.exiftoolMissing`; download link styled with `Material.accent` for dark-mode readability; all bindings guarded against `null` controller; **ExifTool missing dialog** — modal dialog triggered by `onExiftoolMissingChanged` when ExifTool is absent at unlock time, with a clickable `exiftool.org` link |
 | `qml/FoldersPanel.qml` | Folder management panel — add/remove/enable folders, shows per-folder indexing status |
+| `scroll_fix.py` | `ListScrollFix(QObject)` — window-level event filter that normalises mouse-wheel scrolling on QML `ListView`s to one row per 120-unit notch (`ROW_HEIGHT = 210 px`, accumulator for sub-notch input devices, pixelDelta fallback for trackpads/Wayland). Installed per ListView object name (`resultsList`, `browseImageList`, `foldersList`). The filter short-circuits when the target `ListView` is not actually visible (`QQuickItem.isVisible()` returns false when any ancestor is hidden), so the Search-tab `resultsList` does not silently consume wheel events while the user is on the Browse tab. |
 | `qml/FloatingBadge.qml` | Reusable badge overlay component |
 
 **AppController design notes:**
@@ -206,6 +207,16 @@ derive stable thumbnail cache names without a live `os.stat` call.
   `ThumbWorker` and `IndexWorker`, then schedules a 2-second `QTimer` to
   `resume()` them. This yields I/O bandwidth to `PreviewImageProvider` on
   slow network drives.
+- **Search/Browse tab-state isolation** — `enterBrowseTab(query_text)` and
+  `leaveBrowseTab() -> str` slots snapshot the Search-tab filter state
+  (query, format chip, date range, sort order, ext filter, folder filters)
+  on entering the Browse tab and restore it on returning, so Browse-tab
+  navigation never mutates the user's active Search filters.
+- **Browse-tab keyboard navigation** — `Up` / `Down` / `PageUp` / `PageDown`
+  shortcuts in `Main.qml` are gated on `mainTabBar.currentIndex === 1` and
+  drive `browseImageList.currentIndex` through `controller.selectResult()`,
+  mirroring the Search-tab navigation. `browseImageList` takes keyboard
+  focus when it becomes visible and shows an always-on vertical scrollbar.
 - `resetDatabase()` — drops and recreates `images_fts` FTS5 table (purging all
   shadow tables), runs `VACUUM` + `PRAGMA wal_checkpoint(TRUNCATE)` to shrink
   the database file immediately, removes the thumbnail cache directory, and
@@ -246,6 +257,7 @@ Translation domain: `exif_turbo`. Supported languages: German (`de`), French (`f
 | Module | Purpose |
 |--------|---------|
 | `thumb_cache.py` | `thumb_cache_path()` / `thumb_cache_name_from_stamp()` — SHA-1 keyed by `path\|mtime\|size` → `.png` filename |
+| `folder_labels.py` | `friendly_folder_label(path)` — returns a human-readable label for an indexed folder, used when the stored `display_name` is empty (e.g. drive roots, where `Path("C:\\").name == ""`). Windows drive roots resolve to `"<VolumeLabel> (C:)"` via `GetVolumeInformationW` (ctypes); falls back to `"C:\\"` when no label is readable. POSIX root returns `"/"`. Everything else returns `Path(path).name`. |
 | `thumb_crypto.py` | `ThumbCrypto` — AES-256-GCM encrypt/decrypt for thumbnail and preview files. Uses a random per-cache-dir master key stored password-wrapped in `.thumb_key` (v2 layout); v1 legacy caches (`.salt`) are migrated on next unlock. `change_password(old, new)` re-wraps the master key without touching the cached files. Raises `WrongPasswordError` on bad password. |
 | `preview_cache.py` | `preview_cache_name_from_stamp()` / `preview_cache_path()` / `preview_dir()` — SHA-1 keyed preview JPEG filenames; helpers to list, count, and clear cached previews for a folder. |
 | `preview_render.py` | `render_preview(path, target_long_edge)` — renders a downscaled Pillow `Image` for any supported format (JPEG/PNG/TIFF/RAW via rawpy / video via `extract_video_frame`); used by `PreviewBuildWorker`. Images exceeding `MAX_PREVIEW_SOURCE_PX` (100 MP) or whose dimensions cannot be probed by Pillow are routed through **libvips** via `_load_vips()`; `_ensure_pyvips()` initialises pyvips lazily on first use (thread-safe double-checked lock), adds `sys._MEIPASS` to `os.add_dll_directory` on Windows/PyInstaller so `libvips-42-*.dll` is findable, and caches the directory cookie in `_vips_dll_dir` to prevent GC. RAW and video decode calls are wrapped with `_call_with_timeout()` (daemon-thread runner, `_DECODE_TIMEOUT_S = 300.0 s`) so a corrupt/stuck file is abandoned after 5 minutes rather than hanging forever; `_TRUNCATED_LOCK` serialises the `LOAD_TRUNCATED_IMAGES` set→reset sequence in `_load_standard()` across concurrent worker threads. |

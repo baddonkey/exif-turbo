@@ -27,7 +27,7 @@ Fully generated using VS Code Copilot.
 - Multilanguage UI: English, German, French, Italian, Romansh
 - Search and Browse tabs with 50/50 split-pane thumbnail preview
 - Folder management — add, remove, enable/disable indexed folders with per-folder status
-- Multi-folder filter — when multiple folders are indexed, a **Folder(s)** dropdown in the search RESULTS header filters results to one or more selected folders simultaneously
+- Multi-folder filter — when multiple folders are indexed, a **Folder(s)** dropdown in the search RESULTS header filters results to one or more selected folders simultaneously; drive roots (e.g. `C:\`) appear with a friendly label such as `OS (C:)` instead of an empty name
 - Scoped rescan — rescanning a single folder only updates that folder's records; other indexed folders are never touched
 - Reset Database — wipes all indexed images, folder records, and thumbnail cache in one step; database file shrinks immediately
 - RAW format support: CR2, CR3, NEF, ARW, DNG, ORF, RW2, PEF, RAF, RWL, SRW
@@ -45,16 +45,16 @@ Fully generated using VS Code Copilot.
 
 ## Test suite
 
-178 automated tests across four layers:
+220 automated tests across four layers:
 
 | Suite | Count | What it covers |
 |-------|-------|----------------|
 | `tests/data/` | 64 | Repository: upsert, FTS5 search, delete_missing (scoped), clear_all, excluded paths, folder management, rekey, `captured_at` persistence, date-range filter, `get_year_counts` |
-| `tests/indexing/` | 31 | Image utils, metadata text, IndexerService e2e (real JPEG/PNG files), scoped rescan, `_resolve_captured_at` (EXIF parse, sub-second suffix, fallback chain) |
-| `tests/ui/` | 64 | Live QML window driven via pytest-qt — unlock, search, filter, folder add/remove/enable, controller state, ext filter, zoom, thumbnail loading, preview build worker, raw preview toggle, metadata panel scroll, sort combo |
-| `tests/utils/` | 19 | Preview cache naming/clearing, thumb crypto (encrypt/decrypt, password change, legacy migration) |
+| `tests/indexing/` | 33 | Image utils, metadata text, IndexerService e2e (real JPEG/PNG files), scoped rescan, `_resolve_captured_at` (EXIF parse, sub-second suffix, fallback chain) |
+| `tests/ui/` | 93 | Live QML window driven via pytest-qt — unlock, search, filter, folder add/remove/enable, controller state, ext filter, zoom, thumbnail loading, preview build worker, raw preview toggle, metadata panel scroll, sort combo, Browse-tab navigation & wheel scroll, search/browse tab-state isolation |
+| `tests/utils/` | 30 | Preview cache naming/clearing, thumb crypto (encrypt/decrypt, password change, legacy migration), friendly folder labels (drive roots), video frame extraction |
 
-**Total: 178**
+**Total: 220**
 
 ## Requirements
 
@@ -204,6 +204,34 @@ Mandatory attribution: © Giles Laurent, gileslaurent.com, License CC BY-SA
 See [tests/sample-data/ATTRIBUTION.md](tests/sample-data/ATTRIBUTION.md) for the full list of images and their Wikimedia Commons links.
 
 ## Recent changes
+
+### Browse-tab navigation and friendly drive-root labels
+
+- **Browse-tab keyboard navigation** — `Up` / `Down` / `PageUp` / `PageDown`
+  shortcuts mirror the Search tab and move the selection through the image
+  list while the Browse tab is active. The list now takes keyboard focus
+  when it becomes visible.
+- **Browse-tab scrollbar always visible** — the vertical scrollbar is
+  pinned (`ScrollBar.AlwaysOn`, 12 px) so the mouse can scroll the list
+  without first having to hover the right edge.
+- **Wheel-scroll dead-zone fixed** — `ListScrollFix` now ignores wheel
+  events on hidden `ListView`s. The Search-tab `resultsList` retained its
+  layout geometry while hidden, so wheel events whose mapped position
+  fell outside `browseImageList`'s bounds were silently consumed by the
+  hidden list, producing a dead zone in the upper part of the Browse
+  image list.
+- **Search-tab filter state survives tab switches** — query, format chip,
+  date range, sort order, ext filter, and folder filters are snapshotted
+  on entering the Browse tab and restored on returning to Search.
+- **Friendly label for drive roots in folder filter** — `Path("C:\\").name`
+  is the empty string, so a drive root added as an indexed folder showed
+  up with no name in the Search-tab folder-filter dropdown. A new helper
+  `friendly_folder_label(path)` returns `"OS (C:)"` via
+  `GetVolumeInformationW` on Windows (falling back to `"C:\\"` when no
+  volume label is readable) and `"/"` for the POSIX root. The repository
+  uses it both when adding new folders and as a fallback in
+  `_row_to_folder`, so legacy rows pick up the friendly label without a
+  migration.
 
 ### Large image rendering via libvips
 
