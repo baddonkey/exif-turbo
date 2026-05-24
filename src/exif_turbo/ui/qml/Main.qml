@@ -2222,7 +2222,10 @@ ApplicationWindow {
                                 icon.name: "edit-find"
                                 text: qsTr("Find")
                                 font.pixelSize: 11
-                                implicitHeight: 24
+                                implicitHeight: 26
+                                topInset: 0; bottomInset: 0
+                                topPadding: 5; bottomPadding: 5
+                                leftPadding: 8; rightPadding: 8
                                 checkable: true
                                 checked: root.findBarVisible
                                 onClicked: {
