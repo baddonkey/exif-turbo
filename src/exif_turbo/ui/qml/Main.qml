@@ -2895,7 +2895,10 @@ ApplicationWindow {
                                 onClicked: {
                                     controller.selectResult(index)
                                 }
-                                onDoubleClicked: controller.openImage(model.path)
+                                onDoubleClicked: (mouse) => {
+                                    if (mouse.x > 200) controller.openFolder(model.path)
+                                    else               controller.openImage(model.path)
+                                }
                             }
 
                             // Selection checkbox — bottom-right corner, above MouseArea
