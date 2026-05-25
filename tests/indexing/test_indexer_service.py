@@ -420,21 +420,36 @@ def test_resolve_captured_at_skips_invalid_exif_and_falls_back(tmp_path: Path) -
 
 
 def test_resolve_captured_at_uses_oldest_metadata_stamp_when_no_primary_keys(tmp_path: Path) -> None:
-    # Arrange — no primary key present; two non-primary date fields
+    # Arrange — no primary key present; two secondary-list date fields
     img = _make_jpeg(tmp_path / "scan.jpg")
     metadata = {
         "IFD0:ModifyDate": "1991:03:27 21:31:21",
-        "XMP-dc:Date": "2005:06:01 00:00:00",
+        "XMP-xmp:CreateDate": "2005:06:01 00:00:00",
     }
 
     # Act
     result = _resolve_captured_at(metadata, img, mtime=9999.0)
 
-    # Assert — oldest non-primary stamp wins
+    # Assert — oldest secondary-list stamp wins
     from calendar import timegm
     from time import strptime
     expected = float(timegm(strptime("1991:03:27 21:31:21", "%Y:%m:%d %H:%M:%S")))
     assert result == expected
+
+
+def test_resolve_captured_at_ignores_icc_profile_datetime(tmp_path: Path) -> None:
+    # Arrange — only an ICC profile date present (e.g. sRGB 1998 creation stamp)
+    img = _make_jpeg(tmp_path / "shot.jpg")
+    metadata = {"ICC_Profile:ProfileDateTime": "1998:02:09 06:49:00"}
+
+    # Act
+    result = _resolve_captured_at(metadata, img, mtime=9999.0)
+
+    # Assert — ICC_Profile date must be ignored; result is filesystem/mtime fallback
+    from calendar import timegm
+    from time import strptime
+    icc_ts = float(timegm(strptime("1998:02:09 06:49:00", "%Y:%m:%d %H:%M:%S")))
+    assert result != icc_ts
 
 
 def test_resolve_captured_at_oldest_fallback_rejects_pre_1900_dates(tmp_path: Path) -> None:

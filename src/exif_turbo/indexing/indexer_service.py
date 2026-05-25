@@ -45,10 +45,50 @@ _EXIF_DATE_KEYS = [
 ]
 # exiftool date format (with -n: numeric, dates keep string format).
 _EXIF_DT_FMT = "%Y:%m:%d %H:%M:%S"
-# Oldest timestamp accepted by the any-field fallback scan: 1900-01-01 UTC.
+# Date-only format used by e.g. IPTC:DateCreated.
+_EXIF_DATE_ONLY_FMT = "%Y:%m:%d"
+# Oldest timestamp accepted by the secondary-key scan: 1900-01-01 UTC.
 _MIN_SANE_YEAR_TS: float = float(timegm((1900, 1, 1, 0, 0, 0, 0, 1, 0)))
-# exiftool groups that reflect filesystem state, not embedded metadata.
-_FILESYSTEM_GROUPS: frozenset[str] = frozenset({"System", "File"})
+# Secondary capture/creation keys tried when the primary list yields nothing.
+# Deliberately excludes infrastructure groups (ICC_Profile:, JFIF:, APP14:,
+# etc.) whose dates reflect software/standard creation, not image capture.
+_SECONDARY_DATE_KEYS: list[str] = [
+    "XMP-xmp:CreateDate",
+    "XMP-photoshop:DateCreated",
+    "XMP-exif:DateTimeOriginal",
+    "XMP-tiff:DateTime",
+    "IPTC:DateCreated",
+    "QuickTime:CreateDate",
+    "QuickTime:TrackCreateDate",
+    "QuickTime:MediaCreateDate",
+    # Modification date is last resort — edit time, not capture,
+    # but better than ICC_Profile or filesystem for scanned/archival images.
+    "IFD0:ModifyDate",
+    "ExifIFD:ModifyDate",
+]
+
+
+def _try_parse_exif_dt(raw: str) -> float | None:
+    """Parse an ExifTool date string to a UTC epoch float.
+
+    Handles sub-second suffixes ("2023:06:15 10:30:00.789"), timezone suffixes
+    ("2023:06:15 10:30:00+02:00"), and date-only values ("2023:06:15").
+    Returns None if the value cannot be parsed.
+    """
+    base = raw.split(".")[0].strip()
+    # Full datetime: truncate to 19 chars to drop any trailing timezone.
+    if len(base) >= 19:
+        try:
+            return float(timegm(strptime(base[:19], _EXIF_DT_FMT)))
+        except ValueError:
+            pass
+    # Date-only (e.g. IPTC:DateCreated): truncate to 10 chars.
+    if len(base) >= 10:
+        try:
+            return float(timegm(strptime(base[:10], _EXIF_DATE_ONLY_FMT)))
+        except ValueError:
+            pass
+    return None
 
 
 def _resolve_captured_at(metadata: Dict[str, str], path: Path, mtime: float) -> float | None:
@@ -58,10 +98,10 @@ def _resolve_captured_at(metadata: Dict[str, str], path: Path, mtime: float) -> 
     1. EXIF date tags (DateTimeOriginal / CreateDate, etc.) — treated as local
        wall-clock time and stored as UTC epoch (no timezone conversion, same
        approach used by most EXIF consumers).
-    2. Oldest parseable date stamp across all remaining embedded metadata
-       fields — skips filesystem-level groups (System:, File:) and values
-       predating 1900.  Useful for scanned/archival images that carry only a
-       ModifyDate or a custom XMP field.
+    2. Oldest parseable date among _SECONDARY_DATE_KEYS — XMP, IPTC,
+       QuickTime, and modification tags.  Deliberately excludes infrastructure
+       groups (ICC_Profile:, JFIF:, etc.) whose dates reflect software/standard
+       creation, not image capture.
     3. File creation time (st_birthtime on macOS, st_ctime on Windows).
     4. File modification time (mtime) as last resort on Linux where no
        creation time is available.
@@ -79,26 +119,20 @@ def _resolve_captured_at(metadata: Dict[str, str], path: Path, mtime: float) -> 
         except ValueError:
             continue
 
-    # Second pass: scan all remaining embedded metadata fields and return the
-    # oldest parseable timestamp.  Filesystem-level exiftool groups (System:,
-    # File:) are skipped because they duplicate what os.stat() already
-    # provides.  Values predating 1900 are rejected as sentinel artefacts.
+    # Second pass: try an explicit allowlist of secondary capture/creation keys.
+    # ICC_Profile:, JFIF:, and similar infrastructure groups are not included
+    # because their dates reflect software/standard creation, not image capture.
     _tried = frozenset(_EXIF_DATE_KEYS)
     candidates: list[float] = []
-    for key, raw in metadata.items():
-        if key in _tried or not raw:
+    for key in _SECONDARY_DATE_KEYS:
+        if key in _tried:
             continue
-        group = key.split(":")[0] if ":" in key else ""
-        if group in _FILESYSTEM_GROUPS:
+        raw = metadata.get(key, "")
+        if not raw:
             continue
-        raw_base = raw.split(".")[0].strip()
-        try:
-            t = strptime(raw_base, _EXIF_DT_FMT)
-            ts = float(timegm(t))
-            if ts >= _MIN_SANE_YEAR_TS:
-                candidates.append(ts)
-        except ValueError:
-            continue
+        ts = _try_parse_exif_dt(raw)
+        if ts is not None and ts >= _MIN_SANE_YEAR_TS:
+            candidates.append(ts)
     if candidates:
         return min(candidates)
 
