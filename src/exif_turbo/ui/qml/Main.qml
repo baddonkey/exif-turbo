@@ -324,8 +324,8 @@ ApplicationWindow {
     readonly property int    _bulkProgressTotal:  controller ? controller.bulkProgressTotal  : 0
     readonly property bool   _isUnlocking:        controller ? controller.isUnlocking        : false
 
-    readonly property int    _dateFrom:   controller ? controller.dateFrom   : 0
-    readonly property int    _dateTo:     controller ? controller.dateTo     : 0
+    readonly property double _dateFrom:   controller ? controller.dateFrom   : 0
+    readonly property double _dateTo:     controller ? controller.dateTo     : 0
     readonly property string _yearCounts: controller ? controller.yearCounts : "[]"
     readonly property var    _years: {
         try { return JSON.parse(_yearCounts) } catch(e) { return [] }

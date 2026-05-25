@@ -522,13 +522,13 @@ class AppController(QObject):
     def exiftoolVersion(self) -> str:
         return self._exiftool_version
 
-    @Property(int, notify=dateFilterChanged)
-    def dateFrom(self) -> int:
-        return self._date_from if self._date_from is not None else 0
+    @Property(float, notify=dateFilterChanged)
+    def dateFrom(self) -> float:
+        return float(self._date_from) if self._date_from is not None else 0.0
 
-    @Property(int, notify=dateFilterChanged)
-    def dateTo(self) -> int:
-        return self._date_to if self._date_to is not None else 0
+    @Property(float, notify=dateFilterChanged)
+    def dateTo(self) -> float:
+        return float(self._date_to) if self._date_to is not None else 0.0
 
     @Property(str, notify=yearCountsChanged)
     def yearCounts(self) -> str:
@@ -1255,11 +1255,11 @@ class AppController(QObject):
         self._run_search()
         return self._query_text
 
-    @Slot(int, int)
-    def setDateFilter(self, date_from: int, date_to: int) -> None:
+    @Slot(float, float)
+    def setDateFilter(self, date_from: float, date_to: float) -> None:
         """Set captured_at filter bounds (Unix timestamps, 0 = unset)."""
-        new_from = date_from if date_from != 0 else None
-        new_to = date_to if date_to != 0 else None
+        new_from = int(date_from) if date_from != 0 else None
+        new_to = int(date_to) if date_to != 0 else None
         if new_from == self._date_from and new_to == self._date_to:
             return
         self._date_from = new_from
