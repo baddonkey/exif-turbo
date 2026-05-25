@@ -1196,6 +1196,7 @@ class AppController(QObject):
             "ext_filter": self._ext_filter,
             "date_from": self._date_from,
             "date_to": self._date_to,
+            "checked_only_filter": self._checked_only_filter_active,
             "current_image_id": self._search_model.get_image_id(self._current_result_row) or 0,
         }
         self._query_text = ""
@@ -1208,6 +1209,9 @@ class AppController(QObject):
         if self._date_from is not None or self._date_to is not None:
             self._date_from = None
             self._date_to = None
+        if self._checked_only_filter_active:
+            self._checked_only_filter_active = False
+            self.checkedOnlyFilterChanged.emit()
             self.dateFilterChanged.emit()
         # Do not run a search here — the Browse tab triggers its own
         # query when the user picks a folder (browseFolder).
@@ -1252,6 +1256,9 @@ class AppController(QObject):
             self._date_from = snapshot["date_from"]
             self._date_to = snapshot["date_to"]
             self.dateFilterChanged.emit()
+        if snapshot.get("checked_only_filter", False) != self._checked_only_filter_active:
+            self._checked_only_filter_active = snapshot.get("checked_only_filter", False)
+            self.checkedOnlyFilterChanged.emit()
         self._run_search()
         return self._query_text
 

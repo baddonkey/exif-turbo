@@ -151,6 +151,13 @@ ApplicationWindow {
         }
     }
 
+    // ── Space: toggle mark on focused row (Search + Browse) ──────────────
+    Shortcut {
+        sequence: "Space"
+        enabled: controller && (mainTabBar.currentIndex === 0 || mainTabBar.currentIndex === 1)
+        onActivated: controller.toggleChecked(controller.currentResultRow)
+    }
+
     property bool findBarVisible: false
     property bool _previewNavigating: false
 
@@ -1733,6 +1740,7 @@ ApplicationWindow {
                                 acceptedButtons: Qt.LeftButton
                                 onClicked: {
                                     controller.selectResult(index)
+                                    resultsList.forceActiveFocus()
                                 }
                                 onDoubleClicked: (mouse) => {
                                     if (mouse.x > 200) controller.openFolder(model.path)
