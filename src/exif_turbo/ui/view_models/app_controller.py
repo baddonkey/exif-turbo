@@ -524,11 +524,11 @@ class AppController(QObject):
 
     @Property(float, notify=dateFilterChanged)
     def dateFrom(self) -> float:
-        return float(self._date_from) if self._date_from is not None else 0.0
+        return float(self._date_from) if self._date_from is not None else -1.0
 
     @Property(float, notify=dateFilterChanged)
     def dateTo(self) -> float:
-        return float(self._date_to) if self._date_to is not None else 0.0
+        return float(self._date_to) if self._date_to is not None else -1.0
 
     @Property(str, notify=yearCountsChanged)
     def yearCounts(self) -> str:
@@ -1264,9 +1264,9 @@ class AppController(QObject):
 
     @Slot(float, float)
     def setDateFilter(self, date_from: float, date_to: float) -> None:
-        """Set captured_at filter bounds (Unix timestamps, 0 = unset)."""
-        new_from = int(date_from) if date_from != 0 else None
-        new_to = int(date_to) if date_to != 0 else None
+        """Set captured_at filter bounds (Unix timestamps, -1 = unset)."""
+        new_from = int(date_from) if date_from != -1 else None
+        new_to = int(date_to) if date_to != -1 else None
         if new_from == self._date_from and new_to == self._date_to:
             return
         self._date_from = new_from

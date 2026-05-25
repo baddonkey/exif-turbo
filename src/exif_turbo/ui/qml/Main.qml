@@ -331,8 +331,8 @@ ApplicationWindow {
     readonly property int    _bulkProgressTotal:  controller ? controller.bulkProgressTotal  : 0
     readonly property bool   _isUnlocking:        controller ? controller.isUnlocking        : false
 
-    readonly property double _dateFrom:   controller ? controller.dateFrom   : 0
-    readonly property double _dateTo:     controller ? controller.dateTo     : 0
+    readonly property double _dateFrom:   controller ? controller.dateFrom   : -1
+    readonly property double _dateTo:     controller ? controller.dateTo     : -1
     readonly property string _yearCounts: controller ? controller.yearCounts : "[]"
     readonly property var    _years: {
         try { return JSON.parse(_yearCounts) } catch(e) { return [] }
@@ -1414,7 +1414,7 @@ ApplicationWindow {
                         objectName: "dateFilterRow"
                         Layout.fillWidth: true
                         readonly property bool _hasYears: root._years.length > 0
-                        readonly property bool _filterActive: root._dateFrom !== 0 || root._dateTo !== 0
+                        readonly property bool _filterActive: root._dateFrom !== -1 || root._dateTo !== -1
                         implicitHeight: _hasYears ? histFlow.implicitHeight + 8 : 0
                         visible: _hasYears
                         color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.04)
@@ -1443,10 +1443,10 @@ ApplicationWindow {
                         readonly property int _maxYear: root._years.length > 0 ? root._years[root._years.length - 1].year : 0
 
                         // Active filter years (0 = unset → use min/max)
-                        readonly property int _activeFrom: root._dateFrom !== 0
+                        readonly property int _activeFrom: root._dateFrom !== -1
                             ? new Date(root._dateFrom * 1000).getUTCFullYear()
                             : _minYear
-                        readonly property int _activeTo:   root._dateTo !== 0
+                        readonly property int _activeTo:   root._dateTo !== -1
                             ? new Date(root._dateTo   * 1000).getUTCFullYear()
                             : _maxYear
 
@@ -1509,10 +1509,10 @@ ApplicationWindow {
                                                 var yStart = Math.floor(Date.UTC(yr,   0, 1) / 1000)
                                                 var yEnd   = Math.floor(Date.UTC(yr+1, 0, 1) / 1000) - 1
                                                 if (dateFilterRow._activeFrom === yr && dateFilterRow._activeTo === yr
-                                                        && root._dateFrom !== 0) {
+                                                        && root._dateFrom !== -1) {
                                                     // clicking the already-selected single year → clear
                                                     controller.clearDateFilter()
-                                                } else if (root._dateFrom !== 0 && (mouse.modifiers & Qt.ShiftModifier)) {
+                                                } else if (root._dateFrom !== -1 && (mouse.modifiers & Qt.ShiftModifier)) {
                                                     // shift-click → extend range to include this year
                                                     var fromTs = yr < dateFilterRow._activeFrom
                                                         ? yStart
@@ -1527,7 +1527,7 @@ ApplicationWindow {
                                             }
                                             ToolTip.text: {
                                                 var base = modelData.year + ": " + modelData.count + " " + qsTr("images")
-                                                if (root._dateFrom !== 0 && !(dateFilterRow._activeFrom === modelData.year && dateFilterRow._activeTo === modelData.year))
+                                                if (root._dateFrom !== -1 && !(dateFilterRow._activeFrom === modelData.year && dateFilterRow._activeTo === modelData.year))
                                                     return base + "\n" + qsTr("Shift-click to extend range")
                                                 return base
                                             }
