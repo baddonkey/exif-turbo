@@ -196,8 +196,12 @@ class AppController(QObject):
         # `None` means no snapshot is currently held.
         self._search_state_snapshot: dict | None = None
         # When restoring from Browse → Search, load enough pages of results so
-        # the previously-selected row is included in the (proxy) model.
-        self._pending_restore_target_row: int | None = None
+        # the previously-selected image (identified by its DB id) is included in
+        # the model.  0 means no pending restore.
+        self._pending_restore_image_id: int = 0
+        # When jumping from Search → Browse, preload pages until the target
+        # image id is in the model.  0 means no pending jump.
+        self._pending_browse_jump_id: int = 0
         self._folder_tree: str = "[]"
         self._folder_tree_dirty: bool = False
         self._pending_preview_path: str = ""
@@ -1150,17 +1154,24 @@ class AppController(QObject):
         self._run_search()
 
     @Slot(str)
-    def browseFolder(self, path: str) -> None:
+    @Slot(str, int)
+    def browseFolder(self, path: str, target_id: int = 0) -> None:
         """Navigate to a folder in the Browse tab.
 
         Clears any active search query so the full folder contents are shown.
         Clicking the already-selected folder clears the filter.
+
+        *target_id* is the DB primary key of the image to pre-scroll to once
+        the folder results have loaded (passed from the "Browse →" button in
+        QML).  0 means no pre-scroll target.
         """
         if self._folder_filter == path:
             self._folder_filter = ""
+            self._pending_browse_jump_id = 0
         else:
             self._query_text = ""
             self._folder_filter = path
+            self._pending_browse_jump_id = target_id
         self.folderFilterChanged.emit()
         self._run_search()
 
@@ -1185,7 +1196,7 @@ class AppController(QObject):
             "ext_filter": self._ext_filter,
             "date_from": self._date_from,
             "date_to": self._date_to,
-            "current_result_row": self._current_result_row,
+            "current_image_id": self._search_model.get_image_id(self._current_result_row) or 0,
         }
         self._query_text = ""
         if self._search_folder_filters:
@@ -1212,6 +1223,9 @@ class AppController(QObject):
         """
         snapshot = self._search_state_snapshot
         self._search_state_snapshot = None
+        # Discard any in-flight forward Browse-jump target — it belongs to
+        # the Browse session we are now leaving.
+        self._pending_browse_jump_id = 0
         # Always drop the Browse-tab folder filter when returning.
         if self._folder_filter:
             self._folder_filter = ""
@@ -1221,11 +1235,9 @@ class AppController(QObject):
             self._run_search()
             return ""
         self._query_text = snapshot["query_text"]
-        self._current_result_row = snapshot.get("current_result_row", 0)
-        # Remember the target row so _on_search_finished can load enough
-        # pages to make it reachable in the model/proxy before scroll-restore.
-        if self._current_result_row >= 0:
-            self._pending_restore_target_row = self._current_result_row
+        image_id = snapshot.get("current_image_id", 0)
+        if image_id:
+            self._pending_restore_image_id = image_id
         restored_search_folders = snapshot["search_folder_filters"]
         if restored_search_folders != self._search_folder_filters:
             self._search_folder_filters = restored_search_folders
@@ -1354,7 +1366,7 @@ class AppController(QObject):
             return
         self._set_search_error("")
         results = [
-            SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
+            SearchResult(image_id=r[0], path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
             for r in rows
         ]
         # Block loadMore for the duration of the model reset.  Without this
@@ -1375,16 +1387,14 @@ class AppController(QObject):
         self._total_results = total
         self._loaded_results = len(results)
         # Returning from Browse: synchronously load enough additional pages
-        # so the previously-selected row (and its saved scroll position) is
-        # reachable in the model before the QML scroll-restore handler runs.
-        if (
-            self._pending_restore_target_row is not None
-            and self._repo is not None
-        ):
-            target = self._pending_restore_target_row
-            self._pending_restore_target_row = None
+        # so the previously-selected image is reachable in the model before
+        # the QML scroll-restore handler runs.  Uses the DB image id so a
+        # concurrent indexer run that changes row counts doesn't land on the
+        # wrong image.
+        if self._pending_restore_image_id and self._repo is not None:
+            target_id = self._pending_restore_image_id
             while (
-                self._loaded_results <= target
+                self._search_model.find_row_by_id(target_id) < 0
                 and self._loaded_results < self._total_results
             ):
                 more_rows = self._repo.search_images(
@@ -1403,7 +1413,39 @@ class AppController(QObject):
                     break
                 more_results = [
                     SearchResult(
-                        path=r[1], filename=r[2], metadata_json=r[3],
+                        image_id=r[0], path=r[1], filename=r[2], metadata_json=r[3],
+                        size=r[4], mtime=r[5],
+                    )
+                    for r in more_rows
+                ]
+                self._search_model.append_rows(more_results)
+                self._loaded_results += len(more_results)
+        # Forward Browse jump (Search → Browse): preload pages until the target
+        # image is in the model so QML's selectResultById call succeeds.
+        if self._pending_browse_jump_id and self._repo is not None:
+            jump_id = self._pending_browse_jump_id
+            self._pending_browse_jump_id = 0
+            while (
+                self._search_model.find_row_by_id(jump_id) < 0
+                and self._loaded_results < self._total_results
+            ):
+                more_rows = self._repo.search_images(
+                    self._query_text,
+                    _PAGE_SIZE,
+                    self._loaded_results,
+                    sort_by=self._sort_by,
+                    ext_filter=self._ext_filter,
+                    path_filter=self._current_path_filter(),
+                    restrict_to_enabled_folders=(self._folder_repo is not None),
+                    marked_only=self._checked_only_filter_active,
+                    date_from=self._date_from,
+                    date_to=self._date_to,
+                )
+                if not more_rows:
+                    break
+                more_results = [
+                    SearchResult(
+                        image_id=r[0], path=r[1], filename=r[2], metadata_json=r[3],
                         size=r[4], mtime=r[5],
                     )
                     for r in more_rows
@@ -1419,12 +1461,19 @@ class AppController(QObject):
         self._apply_format_counts(format_counts)
         self._load_year_counts()
         if self._loaded_results > 0:
-            row = (
-                self._current_result_row
-                if 0 <= self._current_result_row < self._loaded_results
-                else 0
-            )
-            self._select_source_row(row)
+            if self._pending_restore_image_id:
+                restore_id = self._pending_restore_image_id
+                self._pending_restore_image_id = 0
+                if self.selectResultById(restore_id) < 0:
+                    # Image was deleted from the index while browsing; fall back.
+                    self._select_source_row(0)
+            else:
+                row = (
+                    self._current_result_row
+                    if 0 <= self._current_result_row < self._loaded_results
+                    else 0
+                )
+                self._select_source_row(row)
         else:
             self._clear_details()
 
@@ -1517,7 +1566,7 @@ class AppController(QObject):
             date_to=self._date_to,
         )
         results = [
-            SearchResult(path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
+            SearchResult(image_id=r[0], path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
             for r in rows
         ]
         self._search_model.append_rows(results)
@@ -1531,13 +1580,30 @@ class AppController(QObject):
         row = self._filter_proxy.source_row_for(proxy_row) if self._filter_proxy else proxy_row
         self._select_source_row(row)
 
+    @Slot(int, result=int)
+    def selectResultById(self, image_id: int) -> int:
+        """Find the image with *image_id* in the current results, select it,
+        and return its proxy row (or -1 if not found).
+
+        Used by QML to scroll Browse tab to a specific image after
+        navigating from a Search result card.
+        """
+        n = self._search_model.rowCount()
+        for source_row in range(n):
+            if self._search_model.get_image_id(source_row) == image_id:
+                self._select_source_row(source_row)
+                pr = (
+                    self._filter_proxy.proxy_row_for(source_row)
+                    if self._filter_proxy
+                    else source_row
+                )
+                return pr
+        return -1
+
     @Slot(str, result=int)
     def selectResultByPath(self, path: str) -> int:
         """Find the image at *path* in the current results, select it, and
         return its proxy row (or -1 if not found).
-
-        Used by QML to scroll Browse tab to a specific image after
-        navigating from a Search result card.
         """
         n = self._search_model.rowCount()
         for source_row in range(n):

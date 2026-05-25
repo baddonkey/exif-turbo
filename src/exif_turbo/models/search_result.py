@@ -10,3 +10,4 @@ class SearchResult:
     metadata_json: str
     size: int = 0
     mtime: float = 0.0
+    image_id: int = 0

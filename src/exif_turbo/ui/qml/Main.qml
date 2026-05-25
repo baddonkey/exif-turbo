@@ -172,10 +172,10 @@ ApplicationWindow {
         // Called after every search finishes (Browse folder load or Search tab restore).
         function onLoadedResultsChanged() {
             // Browse tab: jump to the pending target image once folder results are loaded.
-            if (mainTabBar.currentIndex === 1 && root._pendingBrowseTarget !== "") {
-                var target = root._pendingBrowseTarget
-                root._pendingBrowseTarget = ""
-                var proxyRow = controller.selectResultByPath(target)
+            if (mainTabBar.currentIndex === 1 && root._pendingBrowseTargetId !== -1) {
+                var target = root._pendingBrowseTargetId
+                root._pendingBrowseTargetId = -1
+                var proxyRow = controller.selectResultById(target)
                 if (proxyRow >= 0) {
                     // Use positionViewAtIndex (delegate-height-agnostic) and a
                     // double Qt.callLater to run after the ListView's own layout
@@ -341,8 +341,8 @@ ApplicationWindow {
     // ── Browse / Search cross-tab navigation state ─────────────────────────
     // contentY of resultsList captured when entering Browse; -1 = nothing saved
     property real   _savedSearchScrollY:    -1.0
-    // Full image path to locate and scroll to once Browse results finish loading
-    property string _pendingBrowseTarget:   ""
+    // DB image id to locate and scroll to once Browse results finish loading; -1 = none
+    property int    _pendingBrowseTargetId: -1
     // One-shot flag: restore resultsList position after the next search load
     property bool   _restoreSearchPosition: false
 
@@ -937,7 +937,7 @@ ApplicationWindow {
             } else if (currentIndex === 0) {
                 // Returning to Search: restore the snapshot, repopulate searchField,
                 // and request a one-shot scroll restore once results have loaded.
-                root._pendingBrowseTarget = ""
+                root._pendingBrowseTargetId = -1
                 root._restoreSearchPosition = true
                 var savedQuery = controller.leaveBrowseTab()
                 searchField.text = savedQuery
@@ -1795,15 +1795,15 @@ ApplicationWindow {
                                     hoverEnabled:  true
                                     cursorShape:   Qt.PointingHandCursor
                                     onClicked: {
-                                        var targetPath = model.path
-                                        var folder = targetPath.replace(/[/\\][^/\\]*$/, "")
+                                        var targetId = model.imageId
+                                        var folder = model.path.replace(/[/\\][^/\\]*$/, "")
                                         // Select this card BEFORE switching tabs so enterBrowseTab
                                         // snapshots the row of this image (not the previously
                                         // selected card) for restoration on return.
                                         controller.selectResult(index)
-                                        root._pendingBrowseTarget = targetPath
+                                        root._pendingBrowseTargetId = targetId
                                         mainTabBar.currentIndex = 1
-                                        controller.browseFolder(folder)
+                                        controller.browseFolder(folder, targetId)
                                     }
                                 }
                             }
