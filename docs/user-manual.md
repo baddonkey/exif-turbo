@@ -353,17 +353,21 @@ Use the **Sort** dropdown at the top-right of the results panel:
 | Largest | File size, largest first |
 | Smallest | File size, smallest first |
 
-**Date taken ↓/↑** sorts by the EXIF `DateTimeOriginal` / `CreateDate` timestamp
-stored during indexing. Images with no EXIF date appear at the end of the list
-in both directions. **Newest/Oldest first** always sorts by the filesystem
-modification time.
+**Date taken ↓/↑** sorts by the capture timestamp stored during indexing.
+exif-turbo resolves this timestamp from a prioritised chain: primary EXIF
+fields (`DateTimeOriginal`, `CreateDate`) are tried first; if none are present,
+XMP, IPTC, and QuickTime creation fields are consulted; as a last resort the
+file-system creation time (macOS/Windows) or modification time (Linux) is used.
+Infrastructure metadata such as ICC colour-profile dates is never used.
+Images with no resolvable date appear at the end of the list in both directions.
+**Newest/Oldest first** always sorts by the filesystem modification time.
 
 The chosen sort order is remembered per database and restored automatically
 the next time you open the application.
 
 ### Filtering by capture year
 
-Whenever at least one indexed image has an EXIF capture date a **year histogram**
+Whenever at least one indexed image has a known capture date a **year histogram**
 appears below the format chips in the Search tab. Each bar represents one
 calendar year; its height is proportional to the number of matching images taken
 in that year relative to the busiest year.
@@ -379,8 +383,8 @@ A tooltip on each bar shows the year and image count. When a filter is already
 active, hovering a bar that is not the sole selected year shows "Shift-click to
 extend range".
 
-Images that have no EXIF capture date are excluded from results while a year
-filter is active.
+Images that have no resolvable capture date are excluded from results while a
+year filter is active.
 
 ### Loading more results
 

@@ -42,7 +42,7 @@ Fully generated using VS Code Copilot.
 - **Delete marked images** — `Action → Delete Marked Images…` permanently removes every marked image from disk *and* from the index, including any cached thumbnail and rendered preview; a confirmation dialog requires you to type the exact count to proceed
 - **Bulk-op progress overlay** — modal overlay with a progress bar and live `X / Y` count during select-all, deselect-all, and export operations; cancelable at any time
 - **Unlock spinner** — animated indicator shown on the lock screen while the encrypted database is being opened
-- **Capture-date indexing & timeline filter** — `DateTimeOriginal` / `CreateDate` are stored as a UTC epoch timestamp (`captured_at`); a **year histogram** in the Search tab lets you click or shift-click bars to filter by year range; images without an EXIF date fall back to file-system creation time (macOS/Windows) or mtime (Linux).
+- **Capture-date indexing & timeline filter** — the capture date is resolved from a prioritised chain of metadata fields and stored as a UTC epoch timestamp (`captured_at`); a **year histogram** in the Search tab lets you click or shift-click bars to filter by year range; see *Capture-date resolution* below for the full fallback chain.
 
 
 ## Test suite
@@ -52,7 +52,7 @@ Fully generated using VS Code Copilot.
 | Suite | Count | What it covers |
 |-------|-------|----------------|
 | `tests/data/` | 64 | Repository: upsert, FTS5 search, delete_missing (scoped), clear_all, excluded paths, folder management, rekey, `captured_at` persistence, date-range filter, `get_year_counts` |
-| `tests/indexing/` | 33 | Image utils, metadata text, IndexerService e2e (real JPEG/PNG files), scoped rescan, `_resolve_captured_at` (EXIF parse, sub-second suffix, fallback chain) |
+| `tests/indexing/` | 33 | Image utils, metadata text, IndexerService e2e (real JPEG/PNG files), scoped rescan, `_resolve_captured_at` (EXIF parse, sub-second suffix, secondary-key allowlist, ICC_Profile exclusion, fallback chain) |
 | `tests/ui/` | 93 | Live QML window driven via pytest-qt — unlock, search, filter, folder add/remove/enable, controller state, ext filter, zoom, thumbnail loading, preview build worker, raw preview toggle, metadata panel scroll, sort combo, Browse-tab navigation & wheel scroll, search/browse tab-state isolation |
 | `tests/utils/` | 30 | Preview cache naming/clearing, thumb crypto (encrypt/decrypt, password change, legacy migration), friendly folder labels (drive roots), video frame extraction |
 
@@ -274,13 +274,33 @@ libvips is now **bundled in every package**:
 
 ### Capture-date indexing and timeline filter
 
-Every image now stores a `captured_at` UTC timestamp in the database, resolved
-in priority order:
+Every image stores a `captured_at` UTC timestamp in the database, resolved
+through a three-tier priority chain:
 
-1. EXIF `DateTimeOriginal` / `CreateDate` (group-prefixed `ExifIFD:` or `IFD0:`)
-   — sub-second suffixes are stripped before parsing.
-2. File-system creation time (`st_birthtime` on macOS, `st_ctime` on Windows).
-3. Modification time (mtime) as a last resort on Linux.
+**Tier 1 — Primary EXIF keys** (first match wins)
+1. `ExifIFD:DateTimeOriginal`
+2. `ExifIFD:CreateDate`
+3. `IFD0:DateTimeOriginal`
+4. `IFD0:CreateDate`
+5. `Composite:SubSecDateTimeOriginal`
+
+**Tier 2 — Secondary capture/creation keys** (oldest match wins)
+6. `XMP-xmp:CreateDate`
+7. `XMP-photoshop:DateCreated`
+8. `XMP-exif:DateTimeOriginal`
+9. `XMP-tiff:DateTime`
+10. `IPTC:DateCreated`
+11. `QuickTime:CreateDate` / `TrackCreateDate` / `MediaCreateDate`
+12. `IFD0:ModifyDate` / `ExifIFD:ModifyDate` *(edit time — last resort within Tier 2)*
+
+Infrastructure groups such as `ICC_Profile:` (e.g. the 1998 sRGB
+`ProfileDateTime`), `JFIF:`, and `APP14:` are deliberately excluded — their
+dates reflect software or standard creation, not when the image was captured.
+
+**Tier 3 — Filesystem timestamps**
+- `st_birthtime` (macOS / FreeBSD true creation time)
+- `st_ctime` (Windows file creation time)
+- `mtime` as a last resort on Linux
 
 After re-indexing, a **year histogram** bar chart appears below the format
 chips in the Search tab whenever at least one image has a known capture date:
