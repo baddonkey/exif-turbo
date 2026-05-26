@@ -2644,6 +2644,18 @@ ApplicationWindow {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                         text: qsTr("FOLDERS")
                     }
+
+                    ToolButton {
+                        anchors { right: parent.right; rightMargin: 2; verticalCenter: parent.verticalCenter }
+                        text: "↻"
+                        font.pixelSize: 16
+                        implicitWidth: 30; implicitHeight: 30
+                        opacity: 0.6
+                        onClicked: controller.reloadFolderTree()
+                        ToolTip.text: qsTr("Reload folder list")
+                        ToolTip.visible: hovered
+                        ToolTip.delay: 500
+                    }
                 }
 
                 Item {

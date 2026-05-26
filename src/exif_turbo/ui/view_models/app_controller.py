@@ -40,6 +40,7 @@ from ..models.folder_list_model import FolderListModel
 from ..models.search_list_model import SearchListModel
 from ..models.settings_model import SettingsModel
 from ..workers.bulk_op_worker import BulkOpWorker
+from ..workers.folder_tree_worker import FolderTreeWorker
 from ..workers.index_worker import IndexWorker
 from ..workers.password_change_worker import PasswordChangeWorker
 from ..workers.preview_build_worker import PreviewBuildWorker
@@ -205,6 +206,7 @@ class AppController(QObject):
         self._pending_browse_jump_id: int = 0
         self._folder_tree: str = "[]"
         self._folder_tree_dirty: bool = False
+        self._folder_tree_worker: FolderTreeWorker | None = None
         self._pending_preview_path: str = ""
         # DB-stored (mtime, size) for the pending preview; used to compute the
         # on-disk cache filename without statting the (possibly missing) source.
@@ -1582,6 +1584,38 @@ class AppController(QObject):
         nodes = self._repo.get_folder_tree()
         self._folder_tree = json.dumps(nodes)
         self.folderTreeChanged.emit()
+
+    @Slot()
+    def reloadFolderTree(self) -> None:
+        """Force-rebuild the folder tree off the GUI thread.
+
+        Uses the search overlay to dim the UI while the query runs, so
+        the grey-out is actually visible (the worker thread keeps the
+        event loop free for rendering).
+        """
+        if self._repo is None or self._is_searching:
+            return
+        self._is_searching = True
+        self.isSearchingChanged.emit()
+        self._folder_tree_worker = FolderTreeWorker(self._db_path, self._key)
+        self._folder_tree_worker.results_ready.connect(self._on_folder_tree_ready)
+        self._folder_tree_worker.failed.connect(self._on_folder_tree_failed)
+        self._folder_tree_worker.start()
+
+    def _on_folder_tree_ready(self, json_str: str) -> None:
+        self._folder_tree_worker = None
+        self._folder_tree = json_str
+        self._folder_tree_dirty = False
+        self._is_searching = False
+        self.folderTreeChanged.emit()
+        self.isSearchingChanged.emit()
+        self._set_status(_("Folder list reloaded."))
+
+    def _on_folder_tree_failed(self, error: str) -> None:
+        self._folder_tree_worker = None
+        self._is_searching = False
+        self.isSearchingChanged.emit()
+        _log.error("Folder tree reload failed: %s", error)
 
     @Slot()
     def loadMore(self) -> None:
