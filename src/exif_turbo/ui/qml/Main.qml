@@ -2535,9 +2535,6 @@ ApplicationWindow {
                             FloatingBadge { text: qsTr("EXIF TAGS") }
 
                             Item { Layout.fillWidth: true }
-
-                            Label { text: qsTr("Tag");   font.pixelSize: 10; opacity: 0.45; Layout.preferredWidth: exifList.width * 0.42 - 16 }
-                            Label { text: qsTr("Value"); font.pixelSize: 10; opacity: 0.45 }
                         }
                     }
 
@@ -3591,9 +3588,6 @@ ApplicationWindow {
                                 FloatingBadge { text: qsTr("EXIF TAGS") }
 
                                 Item { Layout.fillWidth: true }
-
-                                Label { text: qsTr("Tag");   font.pixelSize: 10; opacity: 0.45; Layout.preferredWidth: browseExifList.width * 0.42 - 16 }
-                                Label { text: qsTr("Value"); font.pixelSize: 10; opacity: 0.45 }
                             }
                         }
 
