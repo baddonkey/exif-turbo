@@ -28,6 +28,8 @@ Fully generated using VS Code Copilot.
 - Search and Browse tabs with 50/50 split-pane thumbnail preview
 - **"Browse →" button** — each search result card has a `Browse →` pill in the bottom-right corner; clicking it switches directly to the Browse tab and scrolls to that exact image in its folder, preserving the Search-tab state (query, filters, scroll position) for seamless return
 - **"← Search" back button** — a `← Search` pill in the Browse-tab image list header switches back to the Search tab and restores the exact scroll position and selected image from before the Browse jump
+- **Browse tab Metadata and EXIF Tags panels** — the Browse tab now shows the same **METADATA** and **EXIF TAGS** panels (and GPS location bar) as the Search tab; a split view below the image list and preview panel shows the metadata JSON panel (with an inline Ctrl+F find bar) and the EXIF tags table side-by-side
+- **Busy cursor and UI overlay during search** — while a search is running, the cursor switches to a busy cursor and a semi-transparent grey overlay dims the entire UI, blocking input until results are ready
 - Folder management — add, remove, enable/disable indexed folders with per-folder status
 - Multi-folder filter — when multiple folders are indexed, a **Folder(s)** dropdown in the search RESULTS header filters results to one or more selected folders simultaneously; drive roots (e.g. `C:\`) appear with a friendly label such as `OS (C:)` instead of an empty name
 - Scoped rescan — rescanning a single folder only updates that folder's records; other indexed folders are never touched
@@ -206,6 +208,11 @@ Mandatory attribution: © Giles Laurent, gileslaurent.com, License CC BY-SA
 See [tests/sample-data/ATTRIBUTION.md](tests/sample-data/ATTRIBUTION.md) for the full list of images and their Wikimedia Commons links.
 
 ## Recent changes
+
+### Browse tab metadata panels and search overlay
+
+- **Browse tab metadata panels** — the Browse tab now shows **METADATA** and **EXIF TAGS** panels identical to the Search tab, including the GPS location bar and the inline Ctrl+F find bar for searching within the metadata JSON.
+- **Busy cursor and dimming overlay during search** — when a search is running, `AppController.isSearching` is set to `true`; QML renders a semi-transparent grey overlay over the entire window (blocking user interaction) and the cursor switches to a busy cursor via `QGuiApplication.setOverrideCursor`. Both are cleared automatically as soon as results are ready.
 
 ### Browse-tab navigation and friendly drive-root labels
 

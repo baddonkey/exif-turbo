@@ -1539,7 +1539,7 @@ ApplicationWindow {
                                                    : Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.25)
 
                                             Behavior on height {
-                                                enabled: parent._ready
+                                                enabled: parent.parent._ready
                                                 NumberAnimation { duration: 150 }
                                             }
                                         }

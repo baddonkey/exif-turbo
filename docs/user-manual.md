@@ -282,6 +282,10 @@ When the search field contains text a **`×`** button appears to its left.
 Clicking it clears the field and immediately shows all images (equivalent to
 pressing **Enter** with an empty bar).
 
+While a search is running, a semi-transparent grey overlay dims the entire UI
+and the cursor changes to a busy indicator. The overlay clears automatically
+when results are ready.
+
 ### Filtering by format
 
 When results contain more than one file format, a row of format chips appears
@@ -456,9 +460,13 @@ zoom and pan gestures as in Search (scroll wheel, touchpad scroll, touchpad
 pinch-to-zoom, drag-to-pan, double-tap to reset — see
 [Zooming and panning](#zooming-and-panning)). **Double-click** an image to open
 it in your system's default viewer. (Unlike the Search tab, double-clicking in
-Browse always opens the image — there is no folder-open shortcut.) The Metadata
-panel, EXIF Tags panel, and GPS location bar are not shown in the Browse tab —
-use the **Search** tab for the full metadata view.
+Browse always opens the image — there is no folder-open shortcut.)
+
+The Browse tab shows the same **METADATA** and **EXIF TAGS** panels as the
+Search tab, including the GPS location bar. They appear in a split view below
+the image list and preview panel. The inline **Ctrl+F** find bar works on the
+Browse tab too — click **Find** in the METADATA panel header (or press
+**Ctrl+F** when the Browse tab is active) to search within the metadata text.
 
 The Browse tab preview pane has the same toolbar pill buttons as the Search tab:
 
@@ -666,9 +674,8 @@ selected. Hovering over a link shows the full URL in a tooltip.
 
 ### EXIF Tags panel (bottom-right)
 
-Displays the same metadata as a clean two-column table — **Tag** and **Value**
-— sorted alphabetically. Hover over a truncated tag or value to see the full
-text in a tooltip.
+Displays the same metadata as a clean two-column list, sorted alphabetically.
+Hover over a truncated tag or value to see the full text in a tooltip.
 
 You can drag the divider between the two bottom panels to adjust the split.
 By default they start at **50 % / 50 %**.
