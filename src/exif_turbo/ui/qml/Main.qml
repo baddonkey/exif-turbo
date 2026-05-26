@@ -62,12 +62,17 @@ ApplicationWindow {
     Shortcut {
         sequences: [ StandardKey.Find ]
         onActivated: {
-            findBarVisible = !findBarVisible
-            if (findBarVisible) { findField.forceActiveFocus(); findField.selectAll() }
+            if (mainTabBar.currentIndex === 1) {
+                browseFindBarVisible = !browseFindBarVisible
+                if (browseFindBarVisible) { browseFindField.forceActiveFocus(); browseFindField.selectAll() }
+            } else {
+                findBarVisible = !findBarVisible
+                if (findBarVisible) { findField.forceActiveFocus(); findField.selectAll() }
+            }
         }
     }
-    Shortcut { sequences: [ StandardKey.FindNext ];     onActivated: controller.findNext(findField.text) }
-    Shortcut { sequences: [ StandardKey.FindPrevious ]; onActivated: controller.findPrev(findField.text) }
+    Shortcut { sequences: [ StandardKey.FindNext ];     onActivated: controller.findNext(mainTabBar.currentIndex === 1 ? browseFindField.text : findField.text) }
+    Shortcut { sequences: [ StandardKey.FindPrevious ]; onActivated: controller.findPrev(mainTabBar.currentIndex === 1 ? browseFindField.text : findField.text) }
     Shortcut {
         sequences: [ StandardKey.MoveToNextPage ]
         enabled: mainTabBar.currentIndex === 0 && controller && controller.currentResultRow < resultsList.count - 1
@@ -159,6 +164,7 @@ ApplicationWindow {
     }
 
     property bool findBarVisible: false
+    property bool browseFindBarVisible: false
     property bool _previewNavigating: false
 
     // ── Null-safe proxies ─────────────────────────────────────────────────
@@ -2697,19 +2703,29 @@ ApplicationWindow {
             }
         }
 
-        // ── Image list + preview ─────────────────────────────────────────
+        // ── Image list + preview + metadata ──────────────────────────────
         SplitView {
             id: browseContentSplit
             SplitView.fillWidth: true
-            orientation: Qt.Horizontal
+            orientation: Qt.Vertical
             handle: Rectangle {
-                implicitWidth: 5
+                implicitHeight: 5
                 color: SplitHandle.pressed ? root._accentColor : Material.dividerColor
             }
 
+            // Top: image list + preview
+            SplitView {
+                id: browseTopSplit
+                SplitView.fillHeight: true
+                orientation: Qt.Horizontal
+                handle: Rectangle {
+                    implicitWidth: 5
+                    color: SplitHandle.pressed ? root._accentColor : Material.dividerColor
+                }
+
             // Image list
             Rectangle {
-                SplitView.preferredWidth: browseContentSplit.width / 2
+                SplitView.preferredWidth: browseTopSplit.width / 2
                 SplitView.minimumWidth: 260
                 color: Material.background
                 clip: true
@@ -3307,6 +3323,320 @@ ApplicationWindow {
                                     text: qsTr("Loading original\u2026")
                                     font.pixelSize: 12
                                     color: "#ffffff"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            } // browseTopSplit
+
+            // ── Bottom: metadata + EXIF tags ─────────────────────────────
+            SplitView {
+                id: browseBottomSplit
+                orientation: Qt.Horizontal
+                SplitView.preferredHeight: 280
+                SplitView.minimumHeight: 90
+                handle: Rectangle {
+                    implicitWidth: 5
+                    color: SplitHandle.pressed ? root._accentColor : Material.dividerColor
+                }
+
+                // ── Metadata ─────────────────────────────────────────────
+                Rectangle {
+                    SplitView.preferredWidth: browseBottomSplit.width / 2
+                    SplitView.minimumWidth: 200
+                    color: Material.background
+                    clip: true
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        spacing: 0
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 30
+                            color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.09)
+
+                            RowLayout {
+                                anchors { fill: parent; leftMargin: 10; rightMargin: 6 }
+                                spacing: 4
+
+                                FloatingBadge { text: qsTr("METADATA") }
+
+                                Item { Layout.fillWidth: true }
+
+                                Button {
+                                    flat: true
+                                    icon.name: "edit-find"
+                                    text: qsTr("Find")
+                                    font.pixelSize: 11
+                                    implicitHeight: 26
+                                    topInset: 0; bottomInset: 0
+                                    topPadding: 5; bottomPadding: 5
+                                    leftPadding: 8; rightPadding: 8
+                                    checkable: true
+                                    checked: root.browseFindBarVisible
+                                    onClicked: {
+                                        root.browseFindBarVisible = !root.browseFindBarVisible
+                                        if (root.browseFindBarVisible) { browseFindField.forceActiveFocus(); browseFindField.selectAll() }
+                                    }
+                                    ToolTip.text: qsTr("Find in metadata (Ctrl+F)")
+                                    ToolTip.visible: hovered
+                                }
+                            }
+                        }
+
+                        // Find bar
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: root.browseFindBarVisible ? 42 : 0
+                            visible: root.browseFindBarVisible
+                            color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.05)
+
+                            RowLayout {
+                                anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                                spacing: 4
+
+                                TextField {
+                                    id: browseFindField
+                                    Layout.fillWidth: true
+                                    implicitHeight: 32
+                                    placeholderText: qsTr("Find in metadata\u2026")
+                                    font.pixelSize: 12
+                                    Keys.onReturnPressed: controller.findNext(text)
+                                    Keys.onEscapePressed: root.browseFindBarVisible = false
+                                }
+
+                                Button {
+                                    flat: true; text: "\u25b2"
+                                    implicitHeight: 32; implicitWidth: 32; font.pixelSize: 11
+                                    onClicked: controller.findPrev(browseFindField.text)
+                                    ToolTip.text: qsTr("Previous match"); ToolTip.visible: hovered
+                                }
+                                Button {
+                                    flat: true; text: "\u25bc"
+                                    implicitHeight: 32; implicitWidth: 32; font.pixelSize: 11
+                                    onClicked: controller.findNext(browseFindField.text)
+                                    ToolTip.text: qsTr("Next match"); ToolTip.visible: hovered
+                                }
+                            }
+                        }
+
+                        // GPS location bar
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: _geoLocationUrl !== "" ? 30 : 0
+                            visible: _geoLocationUrl !== ""
+                            color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.07)
+
+                            RowLayout {
+                                anchors { fill: parent; leftMargin: 10; rightMargin: 8 }
+                                spacing: 6
+
+                                Label { text: "\ud83d\uddfa"; font.pixelSize: 13 }
+                                Label {
+                                    text: qsTr("GPS location —")
+                                    font.pixelSize: 11; opacity: 0.65
+                                }
+                                Label {
+                                    text: qsTr("OpenStreetMap")
+                                    font.pixelSize: 11
+                                    color: Material.accent
+                                    font.underline: true
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: controller.openUrl(_geoLocationUrl)
+                                    }
+                                    ToolTip.text: _geoLocationUrl
+                                    ToolTip.visible: browseOsmLinkHover.hovered
+                                    HoverHandler { id: browseOsmLinkHover }
+                                }
+                                Label { text: "|"; font.pixelSize: 11; opacity: 0.35 }
+                                Label {
+                                    text: qsTr("Google Maps")
+                                    font.pixelSize: 11
+                                    color: Material.accent
+                                    font.underline: true
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: controller.openUrl(_geoGoogleMapsUrl)
+                                    }
+                                    ToolTip.text: _geoGoogleMapsUrl
+                                    ToolTip.visible: browseGmapsLinkHover.hovered
+                                    HoverHandler { id: browseGmapsLinkHover }
+                                }
+                                Label { text: "|"; font.pixelSize: 11; opacity: 0.35 }
+                                Label {
+                                    text: qsTr("GeoHack")
+                                    font.pixelSize: 11
+                                    color: Material.accent
+                                    font.underline: true
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: controller.openUrl(_geoWikipediaUrl)
+                                    }
+                                    ToolTip.text: _geoWikipediaUrl
+                                    ToolTip.visible: browseWikiLinkHover.hovered
+                                    HoverHandler { id: browseWikiLinkHover }
+                                }
+                                Item { Layout.fillWidth: true }
+                            }
+                        }
+
+                        Flickable {
+                            id: browseDetailsScrollView
+                            objectName: "browseDetailsScrollView"
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            clip: true
+                            contentWidth: width
+                            contentHeight: browseDetailsEditLoader.item
+                                ? browseDetailsEditLoader.item.implicitHeight + browseDetailsEditLoader.item.padding * 2
+                                : 0
+                            boundsBehavior: Flickable.StopAtBounds
+
+                            ScrollBar.vertical: ScrollBar {
+                                id: browseDetailsVBar
+                                policy: ScrollBar.AsNeeded
+                            }
+
+                            property string detailsHtmlSnapshot: controller ? controller.detailsHtml : ""
+                            onDetailsHtmlSnapshotChanged: {
+                                browseDetailsEditLoader.active = false
+                                browseDetailsEditLoader.active = true
+                                contentY = 0
+                            }
+
+                            Loader {
+                                id: browseDetailsEditLoader
+                                width: browseDetailsScrollView.width
+                                active: true
+                                sourceComponent: browseDetailsEditComponent
+                            }
+
+                            Component {
+                                id: browseDetailsEditComponent
+                                TextEdit {
+                                    objectName: "browseDetailsArea"
+                                    readOnly: true
+                                    selectByMouse: true
+                                    selectByKeyboard: true
+                                    persistentSelection: false
+                                    textFormat: TextEdit.RichText
+                                    text: browseDetailsScrollView.detailsHtmlSnapshot
+                                    wrapMode: TextEdit.Wrap
+                                    font.family: root.monoFont
+                                    font.pixelSize: 12
+                                    color: Material.foreground
+                                    selectionColor: Material.accent
+                                    selectedTextColor: Material.background
+                                    width: browseDetailsScrollView.width - padding * 2
+                                    x: padding
+                                    y: padding
+                                    property real padding: 8
+                                }
+                            }
+
+                            Label {
+                                anchors.centerIn: parent
+                                visible: browseDetailsScrollView.detailsHtmlSnapshot.length === 0
+                                text: qsTr("Select an image to see metadata")
+                                opacity: 0.4
+                            }
+                        }
+                    }
+
+                    Connections {
+                        target: controller
+                        function onFindScrollFractionChanged() {
+                            Qt.callLater(function() {
+                                browseDetailsScrollView.contentY = controller.findScrollFraction
+                                    * Math.max(0, browseDetailsScrollView.contentHeight - browseDetailsScrollView.height)
+                            })
+                        }
+                        function onGeoLocationUrlChanged() {
+                            Qt.callLater(function() {
+                                browseDetailsScrollView.contentY = 0
+                            })
+                        }
+                        function onDetailsHtmlChanged() {
+                            browseDetailsScrollView.contentY = 0
+                        }
+                    }
+                }
+
+                // ── EXIF tags ─────────────────────────────────────────────
+                Rectangle {
+                    SplitView.fillWidth: true
+                    SplitView.minimumWidth: 180
+                    color: Material.background
+                    clip: true
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        spacing: 0
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 30
+                            color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.09)
+
+                            RowLayout {
+                                anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
+
+                                FloatingBadge { text: qsTr("EXIF TAGS") }
+
+                                Item { Layout.fillWidth: true }
+
+                                Label { text: qsTr("Tag");   font.pixelSize: 10; opacity: 0.45; Layout.preferredWidth: browseExifList.width * 0.42 - 16 }
+                                Label { text: qsTr("Value"); font.pixelSize: 10; opacity: 0.45 }
+                            }
+                        }
+
+                        ListView {
+                            id: browseExifList
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            clip: true
+                            model: exifModel
+                            ScrollBar.vertical: ScrollBar {}
+
+                            delegate: Rectangle {
+                                width: browseExifList.width
+                                height: 32
+                                color: index % 2 === 0 ? Material.background : Qt.darker(Material.background, 1.03)
+
+                                RowLayout {
+                                    anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                                    spacing: 8
+
+                                    Label {
+                                        id: browseTagLabel
+                                        text: model.tag
+                                        Layout.preferredWidth: browseExifList.width * 0.42 - 16
+                                        font.pixelSize: 11
+                                        font.family: root.monoFont
+                                        elide: Text.ElideRight
+                                        ToolTip.text: model.tag
+                                        ToolTip.visible: (browseTagHover ? browseTagHover.hovered : false) && truncated
+                                        HoverHandler { id: browseTagHover }
+                                    }
+
+                                    Label {
+                                        id: browseValueLabel
+                                        text: model.value
+                                        Layout.fillWidth: true
+                                        font.pixelSize: 11
+                                        elide: Text.ElideRight
+                                        opacity: 0.75
+                                        ToolTip.text: model.value
+                                        ToolTip.visible: (browseValueHover ? browseValueHover.hovered : false) && truncated
+                                        HoverHandler { id: browseValueHover }
+                                    }
                                 }
                             }
                         }
