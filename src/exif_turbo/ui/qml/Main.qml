@@ -194,6 +194,23 @@ ApplicationWindow {
                         })
                     })
                 }
+                // Scroll the folder tree so the parent folder of the jumped-to image
+                // is visible. _folderFilter is already set by browseFolder() before
+                // results finish loading, so _folderTree can be searched here.
+                var folderPath = root._folderFilter
+                var treeIdx = -1
+                for (var i = 0; i < root._folderTree.length; i++) {
+                    if (root._folderTree[i].path === folderPath) {
+                        treeIdx = i
+                        break
+                    }
+                }
+                if (treeIdx >= 0) {
+                    var capturedTreeIdx = treeIdx
+                    Qt.callLater(function() {
+                        browseTreeList.positionViewAtIndex(capturedTreeIdx, ListView.Contain)
+                    })
+                }
                 return
             }
             // Search tab: restore scroll position after returning from Browse tab.
