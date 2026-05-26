@@ -34,7 +34,6 @@ _DEFAULT_SORT = "captured_desc"
 _VALID_SORTS = {
     "filename_asc", "filename_desc",
     "path_asc",     "path_desc",
-    "date_desc",    "date_asc",
     "size_desc",    "size_asc",
     "captured_desc", "captured_asc",
 }

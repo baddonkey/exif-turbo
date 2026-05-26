@@ -323,9 +323,8 @@ is active. The histogram reflects the current search query and folder/format
 filters.
 
 New sort options **Date taken ↓** / **Date taken ↑** sort purely by `captured_at`;
-images without an EXIF date sort last in both directions. **Newest/Oldest first**
-continues to sort by filesystem `mtime`. The chosen sort order is persisted per
-database in `settings.json` and restored on the next launch.
+images without an EXIF date sort last in both directions. The chosen sort order
+is persisted per database in `settings.json` and restored on the next launch.
 
 ### Bundle ExifTool in Windows MSI
 

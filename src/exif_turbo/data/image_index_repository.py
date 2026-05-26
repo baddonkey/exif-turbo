@@ -359,8 +359,6 @@ class ImageIndexRepository:
         "filename_desc":      "images.filename COLLATE NOCASE DESC",
         "path_asc":           "images.path COLLATE NOCASE ASC",
         "path_desc":          "images.path COLLATE NOCASE DESC",
-        "date_desc":          "images.mtime DESC",
-        "date_asc":           "images.mtime ASC",
         "size_desc":          "images.size DESC",
         "size_asc":           "images.size ASC",
         "captured_desc":      "images.captured_at DESC NULLS LAST",

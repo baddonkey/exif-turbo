@@ -1344,8 +1344,6 @@ ApplicationWindow {
                                 readonly property var _opts: [
                                     { text: qsTr("Date taken ↓"),  value: "captured_desc" },
                                     { text: qsTr("Date taken ↑"),  value: "captured_asc"  },
-                                    { text: qsTr("Newest first"),  value: "date_desc"     },
-                                    { text: qsTr("Oldest first"),  value: "date_asc"      },
                                     { text: qsTr("Name A→Z"),      value: "filename_asc"  },
                                     { text: qsTr("Name Z→A"),      value: "filename_desc" },
                                     { text: qsTr("Path A→Z"),      value: "path_asc"      },

@@ -348,8 +348,6 @@ Use the **Sort** dropdown at the top-right of the results panel:
 |--------|-------------|
 | Date taken ↓ | EXIF capture date, newest first (default) |
 | Date taken ↑ | EXIF capture date, oldest first |
-| Newest first | Filesystem modification date, newest first |
-| Oldest first | Filesystem modification date, oldest first |
 | Name A→Z | Filename ascending |
 | Name Z→A | Filename descending |
 | Path A→Z | Full path ascending |
@@ -364,7 +362,6 @@ XMP, IPTC, and QuickTime creation fields are consulted; as a last resort the
 file-system creation time (macOS/Windows) or modification time (Linux) is used.
 Infrastructure metadata such as ICC colour-profile dates is never used.
 Images with no resolvable date appear at the end of the list in both directions.
-**Newest/Oldest first** always sorts by the filesystem modification time.
 
 The chosen sort order is remembered per database and restored automatically
 the next time you open the application.

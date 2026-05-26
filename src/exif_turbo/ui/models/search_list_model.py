@@ -26,9 +26,27 @@ def _extract_display(metadata_json: str) -> Dict[str, str]:
     else:
         camera = (make or model).strip()
 
-    # Date
-    d = (exif.get("EXIF:DateTimeOriginal") or exif.get("EXIF:DateTime")
-         or exif.get("IFD0:ModifyDate") or "")
+    # Date — same key priority as captured_at resolution in indexer_service.py
+    d = next(
+        (exif[k] for k in (
+            "ExifIFD:DateTimeOriginal",
+            "ExifIFD:CreateDate",
+            "IFD0:DateTimeOriginal",
+            "IFD0:CreateDate",
+            "Composite:SubSecDateTimeOriginal",
+            "XMP-xmp:CreateDate",
+            "XMP-photoshop:DateCreated",
+            "XMP-exif:DateTimeOriginal",
+            "XMP-tiff:DateTime",
+            "IPTC:DateCreated",
+            "QuickTime:CreateDate",
+            "QuickTime:TrackCreateDate",
+            "QuickTime:MediaCreateDate",
+            "IFD0:ModifyDate",
+            "ExifIFD:ModifyDate",
+        ) if exif.get(k)),
+        "",
+    )
     date = d.replace("T", " ").split(".")[0] if d else ""
 
     # Dimensions
