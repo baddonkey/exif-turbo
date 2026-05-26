@@ -297,6 +297,56 @@ class TestBrowseNavigation:
         # Assert — the correct image (by id) is selected, not the shifted row.
         assert search_model.get_path(controller.currentResultRow) == selected_path
 
+    def test_leave_browse_tab_currentProxyResultRow_correct_when_loadedResultsChanged_fires(
+        self,
+        qtbot: QtBot,
+        controller_with_images: tuple[AppController, SearchListModel, Path, Path],
+    ) -> None:
+        """currentProxyResultRow must already reflect the restored image at the
+        moment loadedResultsChanged is emitted, not after a deferred call.
+
+        Regression: selectResultById was previously called *after* the emit,
+        so QML's onLoadedResultsChanged captured a stale proxy row into
+        Qt.callLater and scrolled to the wrong image.  The fix moves
+        selection to before the emit.
+        """
+        # Arrange — select row 2 (non-zero) so the test can distinguish
+        # "correctly restored" from "coincidentally row 0".
+        controller, search_model, _, folder_b = controller_with_images
+        controller.selectResult(2)
+        qtbot.wait(_PAUSE_MS)
+        expected_proxy_row = controller.currentProxyResultRow
+        expected_path = search_model.get_path(controller.currentResultRow)
+        assert expected_path is not None
+        assert expected_proxy_row > 0, "need a non-zero proxy row for this test to be meaningful"
+
+        controller.enterBrowseTab("")
+        with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+            controller.browseFolder(str(folder_b))
+        qtbot.wait(_PAUSE_MS)
+
+        # Connect a listener BEFORE triggering the restore so we can capture
+        # currentProxyResultRow synchronously inside the signal handler.
+        captured_proxy_row: list[int] = []
+
+        def _on_loaded() -> None:
+            captured_proxy_row.append(controller.currentProxyResultRow)
+
+        controller.loadedResultsChanged.connect(_on_loaded)
+
+        # Act — return to Search tab.
+        with qtbot.waitSignal(controller.loadedResultsChanged, timeout=3000):
+            controller.leaveBrowseTab()
+        qtbot.wait(_PAUSE_MS)
+
+        controller.loadedResultsChanged.disconnect(_on_loaded)
+
+        # Assert — the proxy row was already correct when the signal fired
+        # (not deferred), and the correct image is selected afterwards.
+        assert len(captured_proxy_row) > 0, "loadedResultsChanged was never emitted"
+        assert captured_proxy_row[-1] == expected_proxy_row
+        assert search_model.get_path(controller.currentResultRow) == expected_path
+
     def test_browseFolder_with_target_id_preloads_beyond_first_page(
         self,
         qtbot: QtBot,

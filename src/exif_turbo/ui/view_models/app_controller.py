@@ -1459,6 +1459,19 @@ class AppController(QObject):
                 ]
                 self._search_model.append_rows(more_results)
                 self._loaded_results += len(more_results)
+        # Restore: select the target image BEFORE emitting loadedResultsChanged
+        # so that QML's onLoadedResultsChanged reads the correct
+        # currentProxyResultRow when it schedules the positionViewAtIndex call.
+        # If selection happens after the emit, QML captures a stale row from
+        # the previous search and scrolls to the wrong image.
+        _did_restore = False
+        if self._loaded_results > 0 and self._pending_restore_image_id:
+            restore_id = self._pending_restore_image_id
+            self._pending_restore_image_id = 0
+            if self.selectResultById(restore_id) < 0:
+                # Image was deleted from the index while browsing; fall back.
+                self._select_source_row(0)
+            _did_restore = True
         # Keep _loading=True through both emits so loadMore cannot fire
         # prematurely during totalResultsChanged or loadedResultsChanged and
         # consume _pendingBrowseTarget before onLoadedResultsChanged handles it.
@@ -1468,13 +1481,7 @@ class AppController(QObject):
         self._apply_format_counts(format_counts)
         self._load_year_counts()
         if self._loaded_results > 0:
-            if self._pending_restore_image_id:
-                restore_id = self._pending_restore_image_id
-                self._pending_restore_image_id = 0
-                if self.selectResultById(restore_id) < 0:
-                    # Image was deleted from the index while browsing; fall back.
-                    self._select_source_row(0)
-            else:
+            if not _did_restore:
                 row = (
                     self._current_result_row
                     if 0 <= self._current_result_row < self._loaded_results
