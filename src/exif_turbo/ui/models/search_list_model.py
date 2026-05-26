@@ -26,7 +26,8 @@ def _extract_display(metadata_json: str) -> Dict[str, str]:
     else:
         camera = (make or model).strip()
 
-    # Date — same key priority as captured_at resolution in indexer_service.py
+    # Date — mirrors the three-tier priority of captured_at in indexer_service.py.
+    # Tier 1: primary EXIF keys — first match wins.
     d = next(
         (exif[k] for k in (
             "ExifIFD:DateTimeOriginal",
@@ -34,19 +35,24 @@ def _extract_display(metadata_json: str) -> Dict[str, str]:
             "IFD0:DateTimeOriginal",
             "IFD0:CreateDate",
             "Composite:SubSecDateTimeOriginal",
-            "XMP-xmp:CreateDate",
-            "XMP-photoshop:DateCreated",
-            "XMP-exif:DateTimeOriginal",
-            "XMP-tiff:DateTime",
-            "IPTC:DateCreated",
-            "QuickTime:CreateDate",
-            "QuickTime:TrackCreateDate",
-            "QuickTime:MediaCreateDate",
-            "IFD0:ModifyDate",
-            "ExifIFD:ModifyDate",
         ) if exif.get(k)),
         "",
     )
+    # Tier 2: secondary capture/creation keys — oldest wins.
+    if not d:
+        _secondary = {
+            "XMP-xmp:CreateDate", "XMP-photoshop:DateCreated",
+            "XMP-exif:DateTimeOriginal", "XMP-tiff:DateTime",
+            "IPTC:DateCreated", "QuickTime:CreateDate",
+            "QuickTime:TrackCreateDate", "QuickTime:MediaCreateDate",
+            "IFD0:ModifyDate", "ExifIFD:ModifyDate",
+        }
+        _sec_vals = [v for k, v in exif.items() if k in _secondary and v]
+        d = min(_sec_vals, default="")
+    # Tier 3: System:File*Date* keys — oldest wins.
+    if not d:
+        _sys_vals = [v for k, v in exif.items() if k.startswith("System:File") and "Date" in k and v]
+        d = min(_sys_vals, default="")
     date = d.replace("T", " ").split(".")[0] if d else ""
 
     # Dimensions

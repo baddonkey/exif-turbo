@@ -102,8 +102,10 @@ def _resolve_captured_at(metadata: Dict[str, str], path: Path, mtime: float) -> 
        QuickTime, and modification tags.  Deliberately excludes infrastructure
        groups (ICC_Profile:, JFIF:, etc.) whose dates reflect software/standard
        creation, not image capture.
-    3. File creation time (st_birthtime on macOS, st_ctime on Windows).
-    4. File modification time (mtime) as last resort on Linux where no
+    3. Oldest parseable date among System:File* keys reported by exiftool
+       (e.g. System:FileModifyDate, System:FileCreateDate).
+    4. File creation time (st_birthtime on macOS, st_ctime on Windows).
+    5. File modification time (mtime) as last resort on Linux where no
        creation time is available.
     Returns None only if everything fails.
     """
@@ -135,6 +137,18 @@ def _resolve_captured_at(metadata: Dict[str, str], path: Path, mtime: float) -> 
             candidates.append(ts)
     if candidates:
         return min(candidates)
+
+    # Third pass: System:File*Date* keys reported by exiftool itself.
+    # Takes the oldest to match the secondary-key strategy.
+    sys_candidates: list[float] = []
+    for key, raw in metadata.items():
+        if not key.startswith("System:File") or "Date" not in key or not raw:
+            continue
+        ts = _try_parse_exif_dt(raw)
+        if ts is not None and ts >= _MIN_SANE_YEAR_TS:
+            sys_candidates.append(ts)
+    if sys_candidates:
+        return min(sys_candidates)
 
     # Fall back to file-system timestamps.
     try:
