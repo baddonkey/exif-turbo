@@ -1449,7 +1449,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         readonly property bool _hasYears: root._years.length > 0
                         readonly property bool _filterActive: root._dateFrom !== -1 || root._dateTo !== -1
-                        implicitHeight: _hasYears ? histFlow.implicitHeight + 8 : 0
+                        implicitHeight: _hasYears ? 68 : 0
                         visible: _hasYears
                         color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.04)
 
@@ -1498,16 +1498,23 @@ ApplicationWindow {
                                     model: root._years
                                     delegate: Item {
                                         required property var modelData
+                                        property bool _ready: false
+                                        Component.onCompleted: _ready = true
                                         width: 18
                                         height: 60
 
                                         readonly property bool _inRange:
                                             modelData.year >= dateFilterRow._activeFrom &&
                                             modelData.year <= dateFilterRow._activeTo
-                                        readonly property int _barH:
-                                            Math.max(3, Math.round(
-                                                (modelData.count / dateFilterRow._maxCount) * (height - 18)
+                                        readonly property int _barH: {
+                                            var ys = root._years
+                                            var m = 1
+                                            for (var i = 0; i < ys.length; i++)
+                                                if (ys[i].count > m) m = ys[i].count
+                                            return Math.max(3, Math.round(
+                                                (modelData.count / m) * (height - 18)
                                             ))
+                                        }
 
                                         // Year label
                                         Label {
@@ -1531,7 +1538,10 @@ ApplicationWindow {
                                                    ? root._accentColor
                                                    : Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.25)
 
-                                            Behavior on height { NumberAnimation { duration: 150 } }
+                                            Behavior on height {
+                                                enabled: parent._ready
+                                                NumberAnimation { duration: 150 }
+                                            }
                                         }
 
                                         MouseArea {
