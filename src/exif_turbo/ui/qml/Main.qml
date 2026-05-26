@@ -2617,7 +2617,7 @@ ApplicationWindow {
         visible: !_isLocked && mainTabBar.currentIndex === 1
         orientation: Qt.Horizontal
 
-        onVisibleChanged: { if (visible) controller.loadFolderTree() }
+        onVisibleChanged: { if (visible) controller.reloadFolderTree() }
         handle: Rectangle {
             implicitWidth: 5
             color: SplitHandle.pressed ? root._accentColor : Material.dividerColor
