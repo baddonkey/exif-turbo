@@ -1449,7 +1449,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         readonly property bool _hasYears: root._years.length > 0
                         readonly property bool _filterActive: root._dateFrom !== -1 || root._dateTo !== -1
-                        implicitHeight: _hasYears ? 68 : 0
+                        implicitHeight: _hasYears ? contentRowLayout.implicitHeight + 8 : 0
                         visible: _hasYears
                         color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.04)
 
@@ -1485,7 +1485,8 @@ ApplicationWindow {
                             : _maxYear
 
                         RowLayout {
-                            anchors { fill: parent; leftMargin: 8; rightMargin: 8; topMargin: 4; bottomMargin: 4 }
+                            id: contentRowLayout
+                            anchors { top: parent.top; left: parent.left; right: parent.right; leftMargin: 8; rightMargin: 8; topMargin: 4 }
                             spacing: 8
 
                             // ── Mini histogram ────────────────────────────
@@ -1585,6 +1586,7 @@ ApplicationWindow {
                             // ── Clear chip ────────────────────────────────
                             Rectangle {
                                 visible: dateFilterRow._filterActive
+                                Layout.alignment: Qt.AlignTop
                                 implicitHeight: 22
                                 implicitWidth: _clearDateLabel.implicitWidth + 14
                                 radius: 11
