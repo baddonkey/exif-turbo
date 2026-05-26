@@ -17,8 +17,8 @@ if TYPE_CHECKING:
     from ..providers.thumb_image_provider import ThumbnailImageProvider
 
 import sqlcipher3
-from PySide6.QtCore import Property, QObject, QThread, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import QDesktopServices, QGuiApplication
+from PySide6.QtCore import Property, QObject, Qt, QThread, QTimer, QUrl, Signal, Slot
+from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication
 
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
@@ -119,6 +119,7 @@ class AppController(QObject):
     checkedOnlyFilterChanged = Signal()
     currentProxyResultRowChanged = Signal()
     isBusyChanged = Signal()
+    isSearchingChanged = Signal()
     busyLabelChanged = Signal()
     bulkProgressChanged = Signal()
     isUnlockingChanged = Signal()
@@ -246,6 +247,7 @@ class AppController(QObject):
         self._checked_only_filter_active: bool = False
         self._checked_in_results_count: int = 0
         self._is_busy: bool = False
+        self._is_searching: bool = False
         self._busy_cancelable: bool = True
         self._busy_label: str = ""
         self._bulk_progress: int = 0
@@ -493,6 +495,10 @@ class AppController(QObject):
     @Property(bool, notify=isBusyChanged)
     def isBusy(self) -> bool:
         return self._is_busy
+
+    @Property(bool, notify=isSearchingChanged)
+    def isSearching(self) -> bool:
+        return self._is_searching
 
     @Property(str, notify=busyLabelChanged)
     def busyLabel(self) -> str:
@@ -1323,6 +1329,9 @@ class AppController(QObject):
         worker.failed.connect(self._on_search_failed)
         worker.finished.connect(self._on_search_worker_done)
         self._search_worker = worker
+        QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.BusyCursor))
+        self._is_searching = True
+        self.isSearchingChanged.emit()
         worker.start()
 
     def _on_search_worker_done(self) -> None:
@@ -1370,6 +1379,9 @@ class AppController(QObject):
             return
         # Discard results that belong to a superseded search.
         if serial != self._search_serial:
+            QGuiApplication.restoreOverrideCursor()
+            self._is_searching = False
+            self.isSearchingChanged.emit()
             return
         self._set_search_error("")
         results = [
@@ -1490,6 +1502,9 @@ class AppController(QObject):
                 self._select_source_row(row)
         else:
             self._clear_details()
+        QGuiApplication.restoreOverrideCursor()
+        self._is_searching = False
+        self.isSearchingChanged.emit()
 
     def _on_search_failed(self, error: str) -> None:
         old_worker = self._search_worker
@@ -1507,6 +1522,9 @@ class AppController(QObject):
         self.totalResultsChanged.emit()
         self.loadedResultsChanged.emit()
         self._clear_details()
+        QGuiApplication.restoreOverrideCursor()
+        self._is_searching = False
+        self.isSearchingChanged.emit()
 
     def _apply_format_counts(self, counts: list) -> None:
         """Update the available-formats property from a pre-fetched counts list."""

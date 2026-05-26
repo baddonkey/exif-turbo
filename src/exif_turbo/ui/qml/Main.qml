@@ -349,6 +349,7 @@ ApplicationWindow {
     readonly property string _searchError:        controller ? controller.searchError         : ""
     readonly property string _appVersion:         controller ? controller.appVersion          : ""
     readonly property bool   _isBusy:             controller ? controller.isBusy             : false
+    readonly property bool   _isSearching:        controller ? controller.isSearching        : false
     readonly property string _busyLabel:          controller ? controller.busyLabel          : ""
     readonly property int    _bulkProgress:       controller ? controller.bulkProgress       : 0
     readonly property int    _bulkProgressTotal:  controller ? controller.bulkProgressTotal  : 0
@@ -905,6 +906,16 @@ ApplicationWindow {
                 }
             }
         }
+    }
+
+    // ── Tab bar background (full-width row behind the buttons) ───────────
+    // ── Search-in-progress overlay (dims UI and blocks input) ────────────
+    Rectangle {
+        anchors.fill: parent
+        z: 55
+        visible: _isSearching
+        color: Qt.rgba(0, 0, 0, 0.25)
+        MouseArea { anchors.fill: parent; hoverEnabled: true }
     }
 
     // ── Tab bar background (full-width row behind the buttons) ───────────
