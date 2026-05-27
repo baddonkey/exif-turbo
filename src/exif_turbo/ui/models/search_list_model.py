@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 from PySide6.QtCore import QAbstractListModel, QModelIndex, Qt
 
@@ -386,6 +386,24 @@ class SearchListModel(QAbstractListModel):
     def set_checked_paths(self, paths: list[str]) -> None:
         """Restore marks from persistence."""
         self._checked = set(paths)
+        if self._rows:
+            self._emit_checked_range()
+
+    def add_to_checked(self, paths: Iterable[str]) -> None:
+        """Add *paths* to the checked set; emit dataChanged for visible rows."""
+        new_set = set(paths)
+        if not new_set:
+            return
+        self._checked |= new_set
+        if self._rows:
+            self._emit_checked_range()
+
+    def remove_from_checked(self, paths: Iterable[str]) -> None:
+        """Remove *paths* from the checked set; emit dataChanged for visible rows."""
+        remove_set = set(paths)
+        if not remove_set:
+            return
+        self._checked -= remove_set
         if self._rows:
             self._emit_checked_range()
 

@@ -310,6 +310,103 @@ class ImageIndexRepository:
                 ((val, p) for p in paths),
             )
 
+    def bulk_mark_images(
+        self,
+        value: bool,
+        query: str = "",
+        ext_filter: str = "",
+        path_filter: List[str] | None = None,
+        restrict_to_enabled_folders: bool = False,
+        marked_only: bool = False,
+        date_from: int | None = None,
+        date_to: int | None = None,
+    ) -> list[str]:
+        """Set or clear the mark on all matching images in a single SQL UPDATE.
+
+        Uses ``RETURNING path`` so the caller receives the affected paths
+        directly from the UPDATE statement — no additional SELECT needed.
+        The paths are read from SQLite's dirty page cache (inside the same
+        transaction), so there is effectively zero extra I/O.
+        """
+        val = 1 if value else 0
+        ext_clause, ext_args = self._build_ext_clause(ext_filter)
+        path_clause, path_args = self._build_path_clause(path_filter)
+        date_clause, date_args = self._build_date_clause(date_from, date_to)
+        marks_clause = "AND images.marked = 1" if marked_only else ""
+        enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
+
+        if query.strip():
+            fts_query = self._sanitize_fts_query(query)
+            sql = (
+                f"UPDATE images SET marked = {val} "
+                "WHERE id IN ("
+                "  SELECT images.id FROM images_fts "
+                "  JOIN images ON images_fts.rowid = images.id "
+                f" WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+                ")"
+            )
+            args: tuple = (fts_query,) + ext_args + path_args + date_args
+        else:
+            sql = (
+                f"UPDATE images SET marked = {val} "
+                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+            )
+            args = ext_args + path_args + date_args
+
+        sql_returning = sql + " RETURNING path"
+        with self.conn:
+            cursor = self.conn.execute(sql_returning, args)
+            return [row[0] for row in cursor.fetchall()]
+
+    def bulk_invert_images(
+        self,
+        query: str = "",
+        ext_filter: str = "",
+        path_filter: List[str] | None = None,
+        restrict_to_enabled_folders: bool = False,
+        marked_only: bool = False,
+        date_from: int | None = None,
+        date_to: int | None = None,
+    ) -> tuple[list[str], list[str]]:
+        """Flip the mark on all matching images in a single SQL UPDATE.
+
+        Returns ``(added, removed)`` where *added* is paths newly set to
+        ``marked = 1`` and *removed* is paths newly set to ``marked = 0``.
+        Uses ``RETURNING path, marked`` so the caller receives the updated
+        state without a separate SELECT.
+        """
+        ext_clause, ext_args = self._build_ext_clause(ext_filter)
+        path_clause, path_args = self._build_path_clause(path_filter)
+        date_clause, date_args = self._build_date_clause(date_from, date_to)
+        marks_clause = "AND images.marked = 1" if marked_only else ""
+        enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
+
+        if query.strip():
+            fts_query = self._sanitize_fts_query(query)
+            sql = (
+                "UPDATE images SET marked = 1 - marked "
+                "WHERE id IN ("
+                "  SELECT images.id FROM images_fts "
+                "  JOIN images ON images_fts.rowid = images.id "
+                f" WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+                ")"
+            )
+            args: tuple = (fts_query,) + ext_args + path_args + date_args
+        else:
+            sql = (
+                "UPDATE images SET marked = 1 - marked "
+                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+            )
+            args = ext_args + path_args + date_args
+
+        sql_returning = sql + " RETURNING path, marked"
+        with self.conn:
+            cursor = self.conn.execute(sql_returning, args)
+            rows = cursor.fetchall()
+        added = [path for path, m in rows if m == 1]
+        removed = [path for path, m in rows if m == 0]
+        return added, removed
+
     def get_marked_paths(self) -> List[str]:
         """Return all currently marked image paths."""
         cur = self.conn.execute("SELECT path FROM images WHERE marked = 1")
@@ -605,6 +702,32 @@ class ImageIndexRepository:
 
         cur = self.conn.execute(sql, args)
         return [row[0] for row in cur.fetchall()]
+
+    def _build_ext_clause(self, ext_filter: str) -> tuple[str, tuple]:
+        """Build a SQL clause and args tuple for extension filtering."""
+        if not ext_filter:
+            return "", ()
+        canonical = ext_filter.lower().lstrip(".")
+        aliases = [
+            raw for raw, mapped in self._EXT_ALIASES.items() if mapped == canonical
+        ]
+        exts = [canonical] + aliases
+        placeholders = " OR ".join("LOWER(images.filename) LIKE ?" for _ in exts)
+        return f"AND ({placeholders})", tuple(f"%.{e}" for e in exts)
+
+    @staticmethod
+    def _build_path_clause(path_filter: List[str] | None) -> tuple[str, tuple]:
+        """Build a SQL clause and args tuple for path prefix filtering."""
+        if not path_filter:
+            return "", ()
+        if len(path_filter) == 1:
+            prefix = os.path.normpath(path_filter[0]) + os.sep
+            return "AND images.path LIKE ?", (prefix + "%",)
+        parts = " OR ".join("images.path LIKE ?" for _ in path_filter)
+        return (
+            f"AND ({parts})",
+            tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter),
+        )
 
     @staticmethod
     def _build_date_clause(

@@ -463,3 +463,83 @@ def test_get_year_counts_excludes_null_captured_at(
     counts = repo.get_year_counts()
     by_year = {yr: cnt for yr, cnt in counts}
     assert by_year == {2022: 1}
+
+
+# ── bulk_mark_images / bulk_invert_images ────────────────────────────────────
+
+
+def test_bulk_mark_images_no_filter_marks_all_rows(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange
+    paths = [str(make_jpeg(tmp_path / f"img{i}.jpg")) for i in range(3)]
+    for i, p in enumerate(paths):
+        repo.upsert_image(p, f"img{i}.jpg", 1.0, 100, {}, f"img{i} jpg")
+    repo.commit()
+
+    # Act
+    affected = repo.bulk_mark_images(True)
+
+    # Assert
+    assert len(affected) == 3
+    assert set(affected) == set(paths)
+
+
+def test_bulk_mark_images_fts_query_marks_matching_only(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange
+    path_a = str(make_jpeg(tmp_path / "a.jpg"))
+    path_b = str(make_jpeg(tmp_path / "b.jpg"))
+    repo.upsert_image(path_a, "a.jpg", 1.0, 100, {}, "canon camera")
+    repo.upsert_image(path_b, "b.jpg", 1.0, 100, {}, "nikon camera")
+    repo.commit()
+
+    # Act
+    affected = repo.bulk_mark_images(True, query="canon")
+
+    # Assert
+    assert len(affected) == 1
+    assert repo.get_marked_paths() == [path_a]
+
+
+def test_bulk_mark_images_deselect_clears_marks(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange — mark all, then unmark one via fts query
+    path_a = str(make_jpeg(tmp_path / "a.jpg"))
+    path_b = str(make_jpeg(tmp_path / "b.jpg"))
+    repo.upsert_image(path_a, "a.jpg", 1.0, 100, {}, "canon camera")
+    repo.upsert_image(path_b, "b.jpg", 1.0, 100, {}, "nikon camera")
+    repo.commit()
+    repo.bulk_mark_images(True)
+
+    # Act
+    repo.bulk_mark_images(False, query="nikon")
+
+    # Assert — only path_a remains marked
+    assert repo.get_marked_paths() == [path_a]
+
+
+def test_bulk_invert_images_flips_marks(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange — mark first image only
+    path_a = str(make_jpeg(tmp_path / "a.jpg"))
+    path_b = str(make_jpeg(tmp_path / "b.jpg"))
+    repo.upsert_image(path_a, "a.jpg", 1.0, 100, {}, "a jpg")
+    repo.upsert_image(path_b, "b.jpg", 1.0, 100, {}, "b jpg")
+    repo.commit()
+    repo.bulk_mark_images(True, query="a")
+
+    # Act
+    repo.bulk_invert_images()
+
+    # Assert — marks are flipped: path_b is now marked, path_a is not
+    assert repo.get_marked_paths() == [path_b]
+
+
+def test_bulk_mark_images_returns_zero_for_no_match(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange
+    path = str(make_jpeg(tmp_path / "a.jpg"))
+    repo.upsert_image(path, "a.jpg", 1.0, 100, {}, "canon camera")
+    repo.commit()
+
+    # Act
+    affected = repo.bulk_mark_images(True, query="nikon")
+
+    # Assert
+    assert affected == []
+    assert repo.get_marked_paths() == []

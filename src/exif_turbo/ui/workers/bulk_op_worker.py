@@ -69,6 +69,8 @@ class BulkOpWorker(QThread):
 
         # Output fields — read by the controller in the finished slot
         self.result_paths: List[str] = []
+        self.result_paths_added: List[str] = []
+        self.result_paths_removed: List[str] = []
         self.result_export_count: int = 0
         self.result_deleted_count: int = 0
         self.result_missing_count: int = 0
@@ -104,11 +106,10 @@ class BulkOpWorker(QThread):
         if self._is_canceled():
             self.canceled.emit()
             return
-        # Step 1: discover matching paths (total unknown yet → indeterminate)
         self.progress.emit(0, 0)
-
-        paths = repo.get_matching_paths(
-            self._query,
+        paths = repo.bulk_mark_images(
+            self._mark_value,
+            query=self._query,
             ext_filter=self._ext_filter,
             path_filter=self._path_filter,
             restrict_to_enabled_folders=self._restrict_to_enabled_folders,
@@ -116,43 +117,17 @@ class BulkOpWorker(QThread):
             date_from=self._date_from,
             date_to=self._date_to,
         )
-
-        if self._is_canceled():
-            self.canceled.emit()
-            return
-
-        total = len(paths)
-        self.progress.emit(0, total)
-
-        # Step 2: write marks in batches so the progress bar advances
-        val = 1 if self._mark_value else 0
-        done = 0
-        with repo.conn:
-            for i in range(0, total, _BATCH_SIZE):
-                if self._is_canceled():
-                    self.canceled.emit()
-                    return
-                batch = paths[i : i + _BATCH_SIZE]
-                repo.conn.executemany(
-                    "UPDATE images SET marked = ? WHERE path = ?",
-                    ((val, p) for p in batch),
-                )
-                done += len(batch)
-                self.progress.emit(done, total)
-
-        # Step 3: read back full marked set
-        self.result_paths = repo.get_marked_paths()
+        self.progress.emit(len(paths), len(paths))
+        self.result_paths = paths
         self.finished.emit()
 
     def _run_invert(self, repo: ImageIndexRepository) -> None:
         if self._is_canceled():
             self.canceled.emit()
             return
-        # Step 1: discover matching paths (total unknown yet → indeterminate)
         self.progress.emit(0, 0)
-
-        paths = repo.get_matching_paths(
-            self._query,
+        added, removed = repo.bulk_invert_images(
+            query=self._query,
             ext_filter=self._ext_filter,
             path_filter=self._path_filter,
             restrict_to_enabled_folders=self._restrict_to_enabled_folders,
@@ -160,31 +135,10 @@ class BulkOpWorker(QThread):
             date_from=self._date_from,
             date_to=self._date_to,
         )
-
-        if self._is_canceled():
-            self.canceled.emit()
-            return
-
-        total = len(paths)
-        self.progress.emit(0, total)
-
-        # Step 2: flip each row's marked bit in batches
-        done = 0
-        with repo.conn:
-            for i in range(0, total, _BATCH_SIZE):
-                if self._is_canceled():
-                    self.canceled.emit()
-                    return
-                batch = paths[i : i + _BATCH_SIZE]
-                repo.conn.executemany(
-                    "UPDATE images SET marked = 1 - marked WHERE path = ?",
-                    ((p,) for p in batch),
-                )
-                done += len(batch)
-                self.progress.emit(done, total)
-
-        # Step 3: read back full marked set
-        self.result_paths = repo.get_marked_paths()
+        affected = len(added) + len(removed)
+        self.progress.emit(affected, affected)
+        self.result_paths_added = added
+        self.result_paths_removed = removed
         self.finished.emit()
 
     def _run_select_missing_thumbs(self, repo: ImageIndexRepository) -> None:

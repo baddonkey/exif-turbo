@@ -770,7 +770,23 @@ class AppController(QObject):
         self.isBusyChanged.emit()
         if worker is None:
             return
-        if worker._operation in ("select_all", "deselect_all", "invert", "select_missing_thumbs"):
+        if worker._operation == "select_all":
+            # RETURNING paths come directly from the UPDATE transaction \u2014
+            # no cold-cache SELECT needed.  For a plain select-all the new
+            # checked-in-results count equals the total result count.
+            self._search_model.add_to_checked(worker.result_paths)
+            self._checked_in_results_count = self._total_results
+            self.checkedCountChanged.emit()
+        elif worker._operation == "deselect_all":
+            self._search_model.remove_from_checked(worker.result_paths)
+            self._checked_in_results_count = 0
+            self.checkedCountChanged.emit()
+        elif worker._operation == "invert":
+            self._search_model.add_to_checked(worker.result_paths_added)
+            self._search_model.remove_from_checked(worker.result_paths_removed)
+            self._recompute_checked_in_results()
+            self.checkedCountChanged.emit()
+        elif worker._operation == "select_missing_thumbs":
             self._search_model.set_checked_paths(worker.result_paths)
             self._recompute_checked_in_results()
             self.checkedCountChanged.emit()
