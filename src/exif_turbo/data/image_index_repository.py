@@ -696,13 +696,15 @@ class ImageIndexRepository:
         query: str = "",
         path_filter: List[str] | None = None,
         restrict_to_enabled_folders: bool = False,
+        date_from: int | None = None,
+        date_to: int | None = None,
     ) -> List[Tuple[str, int]]:
         """Return [(extension, count)] sorted by count descending.
 
         Aliased extensions (e.g. jpeg → jpg) are merged into one bucket.
-        When *query* or *path_filter* are given, counts are scoped to the
-        current search context (but never filtered by ext — that would be
-        meaningless for a facet).
+        When *query*, *path_filter*, or *date_from*/*date_to* are given,
+        counts are scoped to the current search context (but never filtered
+        by ext — that would be meaningless for a facet).
         """
         path_clause = ""
         path_args: tuple = ()
@@ -717,6 +719,7 @@ class ImageIndexRepository:
                 path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
 
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
+        date_clause, date_args = self._build_date_clause(date_from, date_to)
 
         # Fetch only filenames and group in Python so that rsplit('.', 1) correctly
         # extracts the extension after the *last* dot — INSTR finds the first dot,
@@ -727,15 +730,15 @@ class ImageIndexRepository:
                 "SELECT images.filename FROM images_fts"
                 " JOIN images ON images_fts.rowid = images.id"
                 f" WHERE images_fts MATCH ? AND images.filename LIKE '%.%'"
-                f" {path_clause} {enabled_clause}"
+                f" {path_clause} {enabled_clause} {date_clause}"
             )
-            args = (fts_query,) + path_args
+            args = (fts_query,) + path_args + date_args
         else:
             sql = (
                 "SELECT filename FROM images"
-                f" WHERE filename LIKE '%.%' {path_clause} {enabled_clause}"
+                f" WHERE filename LIKE '%.%' {path_clause} {enabled_clause} {date_clause}"
             )
-            args = path_args
+            args = path_args + date_args
 
         cur = self.conn.execute(sql, args)
         counts: Dict[str, int] = {}

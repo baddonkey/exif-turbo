@@ -87,6 +87,8 @@ class SearchWorker(QThread):
                 query=self._query,
                 path_filter=self._path_filter,
                 restrict_to_enabled_folders=self._restrict,
+                date_from=self._date_from,
+                date_to=self._date_to,
             )
             repo.close()
             self.results_ready.emit(rows, total, format_counts, self._serial)
