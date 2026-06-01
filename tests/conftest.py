@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -7,9 +8,12 @@ import pytest
 from PIL import Image
 
 # Guard: refuse to run outside the project venv to prevent hard-to-diagnose
-# failures (e.g. missing optional deps like PyAV).
+# failures (e.g. missing optional deps like PyAV).  Compare via ``sys.prefix``
+# rather than ``Path(sys.executable).resolve()`` — on macOS the venv ``python``
+# symlink chain ends in ``/Library/Frameworks/...`` so resolving the executable
+# escapes the venv root, while ``sys.prefix`` always points at the venv itself.
 _venv = Path(__file__).resolve().parents[1] / ".venv"
-if not Path(sys.executable).resolve().is_relative_to(_venv):
+if Path(sys.prefix).resolve() != _venv.resolve():
     pytest.exit(
         f"Tests must be run inside the project venv.\n"
         f"  Expected: {_venv / 'Scripts' / 'python.exe'} (Windows) "
@@ -41,3 +45,29 @@ def make_png(path: Path, width: int = 8, height: int = 8) -> Path:
     img = Image.new("RGB", (width, height), color=(34, 139, 34))
     img.save(str(path), format="PNG")
     return path
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_sessionfinish(
+    session: pytest.Session, exitstatus: int
+) -> None:
+    """Bypass the Python interpreter teardown to avoid a Qt/WebEngine segfault.
+
+    After all tests have finished, the interpreter destroys module-level
+    globals in undefined order.  In a process that has loaded QtWebEngine,
+    this teardown races with Chromium's worker shutdown and aborts with
+    SIGSEGV/SIGABRT on macOS — long after the test results have already
+    been reported.
+
+    Calling ``os._exit`` here exits immediately with the recorded test
+    result, skipping the broken teardown.  Safe because pytest has already
+    written its summary and we have no remaining work to do.
+
+    Only triggered when QtWebEngine has actually been loaded into the
+    process — pure non-UI runs are not affected.
+    """
+    if "PySide6.QtWebEngineCore" not in sys.modules:
+        return
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(exitstatus)

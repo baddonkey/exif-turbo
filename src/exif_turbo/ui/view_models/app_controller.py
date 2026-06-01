@@ -2527,6 +2527,14 @@ class AppController(QObject):
         except Exception:
             _log.exception("resetDatabase failed")
             return
+        # Re-configure providers so they generate a fresh master key against
+        # the newly-empty cache dir.  Without this the providers keep the old
+        # in-memory ThumbCrypto (keyed to the deleted .thumb_key) and every
+        # subsequent thumbnail request silently fails with InvalidTag.
+        if self._thumb_provider is not None and self._cache_dir is not None:
+            self._thumb_provider.set_key(self._key, self._cache_dir)
+        if self._preview_provider is not None and self._cache_dir is not None:
+            self._preview_provider.set_cache(self._cache_dir, self._key)
         self._search_model.set_rows([])
         self._exif_model.set_rows([])
         self._folder_model.set_rows([])
