@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 
 
@@ -43,6 +44,13 @@ class AppNapAssertion:
     @staticmethod
     def _begin(reason: str) -> object:
         if sys.platform != "darwin":
+            return None
+        # Calling NSProcessInfo via ctypes from many concurrent QThreads has
+        # been observed to abort the process on Apple Silicon under heavy
+        # test parallelism.  Allow tests (or any caller) to opt out via an
+        # environment variable — the assertion is a power-management hint
+        # and is safe to skip.
+        if os.environ.get("EXIF_TURBO_DISABLE_APPNAP_ASSERTION"):
             return None
         try:
             import ctypes
