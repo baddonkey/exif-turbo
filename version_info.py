@@ -1,8 +1,8 @@
 # Auto-generated from exif-turbo.spec — do not edit manually.
 VSVersionInfo(
     ffi=FixedFileInfo(
-        filevers=(1, 13, 12, 0),
-        prodvers=(1, 13, 12, 0),
+        filevers=(1, 14, 0, 0),
+        prodvers=(1, 14, 0, 0),
         mask=0x3F,
         flags=0x0,
         OS=0x40004,
@@ -18,12 +18,12 @@ VSVersionInfo(
                     [
                         StringStruct("CompanyName", "exif-turbo"),
                         StringStruct("FileDescription", "exif-turbo — Image EXIF metadata search and indexing tool"),
-                        StringStruct("FileVersion", "1.13.12"),
+                        StringStruct("FileVersion", "1.14.0"),
                         StringStruct("InternalName", "exif-turbo"),
                         StringStruct("LegalCopyright", "Copyright (c) 2025 exif-turbo contributors"),
                         StringStruct("OriginalFilename", "exif-turbo.exe"),
                         StringStruct("ProductName", "exif-turbo"),
-                        StringStruct("ProductVersion", "1.13.12"),
+                        StringStruct("ProductVersion", "1.14.0"),
                     ],
                 )
             ]
