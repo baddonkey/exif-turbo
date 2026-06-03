@@ -1,7 +1,10 @@
 """Tests for AiIndexerService — mocks open_clip so torch is not required."""
 from __future__ import annotations
 
+from contextlib import nullcontext
 from pathlib import Path
+import sys
+from types import SimpleNamespace
 from typing import List
 from unittest.mock import MagicMock, patch
 
@@ -26,6 +29,17 @@ def _make_repo(tmp_path: Path) -> AiVectorRepository:
     )
     repo.load()
     return repo
+
+
+class _FakeTensor:
+    def __init__(self, array: np.ndarray) -> None:
+        self._array = array
+
+    def float(self) -> "_FakeTensor":
+        return self
+
+    def numpy(self) -> np.ndarray:
+        return self._array
 
 
 def _patch_clip(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
@@ -204,3 +218,92 @@ def test_ai_indexer_service_build_index_calls_progress(
     # Last call should report total == total paths
     last_done, last_total, _ = progress_calls[-1]
     assert last_total == len(paths)
+
+
+def test_ai_indexer_service_encode_text_downloads_bpe_vocab_into_repo_storage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    service = AiIndexerService(repo)
+
+    fake_tokenizer = MagicMock(return_value="TOKENS")
+    fake_open_clip = SimpleNamespace(
+        SimpleTokenizer=MagicMock(return_value=fake_tokenizer),
+    )
+    fake_torch = SimpleNamespace(no_grad=nullcontext)
+    fake_model = MagicMock()
+    fake_model.encode_text.return_value = _FakeTensor(_fake_vec().reshape(1, -1))
+
+    monkeypatch.setitem(sys.modules, "open_clip", fake_open_clip)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_model",
+        fake_model,
+    )
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_preprocess",
+        MagicMock(),
+    )
+
+    class _FakeResponse:
+        def __enter__(self) -> "_FakeResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def read(self) -> bytes:
+            return b"fake-bpe-data"
+
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service.urllib.request.urlopen",
+        lambda request, timeout=60: _FakeResponse(),
+    )
+
+    # Act
+    vector = service.encode_text("forest trail")
+
+    # Assert
+    expected_bpe = tmp_path / "open_clip" / "bpe_simple_vocab_16e6.txt.gz"
+    assert expected_bpe.exists()
+    assert np.allclose(vector, _fake_vec())
+    assert fake_open_clip.SimpleTokenizer.call_args.kwargs["bpe_path"] == str(expected_bpe)
+
+
+def test_ai_indexer_service_model_load_uses_repo_storage_cache_dir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    service = AiIndexerService(repo)
+
+    fake_model = MagicMock()
+    fake_model.eval = MagicMock()
+    fake_preprocess = MagicMock()
+    fake_open_clip = SimpleNamespace(
+        create_model_and_transforms=MagicMock(
+            return_value=(fake_model, MagicMock(), fake_preprocess)
+        )
+    )
+
+    monkeypatch.setitem(sys.modules, "open_clip", fake_open_clip)
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace())
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_model",
+        None,
+    )
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_preprocess",
+        None,
+    )
+
+    # Act
+    service._ensure_model_loaded()
+
+    # Assert
+    assert fake_open_clip.create_model_and_transforms.call_args.kwargs["cache_dir"] == str(
+        tmp_path / "open_clip"
+    )

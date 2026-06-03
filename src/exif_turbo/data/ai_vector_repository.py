@@ -33,6 +33,11 @@ class AiVectorRepository:
         # Maps str(sequential_faiss_id) → absolute image path.
         self._id_map: Dict[str, str] = {}
 
+    @property
+    def storage_dir(self) -> Path:
+        """Directory containing this repository's persisted files."""
+        return self._index_path.parent
+
     # ── Lifecycle ─────────────────────────────────────────────────────────
 
     def load(self) -> None:

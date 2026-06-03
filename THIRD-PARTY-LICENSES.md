@@ -20,6 +20,26 @@ These packages are required at runtime by the application.
 | [markdown](https://pypi.org/project/Markdown/) | User manual export — converts `docs/user-manual.md` to HTML as an intermediate step when generating the PDF via `export_manual_pdf.py` | BSD-2-Clause | https://python-markdown.github.io |
 | [pyvips](https://pypi.org/project/pyvips/) | Large-image rendering — Python bindings for libvips; used to decode images exceeding 100 MP (panoramas, large TIFFs, medium-format scans) via streaming tile I/O so memory use stays constant; initialised lazily | MIT | https://github.com/libvips/pyvips |
 | [pyvips-binary](https://pypi.org/project/pyvips-binary/) | Pre-built libvips shared library — bundled libvips binary wheels that provide the native library for `pyvips` on Windows and Linux without a separate system install | MIT | https://github.com/libvips/pyvips |
+| [faiss-cpu](https://pypi.org/project/faiss-cpu/) | AI vector search index — stores and queries CLIP embeddings for AI-based image search using an inner-product FAISS index | MIT | https://github.com/facebookresearch/faiss |
+| [open_clip_torch](https://pypi.org/project/open-clip-torch/) | AI search and AI indexing — loads the CLIP model/tokenizer used to embed images and text; downloads its runtime cache into the per-database user folder under `~/.exif-turbo/data/<db-stem>/open_clip/` | MIT | https://github.com/mlfoundations/open_clip |
+
+---
+
+## Runtime-Downloaded AI Assets
+
+These assets are **not bundled in the installer**. They are downloaded on first
+AI use and cached in the per-database user folder under
+`~/.exif-turbo/data/<db-stem>/open_clip/`.
+
+| Asset | Used for | License | URL |
+|-------|----------|---------|-----|
+| OpenCLIP tokenizer vocabulary (`bpe_simple_vocab_16e6.txt.gz`) | Text tokenization for AI search and AI indexing | MIT (via OpenAI CLIP repository) | https://github.com/openai/CLIP |
+| OpenAI ViT-B/32 pretrained weights (`timm/vit_base_patch32_clip_224.openai`) | Pretrained CLIP model weights downloaded by OpenCLIP for AI search and AI indexing | Apache-2.0 | https://huggingface.co/timm/vit_base_patch32_clip_224.openai |
+
+> **OpenAI CLIP attribution:** The OpenCLIP project states that portions of its
+> modeling and tokenizer code are adapted from OpenAI's CLIP repository, which
+> is licensed under MIT. The runtime tokenizer vocabulary used here follows
+> that upstream source.
 
 ---
 
