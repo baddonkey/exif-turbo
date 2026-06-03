@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+import gzip
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -299,6 +300,10 @@ def test_ai_indexer_service_model_load_uses_repo_storage_cache_dir(
         "exif_turbo.indexing.ai_indexer_service._cached_preprocess",
         None,
     )
+    (tmp_path / "open_clip").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "open_clip" / "bpe_simple_vocab_16e6.txt.gz").write_bytes(
+        b"fake-bpe-data"
+    )
 
     # Act
     service._ensure_model_loaded()
@@ -307,3 +312,72 @@ def test_ai_indexer_service_model_load_uses_repo_storage_cache_dir(
     assert fake_open_clip.create_model_and_transforms.call_args.kwargs["cache_dir"] == str(
         tmp_path / "open_clip"
     )
+
+
+def test_ai_indexer_service_model_load_imports_open_clip_with_user_bpe_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    service = AiIndexerService(repo)
+
+    fake_model = MagicMock()
+    fake_model.eval = MagicMock()
+    fake_preprocess = MagicMock()
+    fake_open_clip = SimpleNamespace(
+        create_model_and_transforms=MagicMock(
+            return_value=(fake_model, MagicMock(), fake_preprocess)
+        )
+    )
+    bpe_payload = gzip.compress(b"#version: 0.2\na b\n")
+    missing_bpe_path = (
+        tmp_path
+        / "frozen-app"
+        / "_internal"
+        / "open_clip"
+        / "bpe_simple_vocab_16e6.txt.gz"
+    )
+
+    class _FakeResponse:
+        def __enter__(self) -> "_FakeResponse":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def read(self) -> bytes:
+            return bpe_payload
+
+    def _fake_import_module(name: str) -> SimpleNamespace:
+        assert name == "open_clip"
+        with gzip.open(missing_bpe_path, "rb") as stream:
+            assert stream.read() == b"#version: 0.2\na b\n"
+        return fake_open_clip
+
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service.urllib.request.urlopen",
+        lambda request, timeout=60: _FakeResponse(),
+    )
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service.importlib.import_module",
+        _fake_import_module,
+    )
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace())
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_model",
+        None,
+    )
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_preprocess",
+        None,
+    )
+
+    # Act
+    service._ensure_model_loaded()
+
+    # Assert
+    assert fake_open_clip.create_model_and_transforms.call_args.kwargs["cache_dir"] == str(
+        tmp_path / "open_clip"
+    )
+    assert (tmp_path / "open_clip" / "bpe_simple_vocab_16e6.txt.gz").exists()

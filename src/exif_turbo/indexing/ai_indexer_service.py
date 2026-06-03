@@ -14,8 +14,11 @@ Usage::
 """
 from __future__ import annotations
 
+import gzip
+import importlib
 import logging
 from pathlib import Path
+import threading
 from typing import Callable, List, Optional, Tuple
 import urllib.request
 
@@ -41,6 +44,7 @@ _BPE_VOCAB_URLS = (
 # torch.load() call once per app lifetime.
 _cached_model = None
 _cached_preprocess = None
+_open_clip_import_lock = threading.Lock()
 
 
 class AiIndexerService:
@@ -129,7 +133,8 @@ class AiIndexerService:
             self._preprocess = _cached_preprocess
             return
         import torch  # noqa: PLC0415
-        import open_clip  # noqa: PLC0415
+
+        open_clip = self._import_open_clip()
 
         _log.debug("Loading CLIP model %s (%s)…", _MODEL_NAME, _PRETRAINED)
         model, _, preprocess = open_clip.create_model_and_transforms(
@@ -148,11 +153,36 @@ class AiIndexerService:
         if self._tokenizer is not None:
             return self._tokenizer
 
-        import open_clip  # noqa: PLC0415
-
+        open_clip = self._import_open_clip()
         bpe_path = self._ensure_bpe_vocab_downloaded()
         self._tokenizer = open_clip.SimpleTokenizer(bpe_path=str(bpe_path))
         return self._tokenizer
+
+    def _import_open_clip(self):
+        bpe_path = self._ensure_bpe_vocab_downloaded()
+
+        def _gzip_open_with_bpe_fallback(filename, *args, **kwargs):
+            try:
+                candidate_path = Path(filename)
+            except TypeError:
+                candidate_path = None
+
+            if (
+                candidate_path is not None
+                and candidate_path.name == _BPE_VOCAB_FILENAME
+                and not candidate_path.exists()
+            ):
+                return original_gzip_open(bpe_path, *args, **kwargs)
+
+            return original_gzip_open(filename, *args, **kwargs)
+
+        with _open_clip_import_lock:
+            original_gzip_open = gzip.open
+            gzip.open = _gzip_open_with_bpe_fallback
+            try:
+                return importlib.import_module("open_clip")
+            finally:
+                gzip.open = original_gzip_open
 
     def _ensure_bpe_vocab_downloaded(self) -> Path:
         vocab_path = self._cache_dir / _BPE_VOCAB_FILENAME
