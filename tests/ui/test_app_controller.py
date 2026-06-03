@@ -261,6 +261,28 @@ def test_selectResult_thumb_source_updates_synchronously(
     assert len(fired) == 1
 
 
+def test_app_controller_default_ai_disabled(
+    demo_db: tuple[Path, Path],
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    db_path, _ = demo_db
+    settings_model = SettingsModel(tmp_path / "settings.json")
+    search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
+    controller = AppController(
+        db_path,
+        search_model,
+        ExifListModel(),
+        FolderListModel(),
+    )
+
+    # Assert
+    assert settings_model.aiEnabled is False
+    assert controller.aiEnabled is False
+
+    controller.close()
+
+
 def test_selectResult_image_source_is_empty_before_debounce_fires(
     qtbot: QtBot,
     bare_controller: AppController,

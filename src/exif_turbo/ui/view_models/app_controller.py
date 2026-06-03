@@ -238,7 +238,7 @@ class AppController(QObject):
         self._ai_scan_worker: AiScanWorker | None = None
         self._is_ai_scanning: bool = False
         self._is_ai_search_mode: bool = False
-        self._ai_enabled: bool = self._settings.ai_enabled if self._settings else True
+        self._ai_enabled: bool = self._settings.ai_enabled if self._settings else False
         self._ai_search_worker: AiSearchWorker | None = None
         self._last_ai_query: str = ""
         self._last_ai_precision: str = "normal"

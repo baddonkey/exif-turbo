@@ -66,7 +66,7 @@ class SettingsModel(QObject):
         self._language: str = "en"
         self._preview_max_size: int = _DEFAULT_PREVIEW_SIZE
         self._sort_by: str = _DEFAULT_SORT
-        self._ai_enabled: bool = True
+        self._ai_enabled: bool = False
         self._load()
 
     # ── Properties ───────────────────────────────────────────────────────────
