@@ -123,6 +123,7 @@ ApplicationWindow {
             var next = Math.min(controller.currentResultRow + step, browseImageList.count - 1)
             controller.selectResult(next)
             browseImageList.positionViewAtIndex(next, ListView.Contain)
+            root._scheduleBrowseDirectionalPrefetch(1)
         }
     }
     Shortcut {
@@ -133,6 +134,7 @@ ApplicationWindow {
             var prev = Math.max(controller.currentResultRow - step, 0)
             controller.selectResult(prev)
             browseImageList.positionViewAtIndex(prev, ListView.Contain)
+            root._scheduleBrowseDirectionalPrefetch(-1)
         }
     }
     Shortcut {
@@ -143,6 +145,7 @@ ApplicationWindow {
             root._previewNavigating = true
             controller.selectResult(next)
             browseImageList.positionViewAtIndex(next, ListView.Contain)
+            root._scheduleBrowseDirectionalPrefetch(1)
         }
     }
     Shortcut {
@@ -153,6 +156,7 @@ ApplicationWindow {
             root._previewNavigating = true
             controller.selectResult(prev)
             browseImageList.positionViewAtIndex(prev, ListView.Contain)
+            root._scheduleBrowseDirectionalPrefetch(-1)
         }
     }
 
@@ -166,6 +170,10 @@ ApplicationWindow {
     property bool findBarVisible: false
     property bool browseFindBarVisible: false
     property bool _previewNavigating: false
+    property bool _aiSearchMode: false
+    property string _aiSearchPrecision: "normal"
+    readonly property bool _aiEnabled: controller ? controller.aiEnabled : true
+
 
     // ── Null-safe proxies ─────────────────────────────────────────────────
     readonly property bool   _isLocked:            controller ? controller.isLocked           : true
@@ -181,42 +189,16 @@ ApplicationWindow {
         function onClipboardCopyDone(message) {
             clipboardToast.show(message)
         }
+        function onFolderTreeChanged() {
+            root._scrollBrowseTreeToFolder()
+        }
         // Called after every search finishes (Browse folder load or Search tab restore).
         // Called after every search finishes (Browse folder load or Search tab restore).
         function onLoadedResultsChanged() {
             // Browse tab: jump to the pending target image once folder results are loaded.
             if (mainTabBar.currentIndex === 1 && root._pendingBrowseTargetId !== -1) {
-                var target = root._pendingBrowseTargetId
-                root._pendingBrowseTargetId = -1
-                var proxyRow = controller.selectResultById(target)
-                if (proxyRow >= 0) {
-                    // Use positionViewAtIndex (delegate-height-agnostic) and a
-                    // double Qt.callLater to run after the ListView's own layout
-                    // pass triggered by the currentProxyResultRow change inside
-                    // selectResultByPath.
-                    Qt.callLater(function() {
-                        Qt.callLater(function() {
-                            browseImageList.positionViewAtIndex(proxyRow, ListView.Beginning)
-                        })
-                    })
-                }
-                // Scroll the folder tree so the parent folder of the jumped-to image
-                // is visible. _folderFilter is already set by browseFolder() before
-                // results finish loading, so _folderTree can be searched here.
-                var folderPath = root._folderFilter
-                var treeIdx = -1
-                for (var i = 0; i < root._folderTree.length; i++) {
-                    if (root._folderTree[i].path === folderPath) {
-                        treeIdx = i
-                        break
-                    }
-                }
-                if (treeIdx >= 0) {
-                    var capturedTreeIdx = treeIdx
-                    Qt.callLater(function() {
-                        browseTreeList.positionViewAtIndex(capturedTreeIdx, ListView.Contain)
-                    })
-                }
+                root._applyPendingBrowseJump()
+                root._scrollBrowseTreeToFolder()
                 return
             }
             // Search tab: restore scroll position after returning from Browse tab.
@@ -374,6 +356,22 @@ ApplicationWindow {
     property real   _savedSearchScrollY:    -1.0
     // DB image id to locate and scroll to once Browse results finish loading; -1 = none
     property int    _pendingBrowseTargetId: -1
+    // Proxy row to scroll to once the Browse ListView has caught up to a
+    // pending target selection.
+    property int    _pendingBrowseScrollRow: -1
+    // Pending top-prepend restore state so inserting earlier rows keeps the
+    // current viewport stable instead of snapping back to the top.
+    property int    _pendingBrowsePrependCount: -1
+    property real   _pendingBrowsePrependContentY: -1.0
+    readonly property bool _browseJumpLoading: mainTabBar.currentIndex === 1
+                                              && (root._pendingBrowseTargetId !== -1
+                                                  || root._pendingBrowseScrollRow !== -1)
+    // Browse infinite-scroll prefetch state.
+    readonly property int _browsePageSize: 50
+    readonly property int _browseRowHeight: 210
+    readonly property int _browsePrefetchDistance: _browseRowHeight * _browsePageSize
+    property real   _lastBrowseContentY: 0.0
+    property bool   _suspendBrowsePrefetch: false
     // One-shot flag: restore resultsList position after the next search load
     property bool   _restoreSearchPosition: false
 
@@ -395,6 +393,132 @@ ApplicationWindow {
     // Parsed list of indexed folders for the folder combo
     readonly property var _searchFolderList: {
         try { return JSON.parse(_searchFolderListJson) } catch(e) { return [] }
+    }
+
+    function _scrollBrowseTreeToFolder() {
+        if (mainTabBar.currentIndex !== 1 || root._folderFilter === "" || root._folderTree.length === 0)
+            return
+        for (var i = 0; i < root._folderTree.length; i++) {
+            if (root._folderTree[i].path === root._folderFilter) {
+                var capturedTreeIdx = i
+                Qt.callLater(function() {
+                    browseTreeList.positionViewAtIndex(capturedTreeIdx, ListView.Contain)
+                })
+                return
+            }
+        }
+    }
+
+    function _browseVisibleRowCount() {
+        return Math.max(1, Math.ceil(browseImageList.height / root._browseRowHeight))
+    }
+
+    function _scheduleBrowseDirectionalPrefetch(direction) {
+        Qt.callLater(function() {
+            if (mainTabBar.currentIndex !== 1 || root._folderFilter === "")
+                return
+            if (direction > 0)
+                root._maybeLoadNextBrowsePage()
+            else if (direction < 0)
+                root._maybeLoadPreviousBrowsePage()
+        })
+    }
+
+    function _applyPendingBrowseJump() {
+        if (mainTabBar.currentIndex !== 1 || root._pendingBrowseTargetId === -1)
+            return
+        var proxyRow = controller.selectResultById(root._pendingBrowseTargetId)
+        if (proxyRow < 0) {
+            if (browseImageList.count < root._totalResults) {
+                Qt.callLater(function() {
+                    if (mainTabBar.currentIndex === 1 && root._pendingBrowseTargetId !== -1)
+                        controller.loadMore()
+                })
+            }
+            return
+        }
+        root._pendingBrowseTargetId = -1
+        root._pendingBrowseScrollRow = proxyRow
+        root._flushPendingBrowseScroll()
+    }
+
+    function _flushPendingBrowseScroll() {
+        if (mainTabBar.currentIndex !== 1)
+            return
+        var proxyRow = root._pendingBrowseScrollRow
+        if (proxyRow < 0)
+            return
+        if (browseImageList.count <= proxyRow)
+            return
+        if (browseImageList.currentIndex !== proxyRow)
+            return
+        Qt.callLater(function() {
+            Qt.callLater(function() {
+                if (mainTabBar.currentIndex !== 1 || root._pendingBrowseScrollRow !== proxyRow)
+                    return
+                root._suspendBrowsePrefetch = true
+                browseImageList.positionViewAtIndex(proxyRow, ListView.Beginning)
+                Qt.callLater(function() {
+                    root._suspendBrowsePrefetch = false
+                })
+                root._pendingBrowseScrollRow = -1
+            })
+        })
+    }
+
+    function _maybeLoadNextBrowsePage() {
+        if (mainTabBar.currentIndex !== 1 || root._folderFilter === "")
+            return
+        if (root._pendingBrowseTargetId !== -1 || root._pendingBrowseScrollRow !== -1)
+            return
+        if (browseImageList.count <= 0 || browseImageList.count >= root._totalResults)
+            return
+        var firstVisibleRow = Math.max(0, Math.floor(browseImageList.contentY / root._browseRowHeight))
+        var lastVisibleRow = firstVisibleRow + root._browseVisibleRowCount() - 1
+        var remainingRowsBelow = browseImageList.count - 1 - lastVisibleRow
+        if (remainingRowsBelow > root._browsePageSize)
+            return
+        controller.loadMore()
+    }
+
+    function _maybeLoadPreviousBrowsePage() {
+        if (mainTabBar.currentIndex !== 1 || root._folderFilter === "")
+            return
+        if (root._pendingBrowseTargetId !== -1 || root._pendingBrowseScrollRow !== -1)
+            return
+        if (root._pendingBrowsePrependCount >= 0)
+            return
+        if (browseImageList.count <= 0)
+            return
+        var firstVisibleRow = Math.max(0, Math.floor(browseImageList.contentY / root._browseRowHeight))
+        if (firstVisibleRow > root._browsePageSize)
+            return
+        root._pendingBrowsePrependCount = browseImageList.count
+        root._pendingBrowsePrependContentY = browseImageList.contentY
+        if (!controller.loadPrevious()) {
+            root._pendingBrowsePrependCount = -1
+            root._pendingBrowsePrependContentY = -1.0
+        }
+    }
+
+    function _restoreBrowsePrependPosition() {
+        if (root._pendingBrowsePrependCount < 0)
+            return
+        if (browseImageList.count <= root._pendingBrowsePrependCount)
+            return
+        var insertedRows = browseImageList.count - root._pendingBrowsePrependCount
+        var priorContentY = Math.max(0, root._pendingBrowsePrependContentY)
+        root._pendingBrowsePrependCount = -1
+        root._pendingBrowsePrependContentY = -1.0
+        Qt.callLater(function() {
+            if (mainTabBar.currentIndex !== 1)
+                return
+            root._suspendBrowsePrefetch = true
+            browseImageList.contentY = priorContentY + insertedRows * root._browseRowHeight
+            Qt.callLater(function() {
+                root._suspendBrowsePrefetch = false
+            })
+        })
     }
 
     // ── Dialogs ───────────────────────────────────────────────────────────
@@ -911,11 +1035,16 @@ ApplicationWindow {
     // ── Tab bar background (full-width row behind the buttons) ───────────
     // ── Search-in-progress overlay (dims UI and blocks input) ────────────
     Rectangle {
+        objectName: "searchBusyOverlay"
         anchors.fill: parent
         z: 55
-        visible: _isSearching
+        visible: _isSearching || root._browseJumpLoading
         color: Qt.rgba(0, 0, 0, 0.25)
-        MouseArea { anchors.fill: parent; hoverEnabled: true }
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.BusyCursor
+        }
     }
 
     // ── Tab bar background (full-width row behind the buttons) ───────────
@@ -979,6 +1108,7 @@ ApplicationWindow {
                 // Returning to Search: restore the snapshot, repopulate searchField,
                 // and request a one-shot scroll restore once results have loaded.
                 root._pendingBrowseTargetId = -1
+                root._pendingBrowseScrollRow = -1
                 root._restoreSearchPosition = true
                 var savedQuery = controller.leaveBrowseTab()
                 searchField.text = savedQuery
@@ -1029,6 +1159,115 @@ ApplicationWindow {
                             anchors { fill: parent; leftMargin: 10; rightMargin: 10; topMargin: 8; bottomMargin: 8 }
                             spacing: 6
 
+                            // ── EXIF / AI mode toggle pill ────────────────
+                            Rectangle {
+                                visible: root._aiEnabled
+                                implicitWidth: 82
+                                implicitHeight: 30
+                                radius: 4
+                                color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.08)
+                                border.color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.18)
+                                border.width: 1
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    spacing: 0
+
+                                    Button {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        flat: true
+                                        text: qsTr("EXIF")
+                                        font.pixelSize: 11
+                                        font.bold: !root._aiSearchMode
+                                        highlighted: !root._aiSearchMode
+                                        onClicked: {
+                                            root._aiSearchMode = false
+                                            controller.setAiSearchMode(false)
+                                        }
+                                        topPadding: 0; bottomPadding: 0
+                                        leftPadding: 4; rightPadding: 4
+                                    }
+
+                                    Rectangle {
+                                        width: 1
+                                        Layout.fillHeight: true
+                                        color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.18)
+                                    }
+
+                                    Button {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        flat: true
+                                        text: qsTr("AI")
+                                        font.pixelSize: 11
+                                        font.bold: root._aiSearchMode
+                                        highlighted: root._aiSearchMode
+                                        onClicked: {
+                                            root._aiSearchMode = true
+                                            controller.setAiSearchMode(true)
+                                        }
+                                        topPadding: 0; bottomPadding: 0
+                                        leftPadding: 4; rightPadding: 4
+                                    }
+                                }
+                            }
+
+                            // ── AI precision picker (Fine / Normal / Broad) ─────────
+                            Rectangle {
+                                visible: root._aiSearchMode
+                                implicitWidth: 148
+                                implicitHeight: 30
+                                radius: 4
+                                color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.08)
+                                border.color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.18)
+                                border.width: 1
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    spacing: 0
+
+                                    Repeater {
+                                        model: [
+                                            { key: "fine",   label: qsTr("Fine")   },
+                                            { key: "normal", label: qsTr("Normal") },
+                                            { key: "broad",  label: qsTr("Broad")  },
+                                        ]
+
+                                        delegate: RowLayout {
+                                            spacing: 0
+                                            Layout.fillWidth: true
+                                            Layout.fillHeight: true
+
+                                            Rectangle {
+                                                visible: index > 0
+                                                width: 1
+                                                Layout.fillHeight: true
+                                                color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.18)
+                                            }
+
+                                            Button {
+                                                Layout.fillWidth: true
+                                                Layout.fillHeight: true
+                                                flat: true
+                                                text: modelData.label
+                                                font.pixelSize: 11
+                                                font.bold: root._aiSearchPrecision === modelData.key
+                                                highlighted: root._aiSearchPrecision === modelData.key
+                                                onClicked: root._aiSearchPrecision = modelData.key
+                                                topPadding: 0; bottomPadding: 0
+                                                leftPadding: 4; rightPadding: 4
+                                                ToolTip.text: modelData.key === "fine"   ? qsTr("Precise — score ≥ 0.22 (strictest)")  :
+                                                              modelData.key === "normal" ? qsTr("Balanced — score ≥ 0.20")               :
+                                                                                           qsTr("Broad — score ≥ 0.18 (most results)")
+                                                ToolTip.visible: hovered
+                                                ToolTip.delay: 600
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             Rectangle {
                                 Layout.fillWidth: true
                                 implicitHeight: 36
@@ -1040,7 +1279,7 @@ ApplicationWindow {
                                 Label {
                                     anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                                     visible: searchField.text.length === 0
-                                    text: qsTr("Search EXIF metadata\u2026")
+                                    text: root._aiSearchMode ? qsTr("Describe what you\u2019re looking for\u2026") : qsTr("Search EXIF metadata\u2026")
                                     font.pixelSize: 13
                                     opacity: 0.4
                                 }
@@ -1053,7 +1292,7 @@ ApplicationWindow {
                                     selectedTextColor: "white"
                                     selectionColor: root._accentColor
                                     clip: true
-                                    Keys.onReturnPressed: controller.search(text)
+                                    Keys.onReturnPressed: root._aiSearchMode ? controller.aiSearch(text, root._aiSearchPrecision) : controller.search(text)
                                 }
 
                                 // Clear button — visible whenever the field has text
@@ -1085,11 +1324,12 @@ ApplicationWindow {
                                     }
                                 }
 
-                                // Help (?) button — shows search-syntax hints on hover
+                                // Help (?) button — shows search-syntax hints on hover — EXIF mode only
                                 Item {
                                     id: searchHelpButton
                                     anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
                                     width: 20; height: 20
+                                    visible: !root._aiSearchMode
 
                                     Text {
                                         anchors.centerIn: parent
@@ -1180,7 +1420,7 @@ ApplicationWindow {
                                 highlighted: true
                                 implicitHeight: 36
                                 font.pixelSize: 13
-                                onClicked: controller.search(searchField.text)
+                                onClicked: root._aiSearchMode ? controller.aiSearch(searchField.text, root._aiSearchPrecision) : controller.search(searchField.text)
                             }
                         }
                     }
@@ -1210,7 +1450,7 @@ ApplicationWindow {
                                 text: qsTr("Folder(s)")
                                 font.pixelSize: 11
                                 opacity: 0.6
-                                visible: root._indexedFolderCount > 1
+                                visible: root._indexedFolderCount > 1 && !root._aiSearchMode
                             }
 
                             // Checked-only filter chip
@@ -1257,7 +1497,7 @@ ApplicationWindow {
                             ComboBox {
                                 id: folderMultiCombo
                                 objectName: "folderMultiCombo"
-                                visible: root._indexedFolderCount > 1
+                                visible: root._indexedFolderCount > 1 && !root._aiSearchMode
                                 implicitHeight: 28
                                 implicitWidth: 170
                                 font.pixelSize: 11
@@ -1317,11 +1557,13 @@ ApplicationWindow {
                                 text: qsTr("Sort")
                                 font.pixelSize: 11
                                 opacity: 0.6
+                                visible: !root._aiSearchMode
                             }
 
                             ComboBox {
                                 id: sortCombo
                                 objectName: "sortCombo"
+                                visible: !root._aiSearchMode
                                 implicitHeight: 28
                                 font.pixelSize: 11
 
@@ -1448,7 +1690,7 @@ ApplicationWindow {
                         readonly property bool _hasYears: root._years.length > 0
                         readonly property bool _filterActive: root._dateFrom !== -1 || root._dateTo !== -1
                         implicitHeight: _hasYears ? contentRowLayout.implicitHeight + 8 : 0
-                        visible: _hasYears
+                        visible: _hasYears && !root._aiSearchMode
                         color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.04)
 
                         // Tooltip for the whole filter strip (non-blocking).
@@ -2615,7 +2857,7 @@ ApplicationWindow {
         visible: !_isLocked && mainTabBar.currentIndex === 1
         orientation: Qt.Horizontal
 
-        onVisibleChanged: { if (visible) controller.reloadFolderTree() }
+        onVisibleChanged: { if (visible) controller.loadFolderTree() }
         handle: Rectangle {
             implicitWidth: 5
             color: SplitHandle.pressed ? root._accentColor : Material.dividerColor
@@ -2670,6 +2912,7 @@ ApplicationWindow {
 
                 ListView {
                     id: browseTreeList
+                    objectName: "browseTreeList"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
@@ -2737,8 +2980,11 @@ ApplicationWindow {
         // ── Image list + preview + metadata ──────────────────────────────
         SplitView {
             id: browseContentSplit
+            objectName: "browseContentSplit"
             SplitView.fillWidth: true
             orientation: Qt.Vertical
+            opacity: root._browseJumpLoading ? 0.0 : 1.0
+            enabled: !root._browseJumpLoading
             handle: Rectangle {
                 implicitHeight: 5
                 color: SplitHandle.pressed ? root._accentColor : Material.dividerColor
@@ -2811,7 +3057,7 @@ ApplicationWindow {
 
                             Label {
                                 text: root._folderFilter !== ""
-                                      ? browseImageList.count + qsTr(" images")
+                                      ? root._totalResults + qsTr(" images")
                                       : qsTr("Select a folder")
                                 font.pixelSize: 11; opacity: 0.6
                             }
@@ -2838,6 +3084,9 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
+                        cacheBuffer: root._browsePrefetchDistance
+                        displayMarginBeginning: root._browsePrefetchDistance
+                        displayMarginEnd: root._browsePrefetchDistance
                         visible: root._folderFilter !== ""
                         focus: visible
                         activeFocusOnTab: true
@@ -2851,6 +3100,30 @@ ApplicationWindow {
                         }
 
                         onVisibleChanged: { if (visible) forceActiveFocus() }
+                        onContentYChanged: {
+                            var previousContentY = root._lastBrowseContentY
+                            root._lastBrowseContentY = contentY
+                            if (root._suspendBrowsePrefetch) {
+                                root._suspendBrowsePrefetch = false
+                                return
+                            }
+                            if (!visible || count <= 0 || root._folderFilter === "")
+                                return
+                            if (contentY > previousContentY)
+                                root._maybeLoadNextBrowsePage()
+                            else if (contentY < previousContentY)
+                                root._maybeLoadPreviousBrowsePage()
+                        }
+                        onCurrentIndexChanged: root._flushPendingBrowseScroll()
+                        onCountChanged: {
+                            root._flushPendingBrowseScroll()
+                            root._restoreBrowsePrependPosition()
+                        }
+                        onContentHeightChanged: root._flushPendingBrowseScroll()
+                        onHeightChanged: root._flushPendingBrowseScroll()
+                        onAtYBeginningChanged: {
+                            if (atYBeginning && count > 0) root._maybeLoadPreviousBrowsePage()
+                        }
 
                         delegate: Rectangle {
                             id: browseCardDelegate
@@ -4069,6 +4342,44 @@ ApplicationWindow {
 
                     // spacer below the section
                     Item { height: 28; Layout.fillWidth: true }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
+
+                    // ── AI Features ───────────────────────────────────────
+                    Label {
+                        text: qsTr("AI Features")
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                        Layout.bottomMargin: 6
+                    }
+                    Label {
+                        text: qsTr("Enable CLIP-based semantic image search and AI-Scan for indexed folders. Requires the open-clip-torch package and downloads a ~350 MB model on first use.")
+                        font.pixelSize: 12
+                        opacity: 0.6
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 12
+                    }
+                    RowLayout {
+                        spacing: 12
+                        Layout.bottomMargin: 28
+
+                        Switch {
+                            id: aiEnabledSwitch
+                            checked: controller ? controller.aiEnabled : true
+                            onToggled: {
+                                controller.setAiEnabled(checked)
+                                if (!checked) root._aiSearchMode = false
+                            }
+                        }
+
+                        Label {
+                            text: aiEnabledSwitch.checked ? qsTr("Enabled") : qsTr("Disabled")
+                            font.pixelSize: 13
+                            opacity: 0.8
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
 

@@ -332,6 +332,29 @@ Item {
                         }
                     }
 
+                    // AI-Scan button — CLIP vector embedding for this folder
+                    Button {
+                        flat: true
+                        visible: controller && controller.aiEnabled
+                        text: (controller && controller.isAiScanning && controller.aiScanFolderId === model.folderId)
+                              ? qsTr("Cancel AI-Scan")
+                              : qsTr("AI-Scan")
+                        font.pixelSize: 11
+                        implicitHeight: 30
+                        enabled: model.enabled && model.imageCount > 0 &&
+                                 (!controller || !controller.isAiScanning || controller.aiScanFolderId === model.folderId)
+                        ToolTip.text: (controller && controller.isAiScanning && controller.aiScanFolderId === model.folderId)
+                                      ? qsTr("Cancel the running AI-Scan")
+                                      : qsTr("Build CLIP vector embeddings for this folder (enables AI search)")
+                        ToolTip.visible: hovered
+                        onClicked: {
+                            if (controller.isAiScanning && controller.aiScanFolderId === model.folderId)
+                                controller.cancelAiScan()
+                            else
+                                controller.aiScanFolder(model.folderId)
+                        }
+                    }
+
                     // Clear Previews button — kept in layout (transparent when nothing cached)
                     // so the Remove button stays aligned across rows.
                     Button {
@@ -515,6 +538,17 @@ Item {
                     cancelText: qsTr("Cancel")
                     canceling: false  // preview cancel always allowed
                     onCancelRequested: controller.cancelPreviewBuild()
+                }
+
+                ProgressColumn {
+                    title: qsTr("AI-Scan")
+                    active: controller ? controller.isAiScanning : false
+                    current: controller ? controller.aiScanCurrent : 0
+                    total: controller ? controller.aiScanTotal : 0
+                    currentFile: controller ? controller.aiScanCurrentFile : ""
+                    cancelText: qsTr("Cancel")
+                    canceling: false
+                    onCancelRequested: controller.cancelAiScan()
                 }
             }
         }

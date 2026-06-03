@@ -58,6 +58,28 @@ def test_count_images_after_insert_returns_correct_count(repo: ImageIndexReposit
     assert repo.count_images("") == 5
 
 
+def test_find_image_offset_path_filter_returns_sorted_offset(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange
+    folder = tmp_path / "folder"
+    folder.mkdir()
+    for name in ("c.jpg", "a.jpg", "b.jpg"):
+        path = str(make_jpeg(folder / name))
+        repo.upsert_image(path, name, 1.0, 100, {}, name)
+    repo.commit()
+    rows = repo.search_images("", limit=10, offset=0, sort_by="filename_asc")
+    target_id = next(row[0] for row in rows if row[2] == "b.jpg")
+
+    # Act
+    offset = repo.find_image_offset(
+        target_id,
+        sort_by="filename_asc",
+        path_filter=[str(folder)],
+    )
+
+    # Assert
+    assert offset == 1
+
+
 # ── FTS5 search ───────────────────────────────────────────────────────────────
 
 

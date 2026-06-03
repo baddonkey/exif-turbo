@@ -17,6 +17,8 @@ dependencies = [
   "cryptography>=42.0",
   "pyvips>=2.2",
   "pyvips-binary>=2.2",
+  "faiss-cpu>=1.7",
+  "open-clip-torch>=2.24",
 ]
 
 [project.scripts]

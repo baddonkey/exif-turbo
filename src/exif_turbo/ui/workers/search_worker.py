@@ -94,3 +94,62 @@ class SearchWorker(QThread):
             self.results_ready.emit(rows, total, format_counts, self._serial)
         except Exception as exc:  # noqa: BLE001
             self.failed.emit(str(exc))
+
+
+class SearchPageWorker(QThread):
+    """Load a single page of SQL search results off the GUI thread."""
+
+    results_ready: Signal = Signal(list, int)
+    failed: Signal = Signal(str)
+
+    def __init__(
+        self,
+        db_path: Path,
+        key: str,
+        *,
+        query: str,
+        page_size: int,
+        offset: int,
+        sort_by: str,
+        ext_filter: str,
+        path_filter: List[str] | None,
+        restrict_to_enabled_folders: bool,
+        marked_only: bool,
+        serial: int,
+        date_from: int | None = None,
+        date_to: int | None = None,
+    ) -> None:
+        super().__init__()
+        self._db_path = db_path
+        self._key = key
+        self._query = query
+        self._page_size = page_size
+        self._offset = offset
+        self._sort_by = sort_by
+        self._ext_filter = ext_filter
+        self._path_filter = path_filter
+        self._restrict = restrict_to_enabled_folders
+        self._marked_only = marked_only
+        self._serial = serial
+        self._date_from = date_from
+        self._date_to = date_to
+
+    def run(self) -> None:
+        try:
+            repo = ImageIndexRepository(self._db_path, key=self._key)
+            rows: list = repo.search_images(
+                self._query,
+                self._page_size,
+                self._offset,
+                sort_by=self._sort_by,
+                ext_filter=self._ext_filter,
+                path_filter=self._path_filter,
+                restrict_to_enabled_folders=self._restrict,
+                marked_only=self._marked_only,
+                date_from=self._date_from,
+                date_to=self._date_to,
+            )
+            repo.close()
+            self.results_ready.emit(rows, self._serial)
+        except Exception as exc:  # noqa: BLE001
+            self.failed.emit(str(exc))
