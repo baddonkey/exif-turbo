@@ -15,7 +15,6 @@ Usage::
 from __future__ import annotations
 
 import gzip
-import importlib
 import logging
 from pathlib import Path
 import threading
@@ -180,7 +179,9 @@ class AiIndexerService:
             original_gzip_open = gzip.open
             gzip.open = _gzip_open_with_bpe_fallback
             try:
-                return importlib.import_module("open_clip")
+                import open_clip  # noqa: PLC0415
+
+                return open_clip
             finally:
                 gzip.open = original_gzip_open
 

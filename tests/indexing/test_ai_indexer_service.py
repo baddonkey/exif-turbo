@@ -1,6 +1,7 @@
 """Tests for AiIndexerService — mocks open_clip so torch is not required."""
 from __future__ import annotations
 
+import builtins
 from contextlib import nullcontext
 import gzip
 from pathlib import Path
@@ -349,19 +350,28 @@ def test_ai_indexer_service_model_load_imports_open_clip_with_user_bpe_fallback(
         def read(self) -> bytes:
             return bpe_payload
 
-    def _fake_import_module(name: str) -> SimpleNamespace:
-        assert name == "open_clip"
-        with gzip.open(missing_bpe_path, "rb") as stream:
-            assert stream.read() == b"#version: 0.2\na b\n"
-        return fake_open_clip
+    original_import = builtins.__import__
+
+    def _fake_import(
+        name: str,
+        globals=None,
+        locals=None,
+        fromlist=(),
+        level: int = 0,
+    ):
+        if name == "open_clip":
+            with gzip.open(missing_bpe_path, "rb") as stream:
+                assert stream.read() == b"#version: 0.2\na b\n"
+            return fake_open_clip
+        return original_import(name, globals, locals, fromlist, level)
 
     monkeypatch.setattr(
         "exif_turbo.indexing.ai_indexer_service.urllib.request.urlopen",
         lambda request, timeout=60: _FakeResponse(),
     )
     monkeypatch.setattr(
-        "exif_turbo.indexing.ai_indexer_service.importlib.import_module",
-        _fake_import_module,
+        "builtins.__import__",
+        _fake_import,
     )
     monkeypatch.setitem(sys.modules, "torch", SimpleNamespace())
     monkeypatch.setattr(

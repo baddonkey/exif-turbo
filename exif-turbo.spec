@@ -4,6 +4,8 @@
 import re
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_data_files
+
 # Read version from the single source of truth
 _version_match = re.search(
     r'^__version__\s*=\s*["\']([^"\']+)["\']',
@@ -63,6 +65,7 @@ _common_datas = [
     ('THIRD-PARTY-LICENSES.md', 'exif_turbo\\assets'),
     ('docs\\user-manual.pdf', 'exif_turbo\\assets'),
     ('src\\exif_turbo\\i18n\\locales', 'exif_turbo\\i18n\\locales'),
+    *collect_data_files('open_clip', includes=['model_configs/*.json']),
 ]
 
 _common_hiddenimports = [
