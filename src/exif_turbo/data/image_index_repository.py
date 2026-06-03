@@ -646,6 +646,64 @@ class ImageIndexRepository:
         cur = self.conn.execute(sql, args)
         return int(cur.fetchone()[0])
 
+    def find_image_offset(
+        self,
+        image_id: int,
+        query: str = "",
+        sort_by: str = "",
+        ext_filter: str = "",
+        path_filter: List[str] | None = None,
+        restrict_to_enabled_folders: bool = False,
+        marked_only: bool = False,
+        date_from: int | None = None,
+        date_to: int | None = None,
+    ) -> int | None:
+        """Return the zero-based offset of *image_id* in the filtered result set."""
+        if image_id <= 0:
+            return None
+
+        order = self._resolve_sort(sort_by)
+        ext_clause, ext_args = self._build_ext_clause(ext_filter)
+        path_clause, path_args = self._build_path_clause(path_filter)
+        date_clause, date_args = self._build_date_clause(date_from, date_to)
+        marks_clause = "AND images.marked = 1" if marked_only else ""
+        enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
+
+        if query.strip():
+            fts_query = self._sanitize_fts_query(query)
+            order_expr = (
+                f"{order}, images.id ASC"
+                if sort_by
+                else "bm25(images_fts), images.id ASC"
+            )
+            sql = (
+                "SELECT row_offset FROM ("
+                "  SELECT images.id AS image_id, "
+                f"         ROW_NUMBER() OVER (ORDER BY {order_expr}) - 1 AS row_offset "
+                "  FROM images_fts "
+                "  JOIN images ON images_fts.rowid = images.id "
+                f"  WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+                ") ranked "
+                "WHERE image_id = ?"
+            )
+            args = (fts_query,) + ext_args + path_args + date_args + (image_id,)
+        else:
+            sql = (
+                "SELECT row_offset FROM ("
+                "  SELECT images.id AS image_id, "
+                f"         ROW_NUMBER() OVER (ORDER BY {order}, images.id ASC) - 1 AS row_offset "
+                "  FROM images "
+                f"  WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+                ") ranked "
+                "WHERE image_id = ?"
+            )
+            args = ext_args + path_args + date_args + (image_id,)
+
+        row = self.conn.execute(sql, args).fetchone()
+        if row is None:
+            return None
+        return int(row[0])
+
     def get_matching_paths(
         self,
         query: str,
@@ -1034,6 +1092,30 @@ class ImageIndexRepository:
             for row in rows:
                 result[row[0]] = (row[1], row[2])
         return result
+
+    def get_images_by_paths(
+        self, paths: List[str]
+    ) -> List[Tuple[int, str, str, str, int, float]]:
+        """Fetch full image rows for a list of *paths*, preserving order.
+
+        Returns ``(id, path, filename, metadata_json, size, mtime)`` tuples in
+        the same order as *paths* (FAISS score order), skipping paths not in
+        the DB.  Used by :class:`~exif_turbo.ui.workers.ai_search_worker.AiSearchWorker`
+        to hydrate FAISS hits into the same row format consumed by
+        ``_on_search_finished``.
+        """
+        if not paths:
+            return []
+        placeholders = ",".join("?" * len(paths))
+        cur = self.conn.execute(
+            f"SELECT id, path, filename, metadata_json, size, mtime "
+            f"FROM images WHERE path IN ({placeholders})",
+            paths,
+        )
+        by_path: dict[str, Tuple[int, str, str, str, int, float]] = {}
+        for row in cur.fetchall():
+            by_path[row[1]] = row
+        return [by_path[p] for p in paths if p in by_path]
 
     def _get_pixel_counts_query(
         self, sql: str, params: tuple = ()

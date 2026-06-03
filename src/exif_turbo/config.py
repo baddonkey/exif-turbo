@@ -32,6 +32,16 @@ def thumb_cache_dir(db_path: Path) -> Path:
     return Path.home() / ".exif-turbo" / "data" / db_path.stem / "thumbs"
 
 
+def ai_index_path(db_path: Path) -> Path:
+    """Path to the FAISS vector index file for the given database."""
+    return Path.home() / ".exif-turbo" / "data" / db_path.stem / "ai_index.faiss"
+
+
+def ai_id_map_path(db_path: Path) -> Path:
+    """Path to the JSON id-map (FAISS integer ID → image path) for the given database."""
+    return Path.home() / ".exif-turbo" / "data" / db_path.stem / "ai_id_map.json"
+
+
 def settings_path(db_path: Path) -> Path:
     """Per-database settings file.
 

@@ -39,16 +39,19 @@ from ..models.exif_list_model import ExifListModel
 from ..models.folder_list_model import FolderListModel
 from ..models.search_list_model import SearchListModel
 from ..models.settings_model import SettingsModel
+from ..workers.ai_scan_worker import AiScanWorker
+from ..workers.ai_search_worker import AiSearchWorker
 from ..workers.bulk_op_worker import BulkOpWorker
 from ..workers.folder_tree_worker import FolderTreeWorker
 from ..workers.index_worker import IndexWorker
 from ..workers.password_change_worker import PasswordChangeWorker
 from ..workers.preview_build_worker import PreviewBuildWorker
-from ..workers.search_worker import SearchWorker
+from ..workers.search_worker import SearchPageWorker, SearchWorker
 from ..workers.thumb_worker import ThumbWorker
 from ...utils.preview_render import MAX_PREVIEW_PX, render_preview
 
 _PAGE_SIZE = 50
+_BROWSE_JUMP_PAGE_SIZE = 500
 _DEFAULT_WORKERS = max(1, (os.cpu_count() or 2) // 2)
 # Pillow LANCZOS resampling is GIL-bound; running too many thumb threads while
 # IndexWorker is active starves the scan thread and GUI event loop on Windows.
@@ -80,6 +83,13 @@ class AppController(QObject):
     isIndexingChanged = Signal()
     isBuildingThumbsChanged = Signal()
     isBuildingPreviewsChanged = Signal()
+    isAiScanningChanged = Signal()
+    isAiSearchModeChanged = Signal()
+    aiEnabledChanged = Signal()
+    aiScanFolderIdChanged = Signal()
+    aiScanCurrentChanged = Signal()
+    aiScanTotalChanged = Signal()
+    aiScanCurrentFileChanged = Signal()
     previewBuildFolderIdChanged = Signal()
     previewCurrentChanged = Signal()
     previewTotalChanged = Signal()
@@ -180,6 +190,7 @@ class AppController(QObject):
         self._preview_bust: int = 0
         self._total_results = 0
         self._loaded_results = 0
+        self._loaded_offset = 0
         self._loading = False
         self._search_error: str = ""
         self._details_plain_text = ""
@@ -201,12 +212,13 @@ class AppController(QObject):
         # the previously-selected image (identified by its DB id) is included in
         # the model.  0 means no pending restore.
         self._pending_restore_image_id: int = 0
-        # When jumping from Search → Browse, preload pages until the target
-        # image id is in the model.  0 means no pending jump.
+        # When jumping from Search → Browse, keep the target image id here
+        # until it is actually loaded and selected in the Browse model.
         self._pending_browse_jump_id: int = 0
         self._folder_tree: str = "[]"
         self._folder_tree_dirty: bool = False
         self._folder_tree_worker: FolderTreeWorker | None = None
+        self._folder_tree_worker_shows_busy_ui: bool = False
         self._pending_preview_path: str = ""
         # DB-stored (mtime, size) for the pending preview; used to compute the
         # on-disk cache filename without statting the (possibly missing) source.
@@ -223,6 +235,22 @@ class AppController(QObject):
         self._preview_total: int = 0
         self._preview_current_file: str = ""
         self._preview_oversized_skipped: int = 0
+        self._ai_scan_worker: AiScanWorker | None = None
+        self._is_ai_scanning: bool = False
+        self._is_ai_search_mode: bool = False
+        self._ai_enabled: bool = self._settings.ai_enabled if self._settings else True
+        self._ai_search_worker: AiSearchWorker | None = None
+        self._last_ai_query: str = ""
+        self._last_ai_precision: str = "normal"
+        # Set to True by aiSearch() so _on_search_finished always selects row 0
+        # for a fresh AI search (not a browse-restore).
+        self._ai_select_first: bool = False
+        # All AI result rows held in memory so we can page them without SQL.
+        self._ai_result_cache: list[SearchResult] = []
+        self._ai_scan_folder_id: int = 0
+        self._ai_scan_current: int = 0
+        self._ai_scan_total: int = 0
+        self._ai_scan_current_file: str = ""
         self._use_raw_preview: bool = False
         self._scanning_folder_id: int | None = None
         self._scan_queue: list[tuple[int, bool]] = []
@@ -231,6 +259,8 @@ class AppController(QObject):
         self._app_closing = False
         self._pending_thumb_restart = False
         self._search_worker: SearchWorker | None = None
+        self._load_more_worker: SearchPageWorker | None = None
+        self._page_load_mode = "append"
         self._search_serial: int = 0
         self._date_from: int | None = None
         self._date_to: int | None = None
@@ -241,10 +271,12 @@ class AppController(QObject):
         # its C++ stack (which holds a reference via AutoDecRef).  Each worker
         # is removed in _on_search_worker_done, which is connected to
         # QThread.finished — emitted only after run() has fully returned.
-        self._finishing_search_workers: set[SearchWorker] = set()
+        self._finishing_search_workers: set[QThread] = set()
         # Params for a search that arrived while one was already in-flight.
         # Consumed immediately when the current worker finishes.
         self._pending_search_params: dict | None = None
+        self._pending_search_show_busy_ui: bool = True
+        self._search_shows_busy_ui: bool = False
         self._filter_proxy: CheckedFilterProxyModel | None = None
         self._checked_only_filter_active: bool = False
         self._checked_in_results_count: int = 0
@@ -347,6 +379,51 @@ class AppController(QObject):
     @Property(bool, notify=useRawPreviewChanged)
     def useRawPreview(self) -> bool:
         return self._use_raw_preview
+
+    # ── AI-scan state ──────────────────────────────────────────────────────────
+
+    @Property(bool, notify=isAiScanningChanged)
+    def isAiScanning(self) -> bool:
+        return self._is_ai_scanning
+
+    @Property(int, notify=aiScanFolderIdChanged)
+    def aiScanFolderId(self) -> int:
+        return self._ai_scan_folder_id
+
+    @Property(int, notify=aiScanCurrentChanged)
+    def aiScanCurrent(self) -> int:
+        return self._ai_scan_current
+
+    @Property(int, notify=aiScanTotalChanged)
+    def aiScanTotal(self) -> int:
+        return self._ai_scan_total
+
+    @Property(str, notify=aiScanCurrentFileChanged)
+    def aiScanCurrentFile(self) -> str:
+        return self._ai_scan_current_file
+
+    # ── AI-search mode ─────────────────────────────────────────────────────────
+
+    @Property(bool, notify=isAiSearchModeChanged)
+    def isAiSearchMode(self) -> bool:
+        return self._is_ai_search_mode
+
+    @Property(bool, notify=aiEnabledChanged)
+    def aiEnabled(self) -> bool:
+        return self._ai_enabled
+
+    @Slot(bool)
+    def setAiEnabled(self, value: bool) -> None:
+        if self._ai_enabled == value:
+            return
+        self._ai_enabled = value
+        if self._settings:
+            self._settings.setAiEnabled(value)
+        # If AI is turned off while in AI mode, revert to EXIF mode.
+        if not value and self._is_ai_search_mode:
+            self._is_ai_search_mode = False
+            self.isAiSearchModeChanged.emit()
+        self.aiEnabledChanged.emit()
 
     @Property(bool, notify=isCancelingChanged)
     def isCanceling(self) -> bool:
@@ -1192,12 +1269,29 @@ class AppController(QObject):
         if self._folder_filter == path:
             self._folder_filter = ""
             self._pending_browse_jump_id = 0
+            search_offset = 0
         else:
             self._query_text = ""
             self._folder_filter = path
             self._pending_browse_jump_id = target_id
+            search_offset = 0
+            if target_id and self._repo is not None:
+                target_offset = self._repo.find_image_offset(
+                    target_id,
+                    query=self._query_text,
+                    sort_by=self._sort_by,
+                    ext_filter=self._ext_filter,
+                    path_filter=[path],
+                    restrict_to_enabled_folders=(self._folder_repo is not None),
+                    marked_only=self._checked_only_filter_active,
+                    date_from=self._date_from,
+                    date_to=self._date_to,
+                )
+                if target_offset is not None:
+                    search_offset = max(0, target_offset - (_PAGE_SIZE // 2))
+        show_busy_ui = self._pending_browse_jump_id != 0
         self.folderFilterChanged.emit()
-        self._run_search()
+        self._run_search(show_busy_ui=show_busy_ui, offset=search_offset)
 
     @Slot(str)
     def enterBrowseTab(self, query_text: str = "") -> None:
@@ -1221,8 +1315,15 @@ class AppController(QObject):
             "date_from": self._date_from,
             "date_to": self._date_to,
             "checked_only_filter": self._checked_only_filter_active,
+            "was_ai_search_mode": self._is_ai_search_mode,
             "current_image_id": self._search_model.get_image_id(self._current_result_row) or 0,
+            "ai_rows": list(self._ai_result_cache) if self._is_ai_search_mode else None,
+            "ai_total_results": self._total_results if self._is_ai_search_mode else 0,
+            "ai_loaded_results": self._loaded_results if self._is_ai_search_mode else 0,
         }
+        if self._is_ai_search_mode:
+            self._is_ai_search_mode = False
+            self.isAiSearchModeChanged.emit()
         self._query_text = ""
         if self._search_folder_filters:
             self._search_folder_filters.clear()
@@ -1262,10 +1363,12 @@ class AppController(QObject):
             self._query_text = ""
             self._run_search()
             return ""
+        restore_ai_search_mode = bool(snapshot.get("was_ai_search_mode", False))
+        if self._is_ai_search_mode != restore_ai_search_mode:
+            self._is_ai_search_mode = restore_ai_search_mode
+            self.isAiSearchModeChanged.emit()
         self._query_text = snapshot["query_text"]
         image_id = snapshot.get("current_image_id", 0)
-        if image_id:
-            self._pending_restore_image_id = image_id
         restored_search_folders = snapshot["search_folder_filters"]
         if restored_search_folders != self._search_folder_filters:
             self._search_folder_filters = restored_search_folders
@@ -1283,7 +1386,34 @@ class AppController(QObject):
         if snapshot.get("checked_only_filter", False) != self._checked_only_filter_active:
             self._checked_only_filter_active = snapshot.get("checked_only_filter", False)
             self.checkedOnlyFilterChanged.emit()
-        self._run_search()
+        if self._is_ai_search_mode and snapshot.get("ai_rows") is not None:
+            # Restore AI results directly — no re-search, no model reload.
+            saved_rows = snapshot["ai_rows"]
+            self._ai_result_cache = saved_rows
+            self._loaded_offset = 0
+            self._loading = True
+            self._search_model.set_rows(saved_rows[:_PAGE_SIZE])
+            self._recompute_checked_in_results()
+            self.checkedCountChanged.emit()
+            self._total_results = snapshot["ai_total_results"]
+            self._loaded_results = min(len(saved_rows), _PAGE_SIZE)
+            if image_id and self._loaded_results > 0:
+                if self.selectResultById(image_id) < 0:
+                    self._select_source_row(0)
+            elif self._loaded_results > 0:
+                self._select_source_row(
+                    self._current_result_row
+                    if 0 <= self._current_result_row < self._loaded_results
+                    else 0
+                )
+            self.totalResultsChanged.emit()
+            self.loadedResultsChanged.emit()
+            self._loading = False
+            self._load_year_counts()
+        else:
+            if image_id:
+                self._pending_restore_image_id = image_id
+            self._run_search()
         return self._query_text
 
     @Slot(float, float)
@@ -1309,14 +1439,24 @@ class AppController(QObject):
         self.dateFilterChanged.emit()
         self._run_search()
 
-    def _run_search(self) -> None:
+    def _set_search_busy_ui(self, active: bool) -> None:
+        if self._is_searching == active:
+            return
+        self._is_searching = active
+        if active:
+            QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.BusyCursor))
+        else:
+            QGuiApplication.restoreOverrideCursor()
+        self.isSearchingChanged.emit()
+
+    def _run_search(self, show_busy_ui: bool = True, offset: int = 0) -> None:
         if self._repo is None or self._db_path is None:
             return
         path_filter = self._current_path_filter()
         params = dict(
             query=self._query_text,
             page_size=_PAGE_SIZE,
-            offset=0,
+            offset=offset,
             sort_by=self._sort_by,
             ext_filter=self._ext_filter,
             path_filter=path_filter,
@@ -1331,6 +1471,7 @@ class AppController(QObject):
             # the current one closes its connection.  This keeps at most
             # one SearchWorker (and one extra DB connection) alive at a time.
             self._pending_search_params = params
+            self._pending_search_show_busy_ui = show_busy_ui
             self._search_serial += 1  # serial bump marks in-flight result stale
             return
 
@@ -1347,9 +1488,8 @@ class AppController(QObject):
         worker.failed.connect(self._on_search_failed)
         worker.finished.connect(self._on_search_worker_done)
         self._search_worker = worker
-        QGuiApplication.setOverrideCursor(QCursor(Qt.CursorShape.BusyCursor))
-        self._is_searching = True
-        self.isSearchingChanged.emit()
+        self._search_shows_busy_ui = show_busy_ui
+        self._set_search_busy_ui(show_busy_ui)
         worker.start()
 
     def _on_search_worker_done(self) -> None:
@@ -1369,6 +1509,8 @@ class AppController(QObject):
         format_counts: list,
         serial: int,
     ) -> None:
+        if self.sender() is self._ai_search_worker:
+            self._ai_search_worker = None
         old_worker = self._search_worker
         self._search_worker = None
         # Keep a Python reference to the outgoing worker until QThread.finished
@@ -1382,6 +1524,7 @@ class AppController(QObject):
         if self._pending_search_params is not None:
             pending = self._pending_search_params
             self._pending_search_params = None
+            pending_show_busy_ui = self._pending_search_show_busy_ui
             serial_now = self._search_serial
             worker = SearchWorker(
                 self._db_path,
@@ -1393,26 +1536,42 @@ class AppController(QObject):
             worker.failed.connect(self._on_search_failed)
             worker.finished.connect(self._on_search_worker_done)
             self._search_worker = worker
+            self._search_shows_busy_ui = pending_show_busy_ui
+            self._set_search_busy_ui(pending_show_busy_ui)
             worker.start()
             return
         # Discard results that belong to a superseded search.
         if serial != self._search_serial:
-            QGuiApplication.restoreOverrideCursor()
-            self._is_searching = False
-            self.isSearchingChanged.emit()
+            self._search_shows_busy_ui = False
+            self._set_search_busy_ui(False)
             return
         self._set_search_error("")
-        results = [
+        search_offset = 0
+        sender = self.sender()
+        if isinstance(sender, SearchWorker):
+            search_offset = sender._offset  # type: ignore[attr-defined]
+        all_results = [
             SearchResult(image_id=r[0], path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
             for r in rows
         ]
+        # For AI searches, store all results in-memory and load only the first
+        # page into the model; further pages are served from _ai_result_cache
+        # by loadMore() without touching the database.
+        if self._is_ai_search_mode:
+            self._ai_result_cache = all_results
+            first_page = all_results[:_PAGE_SIZE]
+            self._loaded_offset = 0
+        else:
+            self._ai_result_cache = []
+            first_page = all_results
+            self._loaded_offset = search_offset
         # Block loadMore for the duration of the model reset.  Without this
         # guard, endResetModel() causes the Browse ListView to fire loadMore
         # (stale _loaded_results < _total_results), which emits
         # loadedResultsChanged prematurely and consumes _pendingBrowseTarget
         # before the real emission at the end of this method.
         self._loading = True
-        self._search_model.set_rows(results)
+        self._search_model.set_rows(first_page)
         # When the "checked only" filter is active, every row is marked,
         # so total == checked-in-results. Otherwise recompute against the
         # full filtered set (not just the loaded page).
@@ -1422,7 +1581,7 @@ class AppController(QObject):
             self._recompute_checked_in_results()
         self.checkedCountChanged.emit()
         self._total_results = total
-        self._loaded_results = len(results)
+        self._loaded_results = len(first_page)
         # Returning from Browse: synchronously load enough additional pages
         # so the previously-selected image is reachable in the model before
         # the QML scroll-restore handler runs.  Uses the DB image id so a
@@ -1432,38 +1591,6 @@ class AppController(QObject):
             target_id = self._pending_restore_image_id
             while (
                 self._search_model.find_row_by_id(target_id) < 0
-                and self._loaded_results < self._total_results
-            ):
-                more_rows = self._repo.search_images(
-                    self._query_text,
-                    _PAGE_SIZE,
-                    self._loaded_results,
-                    sort_by=self._sort_by,
-                    ext_filter=self._ext_filter,
-                    path_filter=self._current_path_filter(),
-                    restrict_to_enabled_folders=(self._folder_repo is not None),
-                    marked_only=self._checked_only_filter_active,
-                    date_from=self._date_from,
-                    date_to=self._date_to,
-                )
-                if not more_rows:
-                    break
-                more_results = [
-                    SearchResult(
-                        image_id=r[0], path=r[1], filename=r[2], metadata_json=r[3],
-                        size=r[4], mtime=r[5],
-                    )
-                    for r in more_rows
-                ]
-                self._search_model.append_rows(more_results)
-                self._loaded_results += len(more_results)
-        # Forward Browse jump (Search → Browse): preload pages until the target
-        # image is in the model so QML's selectResultById call succeeds.
-        if self._pending_browse_jump_id and self._repo is not None:
-            jump_id = self._pending_browse_jump_id
-            self._pending_browse_jump_id = 0
-            while (
-                self._search_model.find_row_by_id(jump_id) < 0
                 and self._loaded_results < self._total_results
             ):
                 more_rows = self._repo.search_images(
@@ -1502,16 +1629,29 @@ class AppController(QObject):
                 # Image was deleted from the index while browsing; fall back.
                 self._select_source_row(0)
             _did_restore = True
+        # Fresh AI search: always land on row 0 (FAISS best match).
+        if self._ai_select_first:
+            self._ai_select_first = False
+            if self._loaded_results > 0 and not _did_restore:
+                self._select_source_row(0)
+                _did_restore = True
         # Keep _loading=True through both emits so loadMore cannot fire
         # prematurely during totalResultsChanged or loadedResultsChanged and
         # consume _pendingBrowseTarget before onLoadedResultsChanged handles it.
+        pending_browse_jump_id = self._pending_browse_jump_id
+        had_pending_browse_jump = pending_browse_jump_id != 0
+        if (
+            had_pending_browse_jump
+            and self._search_model.find_row_by_id(pending_browse_jump_id) < 0
+        ):
+            self._clear_details()
         self.totalResultsChanged.emit()
         self.loadedResultsChanged.emit()
         self._loading = False
         self._apply_format_counts(format_counts)
         self._load_year_counts()
         if self._loaded_results > 0:
-            if not _did_restore:
+            if not _did_restore and not had_pending_browse_jump:
                 row = (
                     self._current_result_row
                     if 0 <= self._current_result_row < self._loaded_results
@@ -1520,11 +1660,12 @@ class AppController(QObject):
                 self._select_source_row(row)
         else:
             self._clear_details()
-        QGuiApplication.restoreOverrideCursor()
-        self._is_searching = False
-        self.isSearchingChanged.emit()
+        self._search_shows_busy_ui = False
+        self._set_search_busy_ui(False)
 
     def _on_search_failed(self, error: str) -> None:
+        if self.sender() is self._ai_search_worker:
+            self._ai_search_worker = None
         old_worker = self._search_worker
         self._search_worker = None
         if old_worker is not None:
@@ -1534,15 +1675,15 @@ class AppController(QObject):
         self._search_model.set_rows([])
         self._total_results = 0
         self._loaded_results = 0
+        self._loaded_offset = 0
         self._loading = False
         self._checked_in_results_count = 0
         self.checkedCountChanged.emit()
         self.totalResultsChanged.emit()
         self.loadedResultsChanged.emit()
         self._clear_details()
-        QGuiApplication.restoreOverrideCursor()
-        self._is_searching = False
-        self.isSearchingChanged.emit()
+        self._search_shows_busy_ui = False
+        self._set_search_busy_ui(False)
 
     def _apply_format_counts(self, counts: list) -> None:
         """Update the available-formats property from a pre-fetched counts list."""
@@ -1584,15 +1725,24 @@ class AppController(QObject):
         """Mark the folder tree as stale; it will be rebuilt on next Browse tab visit."""
         self._folder_tree_dirty = True
 
+    def _start_folder_tree_worker(self, show_busy_ui: bool) -> None:
+        if self._repo is None or self._folder_tree_worker is not None:
+            return
+        self._folder_tree_worker_shows_busy_ui = show_busy_ui
+        if show_busy_ui:
+            self._is_searching = True
+            self.isSearchingChanged.emit()
+        self._folder_tree_worker = FolderTreeWorker(self._db_path, self._key)
+        self._folder_tree_worker.results_ready.connect(self._on_folder_tree_ready)
+        self._folder_tree_worker.failed.connect(self._on_folder_tree_failed)
+        self._folder_tree_worker.start()
+
     @Slot()
     def loadFolderTree(self) -> None:
-        """Load (or reload) the folder tree — called by QML when Browse tab is activated."""
+        """Load the folder tree in the background when Browse becomes visible."""
         if self._repo is None or not self._folder_tree_dirty:
             return
-        nodes = self._repo.get_folder_tree()
-        self._folder_tree = json.dumps(nodes)
-        self._folder_tree_dirty = False
-        self.folderTreeChanged.emit()
+        self._start_folder_tree_worker(show_busy_ui=False)
 
     def _load_folder_tree(self) -> None:
         if self._repo is None:
@@ -1609,51 +1759,143 @@ class AppController(QObject):
         the grey-out is actually visible (the worker thread keeps the
         event loop free for rendering).
         """
-        if self._repo is None or self._is_searching:
+        if self._repo is None or self._folder_tree_worker is not None:
             return
-        self._is_searching = True
-        self.isSearchingChanged.emit()
-        self._folder_tree_worker = FolderTreeWorker(self._db_path, self._key)
-        self._folder_tree_worker.results_ready.connect(self._on_folder_tree_ready)
-        self._folder_tree_worker.failed.connect(self._on_folder_tree_failed)
-        self._folder_tree_worker.start()
+        self._start_folder_tree_worker(show_busy_ui=True)
 
     def _on_folder_tree_ready(self, json_str: str) -> None:
         self._folder_tree_worker = None
         self._folder_tree = json_str
         self._folder_tree_dirty = False
-        self._is_searching = False
+        if self._folder_tree_worker_shows_busy_ui:
+            self._is_searching = False
+            self.isSearchingChanged.emit()
+            self._set_status(_("Folder list reloaded."))
+        self._folder_tree_worker_shows_busy_ui = False
         self.folderTreeChanged.emit()
-        self.isSearchingChanged.emit()
-        self._set_status(_("Folder list reloaded."))
 
     def _on_folder_tree_failed(self, error: str) -> None:
         self._folder_tree_worker = None
-        self._is_searching = False
-        self.isSearchingChanged.emit()
+        if self._folder_tree_worker_shows_busy_ui:
+            self._is_searching = False
+            self.isSearchingChanged.emit()
+        self._folder_tree_worker_shows_busy_ui = False
         _log.error("Folder tree reload failed: %s", error)
 
-    @Slot()
-    def loadMore(self) -> None:
-        if self._repo is None or self._loading or self._loaded_results >= self._total_results:
-            return
+    @Slot(result=bool)
+    def loadMore(self) -> bool:
+        if self._loading:
+            return False
+        if self._is_ai_search_mode:
+            if self._loaded_results >= self._total_results:
+                return False
+            next_page = self._ai_result_cache[
+                self._loaded_results : self._loaded_results + _PAGE_SIZE
+            ]
+            if not next_page:
+                return False
+            self._loading = True
+            self._search_model.append_rows(next_page)
+            self._loaded_results += len(next_page)
+            self.loadedResultsChanged.emit()
+            self._loading = False
+            return True
+        if self._loaded_offset + self._loaded_results >= self._total_results:
+            return False
+        if self._db_path is None:
+            return False
+        page_size = _PAGE_SIZE
+        if self._pending_browse_jump_id:
+            page_size = _BROWSE_JUMP_PAGE_SIZE
         self._loading = True
-        rows = self._repo.search_images(
-            self._query_text, _PAGE_SIZE, self._loaded_results,
-            sort_by=self._sort_by, ext_filter=self._ext_filter,
+        self._page_load_direction = "append"
+        worker = SearchPageWorker(
+            self._db_path,
+            self._key,
+            query=self._query_text,
+            page_size=page_size,
+            offset=self._loaded_offset + self._loaded_results,
+            sort_by=self._sort_by,
+            ext_filter=self._ext_filter,
             path_filter=self._current_path_filter(),
             restrict_to_enabled_folders=(self._folder_repo is not None),
             marked_only=self._checked_only_filter_active,
+            serial=self._search_serial,
             date_from=self._date_from,
             date_to=self._date_to,
         )
+        worker.results_ready.connect(self._on_load_more_finished)
+        worker.failed.connect(self._on_load_more_failed)
+        worker.finished.connect(lambda: self._finishing_search_workers.discard(worker))
+        self._load_more_worker = worker
+        self._finishing_search_workers.add(worker)
+        worker.start()
+        return True
+
+    @Slot(result=bool)
+    def loadPrevious(self) -> bool:
+        if self._loading or self._is_ai_search_mode:
+            return False
+        if self._loaded_offset <= 0 or self._db_path is None:
+            return False
+        page_size = min(_PAGE_SIZE, self._loaded_offset)
+        if page_size <= 0:
+            return False
+        self._loading = True
+        self._page_load_direction = "prepend"
+        worker = SearchPageWorker(
+            self._db_path,
+            self._key,
+            query=self._query_text,
+            page_size=page_size,
+            offset=self._loaded_offset - page_size,
+            sort_by=self._sort_by,
+            ext_filter=self._ext_filter,
+            path_filter=self._current_path_filter(),
+            restrict_to_enabled_folders=(self._folder_repo is not None),
+            marked_only=self._checked_only_filter_active,
+            serial=self._search_serial,
+            date_from=self._date_from,
+            date_to=self._date_to,
+        )
+        worker.results_ready.connect(self._on_load_more_finished)
+        worker.failed.connect(self._on_load_more_failed)
+        worker.finished.connect(lambda: self._finishing_search_workers.discard(worker))
+        self._load_more_worker = worker
+        self._finishing_search_workers.add(worker)
+        worker.start()
+        return True
+
+    def _on_load_more_finished(self, rows: list, serial: int) -> None:
+        self._load_more_worker = None
+        if serial != self._search_serial:
+            self._loading = False
+            return
         results = [
-            SearchResult(image_id=r[0], path=r[1], filename=r[2], metadata_json=r[3], size=r[4], mtime=r[5])
+            SearchResult(
+                image_id=r[0], path=r[1], filename=r[2], metadata_json=r[3],
+                size=r[4], mtime=r[5],
+            )
             for r in rows
         ]
-        self._search_model.append_rows(results)
-        self._loaded_results += len(results)
+        if self._page_load_direction == "prepend":
+            inserted = len(results)
+            self._search_model.prepend_rows(results)
+            self._loaded_offset = max(0, self._loaded_offset - inserted)
+            self._loaded_results += inserted
+            if self._current_result_row >= 0:
+                self._current_result_row += inserted
+                self.currentResultRowChanged.emit()
+                self.currentProxyResultRowChanged.emit()
+        else:
+            self._search_model.append_rows(results)
+            self._loaded_results += len(results)
         self.loadedResultsChanged.emit()
+        self._loading = False
+
+    def _on_load_more_failed(self, error: str) -> None:
+        self._load_more_worker = None
+        _log.error("Load-more failed: %s", error)
         self._loading = False
 
     @Slot(int)
@@ -1674,6 +1916,8 @@ class AppController(QObject):
         for source_row in range(n):
             if self._search_model.get_image_id(source_row) == image_id:
                 self._select_source_row(source_row)
+                if self._pending_browse_jump_id == image_id:
+                    self._pending_browse_jump_id = 0
                 pr = (
                     self._filter_proxy.proxy_row_for(source_row)
                     if self._filter_proxy
@@ -2229,6 +2473,111 @@ class AppController(QObject):
         if self._preview_worker and self._preview_worker.isRunning():
             self._preview_worker.cancel()
 
+    # ── AI-scan ───────────────────────────────────────────────────────────────
+
+    @Slot(int)
+    def aiScanFolder(self, folder_id: int) -> None:
+        """Build the CLIP vector index for every image in *folder_id*.
+
+        No-op while another AI scan is already running — the user must cancel
+        it first.  Progress is reported via the aiScanCurrent / aiScanTotal /
+        aiScanCurrentFile properties.
+        """
+        if self._folder_repo is None or self._is_ai_scanning:
+            return
+        folder = self._folder_repo.get_by_id(folder_id)
+        if folder is None:
+            return
+        self._ai_scan_worker = AiScanWorker(
+            self._db_path,
+            folder_id,
+            folder.path,
+            key=self._key,
+        )
+        self._ai_scan_worker.progress.connect(self._on_ai_scan_progress)
+        self._ai_scan_worker.finished.connect(self._on_ai_scan_finished)
+        self._ai_scan_worker.failed.connect(self._on_ai_scan_failed)
+        self._ai_scan_worker.canceled.connect(self._on_ai_scan_canceled)
+        self._is_ai_scanning = True
+        self._ai_scan_folder_id = folder_id
+        self._ai_scan_current = 0
+        self._ai_scan_total = 0
+        self._ai_scan_current_file = ""
+        self.isAiScanningChanged.emit()
+        self.aiScanFolderIdChanged.emit()
+        self.aiScanCurrentChanged.emit()
+        self.aiScanTotalChanged.emit()
+        self.aiScanCurrentFileChanged.emit()
+        self._ai_scan_worker.start(QThread.Priority.LowPriority)
+
+    @Slot()
+    def cancelAiScan(self) -> None:
+        if self._ai_scan_worker and self._ai_scan_worker.isRunning():
+            self._ai_scan_worker.cancel()
+
+    @Slot(bool)
+    def setAiSearchMode(self, enabled: bool) -> None:
+        if self._is_ai_search_mode == enabled:
+            return
+        self._is_ai_search_mode = enabled
+        self.isAiSearchModeChanged.emit()
+
+    @Slot(str, str)
+    def aiSearch(self, query: str, precision: str = "normal") -> None:
+        """Kick off a CLIP vector search with *query* text."""
+        query = query.strip()
+        if not query or self._db_path is None:
+            return
+        self._last_ai_query = query
+        self._last_ai_precision = precision
+        self._ai_select_first = True
+        self._start_ai_search_worker(query, precision)
+
+    def _start_ai_search_worker(self, query: str, precision: str) -> None:
+        """Internal helper: create and start an AiSearchWorker."""
+        self._search_serial += 1
+        serial = self._search_serial
+        worker = AiSearchWorker(self._db_path, self._key, query, serial, precision=precision)
+        worker.results_ready.connect(self._on_search_finished)
+        worker.failed.connect(self._on_search_failed)
+        worker.finished.connect(lambda: self._finishing_search_workers.discard(worker))
+        self._ai_search_worker = worker
+        self._finishing_search_workers.add(worker)
+        self._search_shows_busy_ui = True
+        self._set_search_busy_ui(True)
+        worker.start()
+
+    def _on_ai_scan_progress(self, done: int, total: int, path: str) -> None:
+        self._ai_scan_current = done
+        self._ai_scan_total = total
+        self._ai_scan_current_file = path
+        self.aiScanCurrentChanged.emit()
+        self.aiScanTotalChanged.emit()
+        self.aiScanCurrentFileChanged.emit()
+
+    def _clear_ai_scan_state(self) -> None:
+        self._is_ai_scanning = False
+        self._ai_scan_folder_id = 0
+        self.isAiScanningChanged.emit()
+        self.aiScanFolderIdChanged.emit()
+
+    def _on_ai_scan_finished(self, indexed: int, errors: int) -> None:
+        self._clear_ai_scan_state()
+        msg = _("AI-Scan complete: {n} image(s) vectorised.").format(n=indexed)
+        if errors:
+            msg += " " + _("{n} file(s) could not be processed.").format(n=errors)
+        self._set_status(msg)
+
+    def _on_ai_scan_failed(self, error: str) -> None:
+        self._clear_ai_scan_state()
+        self._set_status(_("AI-Scan failed: {error}").format(error=error))
+
+    def _on_ai_scan_canceled(self, indexed: int) -> None:
+        self._clear_ai_scan_state()
+        self._set_status(
+            _("AI-Scan canceled ({n} image(s) vectorised so far).").format(n=indexed)
+        )
+
     def _on_preview_progress(self, done: int, total: int, path: str) -> None:
         self._preview_current = done
         self._preview_total = total
@@ -2620,6 +2969,7 @@ class AppController(QObject):
         self.selectedImageSourceChanged.emit()
         self.selectedThumbSourceChanged.emit()
         self.currentResultRowChanged.emit()
+        self.currentProxyResultRowChanged.emit()
         if self._selected_has_preview:
             self._selected_has_preview = False
             self.selectedHasPreviewChanged.emit()

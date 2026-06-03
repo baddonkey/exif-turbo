@@ -55,6 +55,7 @@ class SettingsModel(QObject):
     retranslateRequested = Signal()
     previewMaxSizeChanged = Signal()
     sortByChanged = Signal()
+    aiEnabledChanged = Signal()
 
     def __init__(self, settings_path: Path, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -65,6 +66,7 @@ class SettingsModel(QObject):
         self._language: str = "en"
         self._preview_max_size: int = _DEFAULT_PREVIEW_SIZE
         self._sort_by: str = _DEFAULT_SORT
+        self._ai_enabled: bool = True
         self._load()
 
     # ── Properties ───────────────────────────────────────────────────────────
@@ -92,6 +94,25 @@ class SettingsModel(QObject):
     @Property(bool, constant=True)
     def workersLocked(self) -> bool:
         return False
+
+    # ── AI features ───────────────────────────────────────────────────────────
+
+    @Property(bool, notify=aiEnabledChanged)
+    def aiEnabled(self) -> bool:
+        return self._ai_enabled
+
+    @property
+    def ai_enabled(self) -> bool:
+        """Python-only accessor for AppController."""
+        return self._ai_enabled
+
+    @Slot(bool)
+    def setAiEnabled(self, value: bool) -> None:
+        if self._ai_enabled == value:
+            return
+        self._ai_enabled = value
+        self.aiEnabledChanged.emit()
+        self._save()
 
     @Property("QVariantList", notify=blacklistChanged)
     def blacklist(self) -> List[str]:
@@ -229,6 +250,8 @@ class SettingsModel(QObject):
             if isinstance(data.get("language"), str) and data["language"] in {c for c, _ in available_languages()}:
                 self._language = data["language"]
                 apply_language(self._language)
+            if isinstance(data.get("aiEnabled"), bool):
+                self._ai_enabled = data["aiEnabled"]
         except Exception:
             pass  # corrupt/missing file — use defaults
 
@@ -243,6 +266,7 @@ class SettingsModel(QObject):
                         "previewMaxSize": self._preview_max_size,
                         "sortBy": self._sort_by,
                         "language": self._language,
+                        "aiEnabled": self._ai_enabled,
                     },
                     indent=2,
                 ),

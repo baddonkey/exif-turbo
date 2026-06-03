@@ -58,6 +58,7 @@ coverage.xml
 *.py.cover
 .hypothesis/
 .pytest_cache/
+.pytest-*.xml
 cover/
 
 # Translations
@@ -226,3 +227,5 @@ data/index.db
 data/**
 tests/.DS_Store
 .DS_Store
+.tmp*
+tmp_diag_*/
