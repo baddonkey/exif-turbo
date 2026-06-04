@@ -31,6 +31,7 @@ dnf install -y -q \
     libXcomposite libXdamage libXrandr libxshmfence
 python3.11 -m venv /build-venv
 . /build-venv/bin/activate
+pip install --quiet --index-url https://download.pytorch.org/whl/cpu torch torchvision
 pip install --quiet -e '.[build]'
 python scripts/build_linux.py --rpm-only
 """

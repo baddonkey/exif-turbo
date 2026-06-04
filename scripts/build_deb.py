@@ -33,6 +33,7 @@ apt-get install -y -q \
     libxcomposite1 libxdamage1 libxrandr2 libxshmfence1 libtiff6
 python3 -m venv /build-venv
 . /build-venv/bin/activate
+pip install --quiet --index-url https://download.pytorch.org/whl/cpu torch torchvision
 pip install --quiet -e '.[build]'
 python scripts/build_linux.py --deb-only
 """
