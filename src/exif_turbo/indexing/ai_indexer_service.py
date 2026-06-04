@@ -15,15 +15,21 @@ Usage::
 from __future__ import annotations
 
 import gzip
+from io import BytesIO
 import logging
 from pathlib import Path
 import threading
-from typing import Callable, List, Optional, Tuple
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple
 import urllib.request
 
 import numpy as np
 
 from ..data.ai_vector_repository import AiVectorRepository
+from ..utils.preview_cache import preview_cache_path
+from ..utils.thumb_crypto import ThumbCrypto
+
+if TYPE_CHECKING:
+    from PIL import Image
 
 _log = logging.getLogger(__name__)
 
@@ -53,6 +59,9 @@ class AiIndexerService:
         self,
         vector_repo: AiVectorRepository,
         cache_dir: Path | None = None,
+        *,
+        preview_cache_dir: Path | None = None,
+        preview_cache_key: str = "",
     ) -> None:
         self._repo = vector_repo
         self._cache_dir = (
@@ -60,6 +69,8 @@ class AiIndexerService:
             if cache_dir is not None
             else vector_repo.storage_dir / _OPEN_CLIP_CACHE_DIRNAME
         )
+        self._preview_cache_dir = preview_cache_dir
+        self._preview_cache_key = preview_cache_key
         # Model loaded lazily on first call to build_index.
         self._model = None
         self._preprocess = None
@@ -224,7 +235,6 @@ class AiIndexerService:
     ) -> Tuple["np.ndarray", int, List[str]]:
         """Return (embeddings, error_count, successful_paths) for *paths*."""
         import torch  # noqa: PLC0415
-        from PIL import Image  # noqa: PLC0415
 
         tensors = []
         successful: List[str] = []
@@ -232,7 +242,7 @@ class AiIndexerService:
 
         for path in paths:
             try:
-                img = Image.open(path).convert("RGB")
+                img = self._load_rgb_image(path)
                 tensors.append(self._preprocess(img))  # type: ignore[misc]
                 successful.append(path)
             except Exception as exc:  # noqa: BLE001
@@ -250,6 +260,39 @@ class AiIndexerService:
         norms = np.linalg.norm(vecs_np, axis=1, keepdims=True)
         vecs_np = vecs_np / np.where(norms > 0, norms, 1.0)
         return vecs_np.astype(np.float32), errors, successful
+
+    def _load_rgb_image(self, path: str) -> "Image.Image":
+        from PIL import Image  # noqa: PLC0415
+
+        preview = self._load_cached_preview(path)
+        if preview is not None:
+            return preview
+        with Image.open(path) as img:
+            return img.convert("RGB")
+
+    def _load_cached_preview(self, path: str) -> "Image.Image | None":
+        from PIL import Image  # noqa: PLC0415
+
+        if self._preview_cache_dir is None:
+            return None
+
+        cache_path = preview_cache_path(path, self._preview_cache_dir)
+        try:
+            if self._preview_cache_key:
+                enc_path = cache_path.with_suffix(".jpg.enc")
+                if enc_path.exists():
+                    crypto = ThumbCrypto(self._preview_cache_key, self._preview_cache_dir)
+                    data = crypto.decrypt(enc_path.read_bytes())
+                    with Image.open(BytesIO(data)) as img:
+                        return img.convert("RGB")
+
+            if cache_path.exists():
+                with Image.open(cache_path) as img:
+                    return img.convert("RGB")
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("AI-Scan: could not read cached preview for %s: %s", path, exc)
+
+        return None
 
 
 def image_paths_for_folder(

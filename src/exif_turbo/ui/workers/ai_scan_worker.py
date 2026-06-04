@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
-from ...config import ai_id_map_path, ai_index_path
+from ...config import ai_id_map_path, ai_index_path, thumb_cache_dir
 from ...data.ai_vector_repository import AiVectorRepository
 from ...data.image_index_repository import ImageIndexRepository
 from ...indexing.ai_indexer_service import AiIndexerService, image_paths_for_folder
@@ -63,7 +63,11 @@ class AiScanWorker(QThread):
             vector_repo.load()
 
             # 3. Run the CLIP encoder.
-            service = AiIndexerService(vector_repo)
+            service = AiIndexerService(
+                vector_repo,
+                preview_cache_dir=thumb_cache_dir(self._db_path),
+                preview_cache_key=self._key,
+            )
             indexed_count = 0
 
             def _on_progress(done: int, total: int, path: str) -> None:

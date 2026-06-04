@@ -4,6 +4,7 @@ from __future__ import annotations
 import builtins
 from contextlib import nullcontext
 import gzip
+from io import BytesIO
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -15,6 +16,8 @@ import pytest
 
 from exif_turbo.data.ai_vector_repository import AiVectorRepository
 from exif_turbo.indexing.ai_indexer_service import AiIndexerService
+from exif_turbo.utils.preview_cache import preview_cache_path
+from exif_turbo.utils.thumb_crypto import ThumbCrypto
 
 
 # ── helpers / fixtures ────────────────────────────────────────────────────────
@@ -31,6 +34,13 @@ def _make_repo(tmp_path: Path) -> AiVectorRepository:
     )
     repo.load()
     return repo
+
+
+def _write_jpeg(path: Path, size: tuple[int, int]) -> None:
+    from PIL import Image
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", size, color=(64, 96, 128)).save(path, "JPEG")
 
 
 class _FakeTensor:
@@ -146,6 +156,117 @@ def test_ai_indexer_service_build_index_empty_list_returns_zero(
 
     # Assert
     assert (indexed, errors) == (0, 0)
+
+
+@pytest.mark.parametrize(
+    ("encrypted", "key"),
+    [(False, ""), (True, "secret")],
+)
+def test_ai_indexer_service_build_index_prefers_cached_preview_when_available(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    encrypted: bool,
+    key: str,
+) -> None:
+    # Arrange
+    import torch
+
+    repo = _make_repo(tmp_path)
+    cache_dir = tmp_path / "thumbs"
+    source_path = tmp_path / "photos" / "source.jpg"
+    _write_jpeg(source_path, (40, 25))
+
+    preview_path = preview_cache_path(str(source_path), cache_dir)
+    preview_path.parent.mkdir(parents=True, exist_ok=True)
+
+    preview_bytes = BytesIO()
+    _write_jpeg(tmp_path / "preview-source.jpg", (9, 5))
+    with open(tmp_path / "preview-source.jpg", "rb") as stream:
+        preview_bytes.write(stream.read())
+    if encrypted:
+        crypto = ThumbCrypto(key, cache_dir)
+        preview_path.with_suffix(".jpg.enc").write_bytes(
+            crypto.encrypt(preview_bytes.getvalue())
+        )
+    else:
+        preview_path.write_bytes(preview_bytes.getvalue())
+
+    seen_sizes: list[tuple[int, int]] = []
+
+    def _fake_preprocess(img):  # type: ignore[no-untyped-def]
+        seen_sizes.append(img.size)
+        return torch.zeros(3, 224, 224)
+
+    fake_model = MagicMock()
+    fake_model.encode_image.return_value = torch.from_numpy(
+        np.stack([_fake_vec()])
+    ).float()
+
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_model",
+        fake_model,
+    )
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_preprocess",
+        _fake_preprocess,
+    )
+
+    service = AiIndexerService(
+        repo,
+        preview_cache_dir=cache_dir,
+        preview_cache_key=key,
+    )
+
+    # Act
+    indexed, errors = service.build_index([str(source_path)])
+
+    # Assert
+    assert (indexed, errors, seen_sizes) == (1, 0, [(9, 5)])
+
+
+def test_ai_indexer_service_build_index_falls_back_to_original_when_preview_is_invalid(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    import torch
+
+    repo = _make_repo(tmp_path)
+    cache_dir = tmp_path / "thumbs"
+    source_path = tmp_path / "photos" / "source.jpg"
+    _write_jpeg(source_path, (40, 25))
+
+    preview_path = preview_cache_path(str(source_path), cache_dir)
+    preview_path.parent.mkdir(parents=True, exist_ok=True)
+    preview_path.write_bytes(b"not-a-jpeg")
+
+    seen_sizes: list[tuple[int, int]] = []
+
+    def _fake_preprocess(img):  # type: ignore[no-untyped-def]
+        seen_sizes.append(img.size)
+        return torch.zeros(3, 224, 224)
+
+    fake_model = MagicMock()
+    fake_model.encode_image.return_value = torch.from_numpy(
+        np.stack([_fake_vec()])
+    ).float()
+
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_model",
+        fake_model,
+    )
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_preprocess",
+        _fake_preprocess,
+    )
+
+    service = AiIndexerService(repo, preview_cache_dir=cache_dir)
+
+    # Act
+    indexed, errors = service.build_index([str(source_path)])
+
+    # Assert
+    assert (indexed, errors, seen_sizes) == (1, 0, [(40, 25)])
 
 
 # ── cancel ────────────────────────────────────────────────────────────────────
