@@ -87,6 +87,7 @@ class AppController(QObject):
     isAiSearchModeChanged = Signal()
     aiEnabledChanged = Signal()
     aiScanFolderIdChanged = Signal()
+    aiScanIsFullRescanChanged = Signal()
     aiScanCurrentChanged = Signal()
     aiScanTotalChanged = Signal()
     aiScanCurrentFileChanged = Signal()
@@ -248,6 +249,7 @@ class AppController(QObject):
         # All AI result rows held in memory so we can page them without SQL.
         self._ai_result_cache: list[SearchResult] = []
         self._ai_scan_folder_id: int = 0
+        self._ai_scan_is_full_rescan: bool = False
         self._ai_scan_current: int = 0
         self._ai_scan_total: int = 0
         self._ai_scan_current_file: str = ""
@@ -389,6 +391,10 @@ class AppController(QObject):
     @Property(int, notify=aiScanFolderIdChanged)
     def aiScanFolderId(self) -> int:
         return self._ai_scan_folder_id
+
+    @Property(bool, notify=aiScanIsFullRescanChanged)
+    def aiScanIsFullRescan(self) -> bool:
+        return self._ai_scan_is_full_rescan
 
     @Property(int, notify=aiScanCurrentChanged)
     def aiScanCurrent(self) -> int:
@@ -2477,12 +2483,20 @@ class AppController(QObject):
 
     @Slot(int)
     def aiScanFolder(self, folder_id: int) -> None:
-        """Build the CLIP vector index for every image in *folder_id*.
+        """Build CLIP vectors for images in *folder_id* that are not indexed yet.
 
         No-op while another AI scan is already running — the user must cancel
         it first.  Progress is reported via the aiScanCurrent / aiScanTotal /
         aiScanCurrentFile properties.
         """
+        self._start_ai_scan(folder_id, force_rebuild=False)
+
+    @Slot(int)
+    def aiFullRescanFolder(self, folder_id: int) -> None:
+        """Rebuild the CLIP vector index for every image in *folder_id*."""
+        self._start_ai_scan(folder_id, force_rebuild=True)
+
+    def _start_ai_scan(self, folder_id: int, *, force_rebuild: bool) -> None:
         if self._folder_repo is None or self._is_ai_scanning:
             return
         folder = self._folder_repo.get_by_id(folder_id)
@@ -2493,6 +2507,7 @@ class AppController(QObject):
             folder_id,
             folder.path,
             key=self._key,
+            force_rebuild=force_rebuild,
         )
         self._ai_scan_worker.progress.connect(self._on_ai_scan_progress)
         self._ai_scan_worker.finished.connect(self._on_ai_scan_finished)
@@ -2500,11 +2515,13 @@ class AppController(QObject):
         self._ai_scan_worker.canceled.connect(self._on_ai_scan_canceled)
         self._is_ai_scanning = True
         self._ai_scan_folder_id = folder_id
+        self._ai_scan_is_full_rescan = force_rebuild
         self._ai_scan_current = 0
         self._ai_scan_total = 0
         self._ai_scan_current_file = ""
         self.isAiScanningChanged.emit()
         self.aiScanFolderIdChanged.emit()
+        self.aiScanIsFullRescanChanged.emit()
         self.aiScanCurrentChanged.emit()
         self.aiScanTotalChanged.emit()
         self.aiScanCurrentFileChanged.emit()
@@ -2558,25 +2575,41 @@ class AppController(QObject):
     def _clear_ai_scan_state(self) -> None:
         self._is_ai_scanning = False
         self._ai_scan_folder_id = 0
+        self._ai_scan_is_full_rescan = False
         self.isAiScanningChanged.emit()
         self.aiScanFolderIdChanged.emit()
+        self.aiScanIsFullRescanChanged.emit()
 
     def _on_ai_scan_finished(self, indexed: int, errors: int) -> None:
+        was_full_rescan = self._ai_scan_is_full_rescan
         self._clear_ai_scan_state()
-        msg = _("AI-Scan complete: {n} image(s) vectorised.").format(n=indexed)
+        if was_full_rescan:
+            msg = _("AI full rescan complete: {n} image(s) vectorised.").format(n=indexed)
+        else:
+            msg = _("AI-Scan complete: {n} image(s) vectorised.").format(n=indexed)
         if errors:
             msg += " " + _("{n} file(s) could not be processed.").format(n=errors)
         self._set_status(msg)
 
     def _on_ai_scan_failed(self, error: str) -> None:
+        was_full_rescan = self._ai_scan_is_full_rescan
         self._clear_ai_scan_state()
-        self._set_status(_("AI-Scan failed: {error}").format(error=error))
+        if was_full_rescan:
+            self._set_status(_("AI full rescan failed: {error}").format(error=error))
+        else:
+            self._set_status(_("AI-Scan failed: {error}").format(error=error))
 
     def _on_ai_scan_canceled(self, indexed: int) -> None:
+        was_full_rescan = self._ai_scan_is_full_rescan
         self._clear_ai_scan_state()
-        self._set_status(
-            _("AI-Scan canceled ({n} image(s) vectorised so far).").format(n=indexed)
-        )
+        if was_full_rescan:
+            self._set_status(
+                _("AI full rescan canceled ({n} image(s) vectorised so far).").format(n=indexed)
+            )
+        else:
+            self._set_status(
+                _("AI-Scan canceled ({n} image(s) vectorised so far).").format(n=indexed)
+            )
 
     def _on_preview_progress(self, done: int, total: int, path: str) -> None:
         self._preview_current = done

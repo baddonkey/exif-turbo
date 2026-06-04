@@ -10,6 +10,7 @@ Run with:
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Generator
 
 import pytest
@@ -279,6 +280,72 @@ def test_app_controller_default_ai_disabled(
     # Assert
     assert settings_model.aiEnabled is False
     assert controller.aiEnabled is False
+
+    controller.close()
+
+
+def test_app_controller_ai_full_rescan_starts_force_scan(tmp_path: Path) -> None:
+    # Arrange
+    search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
+    controller = AppController(
+        tmp_path / "app.db",
+        search_model,
+        ExifListModel(),
+        FolderListModel(),
+    )
+    controller._folder_repo = SimpleNamespace(
+        get_by_id=lambda folder_id: SimpleNamespace(id=folder_id, path="C:/photos"),
+        close=lambda: None,
+    )
+
+    class _FakeSignal:
+        def connect(self, callback) -> None:  # type: ignore[no-untyped-def]
+            self._callback = callback
+
+    class _FakeAiScanWorker:
+        instances: list["_FakeAiScanWorker"] = []
+
+        def __init__(self, db_path, folder_id, folder_path, key="", *, force_rebuild=False):  # type: ignore[no-untyped-def]
+            self.db_path = db_path
+            self.folder_id = folder_id
+            self.folder_path = folder_path
+            self.key = key
+            self.force_rebuild = force_rebuild
+            self.progress = _FakeSignal()
+            self.finished = _FakeSignal()
+            self.failed = _FakeSignal()
+            self.canceled = _FakeSignal()
+            self.started = False
+            self.__class__.instances.append(self)
+
+        def start(self, priority) -> None:  # type: ignore[no-untyped-def]
+            self.started = True
+
+        def isRunning(self) -> bool:
+            return False
+
+        def cancel(self) -> None:
+            return None
+
+    import exif_turbo.ui.view_models.app_controller as _mod
+
+    original_worker = _mod.AiScanWorker
+    _mod.AiScanWorker = _FakeAiScanWorker  # type: ignore[assignment]
+    try:
+        # Act
+        controller.aiFullRescanFolder(7)
+    finally:
+        _mod.AiScanWorker = original_worker  # type: ignore[assignment]
+
+    # Assert
+    assert len(_FakeAiScanWorker.instances) == 1
+    worker = _FakeAiScanWorker.instances[0]
+    assert worker.folder_id == 7
+    assert worker.force_rebuild is True
+    assert worker.started is True
+    assert controller.isAiScanning is True
+    assert controller.aiScanFolderId == 7
+    assert controller.aiScanIsFullRescan is True
 
     controller.close()
 

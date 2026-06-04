@@ -33,12 +33,15 @@ class AiScanWorker(QThread):
         folder_id: int,
         folder_path: str,
         key: str = "",
+        *,
+        force_rebuild: bool = False,
     ) -> None:
         super().__init__()
         self._db_path = db_path
         self._folder_id = folder_id
         self._folder_path = folder_path
         self._key = key
+        self._force_rebuild = force_rebuild
         self._cancel_event = threading.Event()
 
     def cancel(self) -> None:
@@ -61,6 +64,8 @@ class AiScanWorker(QThread):
             map_path = ai_id_map_path(self._db_path)
             vector_repo = AiVectorRepository(idx_path, map_path)
             vector_repo.load()
+            if self._force_rebuild:
+                vector_repo.remove_folder(self._folder_path)
 
             # 3. Run the CLIP encoder.
             service = AiIndexerService(

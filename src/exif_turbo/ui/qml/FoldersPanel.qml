@@ -336,22 +336,60 @@ Item {
                     Button {
                         flat: true
                         visible: controller && controller.aiEnabled
-                        text: (controller && controller.isAiScanning && controller.aiScanFolderId === model.folderId)
+                        text: (controller && controller.isAiScanning
+                               && controller.aiScanFolderId === model.folderId
+                               && !controller.aiScanIsFullRescan)
                               ? qsTr("Cancel AI-Scan")
                               : qsTr("AI-Scan")
                         font.pixelSize: 11
                         implicitHeight: 30
                         enabled: model.enabled && model.imageCount > 0 &&
-                                 (!controller || !controller.isAiScanning || controller.aiScanFolderId === model.folderId)
-                        ToolTip.text: (controller && controller.isAiScanning && controller.aiScanFolderId === model.folderId)
+                                 (!controller || !controller.isAiScanning
+                                  || (controller.aiScanFolderId === model.folderId
+                                      && !controller.aiScanIsFullRescan))
+                        ToolTip.text: (controller && controller.isAiScanning
+                                       && controller.aiScanFolderId === model.folderId
+                                       && !controller.aiScanIsFullRescan)
                                       ? qsTr("Cancel the running AI-Scan")
-                                      : qsTr("Build CLIP vector embeddings for this folder (enables AI search)")
+                                      : qsTr("Build missing CLIP vector embeddings for this folder (enables AI search)")
                         ToolTip.visible: hovered
                         onClicked: {
-                            if (controller.isAiScanning && controller.aiScanFolderId === model.folderId)
+                            if (controller.isAiScanning
+                                    && controller.aiScanFolderId === model.folderId
+                                    && !controller.aiScanIsFullRescan)
                                 controller.cancelAiScan()
                             else
                                 controller.aiScanFolder(model.folderId)
+                        }
+                    }
+
+                    Button {
+                        flat: true
+                        visible: controller && controller.aiEnabled
+                        text: (controller && controller.isAiScanning
+                               && controller.aiScanFolderId === model.folderId
+                               && controller.aiScanIsFullRescan)
+                              ? qsTr("Cancel AI Full Rescan")
+                              : qsTr("AI Full Rescan")
+                        font.pixelSize: 11
+                        implicitHeight: 30
+                        enabled: model.enabled && model.imageCount > 0 &&
+                                 (!controller || !controller.isAiScanning
+                                  || (controller.aiScanFolderId === model.folderId
+                                      && controller.aiScanIsFullRescan))
+                        ToolTip.text: (controller && controller.isAiScanning
+                                       && controller.aiScanFolderId === model.folderId
+                                       && controller.aiScanIsFullRescan)
+                                      ? qsTr("Cancel the running AI full rescan")
+                                      : qsTr("Rebuild every CLIP vector embedding for this folder from scratch")
+                        ToolTip.visible: hovered
+                        onClicked: {
+                            if (controller.isAiScanning
+                                    && controller.aiScanFolderId === model.folderId
+                                    && controller.aiScanIsFullRescan)
+                                controller.cancelAiScan()
+                            else
+                                controller.aiFullRescanFolder(model.folderId)
                         }
                     }
 
