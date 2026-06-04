@@ -1286,6 +1286,7 @@ ApplicationWindow {
 
                                 TextInput {
                                     id: searchField
+                                    objectName: "searchField"
                                     anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: text.length > 0 ? 52 : 32; verticalCenter: parent.verticalCenter }
                                     font.pixelSize: 13
                                     color: Material.foreground
@@ -1450,7 +1451,7 @@ ApplicationWindow {
                                 text: qsTr("Folder(s)")
                                 font.pixelSize: 11
                                 opacity: 0.6
-                                visible: root._indexedFolderCount > 1 && !root._aiSearchMode
+                                visible: root._indexedFolderCount > 1
                             }
 
                             // Checked-only filter chip
@@ -1497,7 +1498,7 @@ ApplicationWindow {
                             ComboBox {
                                 id: folderMultiCombo
                                 objectName: "folderMultiCombo"
-                                visible: root._indexedFolderCount > 1 && !root._aiSearchMode
+                                visible: root._indexedFolderCount > 1
                                 implicitHeight: 28
                                 implicitWidth: 170
                                 font.pixelSize: 11

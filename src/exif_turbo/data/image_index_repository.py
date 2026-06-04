@@ -1093,8 +1093,18 @@ class ImageIndexRepository:
                 result[row[0]] = (row[1], row[2])
         return result
 
+    def _has_indexed_folders_table(self) -> bool:
+        cur = self.conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='indexed_folders'"
+        )
+        return cur.fetchone() is not None
+
     def get_images_by_paths(
-        self, paths: List[str]
+        self,
+        paths: List[str],
+        *,
+        path_filter: List[str] | None = None,
+        restrict_to_enabled_folders: bool = False,
     ) -> List[Tuple[int, str, str, str, int, float]]:
         """Fetch full image rows for a list of *paths*, preserving order.
 
@@ -1107,15 +1117,46 @@ class ImageIndexRepository:
         if not paths:
             return []
         placeholders = ",".join("?" * len(paths))
+        path_clause, path_args = self._build_path_clause(path_filter)
+        enabled_clause = (
+            f" {self._ENABLED_CLAUSE}"
+            if restrict_to_enabled_folders and self._has_indexed_folders_table()
+            else ""
+        )
         cur = self.conn.execute(
             f"SELECT id, path, filename, metadata_json, size, mtime "
-            f"FROM images WHERE path IN ({placeholders})",
-            paths,
+            f"FROM images WHERE path IN ({placeholders}) {path_clause}{enabled_clause}",
+            tuple(paths) + path_args,
         )
         by_path: dict[str, Tuple[int, str, str, str, int, float]] = {}
         for row in cur.fetchall():
             by_path[row[1]] = row
         return [by_path[p] for p in paths if p in by_path]
+
+    def get_filtered_paths(
+        self,
+        *,
+        path_filter: List[str] | None = None,
+        restrict_to_enabled_folders: bool = False,
+    ) -> set[str]:
+        """Return image paths matching the current folder-related filters."""
+        path_clause, path_args = self._build_path_clause(path_filter)
+        enabled_clause = (
+            f" {self._ENABLED_CLAUSE}"
+            if restrict_to_enabled_folders and self._has_indexed_folders_table()
+            else ""
+        )
+        cur = self.conn.execute(
+            f"SELECT path FROM images WHERE 1=1 {path_clause}{enabled_clause}",
+            path_args,
+        )
+        result: set[str] = set()
+        while True:
+            rows = cur.fetchmany(2000)
+            if not rows:
+                break
+            result.update(row[0] for row in rows)
+        return result
 
     def _get_pixel_counts_query(
         self, sql: str, params: tuple = ()

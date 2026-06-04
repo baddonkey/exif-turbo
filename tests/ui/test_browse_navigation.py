@@ -179,6 +179,65 @@ class TestSelectResultById:
 
 
 class TestBrowseNavigation:
+    def test_ai_search_folder_filter_change_reruns_last_ai_search(
+        self,
+        qtbot: QtBot,
+        controller_with_images: tuple[AppController, SearchListModel, Path, Path],
+    ) -> None:
+        # Arrange
+        controller, _, _, folder_b = controller_with_images
+        controller.setAiSearchMode(True)
+
+        with patch("exif_turbo.ui.view_models.app_controller.AiSearchWorker.run", autospec=True) as mocked_run:
+            def _emit_initial_results(worker: object) -> None:
+                worker.results_ready.emit([], 0, [], worker._serial)  # type: ignore[attr-defined]
+
+            mocked_run.side_effect = _emit_initial_results
+            with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
+                controller.aiSearch("boat", "normal")
+        qtbot.wait(_PAUSE_MS)
+        assert controller._last_ai_query == "boat"  # type: ignore[attr-defined]
+
+        # Act
+        seen_queries: list[str] = []
+        with patch("exif_turbo.ui.view_models.app_controller.AiSearchWorker.run", autospec=True) as mocked_run:
+            def _emit_filtered_results(worker: object) -> None:
+                seen_queries.append(worker._query_text)  # type: ignore[attr-defined]
+                worker.results_ready.emit([], 0, [], worker._serial)  # type: ignore[attr-defined]
+
+            mocked_run.side_effect = _emit_filtered_results
+            with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
+                controller.setSearchFolderFilter(str(folder_b))
+            qtbot.wait(_PAUSE_MS)
+
+        # Assert
+        assert seen_queries == ["boat"]
+
+    def test_ai_search_uses_current_search_folder_filter(
+        self,
+        qtbot: QtBot,
+        controller_with_images: tuple[AppController, SearchListModel, Path, Path],
+    ) -> None:
+        # Arrange
+        controller, _, _, folder_b = controller_with_images
+        controller.setAiSearchMode(True)
+        controller.setSearchFolderFilter(str(folder_b))
+        seen_path_filters: list[list[str] | None] = []
+
+        # Act
+        with patch("exif_turbo.ui.view_models.app_controller.AiSearchWorker.run", autospec=True) as mocked_run:
+            def _emit_results(worker: object) -> None:
+                seen_path_filters.append(worker._path_filter)  # type: ignore[attr-defined]
+                worker.results_ready.emit([], 0, [], worker._serial)  # type: ignore[attr-defined]
+
+            mocked_run.side_effect = _emit_results
+            with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
+                controller.aiSearch("boat", "normal")
+            qtbot.wait(_PAUSE_MS)
+
+        # Assert
+        assert seen_path_filters == [[str(folder_b)]]
+
     def test_ai_search_completion_clears_busy_state_and_worker(
         self,
         qtbot: QtBot,

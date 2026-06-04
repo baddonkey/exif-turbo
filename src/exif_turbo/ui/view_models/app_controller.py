@@ -1229,6 +1229,8 @@ class AppController(QObject):
         self._folder_filter = path
         self._current_result_row = 0
         self.folderFilterChanged.emit()
+        if self._rerun_ai_search_for_filter_change():
+            return
         self._run_search()
 
     @Slot(str)
@@ -1239,6 +1241,8 @@ class AppController(QObject):
             self._search_folder_filters.add(path)
         self._current_result_row = 0
         self.searchFolderFiltersChanged.emit()
+        if self._rerun_ai_search_for_filter_change():
+            return
         self._run_search()
 
     @Slot()
@@ -1248,6 +1252,8 @@ class AppController(QObject):
         self._search_folder_filters.clear()
         self._current_result_row = 0
         self.searchFolderFiltersChanged.emit()
+        if self._rerun_ai_search_for_filter_change():
+            return
         self._run_search()
 
     @Slot(str)
@@ -1258,7 +1264,18 @@ class AppController(QObject):
         self._search_folder_filters = new_set
         self._current_result_row = 0
         self.searchFolderFiltersChanged.emit()
+        if self._rerun_ai_search_for_filter_change():
+            return
         self._run_search()
+
+    def _rerun_ai_search_for_filter_change(self) -> bool:
+        if not self._is_ai_search_mode:
+            return False
+        if not self._last_ai_query or self._db_path is None:
+            return False
+        self._ai_select_first = True
+        self._start_ai_search_worker(self._last_ai_query, self._last_ai_precision)
+        return True
 
     @Slot(str)
     @Slot(str, int)
@@ -2554,7 +2571,14 @@ class AppController(QObject):
         """Internal helper: create and start an AiSearchWorker."""
         self._search_serial += 1
         serial = self._search_serial
-        worker = AiSearchWorker(self._db_path, self._key, query, serial, precision=precision)
+        worker = AiSearchWorker(
+            self._db_path,
+            self._key,
+            query,
+            serial,
+            precision=precision,
+            path_filter=self._current_path_filter(),
+        )
         worker.results_ready.connect(self._on_search_finished)
         worker.failed.connect(self._on_search_failed)
         worker.finished.connect(lambda: self._finishing_search_workers.discard(worker))

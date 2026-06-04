@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import List
 
 from PySide6.QtCore import QThread, Signal
 
@@ -47,7 +48,9 @@ class AiSearchWorker(QThread):
         key: str,
         query_text: str,
         serial: int,
+        *,
         precision: str = "normal",
+        path_filter: List[str] | None = None,
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -55,6 +58,7 @@ class AiSearchWorker(QThread):
         self._query_text = query_text
         self._serial = serial
         self._threshold = self._PRECISION_THRESHOLD.get(precision, 0.20)
+        self._path_filter = path_filter
 
     def run(self) -> None:
         try:
@@ -64,14 +68,34 @@ class AiSearchWorker(QThread):
             vector_repo = AiVectorRepository(index_path, id_map_path)
             vector_repo.load()
 
-            service = AiIndexerService(vector_repo)
-            query_vec = service.encode_text(self._query_text)
-
-            hits = vector_repo.search(query_vec, top_k=self._CANDIDATE_K, threshold=self._threshold)
-            ranked_paths = [path for path, _score in hits]
-
             image_repo = ImageIndexRepository(self._db_path, key=self._key)
-            rows = image_repo.get_images_by_paths(ranked_paths)
+            try:
+                allowed_paths = image_repo.get_filtered_paths(
+                    path_filter=self._path_filter,
+                    restrict_to_enabled_folders=True,
+                )
+                if not allowed_paths:
+                    self.results_ready.emit([], 0, [], self._serial)
+                    return
+
+                service = AiIndexerService(vector_repo)
+                query_vec = service.encode_text(self._query_text)
+
+                hits = vector_repo.search_filtered(
+                    query_vec,
+                    allowed_paths,
+                    top_k=self._CANDIDATE_K,
+                    threshold=self._threshold,
+                )
+                ranked_paths = [path for path, _score in hits]
+
+                rows = image_repo.get_images_by_paths(
+                    ranked_paths,
+                    path_filter=self._path_filter,
+                    restrict_to_enabled_folders=True,
+                )
+            finally:
+                image_repo.close()
 
             self.results_ready.emit(rows, len(rows), [], self._serial)
         except Exception as exc:  # noqa: BLE001

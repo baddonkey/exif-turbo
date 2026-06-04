@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Set
 
 import numpy as np
 
@@ -154,13 +154,45 @@ class AiVectorRepository:
         *query_vec* must be a float32 array of shape (512,) or (1, 512).
         It will be L2-normalised before searching.
         """
+        return self._search_internal(query_vec, top_k=top_k, threshold=threshold)
+
+    def search_filtered(
+        self,
+        query_vec: "np.ndarray",
+        allowed_paths: Set[str],
+        *,
+        top_k: int = 800,
+        threshold: float = 0.20,
+    ) -> List[tuple[str, float]]:
+        """Return ranked hits limited to *allowed_paths*.
+
+        Filtering is applied before the final ``top_k`` cap so out-of-scope
+        vectors cannot crowd out in-scope matches.
+        """
+        if not allowed_paths:
+            return []
+        return self._search_internal(
+            query_vec,
+            top_k=top_k,
+            threshold=threshold,
+            allowed_paths=allowed_paths,
+        )
+
+    def _search_internal(
+        self,
+        query_vec: "np.ndarray",
+        *,
+        top_k: int,
+        threshold: float,
+        allowed_paths: Set[str] | None = None,
+    ) -> List[tuple[str, float]]:
         if self._index is None or self._index.ntotal == 0:
             return []
         vec = np.asarray(query_vec, dtype=np.float32).reshape(1, -1)
         norm = float(np.linalg.norm(vec))
         if norm > 0:
             vec = vec / norm
-        k = min(top_k, self._index.ntotal)
+        k = self._index.ntotal if allowed_paths is not None else min(top_k, self._index.ntotal)
         scores, ids = self._index.search(vec, k)
         results: List[tuple[str, float]] = []
         for score, idx in zip(scores[0], ids[0]):
@@ -169,8 +201,13 @@ class AiVectorRepository:
             if float(score) < threshold:
                 break  # results are sorted descending — no more hits above threshold
             path = self._id_map.get(str(int(idx)))
-            if path:
-                results.append((path, float(score)))
+            if path is None:
+                continue
+            if allowed_paths is not None and path not in allowed_paths:
+                continue
+            results.append((path, float(score)))
+            if len(results) >= top_k:
+                break
         return results
 
 
