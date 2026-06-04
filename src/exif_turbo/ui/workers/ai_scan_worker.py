@@ -82,6 +82,7 @@ class AiScanWorker(QThread):
 
             indexed, errors = service.build_index(
                 image_paths,
+                stamps=stamps,
                 on_progress=_on_progress,
                 cancel_check=lambda: self._cancel_event.is_set(),
             )

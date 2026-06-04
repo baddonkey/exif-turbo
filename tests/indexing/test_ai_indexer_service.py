@@ -16,7 +16,7 @@ import pytest
 
 from exif_turbo.data.ai_vector_repository import AiVectorRepository
 from exif_turbo.indexing.ai_indexer_service import AiIndexerService
-from exif_turbo.utils.preview_cache import preview_cache_path
+from exif_turbo.utils.preview_cache import preview_cache_name_from_stamp, preview_cache_path, preview_dir
 from exif_turbo.utils.thumb_crypto import ThumbCrypto
 
 
@@ -219,6 +219,54 @@ def test_ai_indexer_service_build_index_prefers_cached_preview_when_available(
 
     # Act
     indexed, errors = service.build_index([str(source_path)])
+
+    # Assert
+    assert (indexed, errors, seen_sizes) == (1, 0, [(9, 5)])
+
+
+def test_ai_indexer_service_build_index_uses_db_stamp_to_load_cached_preview(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    import torch
+
+    repo = _make_repo(tmp_path)
+    cache_dir = tmp_path / "thumbs"
+    source_path = tmp_path / "photos" / "source.jpg"
+    _write_jpeg(source_path, (40, 25))
+
+    stamp = (123.0, 456)
+    preview_name = preview_cache_name_from_stamp(str(source_path), stamp[0], stamp[1])
+    preview_path = preview_dir(cache_dir) / preview_name
+    preview_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_jpeg(preview_path, (9, 5))
+    source_path.unlink()
+
+    seen_sizes: list[tuple[int, int]] = []
+
+    def _fake_preprocess(img):  # type: ignore[no-untyped-def]
+        seen_sizes.append(img.size)
+        return torch.zeros(3, 224, 224)
+
+    fake_model = MagicMock()
+    fake_model.encode_image.return_value = torch.from_numpy(
+        np.stack([_fake_vec()])
+    ).float()
+
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_model",
+        fake_model,
+    )
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_preprocess",
+        _fake_preprocess,
+    )
+
+    service = AiIndexerService(repo, preview_cache_dir=cache_dir)
+
+    # Act
+    indexed, errors = service.build_index([str(source_path)], stamps={str(source_path): stamp})
 
     # Assert
     assert (indexed, errors, seen_sizes) == (1, 0, [(9, 5)])
