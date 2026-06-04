@@ -341,7 +341,10 @@ class BulkOpWorker(QThread):
         # Step 1: fetch records (total unknown yet → indeterminate)
         self.progress.emit(0, 0)
 
-        records = repo.get_marked_metadata(self._sort_by)
+        records = repo.get_marked_metadata(
+            self._sort_by,
+            restrict_to_enabled_folders=self._restrict_to_enabled_folders,
+        )
 
         if self._is_canceled():
             self.canceled.emit()

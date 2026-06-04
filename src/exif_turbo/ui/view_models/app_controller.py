@@ -281,6 +281,7 @@ class AppController(QObject):
         self._search_shows_busy_ui: bool = False
         self._filter_proxy: CheckedFilterProxyModel | None = None
         self._checked_only_filter_active: bool = False
+        self._checked_total_count: int = 0
         self._checked_in_results_count: int = 0
         self._is_busy: bool = False
         self._is_searching: bool = False
@@ -561,7 +562,7 @@ class AppController(QObject):
 
     @Property(int, notify=checkedCountChanged)
     def checkedCount(self) -> int:
-        return self._search_model.checked_count
+        return self._checked_total_count
 
     @Property(int, notify=checkedCountChanged)
     def checkedInResultsCount(self) -> int:
@@ -648,13 +649,20 @@ class AppController(QObject):
         self.currentProxyResultRowChanged.emit()
 
     def _recompute_checked_in_results(self) -> None:
-        """Recompute how many marks fall within the current filtered result set."""
+        """Recompute total + in-result mark counts respecting enabled folders."""
         if self._repo is None:
+            self._checked_total_count = 0
             self._checked_in_results_count = 0
             return
         if self._search_model.checked_count == 0:
+            self._checked_total_count = 0
             self._checked_in_results_count = 0
             return
+        self._checked_total_count = self._repo.count_images(
+            "",
+            restrict_to_enabled_folders=(self._folder_repo is not None),
+            marked_only=True,
+        )
         path_filter = self._current_path_filter()
         self._checked_in_results_count = self._repo.count_images(
             self._query_text, ext_filter=self._ext_filter,
@@ -703,12 +711,7 @@ class AppController(QObject):
         path = self._search_model.get_path(row)
         if path is not None and self._repo is not None:
             self._repo.mark_image(path, is_checked_now)
-        # The toggled row is by definition in the current result set, so we can
-        # adjust the cached count incrementally without re-querying.
-        if is_checked_now:
-            self._checked_in_results_count += 1
-        else:
-            self._checked_in_results_count = max(0, self._checked_in_results_count - 1)
+        self._recompute_checked_in_results()
         self.checkedCountChanged.emit()
 
     @Slot()
@@ -765,7 +768,7 @@ class AppController(QObject):
         """
         if self._repo is None:
             return
-        if self._search_model.checked_count == 0:
+        if self._checked_total_count == 0:
             self._set_status(_("No marked images to delete."))
             return
         self._start_bulk_op(
@@ -779,7 +782,7 @@ class AppController(QObject):
         file_path = Path(QUrl(file_url).toLocalFile())
         if self._repo is None:
             return
-        if self._search_model.checked_count == 0:
+        if self._checked_total_count == 0:
             self._set_status(_("No marked images to export."))
             return
         self._pending_export_path = file_path
@@ -858,11 +861,11 @@ class AppController(QObject):
             # no cold-cache SELECT needed.  For a plain select-all the new
             # checked-in-results count equals the total result count.
             self._search_model.add_to_checked(worker.result_paths)
-            self._checked_in_results_count = self._total_results
+            self._recompute_checked_in_results()
             self.checkedCountChanged.emit()
         elif worker._operation == "deselect_all":
             self._search_model.remove_from_checked(worker.result_paths)
-            self._checked_in_results_count = 0
+            self._recompute_checked_in_results()
             self.checkedCountChanged.emit()
         elif worker._operation == "invert":
             self._search_model.add_to_checked(worker.result_paths_added)
@@ -1595,13 +1598,7 @@ class AppController(QObject):
         # before the real emission at the end of this method.
         self._loading = True
         self._search_model.set_rows(first_page)
-        # When the "checked only" filter is active, every row is marked,
-        # so total == checked-in-results. Otherwise recompute against the
-        # full filtered set (not just the loaded page).
-        if self._checked_only_filter_active:
-            self._checked_in_results_count = total
-        else:
-            self._recompute_checked_in_results()
+        self._recompute_checked_in_results()
         self.checkedCountChanged.emit()
         self._total_results = total
         self._loaded_results = len(first_page)
@@ -1700,7 +1697,7 @@ class AppController(QObject):
         self._loaded_results = 0
         self._loaded_offset = 0
         self._loading = False
-        self._checked_in_results_count = 0
+        self._recompute_checked_in_results()
         self.checkedCountChanged.emit()
         self.totalResultsChanged.emit()
         self.loadedResultsChanged.emit()

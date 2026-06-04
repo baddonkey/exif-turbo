@@ -1472,6 +1472,8 @@ ApplicationWindow {
                                         if (!controller) return "\u2611 0"
                                         var total = controller.checkedCount
                                         var here = controller.checkedInResultsCount
+                                        if (controller.checkedOnlyFilter)
+                                            return "\u2611 " + here
                                         return here === total
                                             ? "\u2611 " + total
                                             : "\u2611 " + here + "/" + total

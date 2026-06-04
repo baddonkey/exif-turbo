@@ -407,16 +407,38 @@ class ImageIndexRepository:
         removed = [path for path, m in rows if m == 0]
         return added, removed
 
-    def get_marked_paths(self) -> List[str]:
-        """Return all currently marked image paths."""
-        cur = self.conn.execute("SELECT path FROM images WHERE marked = 1")
+    def get_marked_paths(
+        self,
+        *,
+        restrict_to_enabled_folders: bool = False,
+    ) -> List[str]:
+        """Return currently marked image paths.
+
+        When *restrict_to_enabled_folders* is true, only marks belonging to
+        enabled indexed folders are returned.
+        """
+        enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
+        cur = self.conn.execute(
+            f"SELECT path FROM images WHERE marked = 1 {enabled_clause}"
+        )
         return [row[0] for row in cur.fetchall()]
 
-    def get_marked_metadata(self, sort_by: str = "path_asc") -> List[dict]:
-        """Return export records for all marked images in the requested order."""
+    def get_marked_metadata(
+        self,
+        sort_by: str = "path_asc",
+        *,
+        restrict_to_enabled_folders: bool = False,
+    ) -> List[dict]:
+        """Return export records for marked images in the requested order.
+
+        When *restrict_to_enabled_folders* is true, only marks belonging to
+        enabled indexed folders are exported.
+        """
         order = self._resolve_sort(sort_by, "images.path COLLATE NOCASE ASC")
+        enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
         cur = self.conn.execute(
-            f"SELECT path, filename, metadata_json FROM images WHERE marked = 1 ORDER BY {order}"
+            f"SELECT path, filename, metadata_json FROM images "
+            f"WHERE marked = 1 {enabled_clause} ORDER BY {order}"
         )
         result: List[dict] = []
         for path, filename, metadata_json in cur.fetchall():
@@ -476,15 +498,26 @@ class ImageIndexRepository:
         return cls._SORT_MAP.get(sort_by, default or cls._DEFAULT_SORT_SQL)
 
     # SQL fragment used when restrict_to_enabled_folders=True.
-    # Short-circuits to "show all" when image_folders is empty (CLI-indexed DBs
-    # or first-run before any indexing job has run through the GUI).
+    #
+    # Primary path: use explicit image_folders associations.
+    # Fallback path: if a specific image has no association row (legacy data),
+    # evaluate enabled folders by path prefix so disabled folders are still
+    # respected without requiring a full re-index/migration first.
     _ENABLED_CLAUSE = (
         "AND ("
-        "  NOT EXISTS (SELECT 1 FROM image_folders LIMIT 1)"
+        "  NOT EXISTS (SELECT 1 FROM indexed_folders LIMIT 1)"
         "  OR EXISTS ("
         "    SELECT 1 FROM image_folders imf"
         "    JOIN indexed_folders f ON f.id = imf.folder_id"
         "    WHERE imf.image_id = images.id AND f.enabled = 1"
+        "  )"
+        "  OR ("
+        "    NOT EXISTS (SELECT 1 FROM image_folders imf2 WHERE imf2.image_id = images.id)"
+        "    AND EXISTS ("
+        "      SELECT 1 FROM indexed_folders f2"
+        "      WHERE f2.enabled = 1"
+        "      AND images.path LIKE (f2.path || '" + os.sep + "' || '%')"
+        "    )"
         "  )"
         ")"
     )

@@ -117,6 +117,48 @@ def repo_with_parent_child(tmp_path: Path) -> ImageIndexRepository:
     db.close()
 
 
+@pytest.fixture
+def repo_with_folders_without_links(tmp_path: Path) -> ImageIndexRepository:
+    """DB with indexed_folders rows but legacy images missing image_folders links."""
+    db = ImageIndexRepository(tmp_path / "test.db", key="")
+
+    db.conn.execute(
+        "CREATE TABLE IF NOT EXISTS indexed_folders ("
+        "id INTEGER PRIMARY KEY, path TEXT UNIQUE NOT NULL, "
+        "display_name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, "
+        "status TEXT NOT NULL DEFAULT 'pending'"
+        ")"
+    )
+    db.conn.commit()
+
+    alpha = tmp_path / "alpha"
+    beta = tmp_path / "beta"
+    alpha.mkdir()
+    beta.mkdir()
+
+    _insert_folder(db, str(alpha), enabled=1)
+    _insert_folder(db, str(beta), enabled=0)
+
+    # Intentionally omit folder_id to simulate legacy rows with no join links.
+    p1 = make_jpeg(alpha / "alpha_marked.jpg")
+    db.upsert_image(
+        str(p1), p1.name, 1.0, 100,
+        {"Make": "Canon"}, "Canon alpha_marked jpg",
+        folder_id=None,
+    )
+    p2 = make_jpeg(beta / "beta_marked.jpg")
+    db.upsert_image(
+        str(p2), p2.name, 2.0, 200,
+        {"Make": "Nikon"}, "Nikon beta_marked jpg",
+        folder_id=None,
+    )
+    db.conn.execute("UPDATE images SET marked = 1")
+    db.conn.commit()
+
+    yield db
+    db.close()
+
+
 # ── restrict_to_enabled_folders in search_images ────────────────────────────
 
 
@@ -195,6 +237,36 @@ def test_search_images_parent_disabled_child_enabled_shows_child(
     assert "parent_img.jpg" not in filenames
 
 
+def test_search_images_restrict_without_links_uses_enabled_path_fallback(
+    repo_with_folders_without_links: ImageIndexRepository,
+) -> None:
+    # Arrange / Act
+    rows = repo_with_folders_without_links.search_images(
+        "", limit=20, offset=0, restrict_to_enabled_folders=True
+    )
+
+    # Assert
+    assert len(rows) == 1
+    assert rows[0][2] == "alpha_marked.jpg"
+
+
+def test_search_images_marked_only_without_links_respects_enabled_folders(
+    repo_with_folders_without_links: ImageIndexRepository,
+) -> None:
+    # Arrange / Act
+    rows = repo_with_folders_without_links.search_images(
+        "",
+        limit=20,
+        offset=0,
+        marked_only=True,
+        restrict_to_enabled_folders=True,
+    )
+
+    # Assert
+    assert len(rows) == 1
+    assert rows[0][2] == "alpha_marked.jpg"
+
+
 # ── restrict_to_enabled_folders in count_images ─────────────────────────────
 
 
@@ -217,6 +289,38 @@ def test_count_images_fts_restrict_counts_correctly(
     # Nikon images are in the disabled folder — count must be 0
     count = repo_with_folders.count_images("Nikon", restrict_to_enabled_folders=True)
     assert count == 0
+
+
+def test_get_marked_paths_restrict_excludes_disabled_folder_marks(
+    repo_with_folders: ImageIndexRepository,
+) -> None:
+    # Arrange
+    repo_with_folders.conn.execute("UPDATE images SET marked = 1")
+    repo_with_folders.conn.commit()
+
+    # Act
+    paths = repo_with_folders.get_marked_paths(restrict_to_enabled_folders=True)
+
+    # Assert
+    assert len(paths) == 3
+    assert all("alpha" in p for p in paths)
+
+
+def test_get_marked_metadata_restrict_excludes_disabled_folder_marks(
+    repo_with_folders: ImageIndexRepository,
+) -> None:
+    # Arrange
+    repo_with_folders.conn.execute("UPDATE images SET marked = 1")
+    repo_with_folders.conn.commit()
+
+    # Act
+    records = repo_with_folders.get_marked_metadata(
+        restrict_to_enabled_folders=True,
+    )
+
+    # Assert
+    assert len(records) == 3
+    assert all("alpha" in rec["path"] for rec in records)
 
 
 # ── delete_by_path_prefix ────────────────────────────────────────────────────

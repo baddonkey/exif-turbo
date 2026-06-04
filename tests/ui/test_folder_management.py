@@ -344,3 +344,138 @@ def test_disable_indexed_folder_clears_active_search_filter(
     # Assert — search filter is cleared and beta images are shown
     assert _json.loads(controller.searchFolderFilters) == []
     assert controller.totalResults == 2
+
+
+def test_checked_only_filter_excludes_marked_images_from_disabled_folders(
+    qtbot: QtBot,
+    folder_window: tuple[AppController, SearchListModel, FolderListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, search_model, folder_model, alpha_dir, beta_dir = folder_window
+
+    with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
+        controller.addIndexedFolder(QUrl.fromLocalFile(str(alpha_dir)).toString())
+    qtbot.wait(_PAUSE_MS)
+    with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
+        controller.addIndexedFolder(QUrl.fromLocalFile(str(beta_dir)).toString())
+    qtbot.wait(_PAUSE_MS)
+
+    alpha_row = None
+    beta_row = None
+    beta_id = None
+    import os
+    for i in range(search_model.rowCount()):
+        path = search_model.data(search_model.index(i), SearchListModel.PathRole)
+        if path is None:
+            continue
+        norm = os.path.normpath(path)
+        if alpha_row is None and norm.startswith(os.path.normpath(str(alpha_dir))):
+            alpha_row = i
+        if beta_row is None and norm.startswith(os.path.normpath(str(beta_dir))):
+            beta_row = i
+        if alpha_row is not None and beta_row is not None:
+            break
+
+    for i in range(folder_model.rowCount()):
+        path = folder_model.data(folder_model.index(i), FolderListModel.PathRole)
+        if os.path.normpath(path) == os.path.normpath(str(beta_dir)):
+            beta_id = folder_model.data(folder_model.index(i), FolderListModel.FolderIdRole)
+            break
+
+    assert alpha_row is not None
+    assert beta_row is not None
+    assert beta_id is not None
+
+    controller.toggleChecked(alpha_row)
+    controller.toggleChecked(beta_row)
+    qtbot.wait(_PAUSE_MS)
+
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.setCheckedOnlyFilter(True)
+    qtbot.wait(_PAUSE_MS)
+    assert controller.totalResults == 2
+
+    # Act
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.setFolderEnabled(beta_id, False)
+    qtbot.wait(_PAUSE_MS)
+
+    # Assert
+    assert controller.checkedCount == 1
+    assert controller.totalResults == 1
+    remaining_paths = {
+        search_model.data(search_model.index(i), SearchListModel.PathRole)
+        for i in range(search_model.rowCount())
+    }
+    assert all(
+        os.path.normpath(path).startswith(os.path.normpath(str(alpha_dir)))
+        for path in remaining_paths
+        if path is not None
+    )
+
+
+def test_checked_only_filter_respects_disabled_folders_when_enabled_after_disable(
+    qtbot: QtBot,
+    folder_window: tuple[AppController, SearchListModel, FolderListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, search_model, folder_model, alpha_dir, beta_dir = folder_window
+
+    with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
+        controller.addIndexedFolder(QUrl.fromLocalFile(str(alpha_dir)).toString())
+    qtbot.wait(_PAUSE_MS)
+    with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
+        controller.addIndexedFolder(QUrl.fromLocalFile(str(beta_dir)).toString())
+    qtbot.wait(_PAUSE_MS)
+
+    alpha_row = None
+    beta_row = None
+    beta_id = None
+    import os
+    for i in range(search_model.rowCount()):
+        path = search_model.data(search_model.index(i), SearchListModel.PathRole)
+        if path is None:
+            continue
+        norm = os.path.normpath(path)
+        if alpha_row is None and norm.startswith(os.path.normpath(str(alpha_dir))):
+            alpha_row = i
+        if beta_row is None and norm.startswith(os.path.normpath(str(beta_dir))):
+            beta_row = i
+        if alpha_row is not None and beta_row is not None:
+            break
+
+    for i in range(folder_model.rowCount()):
+        path = folder_model.data(folder_model.index(i), FolderListModel.PathRole)
+        if os.path.normpath(path) == os.path.normpath(str(beta_dir)):
+            beta_id = folder_model.data(folder_model.index(i), FolderListModel.FolderIdRole)
+            break
+
+    assert alpha_row is not None
+    assert beta_row is not None
+    assert beta_id is not None
+
+    controller.toggleChecked(alpha_row)
+    controller.toggleChecked(beta_row)
+    qtbot.wait(_PAUSE_MS)
+
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.setFolderEnabled(beta_id, False)
+    qtbot.wait(_PAUSE_MS)
+
+    # Act
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.setCheckedOnlyFilter(True)
+    qtbot.wait(_PAUSE_MS)
+
+    # Assert
+    assert controller.checkedCount == 1
+    assert controller.totalResults == 1
+    remaining_paths = {
+        search_model.data(search_model.index(i), SearchListModel.PathRole)
+        for i in range(search_model.rowCount())
+    }
+    assert all(
+        os.path.normpath(path).startswith(os.path.normpath(str(alpha_dir)))
+        for path in remaining_paths
+        if path is not None
+    )
