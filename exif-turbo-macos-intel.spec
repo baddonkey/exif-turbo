@@ -3,6 +3,7 @@
 # Run via: python scripts/build_macos.py --arch intel
 import re
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_data_files
 
 _version_match = re.search(
     r'^__version__\s*=\s*["\']([^"\']+)["\']',
@@ -24,6 +25,7 @@ a = Analysis(
         ('THIRD-PARTY-LICENSES.md', 'exif_turbo/assets'),
         ('docs/user-manual.pdf', 'exif_turbo/assets'),
         ('src/exif_turbo/i18n/locales', 'exif_turbo/i18n/locales'),
+        *collect_data_files('open_clip', includes=['model_configs/*.json']),
     ],
     hiddenimports=[
         'exif_turbo.ui',
