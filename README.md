@@ -188,9 +188,20 @@ python scripts\build_windows.py
 Requirements: `pip install pyinstaller babel pillow`, Xcode Command Line Tools
 
 ```bash
+# Apple Silicon (arm64) — default
 python scripts/build_macos.py
-# Produces: dist/exif-turbo.app  and  dist/exif-turbo-<version>-macos.dmg
+# Produces: dist/exif-turbo.app  and  dist/exif-turbo-<version>-macos-arm64.dmg
+
+# Intel (x86_64)
+python scripts/build_macos.py --arch intel
+# Produces: dist/exif-turbo.app  and  dist/exif-turbo-<version>-macos-intel.dmg
 ```
+
+Run on the matching hardware: build the arm64 package on an Apple Silicon Mac
+and the intel package on an Intel Mac (or a Rosetta shell).
+
+Optional: pass `--sign "Developer ID Application: Your Name (TEAMID)"` to
+codesign the bundle with a Developer ID certificate instead of ad-hoc signing.
 
 ### Tagging a release
 
