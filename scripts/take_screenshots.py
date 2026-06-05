@@ -380,10 +380,18 @@ def _run_gui() -> None:
     def step_1_search_all() -> None:
         switch_tab(0)
         _grab(root, "02_search_all")
+        prev = ctrl.selectedImageSource
+        ctrl.search("chateau")
+        print("  Searching 'chateau' -- waiting for preview to decode ...")
+        _wait_for_preview(root, ctrl, step_1_prepare_ai_mode, prev_source=prev)
+
+    # -- Step 1a: prepare AI screenshot on a castle result -------------------
+    def step_1_prepare_ai_mode() -> None:
+        ctrl.setAiEnabled(True)
         from PySide6.QtCore import QObject
         search_field = root.findChild(QObject, "searchField")
         if search_field is not None:
-            search_field.setProperty("text", "golden eagle over mountain lake")
+            search_field.setProperty("text", "castle on a lake at dusk")
         root.setProperty("_aiSearchPrecision", "normal")
         root.setProperty("_aiSearchMode", True)
         ctrl.setAiSearchMode(True)
