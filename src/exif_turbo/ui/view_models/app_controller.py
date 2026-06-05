@@ -1755,6 +1755,13 @@ class AppController(QObject):
         self._folder_tree_worker = FolderTreeWorker(self._db_path, self._key)
         self._folder_tree_worker.results_ready.connect(self._on_folder_tree_ready)
         self._folder_tree_worker.failed.connect(self._on_folder_tree_failed)
+        # Clear the Python reference only after run() has fully returned.
+        # Qt emits finished() after QThreadWrapper::run() exits, so by the time
+        # this slot fires the C++ thread infrastructure is fully unwound and it
+        # is safe to drop the last Python reference.  Setting self._folder_tree_worker
+        # to None inside a results_ready/failed handler races with run() still
+        # being on the C++ call stack, which causes Qt to call qFatal().
+        self._folder_tree_worker.finished.connect(self._on_folder_tree_finished)
         self._folder_tree_worker.start()
 
     @Slot()
@@ -1783,8 +1790,11 @@ class AppController(QObject):
             return
         self._start_folder_tree_worker(show_busy_ui=True)
 
-    def _on_folder_tree_ready(self, json_str: str) -> None:
+    def _on_folder_tree_finished(self) -> None:
+        """Release the worker reference after the thread has fully exited."""
         self._folder_tree_worker = None
+
+    def _on_folder_tree_ready(self, json_str: str) -> None:
         self._folder_tree = json_str
         self._folder_tree_dirty = False
         if self._folder_tree_worker_shows_busy_ui:
@@ -1795,7 +1805,6 @@ class AppController(QObject):
         self.folderTreeChanged.emit()
 
     def _on_folder_tree_failed(self, error: str) -> None:
-        self._folder_tree_worker = None
         if self._folder_tree_worker_shows_busy_ui:
             self._is_searching = False
             self.isSearchingChanged.emit()

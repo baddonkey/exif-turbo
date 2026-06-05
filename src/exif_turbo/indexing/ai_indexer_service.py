@@ -18,6 +18,7 @@ import gzip
 from io import BytesIO
 import logging
 from pathlib import Path
+import ssl
 import threading
 from typing import TYPE_CHECKING, Callable, List, Optional, Tuple
 import urllib.request
@@ -207,6 +208,12 @@ class AiIndexerService:
         temp_path = self._cache_dir / f"{_BPE_VOCAB_FILENAME}.tmp"
         last_error: Exception | None = None
 
+        try:
+            import certifi  # noqa: PLC0415
+            ssl_ctx: ssl.SSLContext | None = ssl.create_default_context(cafile=certifi.where())
+        except ImportError:
+            ssl_ctx = None
+
         for url in _BPE_VOCAB_URLS:
             try:
                 _log.info("Downloading OpenCLIP tokenizer vocabulary from %s", url)
@@ -214,7 +221,7 @@ class AiIndexerService:
                     url,
                     headers={"User-Agent": "exif-turbo"},
                 )
-                with urllib.request.urlopen(request, timeout=60) as response:
+                with urllib.request.urlopen(request, timeout=60, context=ssl_ctx) as response:
                     temp_path.write_bytes(response.read())
                 temp_path.replace(vocab_path)
                 return vocab_path
@@ -228,8 +235,8 @@ class AiIndexerService:
                 temp_path.unlink(missing_ok=True)
 
         raise RuntimeError(
-            "Could not download OpenCLIP tokenizer vocabulary into "
-            f"{self._cache_dir}"
+            f"Could not download OpenCLIP tokenizer vocabulary into {self._cache_dir}: "
+            f"{last_error}"
         ) from last_error
 
     def _encode_batch(

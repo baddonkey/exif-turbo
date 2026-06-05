@@ -59,6 +59,10 @@ class AiSearchWorker(QThread):
         self._serial = serial
         self._threshold = self._PRECISION_THRESHOLD.get(precision, 0.20)
         self._path_filter = path_filter
+        # macOS limits secondary thread stacks to 512 kB by default, which is
+        # too small for the lazy torch + open_clip imports.  64 MB gives ample
+        # headroom without measurable overhead.
+        self.setStackSize(64 * 1024 * 1024)
 
     def run(self) -> None:
         try:

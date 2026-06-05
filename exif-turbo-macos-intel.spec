@@ -41,8 +41,10 @@ a = Analysis(
         'markdown',
         'markdown.extensions.tables',
         'av',
+        'faiss',
+        'certifi',
     ],
-    hookspath=[],
+    hookspath=['hooks'],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[

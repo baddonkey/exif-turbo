@@ -43,6 +43,10 @@ class AiScanWorker(QThread):
         self._key = key
         self._force_rebuild = force_rebuild
         self._cancel_event = threading.Event()
+        # macOS limits secondary thread stacks to 512 kB by default, which is
+        # too small for the lazy torch + open_clip imports.  64 MB gives ample
+        # headroom without measurable overhead.
+        self.setStackSize(64 * 1024 * 1024)
 
     def cancel(self) -> None:
         self._cancel_event.set()
