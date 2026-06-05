@@ -40,7 +40,6 @@ class AiSearchWorker(QThread):
         "normal": 0.20,
         "broad":  0.18,
     }
-    _CANDIDATE_K = 800  # FAISS candidates fetched before threshold filtering
 
     def __init__(
         self,
@@ -51,6 +50,9 @@ class AiSearchWorker(QThread):
         *,
         precision: str = "normal",
         path_filter: List[str] | None = None,
+        ext_filter: str = "",
+        date_from: int | None = None,
+        date_to: int | None = None,
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -59,6 +61,9 @@ class AiSearchWorker(QThread):
         self._serial = serial
         self._threshold = self._PRECISION_THRESHOLD.get(precision, 0.20)
         self._path_filter = path_filter
+        self._ext_filter = ext_filter
+        self._date_from = date_from
+        self._date_to = date_to
         # macOS limits secondary thread stacks to 512 kB by default, which is
         # too small for the lazy torch + open_clip imports.  64 MB gives ample
         # headroom without measurable overhead.
@@ -76,27 +81,38 @@ class AiSearchWorker(QThread):
             try:
                 allowed_paths = image_repo.get_filtered_paths(
                     path_filter=self._path_filter,
+                    ext_filter=self._ext_filter,
                     restrict_to_enabled_folders=True,
+                    date_from=self._date_from,
+                    date_to=self._date_to,
                 )
                 if not allowed_paths:
                     self.results_ready.emit([], 0, [], self._serial)
                     return
 
-                service = AiIndexerService(vector_repo)
-                query_vec = service.encode_text(self._query_text)
+                query_text = self._query_text.strip()
+                if query_text:
+                    service = AiIndexerService(vector_repo)
+                    query_vec = service.encode_text(query_text)
 
-                hits = vector_repo.search_filtered(
-                    query_vec,
-                    allowed_paths,
-                    top_k=self._CANDIDATE_K,
-                    threshold=self._threshold,
-                )
-                ranked_paths = [path for path, _score in hits]
+                    hits = vector_repo.search_filtered(
+                        query_vec,
+                        allowed_paths,
+                        top_k=None,
+                        threshold=self._threshold,
+                    )
+                    ranked_paths = [path for path, _score in hits]
+                else:
+                    # Empty AI query means "show everything in scope".
+                    ranked_paths = sorted(allowed_paths)
 
                 rows = image_repo.get_images_by_paths(
                     ranked_paths,
                     path_filter=self._path_filter,
+                    ext_filter=self._ext_filter,
                     restrict_to_enabled_folders=True,
+                    date_from=self._date_from,
+                    date_to=self._date_to,
                 )
             finally:
                 image_repo.close()

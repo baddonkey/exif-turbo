@@ -14,6 +14,7 @@ Run with:
 
 from __future__ import annotations
 
+import json
 import math
 from pathlib import Path
 from typing import Generator
@@ -237,6 +238,280 @@ class TestBrowseNavigation:
 
         # Assert
         assert seen_path_filters == [[str(folder_b)]]
+
+    def test_ai_search_uses_current_ext_and_date_filters(
+        self,
+        qtbot: QtBot,
+        controller_with_images: tuple[AppController, SearchListModel, Path, Path],
+    ) -> None:
+        # Arrange
+        controller, _, _, _ = controller_with_images
+        controller.setAiSearchMode(True)
+        controller.setExtFilter("jpg")
+        controller.setDateFilter(1704067200, 1735603199)
+        seen_ext_filters: list[str] = []
+        seen_date_from: list[int | None] = []
+        seen_date_to: list[int | None] = []
+
+        # Act
+        with patch("exif_turbo.ui.view_models.app_controller.AiSearchWorker.run", autospec=True) as mocked_run:
+            def _emit_results(worker: object) -> None:
+                seen_ext_filters.append(worker._ext_filter)  # type: ignore[attr-defined]
+                seen_date_from.append(worker._date_from)  # type: ignore[attr-defined]
+                seen_date_to.append(worker._date_to)  # type: ignore[attr-defined]
+                worker.results_ready.emit([], 0, [], worker._serial)  # type: ignore[attr-defined]
+
+            mocked_run.side_effect = _emit_results
+            with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
+                controller.aiSearch("boat", "normal")
+            qtbot.wait(_PAUSE_MS)
+
+        # Assert
+        assert seen_ext_filters == ["jpg"]
+        assert seen_date_from == [1704067200]
+        assert seen_date_to == [1735603199]
+
+    def test_setExtFilter_in_ai_mode_reruns_last_ai_query(
+        self,
+        qtbot: QtBot,
+        controller_with_images: tuple[AppController, SearchListModel, Path, Path],
+    ) -> None:
+        # Arrange
+        controller, _, _, _ = controller_with_images
+        controller.setAiSearchMode(True)
+
+        with patch("exif_turbo.ui.view_models.app_controller.AiSearchWorker.run", autospec=True) as mocked_run:
+            def _emit_initial_results(worker: object) -> None:
+                worker.results_ready.emit([], 0, [], worker._serial)  # type: ignore[attr-defined]
+
+            mocked_run.side_effect = _emit_initial_results
+            with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
+                controller.aiSearch("boat", "normal")
+        qtbot.wait(_PAUSE_MS)
+
+        # Act
+        seen_queries: list[str] = []
+        with patch("exif_turbo.ui.view_models.app_controller.AiSearchWorker.run", autospec=True) as mocked_run:
+            def _emit_filtered_results(worker: object) -> None:
+                seen_queries.append(worker._query_text)  # type: ignore[attr-defined]
+                worker.results_ready.emit([], 0, [], worker._serial)  # type: ignore[attr-defined]
+
+            mocked_run.side_effect = _emit_filtered_results
+            with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
+                controller.setExtFilter("png")
+            qtbot.wait(_PAUSE_MS)
+
+        # Assert
+        assert seen_queries == ["boat"]
+
+    def test_setDateFilter_in_ai_mode_reruns_last_ai_query(
+        self,
+        qtbot: QtBot,
+        controller_with_images: tuple[AppController, SearchListModel, Path, Path],
+    ) -> None:
+        # Arrange
+        controller, _, _, _ = controller_with_images
+        controller.setAiSearchMode(True)
+
+        with patch("exif_turbo.ui.view_models.app_controller.AiSearchWorker.run", autospec=True) as mocked_run:
+            def _emit_initial_results(worker: object) -> None:
+                worker.results_ready.emit([], 0, [], worker._serial)  # type: ignore[attr-defined]
+
+            mocked_run.side_effect = _emit_initial_results
+            with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
+                controller.aiSearch("boat", "normal")
+        qtbot.wait(_PAUSE_MS)
+
+        # Act
+        seen_queries: list[str] = []
+        with patch("exif_turbo.ui.view_models.app_controller.AiSearchWorker.run", autospec=True) as mocked_run:
+            def _emit_filtered_results(worker: object) -> None:
+                seen_queries.append(worker._query_text)  # type: ignore[attr-defined]
+                worker.results_ready.emit([], 0, [], worker._serial)  # type: ignore[attr-defined]
+
+            mocked_run.side_effect = _emit_filtered_results
+            with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
+                controller.setDateFilter(1704067200, 1735603199)
+            qtbot.wait(_PAUSE_MS)
+
+        # Assert
+        assert seen_queries == ["boat"]
+
+    def test_setExtFilter_after_empty_ai_search_reruns_ai_query(
+        self,
+        qtbot: QtBot,
+        controller_with_images: tuple[AppController, SearchListModel, Path, Path],
+    ) -> None:
+        # Arrange
+        controller, _, _, _ = controller_with_images
+        controller.setAiSearchMode(True)
+
+        with patch("exif_turbo.ui.view_models.app_controller.AiSearchWorker.run", autospec=True) as mocked_run:
+            def _emit_initial_results(worker: object) -> None:
+                worker.results_ready.emit([], 0, [], worker._serial)  # type: ignore[attr-defined]
+
+            mocked_run.side_effect = _emit_initial_results
+            with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
+                controller.aiSearch("", "normal")
+        qtbot.wait(_PAUSE_MS)
+
+        # Act
+        seen_queries: list[str] = []
+        with patch("exif_turbo.ui.view_models.app_controller.AiSearchWorker.run", autospec=True) as mocked_run:
+            def _emit_filtered_results(worker: object) -> None:
+                seen_queries.append(worker._query_text)  # type: ignore[attr-defined]
+                worker.results_ready.emit([], 0, [], worker._serial)  # type: ignore[attr-defined]
+
+            mocked_run.side_effect = _emit_filtered_results
+            with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
+                controller.setExtFilter("png")
+            qtbot.wait(_PAUSE_MS)
+
+        # Assert
+        assert seen_queries == [""]
+
+    def test_ai_search_updates_format_and_year_facets_from_ai_subset(
+        self,
+        qtbot: QtBot,
+        controller_with_images: tuple[AppController, SearchListModel, Path, Path],
+    ) -> None:
+        # Arrange
+        controller, _, folder_a, _ = controller_with_images
+        assert controller._repo is not None  # type: ignore[attr-defined]
+        controller._repo.conn.execute(  # type: ignore[attr-defined]
+            "UPDATE images SET captured_at = ? WHERE filename = ?",
+            (1640995200, "alpha.jpg"),  # 2022
+        )
+        controller._repo.conn.execute(  # type: ignore[attr-defined]
+            "UPDATE images SET captured_at = ? WHERE filename = ?",
+            (1704067200, "gamma.png"),  # 2024
+        )
+        controller._repo.conn.execute(  # type: ignore[attr-defined]
+            "UPDATE images SET captured_at = ? WHERE filename = ?",
+            (1672531200, "delta.jpg"),  # 2023 (excluded from emitted AI subset)
+        )
+        controller._repo.commit()  # type: ignore[attr-defined]
+        controller.setAiSearchMode(True)
+
+        fake_rows = [
+            (1, str(folder_a / "alpha.jpg"), "alpha.jpg", "{}", 123, 1.0),
+            (2, str(folder_a / "gamma.png"), "gamma.png", "{}", 123, 1.0),
+        ]
+
+        # Act
+        with patch("exif_turbo.ui.view_models.app_controller.AiSearchWorker.run", autospec=True) as mocked_run:
+            def _emit_results(worker: object) -> None:
+                worker.results_ready.emit(fake_rows, 2, [], worker._serial)  # type: ignore[attr-defined]
+
+            mocked_run.side_effect = _emit_results
+            with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
+                controller.aiSearch("boat", "normal")
+            qtbot.wait(_PAUSE_MS)
+
+        # Assert
+        formats = json.loads(controller.availableFormats)
+        years = json.loads(controller.yearCounts)
+        by_format = {item["ext"]: item["count"] for item in formats}
+        by_year = {item["year"]: item["count"] for item in years}
+        assert by_format == {"jpg": 1, "png": 1}
+        assert by_year == {2022: 1, 2024: 1}
+
+    def test_empty_ai_query_keeps_format_and_year_facets_broad_after_ext_filter(
+        self,
+        qtbot: QtBot,
+        controller_with_images: tuple[AppController, SearchListModel, Path, Path],
+    ) -> None:
+        # Arrange
+        controller, _, folder_a, _ = controller_with_images
+        assert controller._repo is not None  # type: ignore[attr-defined]
+        controller._repo.conn.execute(  # type: ignore[attr-defined]
+            "UPDATE images SET captured_at = ? WHERE filename = ?",
+            (1640995200, "alpha.jpg"),  # 2022
+        )
+        controller._repo.conn.execute(  # type: ignore[attr-defined]
+            "UPDATE images SET captured_at = ? WHERE filename = ?",
+            (1672531200, "delta.jpg"),  # 2023
+        )
+        controller._repo.conn.execute(  # type: ignore[attr-defined]
+            "UPDATE images SET captured_at = ? WHERE filename = ?",
+            (1704067200, "gamma.png"),  # 2024
+        )
+        controller._repo.commit()  # type: ignore[attr-defined]
+        controller.setAiSearchMode(True)
+
+        fake_rows = [
+            (1, str(folder_a / "alpha.jpg"), "alpha.jpg", "{}", 123, 1.0),
+        ]
+
+        # Act
+        with patch("exif_turbo.ui.view_models.app_controller.AiSearchWorker.run", autospec=True) as mocked_run:
+            def _emit_results(worker: object) -> None:
+                worker.results_ready.emit(fake_rows, 1, [], worker._serial)  # type: ignore[attr-defined]
+
+            mocked_run.side_effect = _emit_results
+            with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
+                controller.aiSearch("", "normal")
+            qtbot.wait(_PAUSE_MS)
+
+            with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
+                controller.setExtFilter("jpg")
+            qtbot.wait(_PAUSE_MS)
+
+        # Assert
+        formats = json.loads(controller.availableFormats)
+        years = json.loads(controller.yearCounts)
+        by_format = {item["ext"]: item["count"] for item in formats}
+        by_year = {item["year"]: item["count"] for item in years}
+        assert "png" in by_format
+        assert by_year == {2022: 1, 2023: 1, 2024: 1}
+
+    def test_empty_ai_query_timeline_selection_scopes_format_facets(
+        self,
+        qtbot: QtBot,
+        controller_with_images: tuple[AppController, SearchListModel, Path, Path],
+    ) -> None:
+        # Arrange
+        controller, _, folder_a, folder_b = controller_with_images
+        assert controller._repo is not None  # type: ignore[attr-defined]
+        controller._repo.conn.execute(  # type: ignore[attr-defined]
+            "UPDATE images SET captured_at = ? WHERE filename = ?",
+            (1640995200, "alpha.jpg"),  # 2022, jpg
+        )
+        controller._repo.conn.execute(  # type: ignore[attr-defined]
+            "UPDATE images SET captured_at = ? WHERE filename = ?",
+            (1704067200, "gamma.png"),  # 2024, png
+        )
+        controller._repo.conn.execute(  # type: ignore[attr-defined]
+            "UPDATE images SET captured_at = ? WHERE filename = ?",
+            (1704067200, "delta.jpg"),  # 2024, jpg
+        )
+        controller._repo.commit()  # type: ignore[attr-defined]
+        controller.setAiSearchMode(True)
+
+        fake_rows = [
+            (1, str(folder_a / "alpha.jpg"), "alpha.jpg", "{}", 123, 1.0),
+            (2, str(folder_a / "gamma.png"), "gamma.png", "{}", 123, 1.0),
+            (3, str(folder_b / "delta.jpg"), "delta.jpg", "{}", 123, 1.0),
+        ]
+
+        # Act
+        with patch("exif_turbo.ui.view_models.app_controller.AiSearchWorker.run", autospec=True) as mocked_run:
+            def _emit_results(worker: object) -> None:
+                worker.results_ready.emit(fake_rows, 3, [], worker._serial)  # type: ignore[attr-defined]
+
+            mocked_run.side_effect = _emit_results
+            with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
+                controller.aiSearch("", "normal")
+            qtbot.wait(_PAUSE_MS)
+
+            with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
+                controller.setDateFilter(1704067200, 1735689599)  # 2024 only
+            qtbot.wait(_PAUSE_MS)
+
+        # Assert
+        formats = json.loads(controller.availableFormats)
+        by_format = {item["ext"]: item["count"] for item in formats}
+        assert by_format == {"jpg": 1, "png": 1}
 
     def test_ai_search_completion_clears_busy_state_and_worker(
         self,

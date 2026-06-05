@@ -1299,6 +1299,7 @@ ApplicationWindow {
                                 // Clear button — visible whenever the field has text
                                 Item {
                                     id: clearSearchButton
+                                    objectName: "clearSearchButton"
                                     anchors { right: searchHelpButton.left; rightMargin: 2; verticalCenter: parent.verticalCenter }
                                     width: 20; height: 20
                                     visible: searchField.text.length > 0
@@ -1314,13 +1315,17 @@ ApplicationWindow {
 
                                     MouseArea {
                                         id: clearSearchMouse
+                                        objectName: "clearSearchMouse"
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: {
                                             searchField.text = ""
                                             searchField.forceActiveFocus()
-                                            controller.search("")
+                                            if (root._aiSearchMode)
+                                                controller.aiSearch("", root._aiSearchPrecision)
+                                            else
+                                                controller.search("")
                                         }
                                     }
                                 }
@@ -1693,7 +1698,7 @@ ApplicationWindow {
                         readonly property bool _hasYears: root._years.length > 0
                         readonly property bool _filterActive: root._dateFrom !== -1 || root._dateTo !== -1
                         implicitHeight: _hasYears ? contentRowLayout.implicitHeight + 8 : 0
-                        visible: _hasYears && !root._aiSearchMode
+                        visible: _hasYears
                         color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.04)
 
                         // Tooltip for the whole filter strip (non-blocking).

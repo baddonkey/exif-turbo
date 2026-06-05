@@ -243,6 +243,7 @@ class AppController(QObject):
         self._ai_search_worker: AiSearchWorker | None = None
         self._last_ai_query: str = ""
         self._last_ai_precision: str = "normal"
+        self._has_ai_search_run: bool = False
         # Set to True by aiSearch() so _on_search_finished always selects row 0
         # for a fresh AI search (not a browse-restore).
         self._ai_select_first: bool = False
@@ -1223,6 +1224,8 @@ class AppController(QObject):
         self._ext_filter = ext
         self._current_result_row = 0
         self.extFilterChanged.emit()
+        if self._rerun_ai_search_for_filter_change():
+            return
         self._run_search()
 
     @Slot(str)
@@ -1274,7 +1277,7 @@ class AppController(QObject):
     def _rerun_ai_search_for_filter_change(self) -> bool:
         if not self._is_ai_search_mode:
             return False
-        if not self._last_ai_query or self._db_path is None:
+        if not self._has_ai_search_run or self._db_path is None:
             return False
         self._ai_select_first = True
         self._start_ai_search_worker(self._last_ai_query, self._last_ai_precision)
@@ -1453,6 +1456,8 @@ class AppController(QObject):
         self._date_to = new_to
         self._current_result_row = 0
         self.dateFilterChanged.emit()
+        if self._rerun_ai_search_for_filter_change():
+            return
         self._run_search()
 
     @Slot()
@@ -1463,6 +1468,8 @@ class AppController(QObject):
         self._date_to = None
         self._current_result_row = 0
         self.dateFilterChanged.emit()
+        if self._rerun_ai_search_for_filter_change():
+            return
         self._run_search()
 
     def _set_search_busy_ui(self, active: bool) -> None:
@@ -1668,6 +1675,9 @@ class AppController(QObject):
         self.totalResultsChanged.emit()
         self.loadedResultsChanged.emit()
         self._loading = False
+        if self._is_ai_search_mode and self._repo is not None:
+            ai_paths = self._ai_format_facet_source_paths()
+            format_counts = self._repo.get_format_counts_by_paths(ai_paths)
         self._apply_format_counts(format_counts)
         self._load_year_counts()
         if self._loaded_results > 0:
@@ -1713,15 +1723,55 @@ class AppController(QObject):
         self._available_formats = json.dumps(items)
         self.availableFormatsChanged.emit()
 
+    def _ai_facet_source_paths(self) -> list[str]:
+        """Return source paths used for AI mode facet/timeline counts.
+
+        Empty AI text query keeps facets broad (folder-scope only), while a
+        non-empty query follows the semantic result set.
+        """
+        if self._repo is None:
+            return []
+        if self._last_ai_query.strip():
+            return [res.path for res in self._ai_result_cache]
+        return sorted(
+            self._repo.get_filtered_paths(
+                path_filter=self._current_path_filter(),
+                restrict_to_enabled_folders=(self._folder_repo is not None),
+            )
+        )
+
+    def _ai_format_facet_source_paths(self) -> list[str]:
+        """Return source paths used for AI format chips.
+
+        In empty AI text mode, timeline/date selection scopes formats, but
+        ext-chip selection itself does not (facet behavior).
+        """
+        if self._repo is None:
+            return []
+        if self._last_ai_query.strip():
+            return [res.path for res in self._ai_result_cache]
+        return sorted(
+            self._repo.get_filtered_paths(
+                path_filter=self._current_path_filter(),
+                restrict_to_enabled_folders=(self._folder_repo is not None),
+                date_from=self._date_from,
+                date_to=self._date_to,
+            )
+        )
+
     def _load_year_counts(self) -> None:
         if self._repo is None:
             return
-        counts = self._repo.get_year_counts(
-            query=self._query_text,
-            ext_filter=self._ext_filter,
-            path_filter=self._current_path_filter(),
-            restrict_to_enabled_folders=(self._folder_repo is not None),
-        )
+        if self._is_ai_search_mode:
+            ai_paths = self._ai_facet_source_paths()
+            counts = self._repo.get_year_counts_by_paths(ai_paths)
+        else:
+            counts = self._repo.get_year_counts(
+                query=self._query_text,
+                ext_filter=self._ext_filter,
+                path_filter=self._current_path_filter(),
+                restrict_to_enabled_folders=(self._folder_repo is not None),
+            )
         self._year_counts = json.dumps([{"year": y, "count": c} for y, c in counts])
         self.yearCountsChanged.emit()
 
@@ -2566,10 +2616,11 @@ class AppController(QObject):
     def aiSearch(self, query: str, precision: str = "normal") -> None:
         """Kick off a CLIP vector search with *query* text."""
         query = query.strip()
-        if not query or self._db_path is None:
+        if self._db_path is None:
             return
         self._last_ai_query = query
         self._last_ai_precision = precision
+        self._has_ai_search_run = True
         self._ai_select_first = True
         self._start_ai_search_worker(query, precision)
 
@@ -2584,6 +2635,9 @@ class AppController(QObject):
             serial,
             precision=precision,
             path_filter=self._current_path_filter(),
+            ext_filter=self._ext_filter,
+            date_from=self._date_from,
+            date_to=self._date_to,
         )
         worker.results_ready.connect(self._on_search_finished)
         worker.failed.connect(self._on_search_failed)

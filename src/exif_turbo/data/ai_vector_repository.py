@@ -161,13 +161,14 @@ class AiVectorRepository:
         query_vec: "np.ndarray",
         allowed_paths: Set[str],
         *,
-        top_k: int = 800,
+        top_k: int | None = 800,
         threshold: float = 0.20,
     ) -> List[tuple[str, float]]:
         """Return ranked hits limited to *allowed_paths*.
 
         Filtering is applied before the final ``top_k`` cap so out-of-scope
-        vectors cannot crowd out in-scope matches.
+        vectors cannot crowd out in-scope matches. Pass ``top_k=None`` to
+        return every match above ``threshold``.
         """
         if not allowed_paths:
             return []
@@ -182,7 +183,7 @@ class AiVectorRepository:
         self,
         query_vec: "np.ndarray",
         *,
-        top_k: int,
+        top_k: int | None,
         threshold: float,
         allowed_paths: Set[str] | None = None,
     ) -> List[tuple[str, float]]:
@@ -192,7 +193,10 @@ class AiVectorRepository:
         norm = float(np.linalg.norm(vec))
         if norm > 0:
             vec = vec / norm
-        k = self._index.ntotal if allowed_paths is not None else min(top_k, self._index.ntotal)
+        if top_k is None or allowed_paths is not None:
+            k = self._index.ntotal
+        else:
+            k = min(top_k, self._index.ntotal)
         scores, ids = self._index.search(vec, k)
         results: List[tuple[str, float]] = []
         for score, idx in zip(scores[0], ids[0]):
@@ -206,7 +210,7 @@ class AiVectorRepository:
             if allowed_paths is not None and path not in allowed_paths:
                 continue
             results.append((path, float(score)))
-            if len(results) >= top_k:
+            if top_k is not None and len(results) >= top_k:
                 break
         return results
 

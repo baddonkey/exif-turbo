@@ -487,6 +487,44 @@ def test_get_year_counts_excludes_null_captured_at(
     assert by_year == {2022: 1}
 
 
+def test_get_format_counts_by_paths_counts_only_selected_paths(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange
+    path_a = str(make_jpeg(tmp_path / "a.jpg"))
+    path_b = str(make_jpeg(tmp_path / "b.jpeg"))
+    path_c = str(make_jpeg(tmp_path / "c.png"))
+    repo.upsert_image(path_a, "a.jpg", 1.0, 100, {}, "a jpg")
+    repo.upsert_image(path_b, "b.jpeg", 1.0, 100, {}, "b jpeg")
+    repo.upsert_image(path_c, "c.png", 1.0, 100, {}, "c png")
+    repo.commit()
+
+    # Act
+    counts = dict(repo.get_format_counts_by_paths([path_a, path_b]))
+
+    # Assert
+    assert counts == {"jpg": 2}
+
+
+def test_get_year_counts_by_paths_counts_only_selected_paths(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange
+    path_a = str(make_jpeg(tmp_path / "y2022.jpg"))
+    path_b = str(make_jpeg(tmp_path / "y2023.jpg"))
+    path_c = str(make_jpeg(tmp_path / "y2024.jpg"))
+    repo.upsert_image(path_a, "y2022.jpg", 1.0, 100, {}, "y2022", captured_at=_JAN_2022)
+    repo.upsert_image(path_b, "y2023.jpg", 1.0, 100, {}, "y2023", captured_at=_JAN_2023)
+    repo.upsert_image(path_c, "y2024.jpg", 1.0, 100, {}, "y2024", captured_at=_JAN_2024)
+    repo.commit()
+
+    # Act
+    counts = dict(repo.get_year_counts_by_paths([path_a, path_c]))
+
+    # Assert
+    assert counts == {2022: 1, 2024: 1}
+
+
 # ── bulk_mark_images / bulk_invert_images ────────────────────────────────────
 
 

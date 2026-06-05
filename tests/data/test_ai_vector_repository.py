@@ -164,6 +164,31 @@ def test_ai_vector_repository_search_empty_index_returns_empty(tmp_path: Path) -
     assert results == []
 
 
+def test_ai_vector_repository_search_filtered_top_k_none_returns_all_matches(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    vec_a = _random_vec()
+    vec_b = _random_vec()
+    repo.add_images(
+        np.stack([vec_a, vec_b]),
+        ["/photos/a.jpg", "/photos/b.jpg"],
+    )
+    allowed = {"/photos/a.jpg", "/photos/b.jpg"}
+
+    # Act
+    results = repo.search_filtered(
+        vec_a,
+        allowed,
+        top_k=None,
+        threshold=0.0,
+    )
+
+    # Assert
+    assert {path for path, _score in results} == allowed
+
+
 # ── _is_inside helper ─────────────────────────────────────────────────────────
 
 def test_is_inside_direct_child_returns_true() -> None:

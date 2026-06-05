@@ -964,6 +964,39 @@ class ImageIndexRepository:
                     counts[ext] = counts.get(ext, 0) + 1
         return sorted(counts.items(), key=lambda x: -x[1])
 
+    def get_format_counts_by_paths(self, paths: List[str]) -> List[Tuple[str, int]]:
+        """Return extension counts for the provided subset of image *paths*."""
+        if not paths:
+            return []
+        placeholders = ",".join("?" * len(paths))
+        cur = self.conn.execute(
+            f"SELECT filename FROM images WHERE path IN ({placeholders}) AND filename LIKE '%.%'",
+            tuple(paths),
+        )
+        counts: Dict[str, int] = {}
+        for (filename,) in cur.fetchall():
+            parts = filename.rsplit(".", 1)
+            if len(parts) == 2:
+                ext = self._EXT_ALIASES.get(parts[1].lower(), parts[1].lower())
+                if ext:
+                    counts[ext] = counts.get(ext, 0) + 1
+        return sorted(counts.items(), key=lambda x: -x[1])
+
+    def get_year_counts_by_paths(self, paths: List[str]) -> List[Tuple[int, int]]:
+        """Return ``[(year, count)]`` for *paths* using non-null ``captured_at``."""
+        if not paths:
+            return []
+        placeholders = ",".join("?" * len(paths))
+        cur = self.conn.execute(
+            "SELECT CAST(strftime('%Y', datetime(captured_at, 'unixepoch')) AS INTEGER) AS yr, "
+            "COUNT(*) AS cnt "
+            "FROM images "
+            f"WHERE path IN ({placeholders}) AND captured_at IS NOT NULL "
+            "GROUP BY yr ORDER BY yr",
+            tuple(paths),
+        )
+        return [(int(row[0]), int(row[1])) for row in cur.fetchall()]
+
     def get_folder_tree(self) -> List[Dict[str, Any]]:
         """Return folder nodes for the tree browser, sorted by path.
 
@@ -1137,7 +1170,10 @@ class ImageIndexRepository:
         paths: List[str],
         *,
         path_filter: List[str] | None = None,
+        ext_filter: str = "",
         restrict_to_enabled_folders: bool = False,
+        date_from: int | None = None,
+        date_to: int | None = None,
     ) -> List[Tuple[int, str, str, str, int, float]]:
         """Fetch full image rows for a list of *paths*, preserving order.
 
@@ -1151,6 +1187,8 @@ class ImageIndexRepository:
             return []
         placeholders = ",".join("?" * len(paths))
         path_clause, path_args = self._build_path_clause(path_filter)
+        ext_clause, ext_args = self._build_ext_clause(ext_filter)
+        date_clause, date_args = self._build_date_clause(date_from, date_to)
         enabled_clause = (
             f" {self._ENABLED_CLAUSE}"
             if restrict_to_enabled_folders and self._has_indexed_folders_table()
@@ -1158,8 +1196,8 @@ class ImageIndexRepository:
         )
         cur = self.conn.execute(
             f"SELECT id, path, filename, metadata_json, size, mtime "
-            f"FROM images WHERE path IN ({placeholders}) {path_clause}{enabled_clause}",
-            tuple(paths) + path_args,
+            f"FROM images WHERE path IN ({placeholders}) {path_clause} {ext_clause} {date_clause}{enabled_clause}",
+            tuple(paths) + path_args + ext_args + date_args,
         )
         by_path: dict[str, Tuple[int, str, str, str, int, float]] = {}
         for row in cur.fetchall():
@@ -1170,18 +1208,23 @@ class ImageIndexRepository:
         self,
         *,
         path_filter: List[str] | None = None,
+        ext_filter: str = "",
         restrict_to_enabled_folders: bool = False,
+        date_from: int | None = None,
+        date_to: int | None = None,
     ) -> set[str]:
-        """Return image paths matching the current folder-related filters."""
+        """Return image paths matching the current search-related filters."""
         path_clause, path_args = self._build_path_clause(path_filter)
+        ext_clause, ext_args = self._build_ext_clause(ext_filter)
+        date_clause, date_args = self._build_date_clause(date_from, date_to)
         enabled_clause = (
             f" {self._ENABLED_CLAUSE}"
             if restrict_to_enabled_folders and self._has_indexed_folders_table()
             else ""
         )
         cur = self.conn.execute(
-            f"SELECT path FROM images WHERE 1=1 {path_clause}{enabled_clause}",
-            path_args,
+            f"SELECT path FROM images WHERE 1=1 {path_clause} {ext_clause} {date_clause}{enabled_clause}",
+            path_args + ext_args + date_args,
         )
         result: set[str] = set()
         while True:
