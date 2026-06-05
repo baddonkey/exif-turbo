@@ -27,6 +27,7 @@ Output files:
     06_indexed_folders.png   -- indexed folders management tab
     07_folder_filter.png     -- folder filter popup (Schlösser, Sky, Wildlife)
     08_gps_location_bar.png  -- GPS location bar (image with GPS coordinates selected)
+    09_ai_search_mode.png    -- Search tab in AI mode (EXIF/AI toggle + precision picker)
 """
 
 from __future__ import annotations
@@ -81,6 +82,7 @@ from exif_turbo.utils.thumb_cache import thumb_cache_name_from_stamp  # noqa: E4
 _STEPS = [
     "01_lock_screen",
     "02_search_all",
+    "09_ai_search_mode",
     "03_search_eagle",
     "04_search_milky_way",
     "05_browse_tab",
@@ -378,6 +380,20 @@ def _run_gui() -> None:
     def step_1_search_all() -> None:
         switch_tab(0)
         _grab(root, "02_search_all")
+        from PySide6.QtCore import QObject
+        search_field = root.findChild(QObject, "searchField")
+        if search_field is not None:
+            search_field.setProperty("text", "golden eagle over mountain lake")
+        root.setProperty("_aiSearchPrecision", "normal")
+        root.setProperty("_aiSearchMode", True)
+        ctrl.setAiSearchMode(True)
+        QTimer.singleShot(350, step_1_ai_mode)
+
+    # -- Step 1b: search tab (AI mode controls visible) ----------------------
+    def step_1_ai_mode() -> None:
+        _grab(root, "09_ai_search_mode")
+        root.setProperty("_aiSearchMode", False)
+        ctrl.setAiSearchMode(False)
         prev = ctrl.selectedImageSource
         ctrl.search("eagle")
         print("  Searching 'eagle' -- waiting for preview to decode ...")

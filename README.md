@@ -5,6 +5,8 @@ Fully generated using VS Code Copilot.
 
 ![exif-turbo search tab](docs/screenshots/03_search_eagle.png)
 
+![exif-turbo ai search mode](docs/screenshots/09_ai_search_mode.png)
+
 *Photo: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
 
 📖 **[User Manual](docs/user-manual.md)** ([PDF](docs/user-manual.pdf)) — full feature reference, keyboard shortcuts, and screenshots.
@@ -12,6 +14,8 @@ Fully generated using VS Code Copilot.
 ## Features
 
 - **Video indexing** — MP4, MOV, AVI, MKV, WMV, M4V, MTS, M2TS, 3GP, WebM, FLV are indexed alongside still images; thumbnails and previews are decoded via PyAV/FFmpeg (embedded thumbnail when present, otherwise a frame at 1/3 of duration); rotation from the `tkhd` display matrix keeps portrait clips upright.
+- **AI semantic search (CLIP)** — switch the Search bar from **EXIF** to **AI** mode to search by natural-language intent (for example, "golden eagle over mountain lake") instead of exact metadata tokens. A precision picker controls match strictness: **Fine** (>= 0.22), **Normal** (>= 0.20), **Broad** (>= 0.18).
+- **AI-Scan and AI Full Rescan (per folder)** — in **Indexed Folders**, build missing CLIP embeddings for one folder with **AI-Scan**, or rebuild all vectors for that folder with **AI Full Rescan**. Vector data is persisted per database (`ai_index.faiss` + `ai_id_map.json`) for fast repeat AI searches.
 - **Recreate Thumbnail / Recreate Preview** — right-click the preview image to rebuild a single thumbnail or preview if it ever looks wrong (e.g. video frame extracted before the rotation fix); the left-grid thumbnail refreshes immediately via a cache-busting URL.
 - **Self-healing cache** — after every folder index run a fast garbage-collection pass deletes orphaned thumbnail and preview files (those whose source image no longer exists in the database). Status bar reports *“Cleaning up cache…”* during the sweep.
 - **Encrypted thumbnail and preview cache** — thumbnails and rendered previews are stored AES-256-GCM encrypted on disk; the encryption key is derived from the user’s password using a wrapped-key model so changing the password does not require rebuilding the cache

@@ -196,6 +196,8 @@ Each row exposes the following buttons on the right:
 | **Rescan** | Incrementally re-index this folder (only files whose modification time changed). |
 | **Full Rescan** | Force re-extract EXIF for every file in this folder. |
 | **Build Previews** | Render preview-cache JPEGs for every image in this folder. While the build is running on this folder the same button reads **Cancel Previews**. Disabled while another folder's preview build is in progress. |
+| **AI-Scan** | Build missing CLIP vector embeddings for this folder only (incremental semantic-index build). While running, the same button reads **Cancel AI-Scan**. Visible only when AI features are enabled in Settings. |
+| **AI Full Rescan** | Rebuild every CLIP vector embedding for this folder from scratch. While running, the same button reads **Cancel AI Full Rescan**. Visible only when AI features are enabled. |
 | **Clear Previews** | Delete all cached previews for this folder. Hidden (kept invisible for layout alignment) when nothing is cached. A confirmation dialog asks *"Delete N cached preview(s) for \"<folder>\"? Thumbnails are unaffected."* |
 | **Remove** | Remove the folder and delete all its indexed images. A **Remove Folder** confirmation dialog asks before deletion. The original files on disk are not touched. |
 
@@ -285,6 +287,27 @@ pressing **Enter** with an empty bar).
 While a search is running, a semi-transparent grey overlay dims the entire UI
 and the cursor changes to a busy indicator. The overlay clears automatically
 when results are ready.
+
+### AI semantic search (EXIF/AI toggle)
+
+When **AI Features** are enabled in **Settings**, the search bar shows an
+**EXIF / AI** toggle. Switch to **AI** mode to search by meaning instead of
+exact metadata terms.
+
+![Search tab in AI mode](screenshots/09_ai_search_mode.png)
+
+In AI mode:
+
+1. Enter a natural-language query such as *"golden eagle over mountain lake"*.
+2. Press **Enter** (or click **Search**) to run CLIP semantic retrieval.
+3. Choose a precision level:
+  - **Fine**: strictest matches (score >= 0.22)
+  - **Normal**: balanced default (score >= 0.20)
+  - **Broad**: most permissive (score >= 0.18)
+
+AI search requires CLIP vectors to exist for the target images.
+Build them with **AI-Scan** (or **AI Full Rescan**) in the
+**Indexed Folders** tab.
 
 ### Filtering by format
 
