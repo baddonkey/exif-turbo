@@ -3,6 +3,17 @@ from __future__ import annotations
 import os
 import sys
 
+# ── OpenMP conflict guard (macOS) ─────────────────────────────────────────
+# PyTorch and FAISS each bundle their own libomp.dylib.  On macOS, loading
+# two OpenMP runtimes in the same process causes the OMP worker threads to
+# corrupt each other's barrier state, resulting in a SIGSEGV.
+# KMP_DUPLICATE_LIB_OK lets both runtimes coexist; OMP_NUM_THREADS=1 keeps
+# them single-threaded so they never race on shared global OMP state.
+# These must be set before either library is loaded (i.e. before any import
+# that transitively pulls in torch or faiss).
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+
 
 def _ensure_standard_streams() -> None:
     """Provide dummy stdio streams for windowed Windows builds."""
