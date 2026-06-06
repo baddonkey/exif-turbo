@@ -175,15 +175,6 @@ class SearchListModel(QAbstractListModel):
         self._display_cache.extend([None] * len(rows))
         self.endInsertRows()
 
-    def prepend_rows(self, rows: List[SearchResult]) -> None:
-        if not rows:
-            return
-        self.beginInsertRows(QModelIndex(), 0, len(rows) - 1)
-        self._rows = list(rows) + self._rows
-        self._thumbnail_uris = ([None] * len(rows)) + self._thumbnail_uris
-        self._display_cache = ([None] * len(rows)) + self._display_cache
-        self.endInsertRows()
-
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
         if parent.isValid():
             return 0

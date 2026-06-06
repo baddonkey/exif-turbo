@@ -875,15 +875,18 @@ class TestBrowseNavigation:
         # Act
         proxy_row = controller.selectResultById(target_id)
 
-        # Assert — the initial Browse slice already contains the target.
+        # Assert — the initial Browse slice already contains the target.  The
+        # folder is loaded from the very start through the target slice (no
+        # centred window), so the first row is img_0000 and the target is
+        # immediately selectable.
         assert proxy_row >= 0
         assert search_model.get_path(controller.currentResultRow) == target_path
-        assert search_model.rowCount() < 50
+        assert search_model.get_path(0) == str(folder / "img_0000.jpg")
 
         controller.close()
         qtbot.wait(100)
 
-    def test_browseFolder_with_target_id_load_previous_prepends_earlier_rows(
+    def test_browseFolder_with_target_id_loads_from_start_no_prepend_needed(
         self,
         qtbot: QtBot,
         tmp_path: Path,
@@ -918,22 +921,19 @@ class TestBrowseNavigation:
         qtbot.wait(_PAUSE_MS)
 
         controller.enterBrowseTab("")
+
+        # Act — jump to the last image in the folder.
         with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
             controller.browseFolder(str(folder), target_id)
         qtbot.wait(_PAUSE_MS)
 
-        initial_first_path = search_model.get_path(0)
-        assert initial_first_path != str(folder / "img_0000.jpg")
-        assert controller.selectResultById(target_id) >= 0
-        assert search_model.get_path(controller.currentResultRow) == target_path
-
-        # Act
-        with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
-            controller.loadPrevious()
-        qtbot.wait(_PAUSE_MS)
-
-        # Assert
+        # Assert — the folder is loaded from the very start through the target, so
+        # the first image is already present (no hidden earlier rows) and the
+        # target is reachable.  Because every earlier row is already loaded, no
+        # front-prepend is ever required on scroll-up — this is what prevents the
+        # macOS dark-area/scrollbar-desync jump a centred window would have caused.
         assert search_model.get_path(0) == str(folder / "img_0000.jpg")
+        assert controller.selectResultById(target_id) >= 0
         assert search_model.get_path(controller.currentResultRow) == target_path
         assert search_model.rowCount() == 55
 
@@ -1199,7 +1199,9 @@ class TestBrowseNavigationQml:
         target_fname = "img_0054.jpg"
         target_path = str(folder / target_fname)
         repo = ImageIndexRepository(tmp_path / "large_qml_search.db", key="")
-        for i in range(55):
+        # 130 images so that loading from the start through the target
+        # (offset 54 + one screen) still leaves a forward slice unloaded.
+        for i in range(130):
             fname = f"img_{i:04d}.jpg"
             img_path = folder / fname
             Image.new("RGB", (8, 8)).save(str(img_path), format="JPEG")
@@ -1272,12 +1274,14 @@ class TestBrowseNavigationQml:
         qtbot.wait(_PAUSE_MS)
 
         # Assert
-        assert controller.totalResults == 55
+        assert controller.totalResults == 130
         assert search_model.get_path(controller.currentResultRow) == target_path
         assert browse_list.property("currentIndex") == controller.currentProxyResultRow
         assert float(browse_list.property("contentY")) > 0.0
         assert search_model.rowCount() < controller.totalResults
 
+        qml_window.setVisible(False)
+        qtbot.wait(50)
         engine.deleteLater()
         controller.close()
         qtbot.wait(100)
@@ -1293,7 +1297,9 @@ class TestBrowseNavigationQml:
 
         target_fname = "img_0054.jpg"
         repo = ImageIndexRepository(tmp_path / "large_qml_ai.db", key="")
-        for i in range(55):
+        # 130 images so the Browse jump (load-from-start through the target)
+        # still leaves a forward slice unloaded.
+        for i in range(130):
             fname = f"img_{i:04d}.jpg"
             img_path = folder / fname
             Image.new("RGB", (8, 8)).save(str(img_path), format="JPEG")
@@ -1381,7 +1387,7 @@ class TestBrowseNavigationQml:
 
         # Assert
         assert controller.isAiSearchMode is False
-        assert controller.totalResults == 55
+        assert controller.totalResults == 130
         assert search_model.get_path(controller.currentResultRow) == target_path
         assert browse_list.property("currentIndex") == controller.currentProxyResultRow
         assert float(browse_list.property("contentY")) > 0.0
@@ -1397,21 +1403,32 @@ class TestBrowseNavigationQml:
         assert search_model.rowCount() == 1
         assert search_model.get_path(controller.currentResultRow) == target_path
 
+        qml_window.setVisible(False)
+        qtbot.wait(50)
         engine.deleteLater()
         controller.close()
         qtbot.wait(100)
 
-    def test_browse_jump_upward_scroll_prefetches_previous_page_before_top_reached(
+    def test_browse_jump_into_middle_loads_from_start_so_scroll_up_needs_no_prepend(
         self,
         qtbot: QtBot,
         tmp_path: Path,
     ) -> None:
-        # Arrange
-        folder = tmp_path / "large_folder_upscroll"
+        # Arrange — 91-image folder, jump to img_0073 (offset 73).  browseFolder
+        # loads the folder from the START through the target (offset 0,
+        # page_size = target + one screen), so every earlier image is already in
+        # the model and _loaded_offset stays 0.  This is the fix for the macOS
+        # "scroll up one notch -> dark area + scrollbar desync" bug: a centred
+        # window would hide the earlier rows and force a front-prepend on
+        # scroll-up, whose large compensating contentY jump macOS renders dark.
+        # We verify the guarantee at the controller level (order-independent and
+        # robust) rather than via a real exposed window, whose headless layout is
+        # too flaky to assert exact contentY against.
+        folder = tmp_path / "mid_jump_folder"
         folder.mkdir()
 
-        repo = ImageIndexRepository(tmp_path / "large_qml_upscroll.db", key="")
-        for i in range(55):
+        repo = ImageIndexRepository(tmp_path / "mid_jump.db", key="")
+        for i in range(91):
             fname = f"img_{i:04d}.jpg"
             img_path = folder / fname
             Image.new("RGB", (8, 8)).save(str(img_path), format="JPEG")
@@ -1419,75 +1436,43 @@ class TestBrowseNavigationQml:
             repo.upsert_image(str(img_path), fname, stat.st_mtime, stat.st_size, {}, "")
         repo.commit()
         rows = repo.search_images("", 200, 0, sort_by="filename")
-        target_row = next(r for r in rows if r[2] == "img_0054.jpg")
-        target_id = target_row[0]
-        target_path = target_row[1]
+        target_id = next(r for r in rows if r[2] == "img_0073.jpg")[0]
+        first_path = next(r for r in rows if r[2] == "img_0000.jpg")[1]
         repo.close()
 
         search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
-        exif_model = ExifListModel()
-        folder_model = FolderListModel()
-        settings = SettingsModel(tmp_path / "qml-upscroll-settings.json")
         controller = AppController(
-            tmp_path / "large_qml_upscroll.db",
+            tmp_path / "mid_jump.db",
             search_model,
-            exif_model,
-            folder_model,
-            settings,
+            ExifListModel(),
+            FolderListModel(),
+            SettingsModel(tmp_path / "mid-jump-settings.json"),
         )
-        filter_proxy = CheckedFilterProxyModel()
-        filter_proxy.setSourceModel(search_model)
-        controller.set_filter_proxy(filter_proxy)
-
-        engine = QQmlApplicationEngine()
-        engine.addImageProvider("preview", PreviewImageProvider())
-        engine.addImageProvider("raw", RawImageProvider())
-        ctx = engine.rootContext()
-        ctx.setContextProperty("controller", controller)
-        ctx.setContextProperty("searchModel", search_model)
-        ctx.setContextProperty("filteredSearchModel", filter_proxy)
-        ctx.setContextProperty("exifModel", exif_model)
-        ctx.setContextProperty("folderListModel", folder_model)
-        ctx.setContextProperty("settingsModel", settings)
-        ctx.setContextProperty("thirdPartyLicensesHtml", "")
-        ctx.setContextProperty("userManualUrl", "")
-        engine.load(QUrl.fromLocalFile(str(_QML_PATH)))
-
-        qtbot.waitUntil(lambda: bool(engine.rootObjects()), timeout=5000)
-        root = engine.rootObjects()[0]
-        tab_bar = root.findChild(QQuickItem, "mainTabBar")
-        browse_list = root.findChild(QQuickItem, "browseImageList")
-        assert tab_bar is not None
-        assert browse_list is not None
-
         with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
             controller.unlock("")
         qtbot.wait(_PAUSE_MS)
 
-        root.setProperty("_pendingBrowseTargetId", target_id)
+        controller.enterBrowseTab("")
 
+        # Act — jump into the middle of the folder.
         with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
-            tab_bar.setProperty("currentIndex", 1)
             controller.browseFolder(str(folder), target_id)
-        qtbot.waitUntil(lambda: root.property("_pendingBrowseTargetId") == -1, timeout=5000)
         qtbot.wait(_PAUSE_MS)
 
-        initial_count = search_model.rowCount()
-        assert initial_count < controller.totalResults
-        assert float(browse_list.property("contentY")) > 0.0
-        initial_content_y = float(browse_list.property("contentY"))
+        # Assert — the whole folder is loaded from the very start, so the first
+        # image is already at row 0 with nothing hidden ahead of the target and
+        # the target is immediately reachable.
+        assert search_model.get_path(0) == first_path
+        assert controller.selectResultById(target_id) >= 0
+        assert search_model.rowCount() == controller.totalResults
 
-        # Act
-        with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
-            browse_list.setProperty("contentY", initial_content_y - 1.0)
-        qtbot.wait(_PAUSE_MS)
+        # The whole folder is already loaded from row 0, so scrolling back up to
+        # the top never needs to fetch earlier rows: no front-prepend, no
+        # row-count change — exactly what prevents the macOS dark-area /
+        # scrollbar-desync jump a centred window would have caused on scroll-up.
+        assert search_model.rowCount() == controller.totalResults
+        assert search_model.get_path(0) == first_path
 
-        # Assert
-        assert search_model.rowCount() > initial_count
-        assert search_model.get_path(controller.currentResultRow) == target_path
-        assert float(browse_list.property("contentY")) > 0.0
-
-        engine.deleteLater()
         controller.close()
         qtbot.wait(100)
 
@@ -1678,6 +1663,15 @@ class TestBrowseNavigationQml:
         browse_list.setProperty("contentY", float(max(0, 49 - visible_rows) * row_height))
         qml_window.requestActivate()
         browse_list.setProperty("focus", True)
+        browse_list.forceActiveFocus()
+        # Keyboard delivery only works once the list actually holds active focus;
+        # in the headless platform that can take a beat to settle.
+        try:
+            qtbot.waitUntil(
+                lambda: bool(browse_list.property("activeFocus")), timeout=2000
+            )
+        except Exception:
+            qtbot.wait(_PAUSE_MS)
         qtbot.wait(_PAUSE_MS)
 
         # Act
@@ -1689,6 +1683,8 @@ class TestBrowseNavigationQml:
         assert search_model.rowCount() == initial_count + 50
         assert controller.currentResultRow == 49
 
+        qml_window.setVisible(False)
+        qtbot.wait(50)
         engine.deleteLater()
         controller.close()
         qtbot.wait(100)

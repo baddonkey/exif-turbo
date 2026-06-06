@@ -134,7 +134,6 @@ ApplicationWindow {
             var prev = Math.max(controller.currentResultRow - step, 0)
             controller.selectResult(prev)
             browseImageList.positionViewAtIndex(prev, ListView.Contain)
-            root._scheduleBrowseDirectionalPrefetch(-1)
         }
     }
     Shortcut {
@@ -156,7 +155,6 @@ ApplicationWindow {
             root._previewNavigating = true
             controller.selectResult(prev)
             browseImageList.positionViewAtIndex(prev, ListView.Contain)
-            root._scheduleBrowseDirectionalPrefetch(-1)
         }
     }
 
@@ -359,17 +357,12 @@ ApplicationWindow {
     // Proxy row to scroll to once the Browse ListView has caught up to a
     // pending target selection.
     property int    _pendingBrowseScrollRow: -1
-    // Pending top-prepend restore state so inserting earlier rows keeps the
-    // current viewport stable instead of snapping back to the top.
-    property int    _pendingBrowsePrependCount: -1
-    property real   _pendingBrowsePrependContentY: -1.0
     readonly property bool _browseJumpLoading: mainTabBar.currentIndex === 1
                                               && (root._pendingBrowseTargetId !== -1
                                                   || root._pendingBrowseScrollRow !== -1)
     // Browse infinite-scroll prefetch state.
     readonly property int _browsePageSize: 50
     readonly property int _browseRowHeight: 210
-    readonly property int _browsePrefetchDistance: _browseRowHeight * _browsePageSize
     property real   _lastBrowseContentY: 0.0
     property bool   _suspendBrowsePrefetch: false
     // One-shot flag: restore resultsList position after the next search load
@@ -419,8 +412,6 @@ ApplicationWindow {
                 return
             if (direction > 0)
                 root._maybeLoadNextBrowsePage()
-            else if (direction < 0)
-                root._maybeLoadPreviousBrowsePage()
         })
     }
 
@@ -479,46 +470,6 @@ ApplicationWindow {
         if (remainingRowsBelow > root._browsePageSize)
             return
         controller.loadMore()
-    }
-
-    function _maybeLoadPreviousBrowsePage() {
-        if (mainTabBar.currentIndex !== 1 || root._folderFilter === "")
-            return
-        if (root._pendingBrowseTargetId !== -1 || root._pendingBrowseScrollRow !== -1)
-            return
-        if (root._pendingBrowsePrependCount >= 0)
-            return
-        if (browseImageList.count <= 0)
-            return
-        var firstVisibleRow = Math.max(0, Math.floor(browseImageList.contentY / root._browseRowHeight))
-        if (firstVisibleRow > root._browsePageSize)
-            return
-        root._pendingBrowsePrependCount = browseImageList.count
-        root._pendingBrowsePrependContentY = browseImageList.contentY
-        if (!controller.loadPrevious()) {
-            root._pendingBrowsePrependCount = -1
-            root._pendingBrowsePrependContentY = -1.0
-        }
-    }
-
-    function _restoreBrowsePrependPosition() {
-        if (root._pendingBrowsePrependCount < 0)
-            return
-        if (browseImageList.count <= root._pendingBrowsePrependCount)
-            return
-        var insertedRows = browseImageList.count - root._pendingBrowsePrependCount
-        var priorContentY = Math.max(0, root._pendingBrowsePrependContentY)
-        root._pendingBrowsePrependCount = -1
-        root._pendingBrowsePrependContentY = -1.0
-        Qt.callLater(function() {
-            if (mainTabBar.currentIndex !== 1)
-                return
-            root._suspendBrowsePrefetch = true
-            browseImageList.contentY = priorContentY + insertedRows * root._browseRowHeight
-            Qt.callLater(function() {
-                root._suspendBrowsePrefetch = false
-            })
-        })
     }
 
     // ── Dialogs ───────────────────────────────────────────────────────────
@@ -3092,15 +3043,20 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
-                        cacheBuffer: root._browsePrefetchDistance
-                        displayMarginBeginning: root._browsePrefetchDistance
-                        displayMarginEnd: root._browsePrefetchDistance
+                        // Keep a modest off-screen delegate cache for smooth
+                        // scrolling. Page prefetching is driven by
+                        // _maybeLoadNextBrowsePage on contentY.
+                        cacheBuffer: root._browseRowHeight * 4
                         visible: root._folderFilter !== ""
                         focus: visible
                         activeFocusOnTab: true
                         model: root._folderFilter !== "" ? filteredSearchModel : null
                         currentIndex: controller ? controller.currentProxyResultRow : -1
                         highlightMoveDuration: 0
+                        // Never let Qt auto-scroll to follow currentIndex.  All
+                        // intentional scrolls go through _flushPendingBrowseScroll
+                        // / positionViewAtIndex.
+                        highlightFollowsCurrentItem: false
                         ScrollBar.vertical: ScrollBar {
                             policy: ScrollBar.AlwaysOn
                             width: 12
@@ -3119,19 +3075,13 @@ ApplicationWindow {
                                 return
                             if (contentY > previousContentY)
                                 root._maybeLoadNextBrowsePage()
-                            else if (contentY < previousContentY)
-                                root._maybeLoadPreviousBrowsePage()
                         }
                         onCurrentIndexChanged: root._flushPendingBrowseScroll()
                         onCountChanged: {
                             root._flushPendingBrowseScroll()
-                            root._restoreBrowsePrependPosition()
                         }
                         onContentHeightChanged: root._flushPendingBrowseScroll()
                         onHeightChanged: root._flushPendingBrowseScroll()
-                        onAtYBeginningChanged: {
-                            if (atYBeginning && count > 0) root._maybeLoadPreviousBrowsePage()
-                        }
 
                         delegate: Rectangle {
                             id: browseCardDelegate
