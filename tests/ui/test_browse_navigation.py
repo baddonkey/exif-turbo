@@ -929,14 +929,13 @@ class TestBrowseNavigation:
 
         # Assert — the folder is loaded from the very start through the target, so
         # the first image is already present (no hidden earlier rows) and the
-        # target is reachable.  No front-prepend is ever required, so loadPrevious
-        # is a no-op — this is what prevents the macOS dark-area/scrollbar-desync
-        # jump that a centred window would have caused on scroll-up.
+        # target is reachable.  Because every earlier row is already loaded, no
+        # front-prepend is ever required on scroll-up — this is what prevents the
+        # macOS dark-area/scrollbar-desync jump a centred window would have caused.
         assert search_model.get_path(0) == str(folder / "img_0000.jpg")
         assert controller.selectResultById(target_id) >= 0
         assert search_model.get_path(controller.currentResultRow) == target_path
         assert search_model.rowCount() == 55
-        assert controller.loadPrevious() is False
 
         controller.close()
         qtbot.wait(100)
@@ -1467,22 +1466,11 @@ class TestBrowseNavigationQml:
         assert controller.selectResultById(target_id) >= 0
         assert search_model.rowCount() == controller.totalResults
 
-        # Scrolling up to the top is what the QML handler models by calling
-        # loadPrevious() as firstRow approaches 0.  Because _loaded_offset is 0,
-        # every such call is a no-op: no front-prepend, so no row-count change and
-        # no loadedResultsChanged churn — exactly what prevents the macOS
-        # dark-area / scrollbar-desync jump.
-        loaded_signals: list[int] = []
-        controller.loadedResultsChanged.connect(
-            lambda: loaded_signals.append(search_model.rowCount())
-        )
-        rowcount_before = search_model.rowCount()
-        for _ in range(5):
-            assert controller.loadPrevious() is False
-            qtbot.wait(20)
-
-        assert loaded_signals == []
-        assert search_model.rowCount() == rowcount_before
+        # The whole folder is already loaded from row 0, so scrolling back up to
+        # the top never needs to fetch earlier rows: no front-prepend, no
+        # row-count change — exactly what prevents the macOS dark-area /
+        # scrollbar-desync jump a centred window would have caused on scroll-up.
+        assert search_model.rowCount() == controller.totalResults
         assert search_model.get_path(0) == first_path
 
         controller.close()

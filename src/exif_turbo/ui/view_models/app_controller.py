@@ -1903,47 +1903,12 @@ class AppController(QObject):
         if self._pending_browse_jump_id:
             page_size = _BROWSE_JUMP_PAGE_SIZE
         self._loading = True
-        self._page_load_direction = "append"
         worker = SearchPageWorker(
             self._db_path,
             self._key,
             query=self._query_text,
             page_size=page_size,
             offset=self._loaded_offset + self._loaded_results,
-            sort_by=self._sort_by,
-            ext_filter=self._ext_filter,
-            path_filter=self._current_path_filter(),
-            restrict_to_enabled_folders=(self._folder_repo is not None),
-            marked_only=self._checked_only_filter_active,
-            serial=self._search_serial,
-            date_from=self._date_from,
-            date_to=self._date_to,
-        )
-        worker.results_ready.connect(self._on_load_more_finished)
-        worker.failed.connect(self._on_load_more_failed)
-        worker.finished.connect(lambda: self._finishing_search_workers.discard(worker))
-        self._load_more_worker = worker
-        self._finishing_search_workers.add(worker)
-        worker.start()
-        return True
-
-    @Slot(result=bool)
-    def loadPrevious(self) -> bool:
-        if self._loading or self._is_ai_search_mode:
-            return False
-        if self._loaded_offset <= 0 or self._db_path is None:
-            return False
-        page_size = min(_PAGE_SIZE, self._loaded_offset)
-        if page_size <= 0:
-            return False
-        self._loading = True
-        self._page_load_direction = "prepend"
-        worker = SearchPageWorker(
-            self._db_path,
-            self._key,
-            query=self._query_text,
-            page_size=page_size,
-            offset=self._loaded_offset - page_size,
             sort_by=self._sort_by,
             ext_filter=self._ext_filter,
             path_filter=self._current_path_filter(),
@@ -1973,18 +1938,8 @@ class AppController(QObject):
             )
             for r in rows
         ]
-        if self._page_load_direction == "prepend":
-            inserted = len(results)
-            self._search_model.prepend_rows(results)
-            self._loaded_offset = max(0, self._loaded_offset - inserted)
-            self._loaded_results += inserted
-            if self._current_result_row >= 0:
-                self._current_result_row += inserted
-                self.currentResultRowChanged.emit()
-                self.currentProxyResultRowChanged.emit()
-        else:
-            self._search_model.append_rows(results)
-            self._loaded_results += len(results)
+        self._search_model.append_rows(results)
+        self._loaded_results += len(results)
         self.loadedResultsChanged.emit()
         self._loading = False
 

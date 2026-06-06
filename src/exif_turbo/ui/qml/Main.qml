@@ -134,7 +134,6 @@ ApplicationWindow {
             var prev = Math.max(controller.currentResultRow - step, 0)
             controller.selectResult(prev)
             browseImageList.positionViewAtIndex(prev, ListView.Contain)
-            root._scheduleBrowseDirectionalPrefetch(-1)
         }
     }
     Shortcut {
@@ -156,7 +155,6 @@ ApplicationWindow {
             root._previewNavigating = true
             controller.selectResult(prev)
             browseImageList.positionViewAtIndex(prev, ListView.Contain)
-            root._scheduleBrowseDirectionalPrefetch(-1)
         }
     }
 
@@ -195,14 +193,6 @@ ApplicationWindow {
         // Called after every search finishes (Browse folder load or Search tab restore).
         // Called after every search finishes (Browse folder load or Search tab restore).
         function onLoadedResultsChanged() {
-            // Safety: if an upward prepend was pending but the model did not grow
-            // (the page load failed or returned nothing), clear the hold state so
-            // the mouse wheel is not frozen at the boundary forever.
-            if (root._pendingBrowsePrependCount >= 0
-                    && browseImageList.count <= root._pendingBrowsePrependCount) {
-                root._pendingBrowsePrependCount = -1
-                root._browsePrependAnchorY = -1.0
-            }
             // Browse tab: jump to the pending target image once folder results are loaded.
             if (mainTabBar.currentIndex === 1 && root._pendingBrowseTargetId !== -1) {
                 root._applyPendingBrowseJump()
@@ -367,15 +357,6 @@ ApplicationWindow {
     // Proxy row to scroll to once the Browse ListView has caught up to a
     // pending target selection.
     property int    _pendingBrowseScrollRow: -1
-    // Pending top-prepend restore state so inserting earlier rows keeps the
-    // current viewport stable instead of snapping back to the top.
-    property int    _pendingBrowsePrependCount: -1
-    // contentY captured immediately BEFORE a loadPrevious() prepend is kicked
-    // off.  This is the only unambiguous anchor: once rows are inserted at the
-    // front, Qt may (macOS/Metal) or may not (offscreen) auto-shift contentY to
-    // keep the top item stable, so reading contentY after the insert is
-    // unreliable.  -1 = nothing captured.
-    property real   _browsePrependAnchorY: -1.0
     readonly property bool _browseJumpLoading: mainTabBar.currentIndex === 1
                                               && (root._pendingBrowseTargetId !== -1
                                                   || root._pendingBrowseScrollRow !== -1)
@@ -431,8 +412,6 @@ ApplicationWindow {
                 return
             if (direction > 0)
                 root._maybeLoadNextBrowsePage()
-            else if (direction < 0)
-                root._maybeLoadPreviousBrowsePage()
         })
     }
 
@@ -491,76 +470,6 @@ ApplicationWindow {
         if (remainingRowsBelow > root._browsePageSize)
             return
         controller.loadMore()
-    }
-
-    function _maybeLoadPreviousBrowsePage() {
-        if (mainTabBar.currentIndex !== 1 || root._folderFilter === "")
-            return
-        if (root._pendingBrowseTargetId !== -1 || root._pendingBrowseScrollRow !== -1)
-            return
-        if (root._pendingBrowsePrependCount >= 0)
-            return
-        if (browseImageList.count <= 0)
-            return
-        var firstVisibleRow = Math.max(0, Math.floor(browseImageList.contentY / root._browseRowHeight))
-        // Use >= so that when the restore places the viewport at exactly
-        // firstVisibleRow == _browsePageSize (capturedContentY==0, full page),
-        // the very next upward nudge does not immediately re-trigger a load.
-        if (firstVisibleRow >= root._browsePageSize)
-            return
-        root._pendingBrowsePrependCount = browseImageList.count
-        // Capture the true pre-insertion scroll position now, while it is still
-        // meaningful (see _restoreBrowsePrependPosition).
-        root._browsePrependAnchorY = browseImageList.contentY
-        var _lp = controller.loadPrevious()
-        if (!_lp) {
-            root._pendingBrowsePrependCount = -1
-            root._browsePrependAnchorY = -1.0
-        }
-    }
-
-    function _restoreBrowsePrependPosition() {
-        if (root._pendingBrowsePrependCount < 0)
-            return
-        if (browseImageList.count <= root._pendingBrowsePrependCount)
-            return
-        var insertedRows = browseImageList.count - root._pendingBrowsePrependCount
-        // The pre-insertion scroll position captured at trigger time.  We MUST
-        // use this rather than the live contentY: prepending rows at the front of
-        // the model resets the ListView's contentY to 0 before this restore runs,
-        // so the live value is meaningless here.
-        var anchorY = root._browsePrependAnchorY
-        if (anchorY < 0)
-            anchorY = browseImageList.contentY
-        root._pendingBrowsePrependCount = -1
-        root._browsePrependAnchorY = -1.0
-
-        // No Qt platform auto-shifts contentY when rows are inserted at the front
-        // of a ListView, so shift the view ourselves by the height of the
-        // inserted rows to keep whatever the user was looking at visually stable
-        // — both the viewport content AND the scrollbar thumb.  Without this the
-        // same screen position now shows different images and the thumb lurches.
-        root._suspendBrowsePrefetch = true
-        Qt.callLater(function() {
-            if (mainTabBar.currentIndex !== 1) {
-                root._suspendBrowsePrefetch = false
-                return
-            }
-            // The ListView's contentHeight lags behind count: when onCountChanged
-            // fires the model already holds the prepended rows but the view has
-            // NOT relaid-out yet (contentHeight still reflects the old, shorter
-            // content).  Any viewport move is then clamped against that stale,
-            // too-small contentHeight and silently snaps back.  forceLayout()
-            // rebuilds the layout synchronously so contentHeight matches the new
-            // count before we set the position.
-            browseImageList.forceLayout()
-            var maxY = Math.max(0, browseImageList.contentHeight - browseImageList.height)
-            var targetY = Math.max(0, Math.min(maxY, anchorY + insertedRows * root._browseRowHeight))
-            browseImageList.contentY = targetY
-            Qt.callLater(function() {
-                root._suspendBrowsePrefetch = false
-            })
-        })
     }
 
     // ── Dialogs ───────────────────────────────────────────────────────────
@@ -3135,11 +3044,8 @@ ApplicationWindow {
                         Layout.fillHeight: true
                         clip: true
                         // Keep a modest off-screen delegate cache for smooth
-                        // scrolling. Avoid large displayMarginBeginning/End — the
-                        // viewport position after a front insertion (prepend_rows
-                        // during loadPrevious) is handled explicitly by
-                        // _restoreBrowsePrependPosition, and page prefetching is
-                        // driven by _maybeLoadNext/PreviousBrowsePage on contentY.
+                        // scrolling. Page prefetching is driven by
+                        // _maybeLoadNextBrowsePage on contentY.
                         cacheBuffer: root._browseRowHeight * 4
                         visible: root._folderFilter !== ""
                         focus: visible
@@ -3147,13 +3053,9 @@ ApplicationWindow {
                         model: root._folderFilter !== "" ? filteredSearchModel : null
                         currentIndex: controller ? controller.currentProxyResultRow : -1
                         highlightMoveDuration: 0
-                        // Never let Qt auto-scroll to follow currentIndex.
-                        // The selected item changes on every prepend (Python
-                        // adjusts _current_result_row), and Qt's polish-pass
-                        // highlight-follow fires AFTER Qt.callLater, overriding
-                        // _restoreBrowsePrependPosition's carefully computed
-                        // contentY.  All intentional scrolls go through
-                        // _flushPendingBrowseScroll / positionViewAtIndex.
+                        // Never let Qt auto-scroll to follow currentIndex.  All
+                        // intentional scrolls go through _flushPendingBrowseScroll
+                        // / positionViewAtIndex.
                         highlightFollowsCurrentItem: false
                         ScrollBar.vertical: ScrollBar {
                             policy: ScrollBar.AlwaysOn
@@ -3169,35 +3071,17 @@ ApplicationWindow {
                                 root._suspendBrowsePrefetch = false
                                 return
                             }
-                            // While a previous-page prepend is in flight the user
-                            // may keep wheeling up.  Keep the anchor synced to
-                            // their LIVE position (in current, pre-insertion model
-                            // coordinates) so the post-prepend restore preserves
-                            // where they actually are — not the now-stale position
-                            // captured when the prepend was first triggered.  Skip
-                            // the contentY==0 reset that prepend_rows causes, and
-                            // stop once the new rows have arrived (count grew).
-                            if (root._pendingBrowsePrependCount >= 0
-                                    && count === root._pendingBrowsePrependCount
-                                    && contentY > 0)
-                                root._browsePrependAnchorY = contentY
                             if (!visible || count <= 0 || root._folderFilter === "")
                                 return
                             if (contentY > previousContentY)
                                 root._maybeLoadNextBrowsePage()
-                            else if (contentY < previousContentY)
-                                root._maybeLoadPreviousBrowsePage()
                         }
                         onCurrentIndexChanged: root._flushPendingBrowseScroll()
                         onCountChanged: {
                             root._flushPendingBrowseScroll()
-                            root._restoreBrowsePrependPosition()
                         }
                         onContentHeightChanged: root._flushPendingBrowseScroll()
                         onHeightChanged: root._flushPendingBrowseScroll()
-                        onAtYBeginningChanged: {
-                            if (atYBeginning && count > 0) root._maybeLoadPreviousBrowsePage()
-                        }
 
                         delegate: Rectangle {
                             id: browseCardDelegate
