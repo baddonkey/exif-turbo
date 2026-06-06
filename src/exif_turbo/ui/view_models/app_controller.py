@@ -1299,11 +1299,13 @@ class AppController(QObject):
             self._folder_filter = ""
             self._pending_browse_jump_id = 0
             search_offset = 0
+            jump_page_size = _PAGE_SIZE
         else:
             self._query_text = ""
             self._folder_filter = path
             self._pending_browse_jump_id = target_id
             search_offset = 0
+            jump_page_size = _PAGE_SIZE
             if target_id and self._repo is not None:
                 target_offset = self._repo.find_image_offset(
                     target_id,
@@ -1317,10 +1319,22 @@ class AppController(QObject):
                     date_to=self._date_to,
                 )
                 if target_offset is not None:
-                    search_offset = max(0, target_offset - (_PAGE_SIZE // 2))
+                    # Always load from the START of the folder through the target
+                    # (plus one screen of forward buffer).  This keeps
+                    # _loaded_offset == 0, so scrolling up never triggers a
+                    # front-prepend.  A prepend would have to insert the earlier
+                    # rows and shift contentY by their full height to stay put —
+                    # a large instantaneous jump that macOS renders as a dark area
+                    # and that desyncs the scrollbar thumb.  Loading forward-only
+                    # (append via loadMore) never moves existing rows, so the view
+                    # and scrollbar stay consistent.
+                    search_offset = 0
+                    jump_page_size = max(_PAGE_SIZE, target_offset + _PAGE_SIZE)
         show_busy_ui = self._pending_browse_jump_id != 0
         self.folderFilterChanged.emit()
-        self._run_search(show_busy_ui=show_busy_ui, offset=search_offset)
+        self._run_search(
+            show_busy_ui=show_busy_ui, offset=search_offset, page_size=jump_page_size
+        )
 
     @Slot(str)
     def enterBrowseTab(self, query_text: str = "") -> None:
@@ -1482,13 +1496,15 @@ class AppController(QObject):
             QGuiApplication.restoreOverrideCursor()
         self.isSearchingChanged.emit()
 
-    def _run_search(self, show_busy_ui: bool = True, offset: int = 0) -> None:
+    def _run_search(
+        self, show_busy_ui: bool = True, offset: int = 0, page_size: int = _PAGE_SIZE
+    ) -> None:
         if self._repo is None or self._db_path is None:
             return
         path_filter = self._current_path_filter()
         params = dict(
             query=self._query_text,
-            page_size=_PAGE_SIZE,
+            page_size=page_size,
             offset=offset,
             sort_by=self._sort_by,
             ext_filter=self._ext_filter,
@@ -1976,6 +1992,9 @@ class AppController(QObject):
         self._load_more_worker = None
         _log.error("Load-more failed: %s", error)
         self._loading = False
+        # Notify QML so it can clear any pending upward-prepend hold state even
+        # though the row count did not change.
+        self.loadedResultsChanged.emit()
 
     @Slot(int)
     def selectResult(self, proxy_row: int) -> None:

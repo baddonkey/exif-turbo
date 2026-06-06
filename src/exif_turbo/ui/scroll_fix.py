@@ -100,5 +100,6 @@ class ListScrollFix(QObject):
         content_height = float(lst.property("contentHeight") or 0)
         list_height = float(lst.property("height") or 0)
         max_y = max(0.0, content_height - list_height)
-        lst.setProperty("contentY", max(0.0, min(content_y + delta, max_y)))
+        new_y = max(0.0, min(content_y + delta, max_y))
+        lst.setProperty("contentY", new_y)
         return True  # consumed — Flickable will not process this event
