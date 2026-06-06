@@ -4,6 +4,13 @@ import os
 import sys
 from pathlib import Path
 
+# OpenMP conflict guard — see src/exif_turbo/app.py.  torch and faiss each bundle
+# their own libomp.dylib; under pytest they are imported during collection,
+# before the app entry point runs, so the guard must also be set here (before any
+# import that transitively pulls in torch or faiss) to avoid a macOS SIGABRT.
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+
 import pytest
 from PIL import Image
 
