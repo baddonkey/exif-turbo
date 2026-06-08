@@ -25,6 +25,8 @@ Usage::
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import QEvent, QObject
 from PySide6.QtQuick import QQuickItem
 
@@ -50,12 +52,15 @@ class ListScrollFix(QObject):
         window: QObject,
         list_object_name: str,
         row_height: int | None = None,
+        on_wheel_down_at_bottom: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(window)
         self._window = window
         self._name = list_object_name
         self._row_height = row_height if row_height is not None else self.ROW_HEIGHT
+        self._on_wheel_down_at_bottom = on_wheel_down_at_bottom
         self._accumulated: float = 0.0
+        self._last_content_y: float | None = None
 
     # ------------------------------------------------------------------
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # noqa: N802
@@ -79,6 +84,16 @@ class ListScrollFix(QObject):
         if not lst.boundingRect().contains(local):
             return False
 
+        content_y = float(lst.property("contentY") or 0)
+        # Programmatic jumps (positionViewAtIndex/contentY assignment) can
+        # happen between wheel events during cross-tab navigation. If a stale
+        # fractional accumulator from before the jump is kept, the first wheel
+        # notch after returning may be swallowed. Reset on large discontinuity.
+        if self._last_content_y is not None:
+            if abs(content_y - self._last_content_y) > (self._row_height * 0.5):
+                self._accumulated = 0.0
+        self._last_content_y = content_y
+
         angle_y: int = event.angleDelta().y()  # type: ignore[attr-defined]
         pixel_y: int = event.pixelDelta().y()  # type: ignore[attr-defined]
 
@@ -96,10 +111,21 @@ class ListScrollFix(QObject):
         else:
             return True  # nothing to scroll; consume to keep Flickable quiet
 
-        content_y = float(lst.property("contentY") or 0)
         content_height = float(lst.property("contentHeight") or 0)
         list_height = float(lst.property("height") or 0)
         max_y = max(0.0, content_height - list_height)
         new_y = max(0.0, min(content_y + delta, max_y))
         lst.setProperty("contentY", new_y)
+
+        # If a wheel-down occurs while already pinned at the bottom, contentY
+        # does not change and QML onContentYChanged cannot trigger prefetch.
+        # Invoke the optional callback to request more rows explicitly (Browse
+        # list pagination path). Do this on every down-notch at bottom so a
+        # first attempt that races with in-flight loading can recover on the
+        # next notch without requiring an opposite-direction scroll.
+        if delta > 0 and content_y >= max_y and new_y >= max_y:
+            if self._on_wheel_down_at_bottom is not None:
+                self._on_wheel_down_at_bottom()
+
+        self._last_content_y = new_y
         return True  # consumed — Flickable will not process this event

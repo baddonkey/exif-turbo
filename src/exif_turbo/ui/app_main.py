@@ -305,9 +305,15 @@ def main() -> None:
     from .scroll_fix import ListScrollFix
 
     _window = engine.rootObjects()[0]
-    for _list_name in ("resultsList", "browseImageList"):
-        _fix = ListScrollFix(_window, _list_name)
-        _window.installEventFilter(_fix)
+    _results_fix = ListScrollFix(_window, "resultsList")
+    _window.installEventFilter(_results_fix)
+
+    _browse_fix = ListScrollFix(
+        _window,
+        "browseImageList",
+        on_wheel_down_at_bottom=controller.loadMore,
+    )
+    _window.installEventFilter(_browse_fix)
     # foldersList rows are 76 px (see FoldersPanel.qml delegate)
     _folders_fix = ListScrollFix(_window, "foldersList", row_height=76)
     _window.installEventFilter(_folders_fix)

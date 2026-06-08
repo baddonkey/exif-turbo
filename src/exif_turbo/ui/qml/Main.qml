@@ -199,20 +199,16 @@ ApplicationWindow {
                 root._scrollBrowseTreeToFolder()
                 return
             }
-            // Search tab: restore scroll position after returning from Browse tab.
-            // _restoreSearchPosition is set as a one-shot flag in onCurrentIndexChanged.
-            if (!root._restoreSearchPosition || mainTabBar.currentIndex !== 0) return
-            root._restoreSearchPosition = false
-            var row = controller.currentProxyResultRow
-            if (row >= 0) {
-                Qt.callLater(function() {
-                    if (root._savedSearchScrollY >= 0.0) {
-                        resultsList.contentY = root._savedSearchScrollY
-                    }
-                    resultsList.positionViewAtIndex(row, ListView.Contain)
-                    root._savedSearchScrollY = -1.0
-                })
+            // Search tab: while restore is pending, try again when rows change.
+            if (mainTabBar.currentIndex === 0 && root._restoreSearchPosition) {
+                root._tryRestoreSearchPosition()
             }
+        }
+        function onSearchRestoreReady() {
+            // Search tab: restore row visibility after returning from Browse tab.
+            if (!root._restoreSearchPosition || mainTabBar.currentIndex !== 0) return
+            root._searchRestoreAttempts = 0
+            root._tryRestoreSearchPosition()
         }
     }
 
@@ -367,6 +363,8 @@ ApplicationWindow {
     property bool   _suspendBrowsePrefetch: false
     // One-shot flag: restore resultsList position after the next search load
     property bool   _restoreSearchPosition: false
+    property int    _searchRestoreAttempts: 0
+    readonly property int _maxSearchRestoreAttempts: 8
 
     // Parsed format list — updated reactively when _availableFormats changes
     readonly property var _formats: {
@@ -400,6 +398,32 @@ ApplicationWindow {
                 return
             }
         }
+    }
+
+    function _tryRestoreSearchPosition() {
+        if (!root._restoreSearchPosition || mainTabBar.currentIndex !== 0)
+            return
+        var row = controller.currentProxyResultRow
+        if (row < 0) {
+            if (root._searchRestoreAttempts < root._maxSearchRestoreAttempts) {
+                root._searchRestoreAttempts += 1
+                Qt.callLater(root._tryRestoreSearchPosition)
+            }
+            return
+        }
+        root._restoreSearchPosition = false
+        root._searchRestoreAttempts = 0
+        Qt.callLater(function() {
+            resultsList.positionViewAtIndex(row, ListView.Contain)
+            if (root._savedSearchScrollY >= 0.0) {
+                var maxY = Math.max(0, resultsList.contentHeight - resultsList.height)
+                var targetY = Math.min(root._savedSearchScrollY, maxY)
+                if (targetY >= 0.0) {
+                    resultsList.contentY = targetY
+                }
+            }
+            root._savedSearchScrollY = -1.0
+        })
     }
 
     function _browseVisibleRowCount() {
@@ -442,7 +466,7 @@ ApplicationWindow {
         if (browseImageList.count <= proxyRow)
             return
         if (browseImageList.currentIndex !== proxyRow)
-            return
+            browseImageList.currentIndex = proxyRow
         Qt.callLater(function() {
             Qt.callLater(function() {
                 if (mainTabBar.currentIndex !== 1 || root._pendingBrowseScrollRow !== proxyRow)
@@ -451,16 +475,31 @@ ApplicationWindow {
                 browseImageList.positionViewAtIndex(proxyRow, ListView.Beginning)
                 Qt.callLater(function() {
                     root._suspendBrowsePrefetch = false
+                    // Keep loading while the jump target is effectively pinned
+                    // at the bottom edge of loaded rows. This preserves room
+                    // for immediate downward wheel navigation.
+                    var maxY = Math.max(0, browseImageList.contentHeight - browseImageList.height)
+                    var rowsBelow = browseImageList.count - 1 - proxyRow
+                    var needsBuffer = (browseImageList.contentY >= (maxY - 1.0))
+                                   || (rowsBelow < root._browseVisibleRowCount())
+                    if (needsBuffer && browseImageList.count < root._totalResults) {
+                        // loadMore may be busy; controller queues follow-up
+                        // requests and replays them after current load ends.
+                        controller.loadMore()
+                        return
+                    }
+                    root._pendingBrowseScrollRow = -1
                 })
-                root._pendingBrowseScrollRow = -1
             })
         })
     }
 
     function _maybeLoadNextBrowsePage() {
+        // Normal browsing prefetch path. This complements the jump-time buffer
+        // logic above and is driven by user scroll position.
         if (mainTabBar.currentIndex !== 1 || root._folderFilter === "")
             return
-        if (root._pendingBrowseTargetId !== -1 || root._pendingBrowseScrollRow !== -1)
+        if (root._pendingBrowseTargetId !== -1)
             return
         if (browseImageList.count <= 0 || browseImageList.count >= root._totalResults)
             return
@@ -1061,6 +1100,7 @@ ApplicationWindow {
                 root._pendingBrowseTargetId = -1
                 root._pendingBrowseScrollRow = -1
                 root._restoreSearchPosition = true
+                root._searchRestoreAttempts = 0
                 var savedQuery = controller.leaveBrowseTab()
                 searchField.text = savedQuery
             }

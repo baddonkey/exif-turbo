@@ -107,6 +107,7 @@ class AppController(QObject):
     selectedHasPreviewChanged = Signal()
     totalResultsChanged = Signal()
     loadedResultsChanged = Signal()
+    searchRestoreReady = Signal()
     searchErrorChanged = Signal()
     isLockedChanged = Signal()
     isNewDatabaseChanged = Signal()
@@ -193,6 +194,7 @@ class AppController(QObject):
         self._loaded_results = 0
         self._loaded_offset = 0
         self._loading = False
+        self._pending_load_more_request = False
         self._search_error: str = ""
         self._details_plain_text = ""
         self._query_text = ""
@@ -1435,14 +1437,30 @@ class AppController(QObject):
             self._ai_result_cache = saved_rows
             self._loaded_offset = 0
             self._loading = True
-            self._search_model.set_rows(saved_rows[:_PAGE_SIZE])
+            target_source_row = -1
+            if image_id:
+                for idx, result in enumerate(saved_rows):
+                    if result.image_id == image_id:
+                        target_source_row = idx
+                        break
+            rows_to_restore = _PAGE_SIZE
+            if target_source_row >= 0:
+                rows_to_restore = max(_PAGE_SIZE, target_source_row + 1)
+            self._search_model.set_rows(saved_rows[:rows_to_restore])
             self._recompute_checked_in_results()
             self.checkedCountChanged.emit()
             self._total_results = snapshot["ai_total_results"]
-            self._loaded_results = min(len(saved_rows), _PAGE_SIZE)
+            self._loaded_results = min(len(saved_rows), rows_to_restore)
+            did_restore = False
             if image_id and self._loaded_results > 0:
                 if self.selectResultById(image_id) < 0:
-                    self._select_source_row(0)
+                    row = (
+                        self._current_result_row
+                        if 0 <= self._current_result_row < self._loaded_results
+                        else 0
+                    )
+                    self._select_source_row(row)
+                did_restore = True
             elif self._loaded_results > 0:
                 self._select_source_row(
                     self._current_result_row
@@ -1451,7 +1469,10 @@ class AppController(QObject):
                 )
             self.totalResultsChanged.emit()
             self.loadedResultsChanged.emit()
+            if did_restore:
+                QTimer.singleShot(0, self.searchRestoreReady.emit)
             self._loading = False
+            self._consume_pending_load_more_request()
             self._load_year_counts()
         else:
             if image_id:
@@ -1669,8 +1690,14 @@ class AppController(QObject):
             restore_id = self._pending_restore_image_id
             self._pending_restore_image_id = 0
             if self.selectResultById(restore_id) < 0:
-                # Image was deleted from the index while browsing; fall back.
-                self._select_source_row(0)
+                # Image was deleted from the index while browsing; keep the
+                # previous search context if it is still a valid row.
+                row = (
+                    self._current_result_row
+                    if 0 <= self._current_result_row < self._loaded_results
+                    else 0
+                )
+                self._select_source_row(row)
             _did_restore = True
         # Fresh AI search: always land on row 0 (FAISS best match).
         if self._ai_select_first:
@@ -1690,7 +1717,12 @@ class AppController(QObject):
             self._clear_details()
         self.totalResultsChanged.emit()
         self.loadedResultsChanged.emit()
+        if _did_restore:
+            # Emit one tick later so QML restores viewport state only after
+            # tab visibility/layout transitions settle.
+            QTimer.singleShot(0, self.searchRestoreReady.emit)
         self._loading = False
+        self._consume_pending_load_more_request()
         if self._is_ai_search_mode and self._repo is not None:
             ai_paths = self._ai_format_facet_source_paths()
             format_counts = self._repo.get_format_counts_by_paths(ai_paths)
@@ -1723,6 +1755,7 @@ class AppController(QObject):
         self._loaded_results = 0
         self._loaded_offset = 0
         self._loading = False
+        self._consume_pending_load_more_request()
         self._recompute_checked_in_results()
         self.checkedCountChanged.emit()
         self.totalResultsChanged.emit()
@@ -1880,24 +1913,30 @@ class AppController(QObject):
     @Slot(result=bool)
     def loadMore(self) -> bool:
         if self._loading:
+            self._pending_load_more_request = True
             return False
         if self._is_ai_search_mode:
             if self._loaded_results >= self._total_results:
+                self._pending_load_more_request = False
                 return False
             next_page = self._ai_result_cache[
                 self._loaded_results : self._loaded_results + _PAGE_SIZE
             ]
             if not next_page:
+                self._pending_load_more_request = False
                 return False
             self._loading = True
             self._search_model.append_rows(next_page)
             self._loaded_results += len(next_page)
             self.loadedResultsChanged.emit()
             self._loading = False
+            self._consume_pending_load_more_request()
             return True
         if self._loaded_offset + self._loaded_results >= self._total_results:
+            self._pending_load_more_request = False
             return False
         if self._db_path is None:
+            self._pending_load_more_request = False
             return False
         page_size = _PAGE_SIZE
         if self._pending_browse_jump_id:
@@ -1926,10 +1965,17 @@ class AppController(QObject):
         worker.start()
         return True
 
+    def _consume_pending_load_more_request(self) -> None:
+        if not self._pending_load_more_request or self._loading:
+            return
+        self._pending_load_more_request = False
+        QTimer.singleShot(0, self.loadMore)
+
     def _on_load_more_finished(self, rows: list, serial: int) -> None:
         self._load_more_worker = None
         if serial != self._search_serial:
             self._loading = False
+            self._consume_pending_load_more_request()
             return
         results = [
             SearchResult(
@@ -1942,11 +1988,13 @@ class AppController(QObject):
         self._loaded_results += len(results)
         self.loadedResultsChanged.emit()
         self._loading = False
+        self._consume_pending_load_more_request()
 
     def _on_load_more_failed(self, error: str) -> None:
         self._load_more_worker = None
         _log.error("Load-more failed: %s", error)
         self._loading = False
+        self._consume_pending_load_more_request()
         # Notify QML so it can clear any pending upward-prepend hold state even
         # though the row count did not change.
         self.loadedResultsChanged.emit()

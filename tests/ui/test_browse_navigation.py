@@ -819,6 +819,136 @@ class TestBrowseNavigation:
         assert captured_proxy_row[-1] == expected_proxy_row
         assert search_model.get_path(controller.currentResultRow) == expected_path
 
+    def test_leave_browse_tab_with_restore_emits_searchRestoreReady(
+        self,
+        qtbot: QtBot,
+        controller_with_images: tuple[AppController, SearchListModel, Path, Path],
+    ) -> None:
+        # Arrange
+        controller, search_model, _, folder_b = controller_with_images
+        controller.selectResult(2)
+        qtbot.wait(_PAUSE_MS)
+        expected_path = search_model.get_path(controller.currentResultRow)
+        assert expected_path is not None
+
+        controller.enterBrowseTab("")
+        with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+            controller.browseFolder(str(folder_b))
+        qtbot.wait(_PAUSE_MS)
+
+        # Act
+        with qtbot.waitSignal(controller.searchRestoreReady, timeout=3000):
+            controller.leaveBrowseTab()
+        qtbot.wait(_PAUSE_MS)
+
+        # Assert
+        assert search_model.get_path(controller.currentResultRow) == expected_path
+
+    def test_leave_browse_tab_when_origin_missing_keeps_nonzero_row(
+        self,
+        qtbot: QtBot,
+        controller_with_images: tuple[AppController, SearchListModel, Path, Path],
+    ) -> None:
+        # Arrange
+        controller, search_model, _, folder_b = controller_with_images
+        controller.selectResult(2)
+        qtbot.wait(_PAUSE_MS)
+        removed_path = search_model.get_path(controller.currentResultRow)
+        assert removed_path is not None
+
+        controller.enterBrowseTab("")
+        with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+            controller.browseFolder(str(folder_b))
+        qtbot.wait(_PAUSE_MS)
+        controller.selectResult(1)
+        qtbot.wait(_PAUSE_MS)
+        assert controller.currentResultRow == 1
+
+        repo = controller._repo
+        assert repo is not None
+        repo.conn.execute("DELETE FROM images_fts WHERE path = ?", (removed_path,))
+        repo.conn.execute("DELETE FROM images WHERE path = ?", (removed_path,))
+        repo.commit()
+
+        # Act
+        with qtbot.waitSignal(controller.searchRestoreReady, timeout=3000):
+            controller.leaveBrowseTab()
+        qtbot.wait(_PAUSE_MS)
+
+        # Assert
+        assert controller.totalResults == len(_IMAGES) - 1
+        assert controller.currentResultRow == 1
+
+    def test_leave_browse_tab_ai_mode_with_deep_origin_restores_selected_image(
+        self,
+        qtbot: QtBot,
+        tmp_path: Path,
+    ) -> None:
+        # Arrange
+        folder = tmp_path / "ai_restore_folder"
+        folder.mkdir()
+
+        repo = ImageIndexRepository(tmp_path / "ai_restore.db", key="")
+        for i in range(130):
+            fname = f"img_{i:04d}.jpg"
+            img_path = folder / fname
+            Image.new("RGB", (12, 12)).save(str(img_path), format="JPEG")
+            stat = img_path.stat()
+            repo.upsert_image(str(img_path), fname, stat.st_mtime, stat.st_size, {}, "")
+        repo.commit()
+        fake_rows = repo.search_images("", 200, 0, sort_by="filename")
+        repo.close()
+
+        search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
+        controller = AppController(
+            tmp_path / "ai_restore.db",
+            search_model,
+            ExifListModel(),
+            FolderListModel(),
+            SettingsModel(tmp_path / "ai-restore-settings.json"),
+        )
+
+        with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
+            controller.unlock("")
+        qtbot.wait(_PAUSE_MS)
+
+        controller.setAiSearchMode(True)
+        with patch("exif_turbo.ui.view_models.app_controller.AiSearchWorker.run", autospec=True) as mocked_run:
+            def _emit_results(worker: object) -> None:
+                worker.results_ready.emit(fake_rows, len(fake_rows), [], worker._serial)  # type: ignore[attr-defined]
+
+            mocked_run.side_effect = _emit_results
+            with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
+                controller.aiSearch("needle", "normal")
+        qtbot.wait(_PAUSE_MS)
+
+        with qtbot.waitSignal(controller.loadedResultsChanged, timeout=5000):
+            controller.loadMore()
+        qtbot.wait(_PAUSE_MS)
+
+        controller.selectResult(75)
+        qtbot.wait(_PAUSE_MS)
+        target_path = search_model.get_path(controller.currentResultRow)
+        assert target_path is not None
+
+        controller.enterBrowseTab("needle")
+        with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
+            controller.browseFolder(str(folder))
+        qtbot.wait(_PAUSE_MS)
+
+        # Act
+        with qtbot.waitSignal(controller.searchRestoreReady, timeout=5000):
+            controller.leaveBrowseTab()
+        qtbot.wait(_PAUSE_MS)
+
+        # Assert
+        assert controller.isAiSearchMode is True
+        assert search_model.rowCount() >= 76
+        assert search_model.get_path(controller.currentResultRow) == target_path
+
+        controller.close()
+        qtbot.wait(100)
+
     def test_browseFolder_with_target_id_loads_target_page_immediately(
         self,
         qtbot: QtBot,

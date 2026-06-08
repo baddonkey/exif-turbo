@@ -250,3 +250,28 @@ class TestBrowseListWheelScroll:
             f"Wheel near top of list after selection should scroll one row; "
             f"got contentY={content_y:.1f}"
         )
+
+    def test_first_wheel_after_programmatic_jump_scrolls_one_row(
+        self,
+        qtbot: QtBot,
+        browse_window: tuple[AppController, QQuickItem, QQuickWindow],
+    ) -> None:
+        # Arrange
+        _, browse_list, window = browse_window
+        browse_list.setProperty("contentY", 0.0)
+        QCoreApplication.processEvents()
+
+        # Simulate the Browse jump path that repositions the list first.
+        browse_list.setProperty("contentY", float(_ROW_HEIGHT * 4))
+        QCoreApplication.processEvents()
+
+        # Act
+        _send_wheel(browse_list, window, angle_delta_y=-120)
+        qtbot.wait(50)
+
+        # Assert
+        content_y = float(browse_list.property("contentY"))
+        assert content_y == pytest.approx(_ROW_HEIGHT * 5, abs=1.0), (
+            "First wheel notch after programmatic jump should scroll one row; "
+            f"got contentY={content_y:.1f}"
+        )
