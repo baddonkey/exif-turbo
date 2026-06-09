@@ -193,26 +193,41 @@ class AiVectorRepository:
         norm = float(np.linalg.norm(vec))
         if norm > 0:
             vec = vec / norm
-        if top_k is None or allowed_paths is not None:
-            k = self._index.ntotal
-        else:
-            k = min(top_k, self._index.ntotal)
-        scores, ids = self._index.search(vec, k)
-        results: List[tuple[str, float]] = []
-        for score, idx in zip(scores[0], ids[0]):
-            if idx < 0:
-                continue
-            if float(score) < threshold:
-                break  # results are sorted descending — no more hits above threshold
-            path = self._id_map.get(str(int(idx)))
-            if path is None:
-                continue
-            if allowed_paths is not None and path not in allowed_paths:
-                continue
-            results.append((path, float(score)))
-            if top_k is not None and len(results) >= top_k:
-                break
-        return results
+
+        def _collect_with_k(k: int) -> List[tuple[str, float]]:
+            scores, ids = self._index.search(vec, k)
+            results: List[tuple[str, float]] = []
+            for score, idx in zip(scores[0], ids[0]):
+                if idx < 0:
+                    continue
+                if float(score) < threshold:
+                    break  # scores are descending — remaining rows are below threshold
+                path = self._id_map.get(str(int(idx)))
+                if path is None:
+                    continue
+                if allowed_paths is not None and path not in allowed_paths:
+                    continue
+                results.append((path, float(score)))
+                if top_k is not None and len(results) >= top_k:
+                    break
+            return results
+
+        # Exact mode: caller wants all matches above threshold.
+        if top_k is None:
+            return _collect_with_k(self._index.ntotal)
+
+        # Unfiltered mode can query the exact target directly.
+        if allowed_paths is None:
+            return _collect_with_k(min(top_k, self._index.ntotal))
+
+        # Filtered mode: start with a modest candidate pool and grow until we
+        # gather top_k in-scope hits (or exhaust the index for full correctness).
+        k = min(max(top_k * 2, 256), self._index.ntotal)
+        while True:
+            results = _collect_with_k(k)
+            if len(results) >= top_k or k >= self._index.ntotal:
+                return results
+            k = min(k * 2, self._index.ntotal)
 
 
 def _is_inside(image_path: str, folder: Path) -> bool:

@@ -40,6 +40,7 @@ class AiSearchWorker(QThread):
         "normal": 0.20,
         "broad":  0.18,
     }
+    _MAX_RESULTS = 2000
 
     def __init__(
         self,
@@ -98,7 +99,7 @@ class AiSearchWorker(QThread):
                     hits = vector_repo.search_filtered(
                         query_vec,
                         allowed_paths,
-                        top_k=None,
+                        top_k=self._MAX_RESULTS,
                         threshold=self._threshold,
                     )
                     ranked_paths = [path for path, _score in hits]

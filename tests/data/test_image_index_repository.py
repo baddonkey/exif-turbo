@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+import sqlcipher3
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from tests.conftest import make_jpeg, make_png
@@ -321,6 +322,57 @@ def test_get_format_counts_groups_jpeg_alias(repo: ImageIndexRepository, tmp_pat
 
     assert counts.get("jpg", 0) == 2
     assert "jpeg" not in counts
+
+
+def test_get_format_counts_uses_last_filename_segment_as_extension(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange
+    path = str(make_jpeg(tmp_path / "cb-01.07.16-name-.jpg"))
+    repo.upsert_image(path, "cb-01.07.16-name-.jpg", 1.0, 100, {}, "sample")
+    repo.commit()
+
+    # Act
+    counts = dict(repo.get_format_counts())
+
+    # Assert
+    assert counts == {"jpg": 1}
+
+
+def test_init_db_backfills_ext_for_legacy_rows(tmp_path: Path) -> None:
+    # Arrange
+    db_path = tmp_path / "legacy.db"
+    conn = sqlcipher3.connect(str(db_path))
+    conn.executescript(
+        """
+        CREATE TABLE images (
+            id INTEGER PRIMARY KEY,
+            path TEXT UNIQUE NOT NULL,
+            filename TEXT NOT NULL,
+            mtime REAL NOT NULL,
+            size INTEGER NOT NULL,
+            metadata_json TEXT NOT NULL
+        );
+        CREATE VIRTUAL TABLE images_fts USING fts5(path, filename, metadata_text);
+        INSERT INTO images (path, filename, mtime, size, metadata_json)
+        VALUES ('/tmp/legacy.jpeg', 'legacy.jpeg', 1.0, 100, '{}');
+        INSERT INTO images_fts (rowid, path, filename, metadata_text)
+        VALUES (1, '/tmp/legacy.jpeg', 'legacy.jpeg', 'legacy jpeg');
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    # Act
+    repo = ImageIndexRepository(db_path)
+    counts = dict(repo.get_format_counts())
+    ext_row = repo.conn.execute("SELECT ext FROM images WHERE id = 1").fetchone()
+    repo.close()
+
+    # Assert
+    assert ext_row is not None
+    assert ext_row[0] == "jpg"
+    assert counts == {"jpg": 1}
 
 
 def test_search_images_returns_mtime_in_column_5(repo: ImageIndexRepository, tmp_path: Path) -> None:

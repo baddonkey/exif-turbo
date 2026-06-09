@@ -327,7 +327,7 @@ def test_ai_search_worker_applies_ext_and_date_filters_to_hits(
     assert [row[1] for row in rows] == [str(jpg_path)]
 
 
-def test_ai_search_worker_calls_vector_search_without_top_k_limit(
+def test_ai_search_worker_calls_vector_search_with_2000_result_cap(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -367,7 +367,7 @@ def test_ai_search_worker_calls_vector_search_without_top_k_limit(
     # Assert
     assert failures == []
     assert len(emitted) == 1
-    assert _FakeAiVectorRepository.last_top_k is None
+    assert _FakeAiVectorRepository.last_top_k == 2000
 
 
 def test_ai_search_worker_empty_query_returns_all_allowed_paths(

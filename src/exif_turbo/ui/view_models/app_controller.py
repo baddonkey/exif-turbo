@@ -48,6 +48,7 @@ from ..workers.password_change_worker import PasswordChangeWorker
 from ..workers.preview_build_worker import PreviewBuildWorker
 from ..workers.search_worker import SearchPageWorker, SearchWorker
 from ..workers.thumb_worker import ThumbWorker
+from ..workers.year_counts_worker import YearCountsWorker
 from ...utils.preview_render import MAX_PREVIEW_PX, render_preview
 
 _PAGE_SIZE = 50
@@ -264,6 +265,8 @@ class AppController(QObject):
         self._app_closing = False
         self._pending_thumb_restart = False
         self._search_worker: SearchWorker | None = None
+        self._year_counts_worker: YearCountsWorker | None = None
+        self._pending_year_counts_serial: int = 0
         self._load_more_worker: SearchPageWorker | None = None
         self._page_load_mode = "append"
         self._search_serial: int = 0
@@ -993,7 +996,6 @@ class AppController(QObject):
             if version == "":
                 self._exiftool_missing = True
                 self.exiftoolMissingChanged.emit()
-            self._load_formats()
             self._folder_tree_dirty = True  # loaded on demand when Browse tab is opened
             self._load_indexed_folders()
             self._load_marks()
@@ -1475,7 +1477,7 @@ class AppController(QObject):
                 QTimer.singleShot(0, self.searchRestoreReady.emit)
             self._loading = False
             self._consume_pending_load_more_request()
-            self._load_year_counts()
+            self._schedule_year_counts_reload(self._search_serial)
         else:
             if image_id:
                 self._pending_restore_image_id = image_id
@@ -1729,7 +1731,9 @@ class AppController(QObject):
             ai_paths = self._ai_format_facet_source_paths()
             format_counts = self._repo.get_format_counts_by_paths(ai_paths)
         self._apply_format_counts(format_counts)
-        self._load_year_counts()
+        # Keep first paint responsive: refresh year histogram on next event-loop
+        # tick after the result list and selection have already rendered.
+        self._schedule_year_counts_reload(serial)
         if self._loaded_results > 0:
             if not _did_restore and not had_pending_browse_jump:
                 row = (
@@ -1742,6 +1746,56 @@ class AppController(QObject):
             self._clear_details()
         self._search_shows_busy_ui = False
         self._set_search_busy_ui(False)
+
+    def _schedule_year_counts_reload(self, serial: int) -> None:
+        """Refresh year counts after the current search result has rendered."""
+        if self._is_ai_search_mode:
+            # AI-mode year counts currently depend on in-memory AI path sets.
+            # Keep the existing synchronous path for that mode.
+            def _reload_ai() -> None:
+                if serial != self._search_serial:
+                    return
+                self._load_year_counts()
+
+            QTimer.singleShot(0, _reload_ai)
+            return
+
+        if self._db_path is None:
+            return
+        if self._year_counts_worker is not None:
+            self._pending_year_counts_serial = serial
+            return
+
+        worker = YearCountsWorker(
+            self._db_path,
+            self._key,
+            serial=serial,
+            query=self._query_text,
+            ext_filter=self._ext_filter,
+            path_filter=self._current_path_filter(),
+            restrict_to_enabled_folders=(self._folder_repo is not None),
+        )
+        worker.results_ready.connect(self._on_year_counts_ready)
+        worker.failed.connect(self._on_year_counts_failed)
+        worker.finished.connect(self._on_year_counts_finished)
+        self._year_counts_worker = worker
+        worker.start()
+
+    def _on_year_counts_ready(self, counts: list, serial: int) -> None:
+        if serial != self._search_serial:
+            return
+        self._year_counts = json.dumps([{"year": y, "count": c} for y, c in counts])
+        self.yearCountsChanged.emit()
+
+    def _on_year_counts_failed(self, error: str, serial: int) -> None:
+        _log.debug("Year-count worker failed (serial=%s): %s", serial, error)
+
+    def _on_year_counts_finished(self) -> None:
+        self._year_counts_worker = None
+        if self._pending_year_counts_serial:
+            serial = self._pending_year_counts_serial
+            self._pending_year_counts_serial = 0
+            self._schedule_year_counts_reload(serial)
 
     def _on_search_failed(self, error: str) -> None:
         if self.sender() is self._ai_search_worker:

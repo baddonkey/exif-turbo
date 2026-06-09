@@ -79,6 +79,7 @@ class ImageIndexRepository:
                 id INTEGER PRIMARY KEY,
                 path TEXT UNIQUE NOT NULL,
                 filename TEXT NOT NULL,
+                ext TEXT NOT NULL DEFAULT '',
                 mtime REAL NOT NULL,
                 size INTEGER NOT NULL,
                 metadata_json TEXT NOT NULL
@@ -119,9 +120,18 @@ class ImageIndexRepository:
                 "ALTER TABLE images ADD COLUMN captured_at INTEGER"
             )
             self.conn.commit()
+        if "ext" not in existing_cols:
+            self.conn.execute(
+                "ALTER TABLE images ADD COLUMN ext TEXT NOT NULL DEFAULT ''"
+            )
+            self.conn.commit()
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_images_ext ON images(ext)"
+        )
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_images_captured_at ON images(captured_at)"
         )
+        self._backfill_ext_column()
         self.conn.commit()
         # Backfill image_folders for images indexed before this join table was
         # introduced (one-time migration, idempotent via INSERT OR IGNORE).
@@ -129,13 +139,17 @@ class ImageIndexRepository:
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='indexed_folders'"
         )
         if cur.fetchone():
-            self.conn.execute(
-                "INSERT OR IGNORE INTO image_folders (image_id, folder_id) "
-                "SELECT i.id, f.id FROM images i, indexed_folders f "
-                "WHERE i.path LIKE (f.path || ? || '%')",
-                (os.sep,),
-            )
-            self.conn.commit()
+            has_assoc = self.conn.execute(
+                "SELECT 1 FROM image_folders LIMIT 1"
+            ).fetchone()
+            if has_assoc is None:
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO image_folders (image_id, folder_id) "
+                    "SELECT i.id, f.id FROM images i, indexed_folders f "
+                    "WHERE i.path LIKE (f.path || ? || '%')",
+                    (os.sep,),
+                )
+                self.conn.commit()
 
     def upsert_image(
         self,
@@ -161,18 +175,20 @@ class ImageIndexRepository:
         with self.conn:
             for path, filename, mtime, size, metadata, metadata_text, folder_id, captured_at in items:
                 metadata_json = json.dumps(metadata, ensure_ascii=False)
+                ext = self._canonical_ext_from_filename(filename)
                 self.conn.execute(
                     """
-                    INSERT INTO images (path, filename, mtime, size, metadata_json, captured_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO images (path, filename, ext, mtime, size, metadata_json, captured_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(path) DO UPDATE SET
                         filename=excluded.filename,
+                        ext=excluded.ext,
                         mtime=excluded.mtime,
                         size=excluded.size,
                         metadata_json=excluded.metadata_json,
                         captured_at=excluded.captured_at
                     """,
-                    (path, filename, mtime, size, metadata_json, captured_at),
+                    (path, filename, ext, mtime, size, metadata_json, captured_at),
                 )
                 self.conn.execute(
                     """
@@ -522,6 +538,41 @@ class ImageIndexRepository:
         ")"
     )
 
+    @classmethod
+    def _canonical_ext(cls, ext_value: str) -> str:
+        ext = ext_value.lower().lstrip(".").strip()
+        if not ext:
+            return ""
+        return cls._EXT_ALIASES.get(ext, ext)
+
+    @classmethod
+    def _canonical_ext_from_filename(cls, filename: str) -> str:
+        parts = filename.rsplit(".", 1)
+        if len(parts) != 2:
+            return ""
+        return cls._canonical_ext(parts[1])
+
+    def _backfill_ext_column(self) -> None:
+        """Fill missing ext values for existing rows after schema migration."""
+        has_missing = self.conn.execute(
+            "SELECT 1 FROM images WHERE ext IS NULL OR ext = '' LIMIT 1"
+        ).fetchone()
+        if has_missing is None:
+            return
+        updates: list[tuple[str, int]] = []
+        cur = self.conn.execute(
+            "SELECT id, filename FROM images WHERE ext IS NULL OR ext = ''"
+        )
+        for image_id, filename in cur.fetchall():
+            updates.append((self._canonical_ext_from_filename(filename), image_id))
+        if not updates:
+            return
+        with self.conn:
+            self.conn.executemany(
+                "UPDATE images SET ext = ? WHERE id = ?",
+                updates,
+            )
+
     @staticmethod
     def _sanitize_fts_query(query: str) -> str:
         """Sanitize a user query for FTS5 MATCH.
@@ -568,18 +619,7 @@ class ImageIndexRepository:
         date_to: int | None = None,
     ) -> List[Tuple[int, str, str, str, int, float]]:
         order = self._resolve_sort(sort_by)
-        ext_clause = ""
-        ext_args: tuple = ()
-        if ext_filter:
-            canonical = ext_filter.lower().lstrip(".")
-            # Collect all extensions that map to this canonical key
-            aliases = [
-                raw for raw, mapped in self._EXT_ALIASES.items() if mapped == canonical
-            ]
-            exts = [canonical] + aliases  # e.g. ["jpg", "jpeg"]
-            placeholders = " OR ".join("LOWER(images.filename) LIKE ?" for _ in exts)
-            ext_clause = f"AND ({placeholders})"
-            ext_args = tuple(f"%.{e}" for e in exts)
+        ext_clause, ext_args = self._build_ext_clause(ext_filter)
 
         path_clause = ""
         path_args: tuple = ()
@@ -633,17 +673,7 @@ class ImageIndexRepository:
         date_from: int | None = None,
         date_to: int | None = None,
     ) -> int:
-        ext_clause = ""
-        ext_args: tuple = ()
-        if ext_filter:
-            canonical = ext_filter.lower().lstrip(".")
-            aliases = [
-                raw for raw, mapped in self._EXT_ALIASES.items() if mapped == canonical
-            ]
-            exts = [canonical] + aliases
-            placeholders = " OR ".join("LOWER(images.filename) LIKE ?" for _ in exts)
-            ext_clause = f"AND ({placeholders})"
-            ext_args = tuple(f"%.{e}" for e in exts)
+        ext_clause, ext_args = self._build_ext_clause(ext_filter)
 
         path_clause = ""
         path_args: tuple = ()
@@ -748,17 +778,7 @@ class ImageIndexRepository:
         date_to: int | None = None,
     ) -> List[str]:
         """Return all paths matching the current filter — no LIMIT."""
-        ext_clause = ""
-        ext_args: tuple = ()
-        if ext_filter:
-            canonical = ext_filter.lower().lstrip(".")
-            aliases = [
-                raw for raw, mapped in self._EXT_ALIASES.items() if mapped == canonical
-            ]
-            exts = [canonical] + aliases
-            placeholders = " OR ".join("LOWER(images.filename) LIKE ?" for _ in exts)
-            ext_clause = f"AND ({placeholders})"
-            ext_args = tuple(f"%.{e}" for e in exts)
+        ext_clause, ext_args = self._build_ext_clause(ext_filter)
 
         path_clause = ""
         path_args: tuple = ()
@@ -798,13 +818,10 @@ class ImageIndexRepository:
         """Build a SQL clause and args tuple for extension filtering."""
         if not ext_filter:
             return "", ()
-        canonical = ext_filter.lower().lstrip(".")
-        aliases = [
-            raw for raw, mapped in self._EXT_ALIASES.items() if mapped == canonical
-        ]
-        exts = [canonical] + aliases
-        placeholders = " OR ".join("LOWER(images.filename) LIKE ?" for _ in exts)
-        return f"AND ({placeholders})", tuple(f"%.{e}" for e in exts)
+        canonical = self._canonical_ext(ext_filter)
+        if not canonical:
+            return "", ()
+        return "AND images.ext = ?", (canonical,)
 
     @staticmethod
     def _build_path_clause(path_filter: List[str] | None) -> tuple[str, tuple]:
@@ -852,17 +869,7 @@ class ImageIndexRepository:
         Results are scoped to the current query / folder / ext context so the
         timeline histogram reflects only the visible search results.
         """
-        ext_clause = ""
-        ext_args: tuple = ()
-        if ext_filter:
-            canonical = ext_filter.lower().lstrip(".")
-            aliases = [
-                raw for raw, mapped in self._EXT_ALIASES.items() if mapped == canonical
-            ]
-            exts = [canonical] + aliases
-            placeholders = " OR ".join("LOWER(images.filename) LIKE ?" for _ in exts)
-            ext_clause = f"AND ({placeholders})"
-            ext_args = tuple(f"%.{e}" for e in exts)
+        ext_clause, ext_args = self._build_ext_clause(ext_filter)
 
         path_clause = ""
         path_args: tuple = ()
@@ -935,34 +942,27 @@ class ImageIndexRepository:
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
         date_clause, date_args = self._build_date_clause(date_from, date_to)
 
-        # Fetch only filenames and group in Python so that rsplit('.', 1) correctly
-        # extracts the extension after the *last* dot — INSTR finds the first dot,
-        # which breaks files like "cb-01.07.16-name-.jpg".
         if query.strip():
             fts_query = self._sanitize_fts_query(query)
             sql = (
-                "SELECT images.filename FROM images_fts"
+                "SELECT images.ext, COUNT(*) AS cnt FROM images_fts"
                 " JOIN images ON images_fts.rowid = images.id"
-                f" WHERE images_fts MATCH ? AND images.filename LIKE '%.%'"
+                f" WHERE images_fts MATCH ? AND images.ext <> ''"
                 f" {path_clause} {enabled_clause} {date_clause}"
+                " GROUP BY images.ext"
+                " ORDER BY cnt DESC, images.ext ASC"
             )
             args = (fts_query,) + path_args + date_args
         else:
             sql = (
-                "SELECT filename FROM images"
-                f" WHERE filename LIKE '%.%' {path_clause} {enabled_clause} {date_clause}"
+                "SELECT ext, COUNT(*) AS cnt FROM images"
+                f" WHERE ext <> '' {path_clause} {enabled_clause} {date_clause}"
+                " GROUP BY ext"
+                " ORDER BY cnt DESC, ext ASC"
             )
             args = path_args + date_args
-
         cur = self.conn.execute(sql, args)
-        counts: Dict[str, int] = {}
-        for (filename,) in cur.fetchall():
-            parts = filename.rsplit(".", 1)
-            if len(parts) == 2:
-                ext = self._EXT_ALIASES.get(parts[1].lower(), parts[1].lower())
-                if ext:
-                    counts[ext] = counts.get(ext, 0) + 1
-        return sorted(counts.items(), key=lambda x: -x[1])
+        return [(str(row[0]), int(row[1])) for row in cur.fetchall()]
 
     def get_format_counts_by_paths(self, paths: List[str]) -> List[Tuple[str, int]]:
         """Return extension counts for the provided subset of image *paths*."""
@@ -970,17 +970,11 @@ class ImageIndexRepository:
             return []
         placeholders = ",".join("?" * len(paths))
         cur = self.conn.execute(
-            f"SELECT filename FROM images WHERE path IN ({placeholders}) AND filename LIKE '%.%'",
+            f"SELECT ext, COUNT(*) AS cnt FROM images WHERE path IN ({placeholders}) AND ext <> '' "
+            "GROUP BY ext ORDER BY cnt DESC, ext ASC",
             tuple(paths),
         )
-        counts: Dict[str, int] = {}
-        for (filename,) in cur.fetchall():
-            parts = filename.rsplit(".", 1)
-            if len(parts) == 2:
-                ext = self._EXT_ALIASES.get(parts[1].lower(), parts[1].lower())
-                if ext:
-                    counts[ext] = counts.get(ext, 0) + 1
-        return sorted(counts.items(), key=lambda x: -x[1])
+        return [(str(row[0]), int(row[1])) for row in cur.fetchall()]
 
     def get_year_counts_by_paths(self, paths: List[str]) -> List[Tuple[int, int]]:
         """Return ``[(year, count)]`` for *paths* using non-null ``captured_at``."""
