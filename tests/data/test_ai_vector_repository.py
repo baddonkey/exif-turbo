@@ -189,6 +189,72 @@ def test_ai_vector_repository_search_filtered_top_k_none_returns_all_matches(
     assert {path for path, _score in results} == allowed
 
 
+def test_ai_vector_repository_search_filtered_adapts_candidate_pool_for_sparse_scope(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    query = _random_vec()
+    rng = np.random.default_rng(123)
+    distractors: list[np.ndarray] = []
+    distractor_paths: list[str] = []
+    for i in range(1700):
+        vec = rng.random(512).astype(np.float32)
+        vec /= np.linalg.norm(vec)
+        distractors.append(vec)
+        distractor_paths.append(f"/photos/distractor_{i}.jpg")
+
+    allowed_paths = ["/photos/allowed_1.jpg", "/photos/allowed_2.jpg"]
+    vecs = np.vstack([query, query, *distractors])
+    repo.add_images(vecs, [*allowed_paths, *distractor_paths])
+
+    # Act
+    results = repo.search_filtered(
+        query,
+        set(allowed_paths),
+        top_k=2,
+        threshold=0.0,
+    )
+
+    # Assert
+    assert len(results) == 2
+    assert {path for path, _score in results} == set(allowed_paths)
+
+
+def test_ai_vector_repository_search_filtered_returns_no_more_than_top_k(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    query = _random_vec()
+    rng = np.random.default_rng(321)
+
+    allowed_paths = [f"/photos/allowed_{i}.jpg" for i in range(5)]
+    allowed_vecs = [query for _ in allowed_paths]
+    distractor_vecs: list[np.ndarray] = []
+    distractor_paths: list[str] = []
+    for i in range(400):
+        vec = rng.random(512).astype(np.float32)
+        vec /= np.linalg.norm(vec)
+        distractor_vecs.append(vec)
+        distractor_paths.append(f"/photos/distractor_{i}.jpg")
+
+    vecs = np.vstack([*allowed_vecs, *distractor_vecs])
+    repo.add_images(vecs, [*allowed_paths, *distractor_paths])
+
+    # Act
+    results = repo.search_filtered(
+        query,
+        set(allowed_paths),
+        top_k=3,
+        threshold=0.0,
+    )
+
+    # Assert
+    assert len(results) == 3
+    assert {path for path, _score in results}.issubset(set(allowed_paths))
+
+
 # ── _is_inside helper ─────────────────────────────────────────────────────────
 
 def test_is_inside_direct_child_returns_true() -> None:
