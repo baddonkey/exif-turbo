@@ -9,7 +9,7 @@ from typing import List
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
-from exif_turbo.i18n import apply_language, available_languages, current_theme, set_theme
+from exif_turbo.i18n import _, apply_language, available_languages, current_theme, set_theme
 
 
 _CPU_COUNT = os.cpu_count() or 2
@@ -42,7 +42,7 @@ _VALID_SORTS = {
 
 _IS_MACOS_INTEL = sys.platform == "darwin" and platform.machine().lower() in {"x86_64", "amd64"}
 _AI_FEATURE_SUPPORTED = not _IS_MACOS_INTEL
-_AI_UNAVAILABLE_REASON = "PyTorch is not available on macOS Intel for Python 3.13+."
+_AI_UNAVAILABLE_REASON = _("PyTorch is not available on macOS Intel for Python 3.13+.")
 
 
 class SettingsModel(QObject):

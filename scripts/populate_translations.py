@@ -272,7 +272,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Show Preview": "Vorschau anzeigen",
         "Showing cached preview. Click to load the full-resolution source.": "Zwischengespeicherte Vorschau wird angezeigt. Klicken, um das Original in voller Aufl\u00f6sung zu laden.",
         "Showing full-resolution source. Click to use cached preview.": "Original in voller Aufl\u00f6sung wird angezeigt. Klicken, um die zwischengespeicherte Vorschau zu verwenden.",
+        "PyTorch is not available on macOS Intel for Python 3.13+.":
+            "PyTorch ist auf macOS Intel f\u00fcr Python 3.13+ nicht verf\u00fcgbar.",
         "To confirm, type the number %1 below:": "Zur Best\u00e4tigung die Zahl %1 unten eingeben:",
+        "Unavailable on macOS Intel targets (PyTorch is not supported for Python 3.13+).":
+            "Auf macOS-Intel-Zielsystemen nicht verf\u00fcgbar (PyTorch wird f\u00fcr Python 3.13+ nicht unterst\u00fctzt).",
         "{n} image(s) skipped \u2014 too large to decode safely.": "{n} Bild(er) \u00fcbersprungen \u2014 zu gro\u00df zum sicheren Dekodieren.",
         "pixels (long edge)": "Pixel (lange Seite)",
         "previews": "Vorschaubilder",
@@ -544,7 +548,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Show Preview": "Afficher l\u2019aper\u00e7u",
         "Showing cached preview. Click to load the full-resolution source.": "Aper\u00e7u en cache affich\u00e9. Cliquez pour charger la source en pleine r\u00e9solution.",
         "Showing full-resolution source. Click to use cached preview.": "Source en pleine r\u00e9solution affich\u00e9e. Cliquez pour utiliser l\u2019aper\u00e7u en cache.",
+        "PyTorch is not available on macOS Intel for Python 3.13+.":
+            "PyTorch n\u2019est pas disponible sur macOS Intel pour Python 3.13+.",
         "To confirm, type the number %1 below:": "Pour confirmer, saisissez le num\u00e9ro %1 ci-dessous\u00a0:",
+        "Unavailable on macOS Intel targets (PyTorch is not supported for Python 3.13+).":
+            "Indisponible sur les syst\u00e8mes macOS Intel (PyTorch n\u2019est pas pris en charge avec Python 3.13+).",
         "{n} image(s) skipped \u2014 too large to decode safely.": "{n} image(s) ignor\u00e9e(s) \u2014 trop volumineuse(s) pour \u00eatre d\u00e9cod\u00e9e(s) sans risque.",
         "pixels (long edge)": "pixels (grand c\u00f4t\u00e9)",
         "previews": "aper\u00e7us",
@@ -821,7 +829,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Show Preview": "Mostra anteprima",
         "Showing cached preview. Click to load the full-resolution source.": "Anteprima in cache visualizzata. Fare clic per caricare la sorgente in piena risoluzione.",
         "Showing full-resolution source. Click to use cached preview.": "Sorgente in piena risoluzione visualizzata. Fare clic per usare l\u2019anteprima in cache.",
+        "PyTorch is not available on macOS Intel for Python 3.13+.":
+            "PyTorch non \u00e8 disponibile su macOS Intel per Python 3.13+.",
         "To confirm, type the number %1 below:": "Per confermare, digita il numero %1 qui sotto:",
+        "Unavailable on macOS Intel targets (PyTorch is not supported for Python 3.13+).":
+            "Non disponibile sui sistemi macOS Intel (PyTorch non \u00e8 supportato con Python 3.13+).",
         "{n} image(s) skipped \u2014 too large to decode safely.": "{n} immagine/i saltata/e \u2014 troppo grande/i per essere decodificata/e in sicurezza.",
         "pixels (long edge)": "pixel (lato lungo)",
         "previews": "anteprime",
@@ -1096,7 +1108,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Show Preview": "Mussar prevista",
         "Showing cached preview. Click to load the full-resolution source.": "Prevista en cache musrada. Cliccar per chargiar la funtauna en resoluziun cumplaina.",
         "Showing full-resolution source. Click to use cached preview.": "Funtauna en resoluziun cumplaina musrada. Cliccar per utilisar la prevista en cache.",
+        "PyTorch is not available on macOS Intel for Python 3.13+.":
+            "PyTorch na \u00e8 betg disponibel sin macOS Intel per Python 3.13+.",
         "To confirm, type the number %1 below:": "Per confermar, endatai il numer %1 sut:",
+        "Unavailable on macOS Intel targets (PyTorch is not supported for Python 3.13+).":
+            "Betg disponibel sin sistems macOS Intel (PyTorch na vegn betg sustegn\u00ec per Python 3.13+).",
         "{n} image(s) skipped \u2014 too large to decode safely.": "{n} maletg(s) sursiglid(s) \u2014 memia gronds per decodar senza riscu.",
         "pixels (long edge)": "pixels (vart lunga)",
         "previews": "previstas",
