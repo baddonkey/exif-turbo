@@ -309,6 +309,10 @@ AI search requires CLIP vectors to exist for the target images.
 Build them with **AI-Scan** (or **AI Full Rescan**) in the
 **Indexed Folders** tab.
 
+Note for macOS Intel users: AI features are unavailable on macOS Intel (x86_64)
+targets and are shown disabled in **Settings**. This is due to PyTorch support
+for Python 3.13+ on that platform.
+
 ### Filtering by format
 
 When results contain more than one file format, a row of format chips appears

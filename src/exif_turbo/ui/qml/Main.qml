@@ -4356,11 +4356,23 @@ ApplicationWindow {
                         opacity: 0.6
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
+                        Layout.bottomMargin: settingsModel.aiFeatureAvailable ? 12 : 6
+                    }
+                    Label {
+                        visible: !settingsModel.aiFeatureAvailable
+                        text: qsTr("Unavailable on macOS Intel targets (PyTorch is not supported for Python 3.13+).")
+                        font.pixelSize: 12
+                        opacity: 0.8
+                        color: Material.theme === Material.Dark ? "#ef9a9a" : "#b71c1c"
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
                         Layout.bottomMargin: 12
                     }
                     RowLayout {
                         spacing: 12
                         Layout.bottomMargin: 28
+                        enabled: settingsModel.aiFeatureAvailable
+                        opacity: settingsModel.aiFeatureAvailable ? 1.0 : 0.55
 
                         Switch {
                             id: aiEnabledSwitch

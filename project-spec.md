@@ -37,6 +37,8 @@
 | Testing | pytest |
 | Packaging | PyInstaller (onedir) + WiX v6 (Windows MSI, bundles ExifTool) + hdiutil (macOS DMG) |
 
+AI availability note: on macOS Intel (x86_64) targets, AI features are intentionally disabled in the Settings UI because PyTorch is not supported there for Python 3.13+.
+
 ---
 
 ## 4. Architecture

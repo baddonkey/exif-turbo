@@ -16,6 +16,7 @@ Fully generated using VS Code Copilot.
 - **Video indexing** — MP4, MOV, AVI, MKV, WMV, M4V, MTS, M2TS, 3GP, WebM, FLV are indexed alongside still images; thumbnails and previews are decoded via PyAV/FFmpeg (embedded thumbnail when present, otherwise a frame at 1/3 of duration); rotation from the `tkhd` display matrix keeps portrait clips upright.
 - **AI semantic search (CLIP)** — switch the Search bar from **EXIF** to **AI** mode to search by natural-language intent (for example, "golden eagle over mountain lake") instead of exact metadata tokens. A precision picker controls match strictness: **Fine** (>= 0.22), **Normal** (>= 0.20), **Broad** (>= 0.18).
 - **AI-Scan and AI Full Rescan (per folder)** — in **Indexed Folders**, build missing CLIP embeddings for one folder with **AI-Scan**, or rebuild all vectors for that folder with **AI Full Rescan**. Vector data is persisted per database (`ai_index.faiss` + `ai_id_map.json`) for fast repeat AI searches.
+- **macOS Intel limitation** — AI features are automatically disabled on macOS Intel (x86_64) targets. The Settings switch is greyed out because PyTorch is not supported there for Python 3.13+.
 - **Recreate Thumbnail / Recreate Preview** — right-click the preview image to rebuild a single thumbnail or preview if it ever looks wrong (e.g. video frame extracted before the rotation fix); the left-grid thumbnail refreshes immediately via a cache-busting URL.
 - **Self-healing cache** — after every folder index run a fast garbage-collection pass deletes orphaned thumbnail and preview files (those whose source image no longer exists in the database). Status bar reports *“Cleaning up cache…”* during the sweep.
 - **Encrypted thumbnail and preview cache** — thumbnails and rendered previews are stored AES-256-GCM encrypted on disk; the encryption key is derived from the user’s password using a wrapped-key model so changing the password does not require rebuilding the cache
@@ -203,6 +204,8 @@ python scripts/build_macos.py --arch intel
 
 Run on the matching hardware: build the arm64 package on an Apple Silicon Mac
 and the intel package on an Intel Mac (or a Rosetta shell).
+
+Note: on macOS Intel builds, AI features remain unavailable and cannot be enabled in Settings (the toggle is disabled).
 
 Optional: pass `--sign "Developer ID Application: Your Name (TEAMID)"` to
 codesign the bundle with a Developer ID certificate instead of ad-hoc signing.

@@ -424,6 +424,8 @@ class AppController(QObject):
 
     @Slot(bool)
     def setAiEnabled(self, value: bool) -> None:
+        if value and self._settings and not self._settings.aiFeatureAvailable:
+            value = False
         if self._ai_enabled == value:
             return
         self._ai_enabled = value

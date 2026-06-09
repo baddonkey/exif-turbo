@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import platform
+import sys
 from pathlib import Path
 from typing import List
 
@@ -37,6 +39,10 @@ _VALID_SORTS = {
     "size_desc",    "size_asc",
     "captured_desc", "captured_asc",
 }
+
+_IS_MACOS_INTEL = sys.platform == "darwin" and platform.machine().lower() in {"x86_64", "amd64"}
+_AI_FEATURE_SUPPORTED = not _IS_MACOS_INTEL
+_AI_UNAVAILABLE_REASON = "PyTorch is not available on macOS Intel for Python 3.13+."
 
 
 class SettingsModel(QObject):
@@ -101,6 +107,14 @@ class SettingsModel(QObject):
     def aiEnabled(self) -> bool:
         return self._ai_enabled
 
+    @Property(bool, constant=True)
+    def aiFeatureAvailable(self) -> bool:
+        return _AI_FEATURE_SUPPORTED
+
+    @Property(str, constant=True)
+    def aiFeatureUnavailableReason(self) -> str:
+        return _AI_UNAVAILABLE_REASON if not _AI_FEATURE_SUPPORTED else ""
+
     @property
     def ai_enabled(self) -> bool:
         """Python-only accessor for AppController."""
@@ -108,6 +122,8 @@ class SettingsModel(QObject):
 
     @Slot(bool)
     def setAiEnabled(self, value: bool) -> None:
+        if value and not _AI_FEATURE_SUPPORTED:
+            return
         if self._ai_enabled == value:
             return
         self._ai_enabled = value
@@ -251,7 +267,7 @@ class SettingsModel(QObject):
                 self._language = data["language"]
                 apply_language(self._language)
             if isinstance(data.get("aiEnabled"), bool):
-                self._ai_enabled = data["aiEnabled"]
+                self._ai_enabled = data["aiEnabled"] and _AI_FEATURE_SUPPORTED
         except Exception:
             pass  # corrupt/missing file — use defaults
 
