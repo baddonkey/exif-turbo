@@ -400,10 +400,25 @@ bug where `delete_missing` left orphaned encrypted previews behind.
 
 ### Linux DEB/RPM packaging
 
-`scripts/build_linux.py` produces both a `.deb` and a `.rpm` from the
-PyInstaller onedir bundle using **fpm**. The package installs to
-`/opt/exif-turbo/`, registers a `.desktop` launcher with the bundled
-`assets/icon.png`, and creates a `/usr/bin/exif-turbo` symlink.
+Linux builds are containerised with Podman:
+
+- `scripts/build_deb.py` builds Debian packages in an Ubuntu 24.04 container.
+  By default it produces both:
+  - `dist/exif-turbo-<version>-linux-amd64.deb`
+  - `dist/exif-turbo-<version>-linux-arm64.deb` (Raspberry Pi 5 / Debian arm64 target)
+  - When building arm64 on a non-arm64 host, Podman must have arm emulation
+    (`qemu-user-static` / `binfmt`) enabled in the Podman machine.
+- `scripts/build_rpm.py` builds the RPM package in an AlmaLinux 9 container:
+  - `dist/exif-turbo-<version>-linux-x86_64.rpm`
+
+`scripts/update_linux_release.py` updates an existing GitHub release:
+
+- Default (no mode flag): builds/uploads all three Linux artifacts
+  (amd64 DEB + arm64 DEB + x86_64 RPM).
+- `--deb-only`: only DEB artifacts (amd64 + arm64).
+- `--deb-arm-only`: only arm64 DEB.
+- `--deb-amd64-only`: only amd64 DEB.
+- `--rpm-only`: only RPM.
 
 ### Copy preview image to clipboard
 

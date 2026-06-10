@@ -3,6 +3,7 @@
 Produces:
     dist/exif-turbo-linux/                        — onedir bundle (GUI + CLI)
     dist/exif-turbo-<version>-linux-amd64.deb     — Debian/Ubuntu package
+    dist/exif-turbo-<version>-linux-arm64.deb     — Debian/Ubuntu package
     dist/exif-turbo-<version>-linux-x86_64.rpm    — RPM package (Fedora/RHEL/openSUSE)
 
 Requirements:
@@ -13,6 +14,7 @@ Requirements:
 Usage:
     python scripts/build_linux.py
     python scripts/build_linux.py --deb-only
+    python scripts/build_linux.py --deb-only --deb-arch arm64
     python scripts/build_linux.py --rpm-only
 """
 
@@ -74,7 +76,9 @@ def compile_translations() -> None:
     print("  Translation catalogs compiled.")
 
 
-def deb_arch() -> str:
+def deb_arch(target_arch: str | None = None) -> str:
+    if target_arch is not None:
+        return target_arch
     return {"x86_64": "amd64", "aarch64": "arm64"}.get(platform.machine(), platform.machine())
 
 
@@ -135,8 +139,13 @@ def create_package_staging(bundle_dir: Path, version: str, staging: Path) -> boo
     return icon_src is not None
 
 
-def build_deb(bundle_dir: Path, version: str) -> Path:
-    arch = deb_arch()
+def build_deb(
+    bundle_dir: Path,
+    version: str,
+    *,
+    deb_arch_override: str | None = None,
+) -> Path:
+    arch = deb_arch(deb_arch_override)
     deb_out = REPO_ROOT / "dist" / f"exif-turbo-{version}-linux-{arch}.deb"
     print(f"  Building DEB package ({arch}) ...")
 
@@ -280,7 +289,15 @@ def main() -> None:
     group.add_argument(
         "--rpm-only", action="store_true", help="Build only the RPM package."
     )
+    parser.add_argument(
+        "--deb-arch",
+        choices=("amd64", "arm64"),
+        help="Override DEB architecture metadata (useful in cross-arch container builds).",
+    )
     args = parser.parse_args()
+
+    if args.deb_arch and args.rpm_only:
+        fail("--deb-arch cannot be used with --rpm-only")
 
     find_tool("pyinstaller")
     if not args.rpm_only:
@@ -300,7 +317,7 @@ def main() -> None:
         print("  PyInstaller DEB build complete.")
         deb_bundle = REPO_ROOT / "dist" / "exif-turbo-deb"
         artifacts.append(deb_bundle)
-        deb_out = build_deb(deb_bundle, version)
+        deb_out = build_deb(deb_bundle, version, deb_arch_override=args.deb_arch)
         artifacts.append(deb_out)
 
     if not args.deb_only:
