@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import platform
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -34,7 +35,8 @@ apt-get install -y -q \
     libxcb-util1 libxcb-xkb1 libxcb-glx0 \
     libgbm1 libpango-1.0-0 libasound2t64 libpulse0 \
     libatk1.0-0 libatk-bridge2.0-0 libcups2 \
-    libxcomposite1 libxdamage1 libxrandr2 libxshmfence1 libtiff6
+    libxcomposite1 libxdamage1 libxrandr2 libxshmfence1 libtiff6 \
+    libminizip1t64
 python3 -m venv /build-venv
 . /build-venv/bin/activate
 pip install --quiet --index-url https://download.pytorch.org/whl/cpu torch torchvision
@@ -48,6 +50,99 @@ ARCH_TO_PLATFORM: dict[str, str] = {
 }
 
 
+def _read_version() -> str:
+    init_file = REPO_ROOT / "src" / "exif_turbo" / "__init__.py"
+    match = re.search(r"__version__\s*=\s*[\"']([^\"']+)[\"']", init_file.read_text())
+    if not match:
+        return ""
+    return match.group(1)
+
+
+def _podman_machine_os_id() -> str | None:
+    """Return Podman machine OS ID from /etc/os-release, or None on failure."""
+    probe = subprocess.run(
+        ["podman", "machine", "ssh", "cat /etc/os-release"],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if probe.returncode != 0:
+        return None
+    for line in probe.stdout.splitlines():
+        if line.startswith("ID="):
+            return line.split("=", 1)[1].strip().strip('"').lower()
+    return None
+
+
+def _arm64_recovery_instructions() -> str:
+    """Return host-specific commands to enable arm64 emulation in Podman machine."""
+    os_id = _podman_machine_os_id()
+    if os_id in {"fedora", "rhel", "centos"}:
+        return (
+            "  podman machine ssh \"sudo dnf install -y qemu-user-static\"\n"
+            "  podman machine ssh \"sudo systemctl restart systemd-binfmt || true\"\n"
+            "  podman machine ssh \"sudo podman run --privileged --rm docker.io/tonistiigi/binfmt --install arm64\"\n"
+            "  podman machine stop\n"
+            "  podman machine start"
+        )
+    if os_id in {"debian", "ubuntu"}:
+        return (
+            "  podman machine ssh \"sudo apt-get update && sudo apt-get install -y qemu-user-static binfmt-support\"\n"
+            "  podman machine ssh \"sudo podman run --privileged --rm docker.io/tonistiigi/binfmt --install arm64\"\n"
+            "  podman machine stop\n"
+            "  podman machine start"
+        )
+    return (
+        "  # Fedora-based Podman machine:\n"
+        "  podman machine ssh \"sudo dnf install -y qemu-user-static\"\n"
+        "  podman machine ssh \"sudo systemctl restart systemd-binfmt || true\"\n"
+        "  podman machine ssh \"sudo podman run --privileged --rm docker.io/tonistiigi/binfmt --install arm64\"\n"
+        "\n"
+        "  # Debian/Ubuntu-based Podman machine:\n"
+        "  podman machine ssh \"sudo apt-get update && sudo apt-get install -y qemu-user-static binfmt-support\"\n"
+        "  podman machine ssh \"sudo podman run --privileged --rm docker.io/tonistiigi/binfmt --install arm64\"\n"
+        "  podman machine stop\n"
+        "  podman machine start"
+    )
+
+
+def _try_enable_arm64_emulation() -> None:
+    """Best-effort emulation bootstrap inside Podman machine."""
+    os_id = _podman_machine_os_id()
+    if os_id in {"fedora", "rhel", "centos"}:
+        cmds = [
+            "sudo dnf install -y qemu-user-static",
+            "sudo systemctl restart systemd-binfmt || true",
+        ]
+    elif os_id in {"debian", "ubuntu"}:
+        cmds = [
+            "sudo apt-get update && sudo apt-get install -y qemu-user-static binfmt-support",
+        ]
+    else:
+        return
+
+    print("Attempting automatic arm64 emulation bootstrap in Podman machine ...")
+    for c in cmds:
+        subprocess.run(
+            ["podman", "machine", "ssh", c],
+            cwd=REPO_ROOT,
+            check=False,
+        )
+
+    # Fallback for environments where systemd-binfmt is present but broken.
+    subprocess.run(
+        [
+            "podman",
+            "machine",
+            "ssh",
+            "sudo podman run --privileged --rm docker.io/tonistiigi/binfmt --install arm64",
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+    )
+
+
 def run(cmd: list[str], *, check: bool = True) -> int:
     print(f"  $ {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=REPO_ROOT)
@@ -57,8 +152,12 @@ def run(cmd: list[str], *, check: bool = True) -> int:
     return result.returncode
 
 
-def _ensure_arm64_platform_available() -> None:
-    """Fail fast with actionable guidance when arm64 container emulation is missing."""
+def _ensure_arm64_platform_available(*, strict: bool = True) -> bool:
+    """Check arm64 container execution support.
+
+    When strict is True, exits with actionable guidance if unavailable.
+    When strict is False, prints a warning and returns False.
+    """
     probe = subprocess.run(
         [
             "podman",
@@ -77,32 +176,40 @@ def _ensure_arm64_platform_available() -> None:
         check=False,
     )
     if probe.returncode == 0:
-        return
+        return True
 
     details = (probe.stderr or probe.stdout).strip()
     if "Exec format error" in details:
-        print(
-            "ERROR: arm64 container execution is not available on this host.\n"
+        recovery = _arm64_recovery_instructions()
+        msg = (
+            "arm64 container execution is not available on this host.\n"
             "Podman can pull linux/arm64 images, but cannot execute them without\n"
             "binfmt/qemu emulation support inside the Podman machine.\n\n"
             "Suggested fix (Windows/macOS Podman machine):\n"
-            "  podman machine ssh \"sudo apt-get update && sudo apt-get install -y qemu-user-static binfmt-support\"\n"
-            "  podman machine stop\n"
-            "  podman machine start\n\n"
+            f"{recovery}\n\n"
             "Then rerun: python scripts/build_deb.py --arch arm64\n"
-            "Alternatively, run this command on a native arm64 host (e.g. Raspberry Pi 5).",
-            file=sys.stderr,
+            "Alternatively, run this command on a native arm64 host (e.g. Raspberry Pi 5)."
         )
+        if strict:
+            print(f"ERROR: {msg}", file=sys.stderr)
+            sys.exit(1)
+        print(f"WARNING: {msg}", file=sys.stderr)
+        return False
+
+    if strict:
+        print(f"ERROR: arm64 probe failed: {details}", file=sys.stderr)
         sys.exit(1)
+    print(f"WARNING: arm64 probe failed: {details}", file=sys.stderr)
+    return False
 
-    print(f"ERROR: arm64 probe failed: {details}", file=sys.stderr)
-    sys.exit(1)
 
-
-def _build_arch(arch: str) -> None:
+def _build_arch(arch: str, *, strict_arm64: bool = True) -> bool:
     platform_name = ARCH_TO_PLATFORM[arch]
     if arch == "arm64":
-        _ensure_arm64_platform_available()
+        if not _ensure_arm64_platform_available(strict=False):
+            _try_enable_arm64_emulation()
+            if not _ensure_arm64_platform_available(strict=strict_arm64):
+                return False
     print(f"Building Debian package ({arch}) inside {CONTAINER_IMAGE} ...")
     run([
         "podman", "run", "--rm",
@@ -113,6 +220,7 @@ def _build_arch(arch: str) -> None:
         CONTAINER_IMAGE,
         "bash", "-c", CONTAINER_SCRIPT,
     ])
+    return True
 
 
 def main() -> None:
@@ -130,10 +238,30 @@ def main() -> None:
         run(["podman", "machine", "start"], check=False)
 
     targets = ["amd64", "arm64"] if args.arch == "all" else [args.arch]
+    built: list[str] = []
+    skipped: list[str] = []
     for arch in targets:
-        _build_arch(arch)
+        strict_arm64 = True
+        if _build_arch(arch, strict_arm64=strict_arm64):
+            built.append(arch)
+        else:
+            skipped.append(arch)
 
     print()
+    if built:
+        print(f"Built: {', '.join(built)}")
+    if skipped:
+        print(f"Skipped: {', '.join(skipped)}")
+        version = _read_version()
+        for arch in skipped:
+            if not version:
+                break
+            stale = REPO_ROOT / "dist" / f"exif-turbo-{version}-linux-{arch}.deb"
+            if stale.exists():
+                print(
+                    f"WARNING: Existing artifact was NOT rebuilt for {arch}: {stale}\n"
+                    "         It may be stale. Do not distribute/install it as the current build output."
+                )
     print("Done. Package(s) are in dist/.")
 
 

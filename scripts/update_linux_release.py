@@ -91,6 +91,7 @@ def delete_existing_linux_assets(
     *,
     delete_deb: bool,
     delete_rpm: bool,
+    deb_arches: list[str] | None = None,
 ) -> None:
     out = run(
         [
@@ -107,11 +108,24 @@ def delete_existing_linux_assets(
     )
     data = json.loads(out)
     assets: list[dict[str, object]] = data.get("assets", [])
+    deb_arches_set = set(deb_arches or [])
     for asset in assets:
         name = str(asset.get("name", ""))
         is_deb = name.endswith(".deb")
         is_rpm = name.endswith(".rpm")
-        if (is_deb and delete_deb) or (is_rpm and delete_rpm):
+        delete_this = False
+        if is_deb and delete_deb:
+            # Only delete selected DEB architectures (e.g. arm-only mode should
+            # not remove amd64). If no architecture filter is provided, keep the
+            # previous behavior and delete all DEB assets.
+            if not deb_arches_set:
+                delete_this = True
+            else:
+                delete_this = any(name.endswith(f"-linux-{arch}.deb") for arch in deb_arches_set)
+        elif is_rpm and delete_rpm:
+            delete_this = True
+
+        if delete_this:
             run(
                 [
                     "gh",
@@ -137,6 +151,14 @@ def upload_linux_assets(tag: str, assets: list[Path]) -> None:
     cmd += [str(asset) for asset in assets]
     cmd += ["--repo", "baddonkey/exif-turbo", "--clobber"]
     run(cmd)
+
+
+def ensure_local_assets_exist(assets: list[Path]) -> None:
+    if not assets:
+        raise ShellError("No assets selected for upload")
+    for asset in assets:
+        if not asset.exists():
+            raise ShellError(f"Missing expected artifact: {asset}")
 
 
 def print_summary(tag: str) -> None:
@@ -245,7 +267,14 @@ def main() -> int:
         for asset in assets:
             print(f"- {asset.name}")
 
-        delete_existing_linux_assets(tag, delete_deb=include_deb, delete_rpm=include_rpm)
+        # Safety: never delete existing release assets if local replacements are missing.
+        ensure_local_assets_exist(assets)
+        delete_existing_linux_assets(
+            tag,
+            delete_deb=include_deb,
+            delete_rpm=include_rpm,
+            deb_arches=deb_arches if include_deb else None,
+        )
         upload_linux_assets(tag, assets)
         print_summary(tag)
         return 0

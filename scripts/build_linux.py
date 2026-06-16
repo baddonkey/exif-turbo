@@ -186,6 +186,7 @@ def build_deb(
             "libxdamage1",
             "libxrandr2",
             "libpango-1.0-0",
+            "libminizip1t64 | libminizip1",
         ])
 
         debian_dir = staging / "DEBIAN"
