@@ -482,3 +482,4 @@ Two new pill buttons in the preview header toolbar and matching right-click cont
 
 A brief toast notification confirms each save. Both actions use `FileDialog` from `QtQuick.Dialogs` (the same pattern as the existing JSON export dialog), since the app uses `QGuiApplication` rather than `QApplication` and Qt Widgets are therefore unavailable.
 
+Test: agent change.
