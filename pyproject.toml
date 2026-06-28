@@ -16,7 +16,7 @@ dependencies = [
   "markdown>=3.4",
   "cryptography>=42.0",
   "pyvips>=2.2",
-  "pyvips-binary>=2.2",
+  "pyvips-binary>=8.18.3",
   "faiss-cpu>=1.7",
   "open-clip-torch>=2.24",
 ]
