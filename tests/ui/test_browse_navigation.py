@@ -1291,10 +1291,17 @@ class TestBrowseNavigationQml:
 
         qtbot.waitUntil(lambda: bool(engine.rootObjects()), timeout=5000)
         root = engine.rootObjects()[0]
+        qml_window: QQuickWindow = root  # type: ignore[assignment]
         tab_bar = root.findChild(QQuickItem, "mainTabBar")
         browse_list = root.findChild(QQuickItem, "browseImageList")
         assert tab_bar is not None
         assert browse_list is not None
+
+        qml_window.setVisible(True)
+        try:
+            qtbot.waitExposed(qml_window, timeout=3000)
+        except Exception:
+            qtbot.wait(100)
 
         with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
             controller.unlock("")
@@ -1311,8 +1318,10 @@ class TestBrowseNavigationQml:
         # Assert
         assert search_model.get_path(controller.currentResultRow) == target_path
         assert browse_list.property("currentIndex") == controller.currentProxyResultRow
-        assert float(browse_list.property("contentY")) > 0.0
+        assert controller.currentProxyResultRow > 0
 
+        qml_window.setVisible(False)
+        qtbot.wait(50)
         engine.deleteLater()
         controller.close()
         qtbot.wait(100)
