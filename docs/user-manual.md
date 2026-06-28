@@ -736,7 +736,7 @@ database — not just the visible results.
 
 | Action | What it does |
 |--------|--------------|
-| **Export Metadata as JSON…** | Writes the EXIF metadata of every marked image to a JSON file you choose via a Save dialog. The export honours the current **Sort** order (date taken, filename, path, or size). When nothing is marked, the menu label changes to *"Export Metadata as JSON… (all results)"* and the action exports every image matching the current filters instead. |
+| **Export Metadata as JSON…** | Writes the EXIF metadata of every marked image to a JSON file you choose via a Save dialog. The export honours the current **Sort** order (date taken, filename, path, or size). When nothing is marked, the menu label changes to *"Export Metadata as JSON… (all results)"* and the action exports every image matching the current filters instead. The on-disk layout is controlled by **Settings → JSON Export Formatting** (see *Settings*). |
 | **Delete Marked Images…** | Permanently deletes every marked image **from disk** and removes its row from the index. Cached thumbnails (`.png` / `.enc`), `.skip` sentinels, and any rendered preview (`.jpg` / `.jpg.enc`) for the deleted images are also cleaned up. Disabled when nothing is marked. The menu label includes the current count, e.g. *"Delete Marked Images… (12 selected)"*. |
 
 Both menu items report the live count in their label and run via the bulk-op
@@ -804,6 +804,20 @@ full paths.
 Examples: `@eaDir`, `*.tmp`, `Thumbs.db`
 
 Changes to the blacklist take effect on the next rescan.
+
+### JSON Export Formatting
+
+Controls how the **Export Metadata as JSON…** action writes its output.
+
+- **Pretty-print (indented) JSON** — off by default, which keeps the historical
+  compact layout (the export is a JSON array with each record serialised on its
+  own line). Turn it on to indent every record for easier human reading.
+- **Indent style** — when pretty-printing is on, choose **Spaces** or **Tabs**.
+- **Indent size** — when the style is **Spaces**, choose how many spaces make up
+  one indentation level (2, 4, or 8).
+
+Whatever the format, the file is always valid JSON that round-trips back to the
+same records. The setting is stored per database and applies to the next export.
 
 ### Theme
 
