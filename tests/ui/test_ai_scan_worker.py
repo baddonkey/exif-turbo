@@ -68,7 +68,7 @@ class _FakeAiIndexerService:
         self._preview_cache_dir = preview_cache_dir
         self._preview_cache_key = preview_cache_key
 
-    def build_index(self, image_paths, on_progress=None, cancel_check=None):  # type: ignore[no-untyped-def]
+    def build_index(self, image_paths, stamps=None, on_progress=None, cancel_check=None):  # type: ignore[no-untyped-def]
         pending = [p for p in image_paths if p not in self._repo.get_indexed_paths()]
         if pending:
             vec = np.ones((len(pending), 512), dtype=np.float32)
