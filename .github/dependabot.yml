@@ -4,6 +4,7 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    versioning-strategy: "increase"
     groups:
       security-patches:
         update-types:
