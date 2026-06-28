@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import threading
 from pathlib import Path
@@ -9,6 +8,7 @@ from typing import List
 from PySide6.QtCore import QThread, Signal
 
 from ...data.image_index_repository import ImageIndexRepository
+from ...utils.json_export import JsonExportFormat, render_record
 from ...utils.preview_cache import preview_cache_name_from_stamp, preview_dir
 from ...utils.thumb_cache import thumb_cache_name_from_stamp
 
@@ -44,6 +44,7 @@ class BulkOpWorker(QThread):
         # export_json
         file_path: Path | None = None,
         sort_by: str = "path_asc",
+        json_format: JsonExportFormat | None = None,
         # select_missing_thumbs
         cache_dir: Path | None = None,
         # date filter
@@ -62,6 +63,7 @@ class BulkOpWorker(QThread):
         self._mark_value = mark_value
         self._file_path = file_path
         self._sort_by = sort_by
+        self._json_format = json_format or JsonExportFormat()
         self._cache_dir = cache_dir
         self._date_from = date_from
         self._date_to = date_to
@@ -355,13 +357,14 @@ class BulkOpWorker(QThread):
 
         # Step 2: write JSON one record at a time so the progress bar advances
         assert self._file_path is not None
+        fmt = self._json_format
         with open(self._file_path, "w", encoding="utf-8") as fh:
             fh.write("[\n")
             for idx, record in enumerate(records):
                 if self._is_canceled():
                     self.canceled.emit()
                     return
-                fh.write(json.dumps(record, ensure_ascii=False))
+                fh.write(render_record(record, fmt))
                 if idx < total - 1:
                     fh.write(",\n")
                 else:

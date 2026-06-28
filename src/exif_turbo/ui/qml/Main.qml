@@ -4086,6 +4086,101 @@ ApplicationWindow {
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
 
+                    // ── JSON export formatting ────────────────────────────
+                    Label {
+                        text: qsTr("JSON Export Formatting")
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                        Layout.bottomMargin: 6
+                    }
+                    Label {
+                        text: qsTr("Controls how the “Export Metadata as JSON” action writes its output. Compact keeps the current one-record-per-line layout; pretty-printed indents each record for readability.")
+                        font.pixelSize: 12
+                        opacity: 0.6
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 12
+                    }
+                    Switch {
+                        id: jsonPrettySwitch
+                        text: qsTr("Pretty-print (indented) JSON")
+                        checked: settingsModel ? settingsModel.jsonExportPretty : false
+                        onToggled: {
+                            if (settingsModel)
+                                settingsModel.setJsonExportPretty(checked)
+                        }
+                        Layout.bottomMargin: 12
+                    }
+                    RowLayout {
+                        spacing: 12
+                        enabled: jsonPrettySwitch.checked
+                        opacity: enabled ? 1.0 : 0.5
+                        Layout.bottomMargin: 12
+
+                        Label {
+                            text: qsTr("Indent style")
+                            font.pixelSize: 12
+                            opacity: 0.7
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        ComboBox {
+                            id: jsonIndentStyleCombo
+                            implicitWidth: 140
+                            readonly property var _opts: [
+                                { value: "space", label: qsTr("Spaces") },
+                                { value: "tab",   label: qsTr("Tabs") },
+                            ]
+                            model: _opts.map(function (o) { return o.label })
+                            currentIndex: {
+                                var v = settingsModel ? settingsModel.jsonExportIndentStyle : "space"
+                                for (var i = 0; i < _opts.length; ++i)
+                                    if (_opts[i].value === v) return i
+                                return 0
+                            }
+                            onActivated: {
+                                if (settingsModel)
+                                    settingsModel.setJsonExportIndentStyle(_opts[currentIndex].value)
+                            }
+                        }
+                    }
+                    RowLayout {
+                        spacing: 12
+                        enabled: jsonPrettySwitch.checked
+                                 && (settingsModel ? settingsModel.jsonExportIndentStyle === "space" : true)
+                        opacity: enabled ? 1.0 : 0.5
+                        Layout.bottomMargin: 28
+
+                        Label {
+                            text: qsTr("Indent size")
+                            font.pixelSize: 12
+                            opacity: 0.7
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        ComboBox {
+                            id: jsonIndentSizeCombo
+                            implicitWidth: 100
+                            model: settingsModel ? settingsModel.jsonExportIndentSizeChoices : [2]
+                            currentIndex: {
+                                var v = settingsModel ? settingsModel.jsonExportIndentSize : 2
+                                var choices = settingsModel ? settingsModel.jsonExportIndentSizeChoices : [2]
+                                var idx = choices.indexOf(v)
+                                return idx >= 0 ? idx : 0
+                            }
+                            onActivated: {
+                                if (settingsModel)
+                                    settingsModel.setJsonExportIndentSize(model[currentIndex])
+                            }
+                        }
+                        Label {
+                            text: qsTr("spaces")
+                            font.pixelSize: 12
+                            opacity: 0.7
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
+
                     // ── Indexing blacklist ────────────────────────────────
                     Label {
                         text: qsTr("Indexing Blacklist")

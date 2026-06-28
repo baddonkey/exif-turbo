@@ -10,6 +10,7 @@ from typing import List
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from exif_turbo.i18n import _, apply_language, available_languages, current_theme, set_theme
+from exif_turbo.utils.json_export import JsonExportFormat
 
 
 _CPU_COUNT = os.cpu_count() or 2
@@ -40,6 +41,16 @@ _VALID_SORTS = {
     "captured_desc", "captured_asc",
 }
 
+# JSON export formatting defaults — compact (one record per line) keeps the
+# historical output unchanged unless the user opts in to pretty-printing.
+_DEFAULT_JSON_PRETTY = False
+_VALID_INDENT_STYLES = {"space", "tab"}
+_DEFAULT_JSON_INDENT_STYLE = "space"
+_DEFAULT_JSON_INDENT_SIZE = 2
+_JSON_INDENT_SIZE_CHOICES: List[int] = [2, 4, 8]
+_MIN_JSON_INDENT_SIZE = 1
+_MAX_JSON_INDENT_SIZE = 8
+
 _IS_MACOS_INTEL = sys.platform == "darwin" and platform.machine().lower() in {"x86_64", "amd64"}
 _AI_FEATURE_SUPPORTED = not _IS_MACOS_INTEL
 _AI_UNAVAILABLE_REASON = _("PyTorch is not available on macOS Intel for Python 3.13+.")
@@ -62,6 +73,7 @@ class SettingsModel(QObject):
     previewMaxSizeChanged = Signal()
     sortByChanged = Signal()
     aiEnabledChanged = Signal()
+    jsonExportFormatChanged = Signal()
 
     def __init__(self, settings_path: Path, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -73,6 +85,9 @@ class SettingsModel(QObject):
         self._preview_max_size: int = _DEFAULT_PREVIEW_SIZE
         self._sort_by: str = _DEFAULT_SORT
         self._ai_enabled: bool = False
+        self._json_pretty: bool = _DEFAULT_JSON_PRETTY
+        self._json_indent_style: str = _DEFAULT_JSON_INDENT_STYLE
+        self._json_indent_size: int = _DEFAULT_JSON_INDENT_SIZE
         self._load()
 
     # ── Properties ───────────────────────────────────────────────────────────
@@ -241,6 +256,58 @@ class SettingsModel(QObject):
         self.sortByChanged.emit()
         self._save()
 
+    # ── JSON export formatting ────────────────────────────────────────────────
+
+    @Property(bool, notify=jsonExportFormatChanged)
+    def jsonExportPretty(self) -> bool:
+        return self._json_pretty
+
+    @Slot(bool)
+    def setJsonExportPretty(self, value: bool) -> None:
+        if self._json_pretty == value:
+            return
+        self._json_pretty = value
+        self.jsonExportFormatChanged.emit()
+        self._save()
+
+    @Property(str, notify=jsonExportFormatChanged)
+    def jsonExportIndentStyle(self) -> str:
+        return self._json_indent_style
+
+    @Slot(str)
+    def setJsonExportIndentStyle(self, value: str) -> None:
+        if value not in _VALID_INDENT_STYLES or self._json_indent_style == value:
+            return
+        self._json_indent_style = value
+        self.jsonExportFormatChanged.emit()
+        self._save()
+
+    @Property(int, notify=jsonExportFormatChanged)
+    def jsonExportIndentSize(self) -> int:
+        return self._json_indent_size
+
+    @Property("QVariantList", constant=True)
+    def jsonExportIndentSizeChoices(self) -> List[int]:
+        return list(_JSON_INDENT_SIZE_CHOICES)
+
+    @Slot(int)
+    def setJsonExportIndentSize(self, value: int) -> None:
+        clamped = max(_MIN_JSON_INDENT_SIZE, min(_MAX_JSON_INDENT_SIZE, value))
+        if self._json_indent_size == clamped:
+            return
+        self._json_indent_size = clamped
+        self.jsonExportFormatChanged.emit()
+        self._save()
+
+    @property
+    def json_export_format(self) -> JsonExportFormat:
+        """Python-only accessor for AppController — the current export format."""
+        return JsonExportFormat(
+            pretty=self._json_pretty,
+            indent_style=self._json_indent_style,
+            indent_size=self._json_indent_size,
+        )
+
     # ── Python-only API (used by IndexWorker) ────────────────────────────────
 
     @property
@@ -268,6 +335,15 @@ class SettingsModel(QObject):
                 apply_language(self._language)
             if isinstance(data.get("aiEnabled"), bool):
                 self._ai_enabled = data["aiEnabled"] and _AI_FEATURE_SUPPORTED
+            if isinstance(data.get("jsonExportPretty"), bool):
+                self._json_pretty = data["jsonExportPretty"]
+            if data.get("jsonExportIndentStyle") in _VALID_INDENT_STYLES:
+                self._json_indent_style = data["jsonExportIndentStyle"]
+            if isinstance(data.get("jsonExportIndentSize"), int):
+                self._json_indent_size = max(
+                    _MIN_JSON_INDENT_SIZE,
+                    min(_MAX_JSON_INDENT_SIZE, data["jsonExportIndentSize"]),
+                )
         except Exception:
             pass  # corrupt/missing file — use defaults
 
@@ -283,6 +359,9 @@ class SettingsModel(QObject):
                         "sortBy": self._sort_by,
                         "language": self._language,
                         "aiEnabled": self._ai_enabled,
+                        "jsonExportPretty": self._json_pretty,
+                        "jsonExportIndentStyle": self._json_indent_style,
+                        "jsonExportIndentSize": self._json_indent_size,
                     },
                     indent=2,
                 ),

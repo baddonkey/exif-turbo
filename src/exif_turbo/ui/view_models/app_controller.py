@@ -33,6 +33,7 @@ from ...utils.preview_cache import (
     preview_cache_name_from_stamp,
     preview_dir,
 )
+from ...utils.json_export import JsonExportFormat
 from ...utils.thumb_cache import thumb_cache_name_from_stamp
 from ..models.checked_filter_proxy_model import CheckedFilterProxyModel
 from ..models.exif_list_model import ExifListModel
@@ -799,6 +800,7 @@ class AppController(QObject):
             _("Exporting metadata\u2026"),
             file_path=file_path,
             sort_by=self._sort_by,
+            json_format=self._settings.json_export_format if self._settings else None,
         )
 
     @Slot()
@@ -816,6 +818,7 @@ class AppController(QObject):
         mark_value: bool = True,
         file_path: Path | None = None,
         sort_by: str = "path_asc",
+        json_format: JsonExportFormat | None = None,
         cache_dir: Path | None = None,
     ) -> None:
         """Spawn a BulkOpWorker and show the busy overlay."""
@@ -833,6 +836,7 @@ class AppController(QObject):
             mark_value=mark_value,
             file_path=file_path,
             sort_by=sort_by,
+            json_format=json_format,
             cache_dir=cache_dir,
             date_from=self._date_from,
             date_to=self._date_to,
