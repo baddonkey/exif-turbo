@@ -327,6 +327,67 @@ def test_ai_search_worker_applies_ext_and_date_filters_to_hits(
     assert [row[1] for row in rows] == [str(jpg_path)]
 
 
+def test_ai_search_worker_date_filter_keeps_facet_paths_for_all_years(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    # Arrange — two semantic hits in different years; date filter covers 2024 only
+    db_path = tmp_path / "test.db"
+    gallery_dir = tmp_path / "gallery"
+    gallery_dir.mkdir()
+
+    path_2024 = make_jpeg(gallery_dir / "photo_2024.jpg")
+    path_2025 = make_jpeg(gallery_dir / "photo_2025.jpg")
+
+    folder_id = _seed_folder(db_path, gallery_dir, enabled=True)
+    _seed_image(
+        db_path, path_2024, folder_id, "Canon", captured_at=1704067200.0
+    )  # 2024-01-01T00:00:00Z
+    _seed_image(
+        db_path, path_2025, folder_id, "Canon", captured_at=1735689600.0
+    )  # 2025-01-01T00:00:00Z
+
+    _FakeAiVectorRepository.hits = [
+        (str(path_2025), 0.96),
+        (str(path_2024), 0.95),
+    ]
+    monkeypatch.setattr(
+        "exif_turbo.ui.workers.ai_search_worker.AiVectorRepository",
+        _FakeAiVectorRepository,
+    )
+    monkeypatch.setattr(
+        "exif_turbo.ui.workers.ai_search_worker.AiIndexerService",
+        _FakeAiIndexerService,
+    )
+
+    emitted: list[tuple[list[tuple[int, str, str, str, int, float]], int, list, int]] = []
+    failures: list[str] = []
+    worker = AiSearchWorker(
+        db_path,
+        "",
+        "landscape",
+        23,
+        date_from=1704067200,
+        date_to=1735603199,  # just before 2025-01-01T00:00:00Z
+    )
+    worker.results_ready.connect(
+        lambda rows, total, format_counts, serial: emitted.append(
+            (rows, total, format_counts, serial)
+        )
+    )
+    worker.failed.connect(failures.append)
+
+    # Act
+    worker.run()
+
+    # Assert — displayed rows honour the date filter, but the timeline facet
+    # source keeps every semantic year so the histogram does not collapse.
+    assert failures == []
+    rows = emitted[0][0]
+    assert [row[1] for row in rows] == [str(path_2024)]
+    assert set(worker.facet_paths) == {str(path_2024), str(path_2025)}
+
+
 def test_ai_search_worker_calls_vector_search_with_2000_result_cap(
     tmp_path: Path,
     monkeypatch,

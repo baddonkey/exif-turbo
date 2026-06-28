@@ -253,6 +253,10 @@ class AppController(QObject):
         self._ai_select_first: bool = False
         # All AI result rows held in memory so we can page them without SQL.
         self._ai_result_cache: list[SearchResult] = []
+        # Semantic result paths BEFORE the date filter is applied.  Drives the
+        # AI-mode year histogram so selecting a single year does not collapse
+        # the other selectable years.
+        self._ai_facet_paths: list[str] = []
         self._ai_scan_folder_id: int = 0
         self._ai_scan_is_full_rescan: bool = False
         self._ai_scan_current: int = 0
@@ -1371,6 +1375,7 @@ class AppController(QObject):
             "was_ai_search_mode": self._is_ai_search_mode,
             "current_image_id": self._search_model.get_image_id(self._current_result_row) or 0,
             "ai_rows": list(self._ai_result_cache) if self._is_ai_search_mode else None,
+            "ai_facet_paths": list(self._ai_facet_paths) if self._is_ai_search_mode else None,
             "ai_total_results": self._total_results if self._is_ai_search_mode else 0,
             "ai_loaded_results": self._loaded_results if self._is_ai_search_mode else 0,
         }
@@ -1443,6 +1448,10 @@ class AppController(QObject):
             # Restore AI results directly — no re-search, no model reload.
             saved_rows = snapshot["ai_rows"]
             self._ai_result_cache = saved_rows
+            self._ai_facet_paths = (
+                snapshot.get("ai_facet_paths")
+                or [res.path for res in saved_rows]
+            )
             self._loaded_offset = 0
             self._loading = True
             target_source_row = -1
@@ -1587,7 +1596,11 @@ class AppController(QObject):
         format_counts: list,
         serial: int,
     ) -> None:
+        ai_facet_paths: list[str] | None = None
         if self.sender() is self._ai_search_worker:
+            ai_facet_paths = list(
+                getattr(self._ai_search_worker, "facet_paths", []) or []
+            )
             self._ai_search_worker = None
         old_worker = self._search_worker
         self._search_worker = None
@@ -1637,6 +1650,14 @@ class AppController(QObject):
         # by loadMore() without touching the database.
         if self._is_ai_search_mode:
             self._ai_result_cache = all_results
+            # Timeline facet source: the semantic set before date filtering.
+            # Fall back to the (date-filtered) result paths if the worker did
+            # not supply a facet list (e.g. a non-AI worker path).
+            self._ai_facet_paths = (
+                ai_facet_paths
+                if ai_facet_paths is not None
+                else [res.path for res in all_results]
+            )
             first_page = all_results[:_PAGE_SIZE]
             self._loaded_offset = 0
         else:
@@ -1836,12 +1857,14 @@ class AppController(QObject):
         """Return source paths used for AI mode facet/timeline counts.
 
         Empty AI text query keeps facets broad (folder-scope only), while a
-        non-empty query follows the semantic result set.
+        non-empty query follows the semantic result set.  In both cases the
+        active date filter is intentionally ignored so picking one year does
+        not hide the other years from the histogram.
         """
         if self._repo is None:
             return []
         if self._last_ai_query.strip():
-            return [res.path for res in self._ai_result_cache]
+            return list(self._ai_facet_paths)
         return sorted(
             self._repo.get_filtered_paths(
                 path_filter=self._current_path_filter(),
