@@ -61,10 +61,41 @@ class ListScrollFix(QObject):
         self._on_wheel_down_at_bottom = on_wheel_down_at_bottom
         self._accumulated: float = 0.0
         self._last_content_y: float | None = None
+        self._overlay: QQuickItem | None = None
+
+    # ------------------------------------------------------------------
+    def _overlay_has_open_popup(self) -> bool:
+        """Return ``True`` while a Popup/Dialog/Menu is shown in the overlay.
+
+        Foreground popups (their ``QQuickPopupItem``) are parented to the
+        ``ApplicationWindow`` overlay only while open.  ``ApplicationWindow``'s
+        ``overlay`` is an attached property and is not reachable via
+        ``property("overlay")``, so the ``QQuickOverlay`` item is located once
+        by class name and cached.
+
+        While a popup is open the background lists must not steal the wheel
+        event, otherwise scrolling over e.g. the Third-Party Licenses dialog
+        moves the search results behind it instead of the dialog content.
+        """
+        overlay = self._overlay
+        if overlay is None:
+            for child in self._window.findChildren(QQuickItem):
+                if child.metaObject().className() == "QQuickOverlay":
+                    overlay = child
+                    self._overlay = child
+                    break
+        if overlay is None:
+            return False
+        return any(child.isVisible() for child in overlay.childItems())
 
     # ------------------------------------------------------------------
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # noqa: N802
         if event.type() != QEvent.Type.Wheel:
+            return False
+
+        # A foreground popup/dialog owns the wheel event — let it through so
+        # the popup (not the background list) scrolls.
+        if self._overlay_has_open_popup():
             return False
 
         lst: QQuickItem | None = self._window.findChild(QQuickItem, self._name)

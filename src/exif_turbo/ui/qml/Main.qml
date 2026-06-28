@@ -582,43 +582,39 @@ ApplicationWindow {
 
     Dialog {
         id: thirdPartyDialog
+        objectName: "thirdPartyDialog"
         title: qsTr("Third-Party Licenses")
         standardButtons: Dialog.Close
+        modal: true
         anchors.centerIn: Overlay.overlay
         width: Math.min(root.width * 0.85, 820)
         height: Math.min(root.height * 0.85, 640)
 
-        ScrollView {
-            id: licensesScroll
+        WebEngineView {
+            id: licensesWeb
+            objectName: "licensesWeb"
             anchors.fill: parent
-            clip: true
-            contentWidth: availableWidth
+            settings.showScrollBars: true
 
-            WebEngineView {
-                width: licensesScroll.availableWidth
-                height: Math.max(licensesScroll.height, implicitHeight)
-                settings.showScrollBars: false
+            property string licenseHtml: thirdPartyLicensesHtml
+                .split("TEXTCOLOR").join(root._licenseTextColor)
+                .split("BGCOLOR").join(root._licenseBgColor)
+                .split("LINKCOLOR").join(root._licenseLinkColor)
+                .split("BORDERCOLOR").join(root._licenseBorderColor)
+                .split("HEADERBG").join(root._licenseHeaderBg)
+                .split("CODEBG").join(root._licenseBorderColor)
 
-                property string licenseHtml: thirdPartyLicensesHtml
-                    .split("TEXTCOLOR").join(root._licenseTextColor)
-                    .split("BGCOLOR").join(root._licenseBgColor)
-                    .split("LINKCOLOR").join(root._licenseLinkColor)
-                    .split("BORDERCOLOR").join(root._licenseBorderColor)
-                    .split("HEADERBG").join(root._licenseHeaderBg)
-                    .split("CODEBG").join(root._licenseBorderColor)
+            onLicenseHtmlChanged: loadHtml(licenseHtml)
+            Component.onCompleted: loadHtml(licenseHtml)
 
-                onLicenseHtmlChanged: loadHtml(licenseHtml)
-                Component.onCompleted: loadHtml(licenseHtml)
-
-                onNavigationRequested: (request) => {
-                    // navigationType 0 = LinkClickedNavigation
-                    if (request.navigationType === WebEngineNavigationRequest.LinkClickedNavigation) {
-                        controller.openUrl(request.url.toString())
-                        request.action = WebEngineNavigationRequest.IgnoreRequest
-                        request.accepted = false
-                    }
-                    // all other types (OtherNavigation = loadHtml) are allowed
+            onNavigationRequested: (request) => {
+                // navigationType 0 = LinkClickedNavigation
+                if (request.navigationType === WebEngineNavigationRequest.LinkClickedNavigation) {
+                    controller.openUrl(request.url.toString())
+                    request.action = WebEngineNavigationRequest.IgnoreRequest
+                    request.accepted = false
                 }
+                // all other types (OtherNavigation = loadHtml) are allowed
             }
         }
     }
