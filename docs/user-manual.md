@@ -199,7 +199,7 @@ Each row exposes the following buttons on the right:
 | **AI-Scan** | Build missing CLIP vector embeddings for this folder only (incremental semantic-index build). While running, the same button reads **Cancel AI-Scan**. Visible only when AI features are enabled in Settings. |
 | **AI Full Rescan** | Rebuild every CLIP vector embedding for this folder from scratch. While running, the same button reads **Cancel AI Full Rescan**. Visible only when AI features are enabled. |
 | **Clear Previews** | Delete all cached previews for this folder. Hidden (kept invisible for layout alignment) when nothing is cached. A confirmation dialog asks *"Delete N cached preview(s) for \"<folder>\"? Thumbnails are unaffected."* |
-| **Remove** | Remove the folder and delete all its indexed images. A **Remove Folder** confirmation dialog asks before deletion. The original files on disk are not touched. |
+| **Remove** | Remove the folder and delete all its indexed images. A **Remove Folder** confirmation dialog asks before deletion. The original files on disk are not touched. The removal then runs on a background worker behind the modal **bulk-op progress overlay** (see [section 9](#9-marking-images--bulk-actions)), which reports each sub-step — *"Clearing preview cache…"* (cancelable, with an `X / Y` count) followed by *"Deleting index entries…"*. |
 
 ---
 
@@ -729,6 +729,13 @@ The menu bar exposes two menus dedicated to marking and bulk actions.
 All four actions show the **bulk-op progress overlay** with a live `X / Y`
 counter and a **Cancel** button.
 
+The same modal overlay is also reused for the two long-running maintenance
+actions — **Remove Folder** (Indexed Folders tab) and **Reset Database**
+(Settings tab). For those, the overlay adds a sub-step detail line describing
+the current phase, and for phases that must not be interrupted (such as the
+database vacuum during a reset) it hides the **Cancel** button and shows a
+*"This step cannot be canceled…"* notice instead.
+
 ### Action menu
 
 The Action menu operates on whatever is currently marked across the entire
@@ -888,6 +895,13 @@ Click **OK** to confirm. This permanently:
 
 The database is vacuumed and checkpointed immediately, so the database file
 shrinks to near-zero on disk straight away.
+
+While the reset runs, the modal **bulk-op progress overlay** (see
+[section 9](#9-marking-images--bulk-actions)) covers the window and steps
+through each phase: *"Clearing preview cache…"* (cancelable, with a live
+`X / Y` count), *"Deleting index rows…"*, and finally *"Vacuuming database…"*.
+The vacuum phase cannot be interrupted — the overlay hides its **Cancel**
+button and shows a *"This step cannot be canceled…"* notice until it finishes.
 
 > **This action cannot be undone.** After a reset you will need to re-add your
 > folders and run a full rescan to rebuild the index.

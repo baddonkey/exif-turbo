@@ -470,7 +470,14 @@ class ImageIndexRepository:
         with self.conn:
             self.conn.execute("UPDATE images SET marked = 0")
 
-    def clear_all(self) -> None:
+    def clear_all_rows(self) -> None:
+        """Delete every image/association row and purge the FTS index.
+
+        Does **not** reclaim disk space — call :meth:`vacuum` afterwards to
+        shrink the file.  Splitting the two phases lets callers report
+        progress for the (potentially slow, non-cancelable) VACUUM step
+        separately from the row deletions.
+        """
         # DROP + recreate the FTS5 virtual table to fully purge its shadow tables
         # (images_fts_data, images_fts_idx, etc.).  A plain DELETE leaves
         # tombstone entries that keep the file large even after VACUUM.
@@ -482,12 +489,20 @@ class ImageIndexRepository:
             " USING fts5(path, filename, metadata_text)"
         )
         self.conn.commit()
-        # Reclaim disk space — VACUUM must run outside any transaction.
+
+    def vacuum(self) -> None:
+        """Reclaim disk space and shrink the database file.
+
+        Must run outside any transaction.  In WAL mode VACUUM writes the
+        compacted pages into the WAL file, so a full checkpoint is forced
+        afterwards to shrink the main database file immediately.
+        """
         self.conn.execute("VACUUM")
-        # In WAL mode, VACUUM writes compacted pages into the WAL file; the
-        # main database file only shrinks after a checkpoint.  Force an
-        # immediate full checkpoint so the file is small right away.
         self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+    def clear_all(self) -> None:
+        self.clear_all_rows()
+        self.vacuum()
 
     _SORT_MAP: Dict[str, str] = {
         "filename_asc":       "images.filename COLLATE NOCASE ASC",

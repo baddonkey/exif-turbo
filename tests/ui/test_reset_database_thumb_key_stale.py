@@ -147,9 +147,12 @@ def test_reset_database_leaves_thumb_provider_with_stale_master_key(
     )
 
     # ── Phase B — resetDatabase wipes .thumb_key and re-keys the provider ───
-    ctrl.resetDatabase()
-    # resetDatabase rmtrees the cache dir and immediately calls set_key(),
-    # which creates a fresh .thumb_key with a new random master key M2.
+    with qtbot.waitSignal(ctrl.isBusyChanged, timeout=3000):
+        ctrl.resetDatabase()
+    # resetDatabase runs the wipe + VACUUM on a MaintenanceWorker; wait for it
+    # to finish, at which point set_key has recreated .thumb_key with a fresh
+    # random master key M2.
+    qtbot.waitUntil(lambda: not ctrl.isBusy, timeout=15_000)
     assert thumb_key_path.exists(), (
         "set_key inside resetDatabase should have recreated .thumb_key"
     )

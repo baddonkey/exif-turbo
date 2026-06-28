@@ -25,6 +25,7 @@ from ...data.indexed_folder_repository import IndexedFolderRepository
 from ...i18n import _
 from ...indexing.exif_metadata_extractor import get_exiftool_version
 from ...indexing.image_utils import RAW_EXTENSIONS
+from ...models.indexed_folder import IndexedFolder
 from ...models.search_result import SearchResult
 from ...utils.preview_cache import (
     clear_cached_previews_for,
@@ -45,6 +46,7 @@ from ..workers.ai_search_worker import AiSearchWorker
 from ..workers.bulk_op_worker import BulkOpWorker
 from ..workers.folder_tree_worker import FolderTreeWorker
 from ..workers.index_worker import IndexWorker
+from ..workers.maintenance_worker import MaintenanceWorker
 from ..workers.password_change_worker import PasswordChangeWorker
 from ..workers.preview_build_worker import PreviewBuildWorker
 from ..workers.search_worker import SearchPageWorker, SearchWorker
@@ -136,6 +138,7 @@ class AppController(QObject):
     isBusyChanged = Signal()
     isSearchingChanged = Signal()
     busyLabelChanged = Signal()
+    busyDetailChanged = Signal()
     bulkProgressChanged = Signal()
     isUnlockingChanged = Signal()
     passwordChangeFinished = Signal(bool, str)  # (success, message)
@@ -298,9 +301,13 @@ class AppController(QObject):
         self._is_searching: bool = False
         self._busy_cancelable: bool = True
         self._busy_label: str = ""
+        self._busy_detail: str = ""
         self._bulk_progress: int = 0
         self._bulk_progress_total: int = 0
         self._bulk_worker: BulkOpWorker | None = None
+        self._maint_worker: MaintenanceWorker | None = None
+        self._maint_operation: str = ""
+        self._pending_remove_folder: IndexedFolder | None = None
         self._pending_export_path: Path | None = None
         self._is_unlocking: bool = False
         self._exiftool_missing: bool = False
@@ -603,6 +610,10 @@ class AppController(QObject):
     def busyLabel(self) -> str:
         return self._busy_label
 
+    @Property(str, notify=busyDetailChanged)
+    def busyDetail(self) -> str:
+        return self._busy_detail
+
     @Property(bool, notify=busyCancelableChanged)
     def busyCancelable(self) -> bool:
         return self._busy_cancelable
@@ -811,6 +822,8 @@ class AppController(QObject):
     def cancelBulkOp(self) -> None:
         if self._bulk_worker is not None:
             self._bulk_worker.cancel()
+        if self._maint_worker is not None:
+            self._maint_worker.cancel()
 
     # ── Bulk-op worker helpers ────────────────────────────────────────────
 
@@ -936,6 +949,88 @@ class AppController(QObject):
         self._is_busy = False
         self._bulk_worker = None
         self.isBusyChanged.emit()
+        self._set_status(_("Operation canceled."))
+
+    # ── Maintenance-op worker helpers (remove folder / reset database) ────────
+
+    def _start_maintenance_op(
+        self,
+        operation: str,
+        label: str,
+        *,
+        folder_id: int | None = None,
+        folder_path: str | None = None,
+        cache_dir: Path | None = None,
+    ) -> None:
+        """Spawn a MaintenanceWorker and show the busy overlay."""
+        if self._is_busy:
+            return
+        self._maint_operation = operation
+        self._maint_worker = MaintenanceWorker(
+            self._db_path,
+            self._key,
+            operation,
+            folder_id=folder_id,
+            folder_path=folder_path,
+            cache_dir=cache_dir,
+        )
+        self._maint_worker.progress.connect(self._on_maint_progress)
+        self._maint_worker.cancelable.connect(self._on_maint_cancelable)
+        self._maint_worker.finished.connect(self._on_maint_finished)
+        self._maint_worker.failed.connect(self._on_maint_failed)
+        self._maint_worker.canceled.connect(self._on_maint_canceled)
+        self._bulk_progress = 0
+        self._bulk_progress_total = 0
+        self._busy_detail = ""
+        self._busy_label = label
+        self._busy_cancelable = True
+        self._is_busy = True
+        self.isBusyChanged.emit()
+        self.busyLabelChanged.emit()
+        self.busyDetailChanged.emit()
+        self.busyCancelableChanged.emit()
+        self.bulkProgressChanged.emit()
+        self._maint_worker.start()
+
+    def _on_maint_progress(self, done: int, total: int, message: str) -> None:
+        self._bulk_progress = done
+        self._bulk_progress_total = total
+        self.bulkProgressChanged.emit()
+        if message and message != self._busy_detail:
+            self._busy_detail = message
+            self.busyDetailChanged.emit()
+
+    def _on_maint_cancelable(self, flag: bool) -> None:
+        if self._busy_cancelable != flag:
+            self._busy_cancelable = flag
+            self.busyCancelableChanged.emit()
+
+    def _clear_maint_busy(self) -> None:
+        self._maint_worker = None
+        self._is_busy = False
+        self._busy_detail = ""
+        self.isBusyChanged.emit()
+        self.busyDetailChanged.emit()
+
+    def _on_maint_finished(self) -> None:
+        operation = self._maint_operation
+        self._maint_operation = ""
+        self._clear_maint_busy()
+        if operation == "remove_folder":
+            self._finish_remove_folder()
+        elif operation == "reset_database":
+            self._finish_reset_database()
+
+    def _on_maint_failed(self, msg: str) -> None:
+        self._maint_operation = ""
+        self._pending_remove_folder = None
+        self._clear_maint_busy()
+        self._set_status(_("Operation failed: {}").format(msg))
+
+    def _on_maint_canceled(self) -> None:
+        self._maint_operation = ""
+        self._pending_remove_folder = None
+        self._clear_maint_busy()
         self._set_status(_("Operation canceled."))
 
 
@@ -2226,6 +2321,8 @@ class AppController(QObject):
     def removeIndexedFolder(self, folder_id: int) -> None:
         if self._repo is None or self._folder_repo is None:
             return
+        if self._is_busy:
+            return
         folder = self._folder_repo.get_by_id(folder_id)
         if folder is None:
             return
@@ -2233,22 +2330,25 @@ class AppController(QObject):
         self._scan_queue = [(fid, f) for fid, f in self._scan_queue if fid != folder_id]
         if self._scanning_folder_id == folder_id and self._index_worker:
             self._index_worker.cancel()
-        # Drop any preview-cache files belonging to this folder before its
-        # rows leave the database, otherwise we lose the stamps needed to
-        # locate the cached files.
-        try:
-            stamps = self._repo.get_folder_stamps(folder_id)
-            clear_cached_previews_for(
-                self._search_model.cache_dir,
-                stamps,
-                encrypted=bool(self._key),
-            )
-        except Exception as exc:  # noqa: BLE001
-            _log.warning("Failed to clean preview cache on folder removal: %s", exc)
-        self._folder_repo.remove(folder_id)
-        self._folder_model.remove_folder(folder_id)
-        self._repo.delete_folder_associations(folder_id)
-        self._repo.delete_orphans_under_prefix(folder.path)
+        # The heavy work — clearing this folder's cached previews and purging
+        # its index rows — runs on a MaintenanceWorker so the GUI stays
+        # responsive and a progress overlay can be shown.  The matching UI /
+        # model updates happen in _finish_remove_folder once the worker is done.
+        self._pending_remove_folder = folder
+        self._start_maintenance_op(
+            "remove_folder",
+            _("Removing folder\u2026"),
+            folder_id=folder_id,
+            folder_path=folder.path,
+            cache_dir=self._search_model.cache_dir,
+        )
+
+    def _finish_remove_folder(self) -> None:
+        folder = self._pending_remove_folder
+        self._pending_remove_folder = None
+        if folder is None:
+            return
+        self._folder_model.remove_folder(folder.id)
         # Drop the removed folder from the active search-filter selection
         # so the search reverts to "all folders" instead of filtering on a
         # path that no longer exists.
@@ -3089,15 +3189,21 @@ class AppController(QObject):
         """Wipe all images, indexed-folder records, and the thumbnail cache."""
         if self._repo is None or self._folder_repo is None:
             return
-        try:
-            self._repo.clear_all()
-            self._folder_repo.clear_all()
-            if self._cache_dir and self._cache_dir.exists():
-                shutil.rmtree(self._cache_dir)
-                self._cache_dir.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            _log.exception("resetDatabase failed")
+        if self._is_busy:
             return
+        # The heavy work — clearing the on-disk cache, deleting every index
+        # row and vacuuming the database — runs on a MaintenanceWorker so the
+        # GUI stays responsive and a progress overlay can be shown.  The
+        # provider/model resets happen in _finish_reset_database afterwards.
+        self._start_maintenance_op(
+            "reset_database",
+            _("Resetting database\u2026"),
+            cache_dir=self._cache_dir,
+        )
+
+    def _finish_reset_database(self) -> None:
+        if self._cache_dir is not None:
+            self._cache_dir.mkdir(parents=True, exist_ok=True)
         # Re-configure providers so they generate a fresh master key against
         # the newly-empty cache dir.  Without this the providers keep the old
         # in-memory ThumbCrypto (keyed to the deleted .thumb_key) and every
@@ -3473,6 +3579,7 @@ class AppController(QObject):
             self._preview_worker,
             self._index_worker,
             self._password_change_worker,
+            self._maint_worker,
         ):
             if worker is not None and worker.isRunning():
                 cancel = getattr(worker, "cancel", None)
@@ -3486,6 +3593,7 @@ class AppController(QObject):
         self._preview_worker = None
         self._index_worker = None
         self._password_change_worker = None
+        self._maint_worker = None
 
         if self._repo is not None:
             self._repo.close()
