@@ -193,6 +193,8 @@ ApplicationWindow {
         // Called after every search finishes (Browse folder load or Search tab restore).
         // Called after every search finishes (Browse folder load or Search tab restore).
         function onLoadedResultsChanged() {
+            // A prefetch page (if any) has landed; allow the next one.
+            root._browsePrefetchInFlight = false
             // Browse tab: jump to the pending target image once folder results are loaded.
             if (mainTabBar.currentIndex === 1 && root._pendingBrowseTargetId !== -1) {
                 root._applyPendingBrowseJump()
@@ -361,6 +363,13 @@ ApplicationWindow {
     readonly property int _browseRowHeight: 210
     property real   _lastBrowseContentY: 0.0
     property bool   _suspendBrowsePrefetch: false
+    // Guards against issuing more than one prefetch page per directional step.
+    // A single Key_Down both scrolls the list (triggering onContentYChanged)
+    // and schedules an explicit directional prefetch; without this flag both
+    // paths call loadMore(), and the controller's pending-request replay turns
+    // that into two appended pages instead of one.  Cleared on the next
+    // loadedResultsChanged once the in-flight page has landed.
+    property bool   _browsePrefetchInFlight: false
     // One-shot flag: restore resultsList position after the next search load
     property bool   _restoreSearchPosition: false
     property int    _searchRestoreAttempts: 0
@@ -508,7 +517,10 @@ ApplicationWindow {
         var remainingRowsBelow = browseImageList.count - 1 - lastVisibleRow
         if (remainingRowsBelow > root._browsePageSize)
             return
-        controller.loadMore()
+        if (root._browsePrefetchInFlight)
+            return
+        if (controller.loadMore())
+            root._browsePrefetchInFlight = true
     }
 
     // ── Dialogs ───────────────────────────────────────────────────────────
