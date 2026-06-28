@@ -221,7 +221,20 @@ class AiIndexerService:
                     url,
                     headers={"User-Agent": "exif-turbo"},
                 )
-                with urllib.request.urlopen(request, timeout=60, context=ssl_ctx) as response:
+                if ssl_ctx is None:
+                    response_ctx = urllib.request.urlopen(request, timeout=60)
+                else:
+                    try:
+                        response_ctx = urllib.request.urlopen(
+                            request,
+                            timeout=60,
+                            context=ssl_ctx,
+                        )
+                    except TypeError as exc:
+                        if "context" not in str(exc):
+                            raise
+                        response_ctx = urllib.request.urlopen(request, timeout=60)
+                with response_ctx as response:
                     temp_path.write_bytes(response.read())
                 temp_path.replace(vocab_path)
                 return vocab_path
