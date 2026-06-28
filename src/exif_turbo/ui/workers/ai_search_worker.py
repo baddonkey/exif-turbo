@@ -65,6 +65,10 @@ class AiSearchWorker(QThread):
         self._ext_filter = ext_filter
         self._date_from = date_from
         self._date_to = date_to
+        # Semantic result paths BEFORE the date filter is applied.  The
+        # controller reads this to build the year-histogram so selecting a
+        # single year does not collapse the other selectable years.
+        self.facet_paths: List[str] = []
         # macOS limits secondary thread stacks to 512 kB by default, which is
         # too small for the lazy torch + open_clip imports.  64 MB gives ample
         # headroom without measurable overhead.
@@ -80,14 +84,16 @@ class AiSearchWorker(QThread):
 
             image_repo = ImageIndexRepository(self._db_path, key=self._key)
             try:
-                allowed_paths = image_repo.get_filtered_paths(
+                # Facet scope: path/ext/folder filters WITHOUT the date filter.
+                # Drives the timeline so picking a single year does not collapse
+                # the other selectable years.
+                facet_allowed_paths = image_repo.get_filtered_paths(
                     path_filter=self._path_filter,
                     ext_filter=self._ext_filter,
                     restrict_to_enabled_folders=True,
-                    date_from=self._date_from,
-                    date_to=self._date_to,
                 )
-                if not allowed_paths:
+                if not facet_allowed_paths:
+                    self.facet_paths = []
                     self.results_ready.emit([], 0, [], self._serial)
                     return
 
@@ -98,14 +104,34 @@ class AiSearchWorker(QThread):
 
                     hits = vector_repo.search_filtered(
                         query_vec,
-                        allowed_paths,
+                        facet_allowed_paths,
                         top_k=self._MAX_RESULTS,
                         threshold=self._threshold,
                     )
-                    ranked_paths = [path for path, _score in hits]
+                    ranked_facet_paths = [path for path, _score in hits]
                 else:
                     # Empty AI query means "show everything in scope".
-                    ranked_paths = sorted(allowed_paths)
+                    ranked_facet_paths = sorted(facet_allowed_paths)
+
+                # The timeline facet source is the full semantic set, before the
+                # date filter narrows the displayed rows.
+                self.facet_paths = list(ranked_facet_paths)
+
+                # Displayed rows additionally honour the active date filter.
+                if self._date_from is not None or self._date_to is not None:
+                    date_allowed_paths = image_repo.get_filtered_paths(
+                        path_filter=self._path_filter,
+                        ext_filter=self._ext_filter,
+                        restrict_to_enabled_folders=True,
+                        date_from=self._date_from,
+                        date_to=self._date_to,
+                    )
+                    ranked_paths = [
+                        path for path in ranked_facet_paths
+                        if path in date_allowed_paths
+                    ]
+                else:
+                    ranked_paths = ranked_facet_paths
 
                 rows = image_repo.get_images_by_paths(
                     ranked_paths,
