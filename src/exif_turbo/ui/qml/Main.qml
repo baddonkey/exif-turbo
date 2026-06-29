@@ -329,6 +329,7 @@ ApplicationWindow {
     readonly property bool   _isBusy:             controller ? controller.isBusy             : false
     readonly property bool   _isSearching:        controller ? controller.isSearching        : false
     readonly property string _busyLabel:          controller ? controller.busyLabel          : ""
+    readonly property string _busyDetail:         controller ? controller.busyDetail         : ""
     readonly property int    _bulkProgress:       controller ? controller.bulkProgress       : 0
     readonly property int    _bulkProgressTotal:  controller ? controller.bulkProgressTotal  : 0
     readonly property bool   _isUnlocking:        controller ? controller.isUnlocking        : false
@@ -1000,6 +1001,16 @@ ApplicationWindow {
                     wrapMode: Text.WordWrap
                 }
 
+                Label {
+                    Layout.fillWidth: true
+                    visible: _busyDetail.length > 0
+                    text: _busyDetail
+                    font.pixelSize: 12
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    opacity: 0.7
+                }
+
                 ProgressBar {
                     Layout.fillWidth: true
                     indeterminate: _bulkProgressTotal === 0
@@ -1025,6 +1036,16 @@ ApplicationWindow {
                     implicitHeight: 36
                     visible: controller ? controller.busyCancelable : true
                     onClicked: controller.cancelBulkOp()
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    visible: controller ? !controller.busyCancelable : false
+                    text: qsTr("This step cannot be canceled\u2026")
+                    font.pixelSize: 12
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    opacity: 0.6
                 }
             }
         }
