@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-06-28 19:41+0200\n"
+"POT-Creation-Date: 2026-06-29 20:42+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: de\n"
@@ -26,121 +26,121 @@ msgstr "PyTorch ist auf macOS Intel für Python 3.13+ nicht verfügbar."
 msgid "Enter the database password to continue"
 msgstr "Datenbankpasswort eingeben, um fortzufahren"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:747
+#: src/exif_turbo/ui/view_models/app_controller.py:752
 msgid "Selecting all matching images…"
 msgstr "Alle passenden Bilder werden ausgewählt…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:757
+#: src/exif_turbo/ui/view_models/app_controller.py:762
 msgid "Deselecting all matching images…"
 msgstr "Auswahl aller passenden Bilder wird aufgehoben…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:767
+#: src/exif_turbo/ui/view_models/app_controller.py:772
 msgid "Inverting selection…"
 msgstr "Auswahl wird umgekehrt…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:781
+#: src/exif_turbo/ui/view_models/app_controller.py:786
 msgid "Selecting images without a cached thumbnail…"
 msgstr "Bilder ohne gecachte Miniaturansicht werden ausgewählt…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:796
+#: src/exif_turbo/ui/view_models/app_controller.py:801
 msgid "No marked images to delete."
 msgstr "Keine markierten Bilder zum Löschen."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:800
+#: src/exif_turbo/ui/view_models/app_controller.py:805
 msgid "Deleting marked images…"
 msgstr "Markierte Bilder werden gelöscht…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:810
+#: src/exif_turbo/ui/view_models/app_controller.py:815
 msgid "No marked images to export."
 msgstr "Keine markierten Bilder zum Exportieren."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:815
+#: src/exif_turbo/ui/view_models/app_controller.py:820
 msgid "Exporting metadata…"
 msgstr "Metadaten werden exportiert…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:917
+#: src/exif_turbo/ui/view_models/app_controller.py:922
 #, python-brace-format
 msgid "Deleted {n} image(s)."
 msgstr "{n} Bild(er) gelöscht."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:921
+#: src/exif_turbo/ui/view_models/app_controller.py:926
 #, python-brace-format
 msgid "{n} were already missing."
 msgstr "{n} waren bereits nicht mehr vorhanden."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:927
+#: src/exif_turbo/ui/view_models/app_controller.py:932
 #, python-brace-format
 msgid "{n} could not be deleted."
 msgstr "{n} konnten nicht gelöscht werden."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:937
+#: src/exif_turbo/ui/view_models/app_controller.py:942
 #, python-brace-format
 msgid "Exported {count} image(s) to {name}"
 msgstr "{count} Bild(er) nach {name} exportiert"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:946
-#: src/exif_turbo/ui/view_models/app_controller.py:1028
+#: src/exif_turbo/ui/view_models/app_controller.py:951
+#: src/exif_turbo/ui/view_models/app_controller.py:1033
 #, python-brace-format
 msgid "Operation failed: {}"
 msgstr "Vorgang fehlgeschlagen: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:952
-#: src/exif_turbo/ui/view_models/app_controller.py:1034
+#: src/exif_turbo/ui/view_models/app_controller.py:957
+#: src/exif_turbo/ui/view_models/app_controller.py:1039
 msgid "Operation canceled."
 msgstr "Vorgang abgebrochen."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1119
+#: src/exif_turbo/ui/view_models/app_controller.py:1125
 msgid "Wrong password — please try again."
 msgstr "Falsches Passwort — bitte erneut versuchen."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1131
+#: src/exif_turbo/ui/view_models/app_controller.py:1137
 #, python-brace-format
 msgid "Failed to open database: {error}"
 msgstr "Datenbank konnte nicht geöffnet werden: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1157
+#: src/exif_turbo/ui/view_models/app_controller.py:1163
 msgid "Database is locked."
 msgstr "Die Datenbank ist gesperrt."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1162
+#: src/exif_turbo/ui/view_models/app_controller.py:1168
 msgid "Cannot change password while indexing or thumb-building is running."
 msgstr ""
 "Das Passwort kann nicht geändert werden, während Indizierung oder "
 "Miniaturansichterstellung läuft."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1166
+#: src/exif_turbo/ui/view_models/app_controller.py:1172
 msgid "Current password is incorrect."
 msgstr "Das aktuelle Passwort ist falsch."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1169
+#: src/exif_turbo/ui/view_models/app_controller.py:1175
 msgid "New password must not be empty."
 msgstr "Das neue Passwort darf nicht leer sein."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1173
+#: src/exif_turbo/ui/view_models/app_controller.py:1179
 msgid "New password must differ from the current password."
 msgstr "Das neue Passwort muss sich vom aktuellen unterscheiden."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1191
+#: src/exif_turbo/ui/view_models/app_controller.py:1197
 msgid "Changing password…"
 msgstr "Passwort wird geändert…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1232
+#: src/exif_turbo/ui/view_models/app_controller.py:1238
 #, python-brace-format
 msgid "Database password changed, but reopening failed: {error}"
 msgstr ""
 "Datenbankpasswort geändert, aber das erneute Öffnen ist fehlgeschlagen: "
 "{error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1242
+#: src/exif_turbo/ui/view_models/app_controller.py:1248
 msgid "Password changed successfully."
 msgstr "Passwort erfolgreich geändert."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1283
+#: src/exif_turbo/ui/view_models/app_controller.py:1289
 #, python-brace-format
 msgid "Failed to change password: {error}"
 msgstr "Passwortänderung fehlgeschlagen: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1288
+#: src/exif_turbo/ui/view_models/app_controller.py:1294
 #, python-brace-format
 msgid ""
 "Password changed but thumbnail cache could not be re-wrapped ({error}). "
@@ -150,181 +150,189 @@ msgstr ""
 "neu verschlüsselt werden ({error}). Der Cache wurde geleert und wird neu "
 "erstellt."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2080
+#: src/exif_turbo/ui/view_models/app_controller.py:2086
 msgid "Folder list reloaded."
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2313
+#: src/exif_turbo/ui/view_models/app_controller.py:2319
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Ordner bereits verfolgt: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2340
+#: src/exif_turbo/ui/view_models/app_controller.py:2346
 msgid "Removing folder…"
 msgstr "Ordner wird entfernt…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2512
+#: src/exif_turbo/ui/view_models/app_controller.py:2518
 msgid "Folder not accessible"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2518
+#: src/exif_turbo/ui/view_models/app_controller.py:2524
 #, python-brace-format
 msgid "Folder not accessible: {}"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2557
+#: src/exif_turbo/ui/view_models/app_controller.py:2563
 #, python-brace-format
 msgid "Indexing {}…"
 msgstr "Indizierung von {}…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2593
+#: src/exif_turbo/ui/view_models/app_controller.py:2599
 #, python-brace-format
 msgid "Indexed {count} images ({errors} skipped due to errors)"
 msgstr "{count} Bilder indiziert ({errors} aufgrund von Fehlern übersprungen)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2598
+#: src/exif_turbo/ui/view_models/app_controller.py:2604
 #, python-brace-format
 msgid "Indexed {} images"
 msgstr "{} Bilder indiziert"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2631
+#: src/exif_turbo/ui/view_models/app_controller.py:2637
 #, python-brace-format
 msgid "Index failed: {}"
 msgstr "Indizierung fehlgeschlagen: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2663
+#: src/exif_turbo/ui/view_models/app_controller.py:2669
 msgid "Index canceled"
 msgstr "Indizierung abgebrochen"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2683
+#: src/exif_turbo/ui/view_models/app_controller.py:2689
 msgid "Canceling…"
 msgstr "Abbrechen…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2876
+#: src/exif_turbo/ui/view_models/app_controller.py:2882
 #, python-brace-format
 msgid "AI full rescan complete: {n} image(s) vectorised."
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2878
+#: src/exif_turbo/ui/view_models/app_controller.py:2884
 #, python-brace-format
 msgid "AI-Scan complete: {n} image(s) vectorised."
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2880
+#: src/exif_turbo/ui/view_models/app_controller.py:2886
 #, python-brace-format
 msgid "{n} file(s) could not be processed."
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2887
+#: src/exif_turbo/ui/view_models/app_controller.py:2893
 #, python-brace-format
 msgid "AI full rescan failed: {error}"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2889
+#: src/exif_turbo/ui/view_models/app_controller.py:2895
 #, python-brace-format
 msgid "AI-Scan failed: {error}"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2896
+#: src/exif_turbo/ui/view_models/app_controller.py:2902
 #, python-brace-format
 msgid "AI full rescan canceled ({n} image(s) vectorised so far)."
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2900
+#: src/exif_turbo/ui/view_models/app_controller.py:2906
 #, python-brace-format
 msgid "AI-Scan canceled ({n} image(s) vectorised so far)."
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2926
+#: src/exif_turbo/ui/view_models/app_controller.py:2932
 #, python-brace-format
 msgid "Built {built} preview(s) of {total}."
 msgstr "{built} von {total} Vorschaubilder erstellt."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2930
+#: src/exif_turbo/ui/view_models/app_controller.py:2936
 #, python-brace-format
 msgid "{n} image(s) skipped — too large to decode safely."
 msgstr "{n} Bild(er) übersprungen — zu groß zum sicheren Dekodieren."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2940
+#: src/exif_turbo/ui/view_models/app_controller.py:2946
 #, python-brace-format
 msgid "Preview build failed: {error}"
 msgstr "Vorschaubilderstellung fehlgeschlagen: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2948
+#: src/exif_turbo/ui/view_models/app_controller.py:2954
 #, python-brace-format
 msgid "Preview build canceled ({built} of {total} done)."
 msgstr "Vorschaubilderstellung abgebrochen ({built} von {total} fertig)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2961
+#: src/exif_turbo/ui/view_models/app_controller.py:2967
 msgid "Cancel the running preview build before clearing the cache."
 msgstr ""
 "Bitte die laufende Vorschaubilderstellung abbrechen, bevor der Cache "
 "geleert wird."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2970
+#: src/exif_turbo/ui/view_models/app_controller.py:2976
 #, python-brace-format
 msgid "Failed to clear preview cache: {error}"
 msgstr "Löschen des Vorschau-Caches fehlgeschlagen: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2976
+#: src/exif_turbo/ui/view_models/app_controller.py:2982
 #, python-brace-format
 msgid "Removed {n} cached preview(s)."
 msgstr "{n} gecachtes Vorschaubild(er) entfernt."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3085
+#: src/exif_turbo/ui/view_models/app_controller.py:3091
 msgid "File not accessible — path copied"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3109
+#: src/exif_turbo/ui/view_models/app_controller.py:3115
 msgid "Image copied to clipboard"
 msgstr "Bild in Zwischenablage kopiert"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3113
+#: src/exif_turbo/ui/view_models/app_controller.py:3119
 msgid "Path copied to clipboard"
 msgstr "Pfad in Zwischenablage kopiert"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3122
-#: src/exif_turbo/ui/view_models/app_controller.py:3142
+#: src/exif_turbo/ui/view_models/app_controller.py:3128
+#: src/exif_turbo/ui/view_models/app_controller.py:3148
 msgid "File not accessible"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3131
+#: src/exif_turbo/ui/view_models/app_controller.py:3137
 msgid "Preview saved"
 msgstr "Vorschau gespeichert"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3147
+#: src/exif_turbo/ui/view_models/app_controller.py:3153
 msgid "Original saved"
 msgstr "Original gespeichert"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3200
+#: src/exif_turbo/ui/view_models/app_controller.py:3206
 msgid "Resetting database…"
 msgstr "Datenbank wird zurückgesetzt…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3223
+#: src/exif_turbo/ui/view_models/app_controller.py:3229
 msgid "Database reset"
 msgstr "Datenbank zurückgesetzt"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3240
-#: src/exif_turbo/ui/view_models/app_controller.py:3252
+#: src/exif_turbo/ui/view_models/app_controller.py:3323
+#, python-brace-format
+msgid ""
+"Original data source not attached: {source} — attach or mount this folder"
+" to open files."
+msgstr ""
+"Originale Datenquelle nicht angehängt: {source} — Hängen Sie diesen "
+"Ordner an oder binden Sie ihn ein, um Dateien zu öffnen."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:3330
 #, python-brace-format
 msgid "File not found: {}"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3418
+#: src/exif_turbo/ui/view_models/app_controller.py:3476
 msgid "Cleaning up cache…"
 msgstr "Cache wird bereinigt…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3438
+#: src/exif_turbo/ui/view_models/app_controller.py:3496
 #, python-brace-format
 msgid "Indexing… {} (scanning)"
 msgstr "Indizierung… {} (Suche)"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3440
+#: src/exif_turbo/ui/view_models/app_controller.py:3498
 #, python-brace-format
 msgid "Indexing… 0 / {}"
 msgstr "Indizierung… 0 / {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3442
+#: src/exif_turbo/ui/view_models/app_controller.py:3500
 #, python-brace-format
 msgid "Indexing… {} / {}"
 msgstr "Indizierung… {} / {}"
