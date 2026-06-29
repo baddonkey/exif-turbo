@@ -173,6 +173,7 @@ class AppController(QObject):
         self._exif_model = exif_model
         self._folder_model = folder_model
         self._status_text = _("Enter the database password to continue")
+        self._status_is_error = False
         self._is_locked = True
         self._is_new_database = not db_path.exists()
         self._unlock_error = ""
@@ -366,6 +367,10 @@ class AppController(QObject):
     @Property(str, notify=statusTextChanged)
     def statusText(self) -> str:
         return self._status_text
+
+    @Property(bool, notify=statusTextChanged)
+    def statusIsError(self) -> bool:
+        return self._status_is_error
 
     @Property(bool, notify=isIndexingChanged)
     def isIndexing(self) -> bool:
@@ -1067,6 +1072,7 @@ class AppController(QObject):
             self._date_from = None
             self._date_to = None
             self._status_text = ""
+            self._status_is_error = False
             self._is_unlocking = False
             self.isUnlockingChanged.emit()
             # Wipe plain PNG thumbs on first unlock with a password (one-time migration
@@ -3237,7 +3243,7 @@ class AppController(QObject):
         if not path:
             return
         if not os.path.exists(path):
-            self._set_status(_("File not found: {}").format(Path(path).name))
+            self._warn_unavailable(path)
             return
         if sys.platform == "linux":
             subprocess.Popen(["xdg-open", path], env=_pyinstaller_clean_env())
@@ -3249,7 +3255,7 @@ class AppController(QObject):
         if not path:
             return
         if not os.path.exists(path):
-            self._set_status(_("File not found: {}").format(Path(path).name))
+            self._warn_unavailable(path)
             return
         if os.name == "nt":
             # /select,"<path>" must be passed as a shell string so the quoted
@@ -3268,10 +3274,62 @@ class AppController(QObject):
 
     # ── Private helpers ───────────────────────────────────────────────────────
 
-    def _set_status(self, text: str) -> None:
-        if self._status_text != text:
+    def _set_status(self, text: str, *, error: bool = False) -> None:
+        if self._status_text != text or self._status_is_error != error:
             self._status_text = text
+            self._status_is_error = error
             self.statusTextChanged.emit()
+
+    def _expected_data_source(self, path: str) -> str:
+        """Return the indexed-folder root that should contain *path*, or "".
+
+        When an indexed file cannot be opened because its original location is
+        unavailable, this points the user at the folder they need to (re)attach
+        or mount.  The longest matching indexed-folder root wins so nested
+        folders are reported precisely.  Returns "" when no managed folder
+        covers *path* (so we never guess a path the app does not know).
+        """
+        if self._folder_repo is None:
+            return ""
+        try:
+            target = os.path.normcase(os.path.normpath(path))
+        except (OSError, ValueError):
+            return ""
+        best_root = ""
+        best_len = -1
+        for folder in self._folder_repo.get_all():
+            root_raw = os.path.normpath(folder.path)
+            root = os.path.normcase(root_raw)
+            try:
+                common = os.path.commonpath([root, target])
+            except ValueError:
+                # Different drives / unrelated roots (e.g. C: vs D: on Windows).
+                continue
+            if common == root and len(root) > best_len:
+                best_root = root_raw
+                best_len = len(root)
+        return best_root
+
+    def _warn_unavailable(self, path: str) -> None:
+        """Show a red status-bar warning for an unavailable indexed file.
+
+        If the file belongs to a known indexed folder, hint which data source
+        to attach; otherwise fall back to a plain file-not-found message.
+        """
+        source = self._expected_data_source(path)
+        if source:
+            self._set_status(
+                _(
+                    "Original data source not attached: {source} — "
+                    "attach or mount this folder to open files."
+                ).format(source=source),
+                error=True,
+            )
+        else:
+            self._set_status(
+                _("File not found: {}").format(Path(path).name),
+                error=True,
+            )
 
     def _clear_details(self) -> None:
         self._preview_delay_timer.stop()

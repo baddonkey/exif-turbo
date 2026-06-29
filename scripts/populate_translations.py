@@ -157,6 +157,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Folder(s)": "Ordner",
         "Reset Database": "Datenbank zur\u00fccksetzen",
         "Database reset": "Datenbank zur\u00fcckgesetzt",
+        "Original data source not attached: {source} \u2014 attach or mount this folder to open files.":
+            "Originale Datenquelle nicht angeh\u00e4ngt: {source} \u2014 H\u00e4ngen Sie diesen Ordner an oder binden Sie ihn ein, um Dateien zu \u00f6ffnen.",
         "ExifTool not found": "ExifTool nicht gefunden",
         "ExifTool was not found on your system. Indexing is disabled until ExifTool is installed and available on your PATH.": "ExifTool wurde auf Ihrem System nicht gefunden. Die Indizierung ist deaktiviert, bis ExifTool installiert und auf Ihrem PATH verf\u00fcgbar ist.",
         "Download ExifTool from:": "ExifTool herunterladen unter:",
@@ -446,6 +448,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Folder(s)": "Dossier(s)",
         "Reset Database": "R\u00e9initialiser la base de donn\u00e9es",
         "Database reset": "Base de donn\u00e9es r\u00e9initialis\u00e9e",
+        "Original data source not attached: {source} \u2014 attach or mount this folder to open files.":
+            "Source de donn\u00e9es d'origine non rattach\u00e9e\u00a0: {source} \u2014 rattachez ou montez ce dossier pour ouvrir les fichiers.",
         "ExifTool not found": "ExifTool introuvable",
         "ExifTool was not found on your system. Indexing is disabled until ExifTool is installed and available on your PATH.": "ExifTool n\u2019a pas \u00e9t\u00e9 trouv\u00e9 sur votre syst\u00e8me. L\u2019indexation est d\u00e9sactiv\u00e9e jusqu\u2019\u00e0 ce qu\u2019ExifTool soit install\u00e9 et disponible dans votre PATH.",
         "Download ExifTool from:": "T\u00e9l\u00e9charger ExifTool sur\u00a0:",
@@ -743,6 +747,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Folder(s)": "Cartella/e",
         "Reset Database": "Ripristina database",
         "Database reset": "Database ripristinato",
+        "Original data source not attached: {source} \u2014 attach or mount this folder to open files.":
+            "Origine dati originale non collegata: {source} \u2014 collega o monta questa cartella per aprire i file.",
         "ExifTool not found": "ExifTool non trovato",
         "ExifTool was not found on your system. Indexing is disabled until ExifTool is installed and available on your PATH.": "ExifTool non \u00e8 stato trovato sul tuo sistema. L\u2019indicizzazione \u00e8 disabilitata finch\u00e9 ExifTool non viene installato e reso disponibile nel tuo PATH.",
         "Download ExifTool from:": "Scarica ExifTool da:",
@@ -1037,6 +1043,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Folder(s)": "Cartella(s)",
         "Reset Database": "Resettar banca da datas",
         "Database reset": "Banca da datas resettada",
+        "Original data source not attached: {source} \u2014 attach or mount this folder to open files.":
+            "Funtauna da datas originala betg colliada: {source} \u2014 colliai u montai questa cartella per avrir datotecas.",
         "ExifTool not found": "ExifTool betg chattà",
         "ExifTool was not found on your system. Indexing is disabled until ExifTool is installed and available on your PATH.": "ExifTool n\u2019\u00e8 betg vegnì chattà sin voss sistem. L\u2019indexaziun \u00e8 deactivada fin che ExifTool \u00e8 installà ed disponibel sin voss PATH.",
         "Download ExifTool from:": "Telechargiar ExifTool da:",

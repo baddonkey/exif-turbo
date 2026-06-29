@@ -433,6 +433,12 @@ default application:
   folder in the system file manager. On Windows, Explorer opens with the file
   highlighted; on macOS and Linux the parent folder is opened.
 
+If the original file cannot be reached — for example when the folder that
+contains it is not currently mounted or attached — nothing is opened and a
+**red warning** appears in the status bar at the bottom of the window naming
+the indexed folder you need to (re)attach or mount, e.g. *"Original data
+source not attached: D:\Photos — attach or mount this folder to open files."*
+
 ### Search examples
 
 | Query | What it finds |

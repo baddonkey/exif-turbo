@@ -4800,7 +4800,9 @@ ApplicationWindow {
             }
             text: _statusText
             font.pixelSize: 11
-            opacity: 0.7
+            color: (controller && controller.statusIsError)
+                   ? Material.color(Material.Red) : Material.foreground
+            opacity: (controller && controller.statusIsError) ? 1.0 : 0.7
         }
     }
 }
