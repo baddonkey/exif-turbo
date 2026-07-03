@@ -1,6 +1,6 @@
-"""E2E unit tests for AppController.copyPreviewToClipboard.
+"""E2E unit tests for AppController preview clipboard/save actions.
 
-Verifies that after calling copyPreviewToClipboard():
+Verifies that after calling the preview copy/save actions:
   - The clipboard QMimeData contains explicit ``image/png`` bytes (so macOS
     maps them to the ``public.png`` UTI that native apps like Messages require).
   - The clipboard also carries a QImage via ``setImageData`` (so legacy Win32
@@ -8,6 +8,7 @@ Verifies that after calling copyPreviewToClipboard():
   - The emitted ``clipboardCopyDone`` signal carries a non-empty message.
   - When the path is empty the method is a no-op.
   - When the file cannot be decoded the fallback copies the path as text.
+  - Save Preview As writes the cached preview even when the source file is gone.
 
 Run with:
     pytest tests/ui/test_clipboard_copy.py -v -s
@@ -20,9 +21,11 @@ from pathlib import Path
 
 import pytest
 from PIL import Image
+from PySide6.QtCore import QUrl
 from PySide6.QtGui import QGuiApplication
 from pytestqt.qtbot import QtBot
 
+from exif_turbo.ui.view_models import app_controller as app_controller_module
 from exif_turbo.ui.models.exif_list_model import ExifListModel
 from exif_turbo.ui.models.folder_list_model import FolderListModel
 from exif_turbo.ui.models.search_list_model import SearchListModel
@@ -131,5 +134,83 @@ def test_copyPreviewToClipboard_with_missing_file_copies_path_as_text(
 
     # Assert — clipboard holds the file path as plain text
     assert QGuiApplication.clipboard().text() == missing
+
+    ctrl.close()
+
+
+def test_copyPreviewToClipboard_missing_source_with_cache_sets_png_mimedata(
+    tmp_path: Path, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    missing = str(tmp_path / "detached" / "photo.jpg")
+    ctrl = _make_controller(tmp_path)
+    ctrl._pending_preview_path = missing
+    monkeypatch.setattr(
+        ctrl,
+        "_load_preview_for_clipboard",
+        lambda path: Image.new("RGB", (16, 12), color=(12, 34, 56)),
+    )
+
+    # Act
+    with qtbot.waitSignal(ctrl.clipboardCopyDone, timeout=5_000) as blocker:
+        ctrl.copyPreviewToClipboard()
+
+    # Assert
+    assert blocker.args[0]
+    assert QGuiApplication.clipboard().mimeData().hasFormat("image/png")
+
+    ctrl.close()
+
+
+def test_doSavePreview_missing_source_with_cache_writes_file(
+    tmp_path: Path, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    missing = str(tmp_path / "detached" / "photo.jpg")
+    ctrl = _make_controller(tmp_path)
+    ctrl._pending_preview_path = missing
+    monkeypatch.setattr(
+        ctrl,
+        "_load_preview_for_clipboard",
+        lambda path: Image.new("RGB", (16, 12), color=(12, 34, 56)),
+    )
+    dest = tmp_path / "saved_preview.png"
+
+    # Act
+    with qtbot.waitSignal(ctrl.clipboardCopyDone, timeout=5_000) as blocker:
+        ctrl.doSavePreview(QUrl.fromLocalFile(str(dest)).toString())
+
+    # Assert
+    assert blocker.args[0]
+    assert dest.exists()
+    assert Image.open(dest).format == "PNG"
+
+    ctrl.close()
+
+
+def test_doSavePreview_raw_mode_missing_source_emits_file_not_accessible(
+    tmp_path: Path, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    missing = str(tmp_path / "detached" / "photo.jpg")
+    ctrl = _make_controller(tmp_path)
+    ctrl._pending_preview_path = missing
+    ctrl._use_raw_preview = True
+
+    def _raise_missing_source(
+        path: str, max_px: int, known_pixel_count: int | None = None
+    ) -> Image.Image:
+        raise OSError("missing source")
+
+    monkeypatch.setattr(app_controller_module, "render_preview", _raise_missing_source)
+    dest = tmp_path / "saved_preview.png"
+
+    # Act
+    with qtbot.waitSignal(ctrl.clipboardCopyDone, timeout=5_000) as blocker:
+        ctrl.doSavePreview(QUrl.fromLocalFile(str(dest)).toString())
+
+    # Assert
+    assert blocker.args[0]
+    assert not dest.exists()
 
     ctrl.close()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import html as html_lib
 import json
 import logging
@@ -17,8 +18,19 @@ if TYPE_CHECKING:
     from ..providers.thumb_image_provider import ThumbnailImageProvider
 
 import sqlcipher3
-from PySide6.QtCore import Property, QObject, Qt, QThread, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication
+from PySide6.QtCore import (
+    Property,
+    QObject,
+    QByteArray,
+    QMimeData,
+    Qt,
+    QThread,
+    QTimer,
+    QUrl,
+    Signal,
+    Slot,
+)
+from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication, QImage
 
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
@@ -3086,15 +3098,7 @@ class AppController(QObject):
         path = self._pending_preview_path
         if not path:
             return
-        if not os.path.exists(path):
-            QGuiApplication.clipboard().setText(path)
-            self.clipboardCopyDone.emit(_("File not accessible \u2014 path copied"))
-            return
         try:
-            import io
-            from PySide6.QtCore import QByteArray, QMimeData
-            from PySide6.QtGui import QImage
-
             pil_img = self._load_preview_for_clipboard(path)
             buf = io.BytesIO()
             pil_img.save(buf, format="PNG")
@@ -3124,12 +3128,14 @@ class AppController(QObject):
         path = self._pending_preview_path
         if not path:
             return
-        if not os.path.exists(path):
-            self.clipboardCopyDone.emit(_("File not accessible"))
-            return
         dest = Path(QUrl(file_url).toLocalFile())
         try:
             pil_img = self._load_preview_for_clipboard(path)
+        except OSError:
+            _log.exception("doSavePreview failed to load preview for %r", path)
+            self.clipboardCopyDone.emit(_("File not accessible"))
+            return
+        try:
             if dest.suffix.lower() == ".png":
                 pil_img.save(str(dest), format="PNG")
             else:
