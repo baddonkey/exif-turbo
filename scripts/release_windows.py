@@ -1,6 +1,7 @@
 """Cut a Windows release for a specific semantic version.
 
-Given ``major minor patch`` this script will:
+Given either ``major minor patch``, ``x.y.z``, or a bump keyword
+(``patch``, ``minor``, ``major``) this script will:
 
 Prepare-PR stage (default):
 1. Bump version in ``src/exif_turbo/__init__.py`` and ``pyproject.toml``.
@@ -17,7 +18,9 @@ Uploaded assets:
     - dist/exif-turbo-<version>-windows.zip (zipped onedir bundle)
 
 Usage:
+    python scripts/release_windows.py patch
     python scripts/release_windows.py 1 15 0
+    python scripts/release_windows.py 1.15.0
     python scripts/release_windows.py 1 15 0 --stage publish
     python scripts/release_windows.py 1 15 0 --repo owner/repo
 """
@@ -86,6 +89,44 @@ def read_version() -> str:
     if not match:
         raise ShellError(f"Could not read __version__ from {INIT_FILE}")
     return match.group(1)
+
+
+def parse_semver(version: str) -> tuple[int, int, int]:
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", version.strip())
+    if not match:
+        raise ShellError(f"Invalid semantic version: {version}")
+    return int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+
+def bump_version(current: str, bump: str) -> str:
+    major, minor, patch = parse_semver(current)
+    if bump == "patch":
+        return f"{major}.{minor}.{patch + 1}"
+    if bump == "minor":
+        return f"{major}.{minor + 1}.0"
+    if bump == "major":
+        return f"{major + 1}.0.0"
+    raise ShellError(f"Unsupported bump target: {bump}")
+
+
+def resolve_target_version(*, current: str, raw_parts: list[str], stage: str) -> str:
+    if len(raw_parts) == 1:
+        token = raw_parts[0].strip().lower()
+        if token in {"patch", "minor", "major"}:
+            if stage == "publish":
+                raise ShellError(
+                    "Publish stage requires an explicit version (x.y.z or major minor patch), "
+                    "not a bump keyword."
+                )
+            return bump_version(current, token)
+        return ".".join(str(part) for part in parse_semver(raw_parts[0]))
+
+    if len(raw_parts) == 3 and all(part.isdigit() for part in raw_parts):
+        return f"{int(raw_parts[0])}.{int(raw_parts[1])}.{int(raw_parts[2])}"
+
+    raise ShellError(
+        "Invalid version input. Use one of: patch|minor|major, x.y.z, or major minor patch."
+    )
 
 
 def write_version(version: str) -> None:
@@ -263,9 +304,14 @@ def parse_args() -> argparse.Namespace:
             "Prepare a PR for a release version bump or publish a merged release."
         )
     )
-    parser.add_argument("major", type=int, help="Major version number")
-    parser.add_argument("minor", type=int, help="Minor version number")
-    parser.add_argument("patch", type=int, help="Patch version number")
+    parser.add_argument(
+        "version_parts",
+        nargs="+",
+        help=(
+            "Version selector: patch|minor|major, x.y.z, or 3 positional numbers "
+            "(major minor patch)."
+        ),
+    )
     parser.add_argument(
         "--stage",
         choices=["prepare-pr", "publish"],
@@ -285,8 +331,6 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    version = f"{args.major}.{args.minor}.{args.patch}"
-    tag = f"v{version}"
 
     try:
         ensure_tool("git")
@@ -294,6 +338,12 @@ def main() -> int:
         ensure_clean_tree()
 
         current = read_version()
+        version = resolve_target_version(
+            current=current,
+            raw_parts=args.version_parts,
+            stage=args.stage,
+        )
+        tag = f"v{version}"
         print(f"Current version: {current}")
         print(f"Target version : {version}")
 
