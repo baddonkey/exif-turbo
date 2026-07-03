@@ -2,11 +2,15 @@
 
 Given ``major minor patch`` this script will:
 
+Prepare-PR stage (default):
 1. Bump version in ``src/exif_turbo/__init__.py`` and ``pyproject.toml``.
-2. Commit the version bump.
-3. Build Windows artifacts via ``scripts/build_windows.py``.
-4. Create and push an annotated git tag ``v<version>``.
-5. Create a GitHub release and upload Windows binaries.
+2. Commit the version bump on the current branch.
+3. Push the branch and create (or reuse) a PR to ``main``.
+
+Publish stage (``--stage publish``):
+1. Build Windows artifacts via ``scripts/build_windows.py``.
+2. Create and push an annotated git tag ``v<version>``.
+3. Create a GitHub release and upload Windows binaries.
 
 Uploaded assets:
     - dist/exif-turbo-<version>-windows.msi
@@ -14,6 +18,7 @@ Uploaded assets:
 
 Usage:
     python scripts/release_windows.py 1 15 0
+    python scripts/release_windows.py 1 15 0 --stage publish
     python scripts/release_windows.py 1 15 0 --repo owner/repo
 """
 
@@ -68,6 +73,13 @@ def ensure_clean_tree() -> None:
         )
 
 
+def current_branch() -> str:
+    branch = run(["git", "branch", "--show-current"], capture=True).strip()
+    if not branch:
+        raise ShellError("Could not determine current git branch")
+    return branch
+
+
 def read_version() -> str:
     text = INIT_FILE.read_text(encoding="utf-8")
     match = re.search(r"__version__\s*=\s*['\"]([^'\"]+)['\"]", text)
@@ -106,6 +118,10 @@ def commit_version_bump(version: str) -> None:
     run(["git", "commit", "-m", f"chore: bump version to {version}"])
 
 
+def push_branch(branch: str) -> None:
+    run(["git", "push", "-u", "origin", branch])
+
+
 def build_windows() -> None:
     run([sys.executable, "scripts/build_windows.py"])
 
@@ -130,12 +146,70 @@ def create_zip_bundle(version: str) -> Path:
 
 
 def create_and_push_tag(tag: str) -> None:
+    run(["git", "fetch", "origin", "--tags"])
     existing = run(["git", "tag", "--list", tag], capture=True).strip()
     if existing:
         raise ShellError(f"Tag already exists locally: {tag}")
+
+    remote_existing = run(
+        ["git", "ls-remote", "--tags", "origin", f"refs/tags/{tag}"],
+        capture=True,
+    ).strip()
+    if remote_existing:
+        raise ShellError(f"Tag already exists on origin: {tag}")
+
     run(["git", "tag", "-a", tag, "-m", f"Release {tag}"])
-    run(["git", "push", "origin", "main"])
     run(["git", "push", "origin", tag])
+
+
+def create_or_reuse_pr(*, repo: str, branch: str, version: str) -> str:
+    existing_url = run(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--repo",
+            repo,
+            "--head",
+            branch,
+            "--base",
+            "main",
+            "--state",
+            "open",
+            "--json",
+            "url",
+            "--jq",
+            ".[0].url",
+        ],
+        capture=True,
+    ).strip()
+    if existing_url:
+        return existing_url
+
+    body = (
+        f"Prepare release v{version}.\n\n"
+        "This PR bumps project version metadata for the release.\n"
+        "After merge, run:\n"
+        f"python scripts/release_windows.py {version.replace('.', ' ')} --stage publish"
+    )
+    return run(
+        [
+            "gh",
+            "pr",
+            "create",
+            "--repo",
+            repo,
+            "--base",
+            "main",
+            "--head",
+            branch,
+            "--title",
+            f"chore: prepare release v{version}",
+            "--body",
+            body,
+        ],
+        capture=True,
+    ).strip()
 
 
 def create_release(
@@ -186,13 +260,21 @@ def create_release(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Bump version, build Windows binaries, create git tag, "
-            "and publish a GitHub release."
+            "Prepare a PR for a release version bump or publish a merged release."
         )
     )
     parser.add_argument("major", type=int, help="Major version number")
     parser.add_argument("minor", type=int, help="Minor version number")
     parser.add_argument("patch", type=int, help="Patch version number")
+    parser.add_argument(
+        "--stage",
+        choices=["prepare-pr", "publish"],
+        default="prepare-pr",
+        help=(
+            "prepare-pr: bump version, commit, push branch, and open PR. "
+            "publish: build artifacts, tag, and create GitHub release."
+        ),
+    )
     parser.add_argument(
         "--repo",
         default="baddonkey/exif-turbo",
@@ -215,8 +297,46 @@ def main() -> int:
         print(f"Current version: {current}")
         print(f"Target version : {version}")
 
-        write_version(version)
-        commit_version_bump(version)
+        if args.stage == "prepare-pr":
+            branch = current_branch()
+            if branch == "main":
+                raise ShellError(
+                    "Refusing to run prepare-pr on 'main'. "
+                    "Create/use a release branch and re-run."
+                )
+            if current == version:
+                raise ShellError(
+                    f"Version is already {version}. Nothing to bump for PR."
+                )
+
+            write_version(version)
+            commit_version_bump(version)
+            push_branch(branch)
+            pr_url = create_or_reuse_pr(
+                repo=args.repo,
+                branch=branch,
+                version=version,
+            )
+
+            print("\nPR preparation completed successfully.")
+            print(f"Branch     : {branch}")
+            print(f"PR         : {pr_url}")
+            print(
+                "Next step  : merge the PR, then run this script with "
+                "'--stage publish' from main."
+            )
+            return 0
+
+        branch = current_branch()
+        if branch != "main":
+            raise ShellError(
+                "Publish stage must run from 'main' after the release PR is merged."
+            )
+        if current != version:
+            raise ShellError(
+                "Publish stage requires main to already contain the target version. "
+                "Merge the release PR first."
+            )
 
         build_windows()
         msi = REPO_ROOT / "dist" / f"exif-turbo-{version}-windows.msi"

@@ -210,9 +210,31 @@ Note: on macOS Intel builds, AI features remain unavailable and cannot be enable
 Optional: pass `--sign "Developer ID Application: Your Name (TEAMID)"` to
 codesign the bundle with a Developer ID certificate instead of ad-hoc signing.
 
-### Tagging a release
+### Windows release workflow (PR-first)
 
-Use the `/release` prompt in VS Code Copilot Chat.
+The Windows release script now follows a pull-request workflow and does not
+push `main` directly.
+
+1. Create or switch to a release branch.
+2. Run the prepare stage to bump version, commit, push branch, and open/reuse
+  a PR to `main`:
+
+```bash
+python scripts/release_windows.py 1 15 0
+```
+
+3. Merge the PR through the normal review process.
+4. From updated `main`, run the publish stage to build artifacts, create/push
+  tag `v<version>`, and publish the GitHub release:
+
+```bash
+python scripts/release_windows.py 1 15 0 --stage publish
+```
+
+The script enforces this flow:
+
+- `prepare-pr` refuses to run on `main`.
+- `publish` requires running on `main` with the target version already merged.
 
 ## Sample Image Credits
 
