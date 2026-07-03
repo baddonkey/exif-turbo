@@ -138,18 +138,43 @@ def test_copyPreviewToClipboard_with_missing_file_copies_path_as_text(
     ctrl.close()
 
 
-def test_copyPreviewToClipboard_missing_source_with_cache_sets_png_mimedata(
+def test_copy_preview_to_clipboard_source_unavailable_copies_path_text(
     tmp_path: Path, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Arrange
-    missing = str(tmp_path / "detached" / "photo.jpg")
+    source_path = str(tmp_path / "detached" / "photo.jpg")
     ctrl = _make_controller(tmp_path)
-    ctrl._pending_preview_path = missing
-    monkeypatch.setattr(
-        ctrl,
-        "_load_preview_for_clipboard",
-        lambda path: Image.new("RGB", (16, 12), color=(12, 34, 56)),
-    )
+    ctrl._pending_preview_path = source_path
+
+    def _raise_source_unavailable(path: str) -> Image.Image:
+        raise OSError("missing source")
+
+    monkeypatch.setattr(ctrl, "_load_preview_for_clipboard", _raise_source_unavailable)
+
+    # Act
+    with qtbot.waitSignal(ctrl.clipboardCopyDone, timeout=5_000) as blocker:
+        ctrl.copyPreviewToClipboard()
+
+    # Assert
+    assert blocker.args[0]
+    assert QGuiApplication.clipboard().text() == source_path
+
+    ctrl.close()
+
+
+def test_copy_preview_to_clipboard_with_missing_source_uses_cached_preview(
+    tmp_path: Path, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    source_path = str(tmp_path / "detached" / "photo.jpg")
+    ctrl = _make_controller(tmp_path)
+    ctrl._pending_preview_path = source_path
+
+    def _load_cached_preview(path: str) -> Image.Image:
+        assert not Path(path).exists()
+        return Image.new("RGB", (16, 12), color=(12, 34, 56))
+
+    monkeypatch.setattr(ctrl, "_load_preview_for_clipboard", _load_cached_preview)
 
     # Act
     with qtbot.waitSignal(ctrl.clipboardCopyDone, timeout=5_000) as blocker:
@@ -162,18 +187,19 @@ def test_copyPreviewToClipboard_missing_source_with_cache_sets_png_mimedata(
     ctrl.close()
 
 
-def test_doSavePreview_missing_source_with_cache_writes_file(
+def test_do_save_preview_with_missing_source_uses_cached_preview(
     tmp_path: Path, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Arrange
-    missing = str(tmp_path / "detached" / "photo.jpg")
+    source_path = str(tmp_path / "detached" / "photo.jpg")
     ctrl = _make_controller(tmp_path)
-    ctrl._pending_preview_path = missing
-    monkeypatch.setattr(
-        ctrl,
-        "_load_preview_for_clipboard",
-        lambda path: Image.new("RGB", (16, 12), color=(12, 34, 56)),
-    )
+    ctrl._pending_preview_path = source_path
+
+    def _load_cached_preview(path: str) -> Image.Image:
+        assert not Path(path).exists()
+        return Image.new("RGB", (16, 12), color=(12, 34, 56))
+
+    monkeypatch.setattr(ctrl, "_load_preview_for_clipboard", _load_cached_preview)
     dest = tmp_path / "saved_preview.png"
 
     # Act
@@ -188,13 +214,13 @@ def test_doSavePreview_missing_source_with_cache_writes_file(
     ctrl.close()
 
 
-def test_doSavePreview_raw_mode_missing_source_emits_file_not_accessible(
+def test_do_save_preview_raw_mode_missing_source_emits_error(
     tmp_path: Path, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Arrange
-    missing = str(tmp_path / "detached" / "photo.jpg")
+    source_path = str(tmp_path / "detached" / "photo.jpg")
     ctrl = _make_controller(tmp_path)
-    ctrl._pending_preview_path = missing
+    ctrl._pending_preview_path = source_path
     ctrl._use_raw_preview = True
 
     def _raise_missing_source(
@@ -210,7 +236,7 @@ def test_doSavePreview_raw_mode_missing_source_emits_file_not_accessible(
         ctrl.doSavePreview(QUrl.fromLocalFile(str(dest)).toString())
 
     # Assert
-    assert blocker.args[0]
+    assert blocker.args[0] == "Preview source file not accessible"
     assert not dest.exists()
 
     ctrl.close()

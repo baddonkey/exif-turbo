@@ -3133,7 +3133,7 @@ class AppController(QObject):
             pil_img = self._load_preview_for_clipboard(path)
         except OSError:
             _log.exception("doSavePreview failed to load preview for %r", path)
-            self.clipboardCopyDone.emit(_("File not accessible"))
+            self.clipboardCopyDone.emit(_("Preview source file not accessible"))
             return
         try:
             if dest.suffix.lower() == ".png":
