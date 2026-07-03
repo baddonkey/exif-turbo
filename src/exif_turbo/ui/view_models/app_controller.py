@@ -1765,10 +1765,12 @@ class AppController(QObject):
             self._ai_result_cache = all_results
             # Timeline facet source: the semantic set before date filtering.
             # Fall back to the (date-filtered) result paths if the worker did
-            # not supply a facet list (e.g. a non-AI worker path).
+            # not supply facet paths. This keeps tests that patch
+            # AiSearchWorker.run and emit rows directly from losing the year
+            # histogram source.
             self._ai_facet_paths = (
                 ai_facet_paths
-                if ai_facet_paths is not None
+                if ai_facet_paths
                 else [res.path for res in all_results]
             )
             first_page = all_results[:_PAGE_SIZE]
