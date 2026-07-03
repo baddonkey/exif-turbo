@@ -114,7 +114,7 @@ Item {
                     enabled: foldersList.count > 0
                     ToolTip.text: qsTr("Incrementally re-index all enabled folders")
                     ToolTip.visible: hovered
-                    onClicked: controller.rescanAllFolders()
+                    onClicked: { if (controller) controller.rescanAllFolders() }
                 }
 
                 Button {
@@ -124,7 +124,7 @@ Item {
                     enabled: foldersList.count > 0
                     ToolTip.text: qsTr("Force re-extract EXIF for every file in all enabled folders")
                     ToolTip.visible: hovered
-                    onClicked: controller.fullRescanAllFolders()
+                    onClicked: { if (controller) controller.fullRescanAllFolders() }
                 }
             }
         }
@@ -178,7 +178,7 @@ Item {
                         implicitHeight: 40
                         ToolTip.text: checked ? qsTr("Folder is included in search results") : qsTr("Folder is excluded from search results")
                         ToolTip.visible: hovered
-                        onToggled: controller.setFolderEnabled(model.folderId, checked)
+                        onToggled: { if (controller) controller.setFolderEnabled(model.folderId, checked) }
                     }
 
                     // Name + path
@@ -295,7 +295,7 @@ Item {
                         enabled: model.enabled && model.status !== "scanning"
                         ToolTip.text: qsTr("Re-index this folder (incremental)")
                         ToolTip.visible: hovered
-                        onClicked: controller.rescanFolder(model.folderId)
+                        onClicked: { if (controller) controller.rescanFolder(model.folderId) }
                     }
 
                     // Full Rescan button
@@ -307,7 +307,7 @@ Item {
                         enabled: model.enabled && model.status !== "scanning"
                         ToolTip.text: qsTr("Force re-extract EXIF for every file in this folder")
                         ToolTip.visible: hovered
-                        onClicked: controller.fullRescanFolder(model.folderId)
+                        onClicked: { if (controller) controller.fullRescanFolder(model.folderId) }
                     }
 
                     // Build Previews button (folder-scoped preview-cache build)
@@ -325,6 +325,8 @@ Item {
                                       : qsTr("Render preview-cache JPEGs for this folder")
                         ToolTip.visible: hovered
                         onClicked: {
+                            if (!controller)
+                                return
                             if (controller.isBuildingPreviews && controller.previewBuildFolderId === model.folderId)
                                 controller.cancelPreviewBuild()
                             else
@@ -354,6 +356,8 @@ Item {
                                       : qsTr("Build missing CLIP vector embeddings for this folder (enables AI search)")
                         ToolTip.visible: hovered
                         onClicked: {
+                            if (!controller)
+                                return
                             if (controller.isAiScanning
                                     && controller.aiScanFolderId === model.folderId
                                     && !controller.aiScanIsFullRescan)
@@ -384,6 +388,8 @@ Item {
                                       : qsTr("Rebuild every CLIP vector embedding for this folder from scratch")
                         ToolTip.visible: hovered
                         onClicked: {
+                            if (!controller)
+                                return
                             if (controller.isAiScanning
                                     && controller.aiScanFolderId === model.folderId
                                     && controller.aiScanIsFullRescan)
@@ -402,7 +408,7 @@ Item {
                         implicitHeight: 30
                         opacity: model.previewCachedCount > 0 ? 1.0 : 0.0
                         enabled: model.previewCachedCount > 0 &&
-                                 (!controller.isBuildingPreviews
+                                 (!controller || !controller.isBuildingPreviews
                                   || controller.previewBuildFolderId !== model.folderId)
                         ToolTip.text: qsTr("Delete all cached previews for this folder")
                         ToolTip.visible: hovered

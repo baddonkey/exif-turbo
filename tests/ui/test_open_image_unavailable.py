@@ -135,3 +135,21 @@ def test_openImage_empty_path_leaves_status_unchanged(
     # Assert
     assert controller.statusIsError is False
     assert controller.statusText == before
+
+
+def test_setUseRawPreview_missing_file_in_indexed_folder_warns_with_data_source(
+    controller: AppController, tmp_path: Path
+) -> None:
+    # Arrange
+    root = tmp_path / "photos"
+    controller._folder_repo = _fake_folder_repo(str(root))
+    missing = root / "img.jpg"
+    controller._pending_preview_path = str(missing)
+
+    # Act
+    controller.setUseRawPreview(True)
+
+    # Assert
+    assert controller.statusIsError is True
+    assert os.path.normpath(str(root)) in controller.statusText
+    assert controller.useRawPreview is False

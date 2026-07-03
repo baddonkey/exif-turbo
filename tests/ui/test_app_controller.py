@@ -429,3 +429,53 @@ def test_clear_details_cancels_pending_preview(
     assert not bare_controller._preview_delay_timer.isActive()
     assert bare_controller._pending_preview_path == ""
     assert bare_controller.selectedImageSource == ""
+
+
+def test_clearStatus_with_status_message_clears_text_and_error_flag(
+    bare_controller: AppController,
+) -> None:
+    # Arrange
+    bare_controller._set_status("Temporary warning", error=True)
+    assert bare_controller.statusText == "Temporary warning"
+    assert bare_controller.statusIsError is True
+
+    # Act
+    bare_controller.clearStatus()
+
+    # Assert
+    assert bare_controller.statusText == ""
+    assert bare_controller.statusIsError is False
+
+
+def test_search_with_existing_status_clears_notification(
+    qtbot: QtBot,
+    bare_controller: AppController,
+) -> None:
+    # Arrange
+    with qtbot.waitSignal(bare_controller.totalResultsChanged, timeout=3000):
+        bare_controller.unlock("")
+    bare_controller._set_status("Old message", error=True)
+
+    # Act
+    bare_controller.search("Canon")
+
+    # Assert
+    assert bare_controller.statusText == ""
+    assert bare_controller.statusIsError is False
+
+
+def test_selectResult_with_existing_status_clears_notification(
+    qtbot: QtBot,
+    bare_controller: AppController,
+) -> None:
+    # Arrange
+    with qtbot.waitSignal(bare_controller.totalResultsChanged, timeout=3000):
+        bare_controller.unlock("")
+    bare_controller._set_status("Old message", error=True)
+
+    # Act
+    bare_controller.selectResult(0)
+
+    # Assert
+    assert bare_controller.statusText == ""
+    assert bare_controller.statusIsError is False
