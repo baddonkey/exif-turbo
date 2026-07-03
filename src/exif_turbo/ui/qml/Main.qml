@@ -228,32 +228,55 @@ ApplicationWindow {
             id: _copyImageMenuItem
             text: qsTr("Copy Image to Clipboard")
             enabled: _selectedImageSource !== ""
-            onTriggered: { if (controller) controller.copyPreviewToClipboard() }
+            onTriggered: {
+                if (controller) {
+                    controller.clearStatus()
+                    controller.copyPreviewToClipboard()
+                }
+            }
         }
         MenuItem {
             id: _savePreviewMenuItem
             text: qsTr("Save Preview As\u2026")
             enabled: _selectedImageSource !== ""
-            onTriggered: { savePreviewDialog.currentFile = _suggestedPreviewUrl(); savePreviewDialog.open() }
+            onTriggered: {
+                if (controller) controller.clearStatus()
+                savePreviewDialog.currentFile = _suggestedPreviewUrl()
+                savePreviewDialog.open()
+            }
         }
         MenuItem {
             id: _saveOriginalMenuItem
             text: qsTr("Save Original As\u2026")
             enabled: _selectedImageSource !== ""
-            onTriggered: { saveOriginalDialog.currentFile = _suggestedOriginalUrl(); saveOriginalDialog.open() }
+            onTriggered: {
+                if (controller) controller.clearStatus()
+                saveOriginalDialog.currentFile = _suggestedOriginalUrl()
+                saveOriginalDialog.open()
+            }
         }
         MenuSeparator {}
         MenuItem {
             id: _recreateThumbMenuItem
             text: qsTr("Recreate Thumbnail")
             enabled: _selectedImageSource !== ""
-            onTriggered: { if (controller) controller.recreateThumbnail() }
+            onTriggered: {
+                if (controller) {
+                    controller.clearStatus()
+                    controller.recreateThumbnail()
+                }
+            }
         }
         MenuItem {
             id: _recreatePreviewMenuItem
             text: qsTr("Recreate Preview")
             enabled: _selectedImageSource !== ""
-            onTriggered: { if (controller) controller.recreatePreview() }
+            onTriggered: {
+                if (controller) {
+                    controller.clearStatus()
+                    controller.recreatePreview()
+                }
+            }
         }
     }
 
@@ -328,6 +351,7 @@ ApplicationWindow {
     readonly property string _appVersion:         controller ? controller.appVersion          : ""
     readonly property bool   _isBusy:             controller ? controller.isBusy             : false
     readonly property bool   _isSearching:        controller ? controller.isSearching        : false
+    readonly property bool   _aiFeatureAvailable: settingsModel ? settingsModel.aiFeatureAvailable : false
     readonly property string _busyLabel:          controller ? controller.busyLabel          : ""
     readonly property string _busyDetail:         controller ? controller.busyDetail         : ""
     readonly property int    _bulkProgress:       controller ? controller.bulkProgress       : 0
@@ -2434,6 +2458,7 @@ ApplicationWindow {
                             TapHandler {
                                 acceptedButtons: Qt.RightButton
                                 onTapped: (eventPoint) => {
+                                    if (controller) controller.clearStatus()
                                     previewContextMenu.popup()
                                 }
                             }
@@ -3570,6 +3595,7 @@ ApplicationWindow {
                             TapHandler {
                                 acceptedButtons: Qt.RightButton
                                 onTapped: (eventPoint) => {
+                                    if (controller) controller.clearStatus()
                                     previewContextMenu.popup()
                                 }
                             }
@@ -4480,10 +4506,10 @@ ApplicationWindow {
                         opacity: 0.6
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
-                        Layout.bottomMargin: settingsModel.aiFeatureAvailable ? 12 : 6
+                        Layout.bottomMargin: _aiFeatureAvailable ? 12 : 6
                     }
                     Label {
-                        visible: !settingsModel.aiFeatureAvailable
+                        visible: !_aiFeatureAvailable
                         text: qsTr("Unavailable on macOS Intel targets (PyTorch is not supported for Python 3.13+).")
                         font.pixelSize: 12
                         opacity: 0.8
@@ -4495,8 +4521,8 @@ ApplicationWindow {
                     RowLayout {
                         spacing: 12
                         Layout.bottomMargin: 28
-                        enabled: settingsModel.aiFeatureAvailable
-                        opacity: settingsModel.aiFeatureAvailable ? 1.0 : 0.55
+                        enabled: _aiFeatureAvailable
+                        opacity: _aiFeatureAvailable ? 1.0 : 0.55
 
                         Switch {
                             id: aiEnabledSwitch
@@ -4793,16 +4819,72 @@ ApplicationWindow {
         }
 
         Label {
+            id: statusLabel
             anchors {
                 left: _isIndexing ? indexingLabel.right : parent.left
                 leftMargin: _isIndexing ? 10 : 12
+                right: clearStatusButton.visible ? clearStatusButton.left : parent.right
+                rightMargin: clearStatusButton.visible ? 6 : 12
                 verticalCenter: parent.verticalCenter
             }
             text: _statusText
+            elide: Text.ElideRight
             font.pixelSize: 11
             color: (controller && controller.statusIsError)
                    ? Material.color(Material.Red) : Material.foreground
             opacity: (controller && controller.statusIsError) ? 1.0 : 0.7
+        }
+
+        Rectangle {
+            id: clearStatusButton
+            anchors {
+                right: parent.right
+                rightMargin: 8
+                verticalCenter: parent.verticalCenter
+            }
+            width: 18
+            height: 18
+            radius: 9
+            visible: _statusText !== ""
+            color: Qt.rgba(0, 0, 0, clearStatusMouse.containsMouse ? 0.35 : 0.2)
+            border.color: Qt.rgba(1, 1, 1, 0.3)
+            border.width: 1
+
+            Item {
+                anchors.centerIn: parent
+                width: 10
+                height: 10
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: parent.width
+                    height: 1.4
+                    radius: 0.7
+                    rotation: 45
+                    color: Material.foreground
+                }
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: parent.width
+                    height: 1.4
+                    radius: 0.7
+                    rotation: -45
+                    color: Material.foreground
+                }
+            }
+
+            MouseArea {
+                id: clearStatusMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: { if (controller) controller.clearStatus() }
+            }
+
+            ToolTip.text: qsTr("Clear notification")
+            ToolTip.visible: clearStatusMouse.containsMouse
+            ToolTip.delay: 300
         }
     }
 }

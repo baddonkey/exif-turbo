@@ -17,7 +17,9 @@ Run with:
 from __future__ import annotations
 
 import io
+import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
@@ -48,6 +50,11 @@ def _make_controller(tmp_path: Path) -> AppController:
 def _make_jpeg(path: Path, color: tuple[int, int, int] = (200, 100, 50)) -> Path:
     Image.new("RGB", (64, 64), color=color).save(str(path), "JPEG")
     return path
+
+
+def _fake_folder_repo(*paths: str) -> SimpleNamespace:
+    folders = [SimpleNamespace(path=p) for p in paths]
+    return SimpleNamespace(get_all=lambda: folders, close=lambda: None)
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -237,6 +244,30 @@ def test_do_save_preview_raw_mode_missing_source_emits_error(
 
     # Assert
     assert blocker.args[0] == "Preview source file not accessible"
+    assert not dest.exists()
+
+    ctrl.close()
+
+
+def test_doSaveOriginal_missing_source_sets_status_warning(
+    tmp_path: Path, qtbot: QtBot
+) -> None:
+    # Arrange
+    root = tmp_path / "detached"
+    missing = root / "photo.jpg"
+    dest = tmp_path / "saved_original.jpg"
+    ctrl = _make_controller(tmp_path)
+    ctrl._folder_repo = _fake_folder_repo(str(root))
+    ctrl._pending_preview_path = str(missing)
+
+    # Act
+    with qtbot.waitSignal(ctrl.clipboardCopyDone, timeout=5_000) as blocker:
+        ctrl.doSaveOriginal(QUrl.fromLocalFile(str(dest)).toString())
+
+    # Assert
+    assert blocker.args[0] == "File not accessible"
+    assert ctrl.statusIsError is True
+    assert os.path.normpath(str(root)) in ctrl.statusText
     assert not dest.exists()
 
     ctrl.close()

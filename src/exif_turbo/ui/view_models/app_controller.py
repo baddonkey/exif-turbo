@@ -1652,6 +1652,7 @@ class AppController(QObject):
     ) -> None:
         if self._repo is None or self._db_path is None:
             return
+        self._clear_status_for_primary_action()
         path_filter = self._current_path_filter()
         params = dict(
             query=self._query_text,
@@ -2199,6 +2200,7 @@ class AppController(QObject):
 
     @Slot(int)
     def selectResult(self, proxy_row: int) -> None:
+        self._clear_status_for_primary_action()
         # Map proxy row → source row when the checked-only filter is active.
         row = self._filter_proxy.source_row_for(proxy_row) if self._filter_proxy else proxy_row
         self._select_source_row(row)
@@ -2211,6 +2213,7 @@ class AppController(QObject):
         Used by QML to scroll Browse tab to a specific image after
         navigating from a Search result card.
         """
+        self._clear_status_for_primary_action()
         n = self._search_model.rowCount()
         for source_row in range(n):
             if self._search_model.get_image_id(source_row) == image_id:
@@ -2230,6 +2233,7 @@ class AppController(QObject):
         """Find the image at *path* in the current results, select it, and
         return its proxy row (or -1 if not found).
         """
+        self._clear_status_for_primary_action()
         n = self._search_model.rowCount()
         for source_row in range(n):
             if self._search_model.get_path(source_row) == path:
@@ -2851,6 +2855,7 @@ class AppController(QObject):
 
     def _start_ai_search_worker(self, query: str, precision: str) -> None:
         """Internal helper: create and start an AiSearchWorker."""
+        self._clear_status_for_primary_action()
         self._search_serial += 1
         serial = self._search_serial
         worker = AiSearchWorker(
@@ -3153,12 +3158,17 @@ class AppController(QObject):
         if not path:
             return
         if not os.path.exists(path):
+            self._warn_unavailable(path)
             self.clipboardCopyDone.emit(_("File not accessible"))
             return
         dest = Path(QUrl(file_url).toLocalFile())
         try:
             shutil.copy2(path, str(dest))
             self.clipboardCopyDone.emit(_("Original saved"))
+        except OSError:
+            _log.exception("doSaveOriginal failed for %r → %r", path, dest)
+            self._warn_unavailable(path)
+            self.clipboardCopyDone.emit(_("File not accessible"))
         except Exception:  # noqa: BLE001
             _log.exception("doSaveOriginal failed for %r → %r", path, dest)
 
@@ -3167,6 +3177,12 @@ class AppController(QObject):
         """Switch the big preview between cached preview and full-res raw."""
         if self._use_raw_preview == use_raw:
             return
+        self._clear_status_for_primary_action()
+        if use_raw:
+            path = self._pending_preview_path
+            if path and not os.path.exists(path):
+                self._warn_unavailable(path)
+                return
         self._use_raw_preview = use_raw
         self.useRawPreviewChanged.emit()
         # Re-resolve the source so the QML Image picks up the new scheme.
@@ -3176,7 +3192,7 @@ class AppController(QObject):
         path = self._pending_preview_path
         if not path:
             return
-        scheme = "raw" if self._use_raw_preview else "preview"
+        scheme = "raw" if (self._use_raw_preview and os.path.exists(path)) else "preview"
         self._selected_image_source = self._build_preview_uri(path, scheme)
         self.selectedImageSourceChanged.emit()
 
@@ -3287,6 +3303,15 @@ class AppController(QObject):
             self._status_text = text
             self._status_is_error = error
             self.statusTextChanged.emit()
+
+    @Slot()
+    def clearStatus(self) -> None:
+        self._set_status("")
+
+    def _clear_status_for_primary_action(self) -> None:
+        if not self._status_text:
+            return
+        self._set_status("")
 
     def _expected_data_source(self, path: str) -> str:
         """Return the indexed-folder root that should contain *path*, or "".
@@ -3559,7 +3584,7 @@ class AppController(QObject):
         """Fire the full preview load after the debounce delay."""
         path = self._pending_preview_path
         if path:
-            scheme = "raw" if self._use_raw_preview else "preview"
+            scheme = "raw" if (self._use_raw_preview and os.path.exists(path)) else "preview"
             self._selected_image_source = self._build_preview_uri(path, scheme)
         else:
             self._selected_image_source = ""
