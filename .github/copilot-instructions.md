@@ -68,6 +68,52 @@ pytest -x           # Stop on first failure
 pytest --tb=short   # Shorter tracebacks
 ```
 
+### Running the full suite reliably (agent notes)
+
+The full suite loads QtWebEngine and torch/faiss native libraries. Two hard-won
+rules keep runs from hanging or crashing:
+
+1. **Never capture the suite's stdout through a pipe.** QtWebEngine leaves a
+   native GPU/vsync thread (`QDxgiVSyncService`) alive at process exit. If a
+   parent reads the child's stdout via an OS pipe (`subprocess.run(...,
+   capture_output=True)` or a shell `|`), that leaked thread keeps the pipe's
+   write end open and the parent blocks **forever** on EOF — even though pytest
+   already finished. Redirect to a **file** instead (`stdout=<file>`), which has
+   no EOF-deadlock. Set `PYTHONUNBUFFERED=1` so output isn't lost when
+   `tests/conftest.py` calls `os._exit()` at session finish.
+2. **Always run with `pytest-timeout` armed** so a wedged test self-aborts with
+   a stack dump instead of hanging. The default `timeout = 120` /
+   `timeout_method = "thread"` lives in `[tool.pytest.ini_options]`.
+
+Preferred invocation (in-process runner, no shell — avoids PowerShell's stray
+`^U`/`&` control-character corruption that plagues long terminal runs):
+
+```python
+import subprocess, sys, os
+env = dict(os.environ); env["PYTHONUNBUFFERED"] = "1"
+with open("full_run.log", "w", encoding="utf-8") as fh:
+    rc = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+         "--timeout=120", "--timeout-method=thread"],
+        stdout=fh, stderr=subprocess.STDOUT, env=env, timeout=840,
+    ).returncode
+```
+
+Then read `full_run.log` for results. A clean run is **364 passed, 5 skipped**
+in ~4 min.
+
+`scripts/run_tests.py` is a process-isolated fallback (non-UI in one process,
+each UI test file in its own) for the rare WebEngine native-teardown crash on
+Windows, where `pytest --forked` is unavailable.
+
+**AI tests must never download the CLIP model.** `AiIndexerService` tests mock
+the model by patching the module globals
+`exif_turbo.indexing.ai_indexer_service._cached_model` /
+`_cached_preprocess`, or by setting `service._model` (honored by
+`_ensure_model_loaded`). A test that triggers the real ~605 MB download will
+fill the disk (each run writes to a fresh temp dir) and cause the very
+crashes/hangs above. If tests start hanging, **check free disk space first**.
+
 ## Conventions
 
 - Follow the standards defined in the `senior-python-engineer` agent for
