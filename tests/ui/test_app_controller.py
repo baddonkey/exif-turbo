@@ -297,7 +297,6 @@ def test_app_controller_ai_full_rescan_starts_force_scan(tmp_path: Path) -> None
         get_by_id=lambda folder_id: SimpleNamespace(id=folder_id, path="C:/photos"),
         close=lambda: None,
     )
-
     class _FakeSignal:
         def connect(self, callback) -> None:  # type: ignore[no-untyped-def]
             self._callback = callback
@@ -348,6 +347,32 @@ def test_app_controller_ai_full_rescan_starts_force_scan(tmp_path: Path) -> None
     assert controller.aiScanIsFullRescan is True
 
     controller.close()
+
+
+def test_ai_search_empty_without_filters_uses_normal_search_pipeline(
+    bare_controller: AppController,
+    monkeypatch,
+) -> None:
+    # Arrange
+    bare_controller.setAiSearchMode(True)
+    calls: list[tuple[str, str, str] | str] = []
+
+    monkeypatch.setattr(
+        bare_controller,
+        "_run_search",
+        lambda: calls.append("run_search"),
+    )
+    monkeypatch.setattr(
+        bare_controller,
+        "_start_ai_search_worker",
+        lambda query, precision: calls.append(("ai_worker", query, precision)),
+    )
+
+    # Act
+    bare_controller.aiSearch("   ", "normal")
+
+    # Assert
+    assert calls == ["run_search"]
 
 
 def test_selectResult_image_source_is_empty_before_debounce_fires(
@@ -462,6 +487,30 @@ def test_search_with_existing_status_clears_notification(
     # Assert
     assert bare_controller.statusText == ""
     assert bare_controller.statusIsError is False
+
+
+def test_on_search_failed_recompute_error_clears_busy_and_loading_state(
+    bare_controller: AppController,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    bare_controller._set_search_busy_ui(True)
+    bare_controller._loading = True
+
+    def _boom() -> None:
+        raise RuntimeError("recompute failed")
+
+    monkeypatch.setattr(bare_controller, "_recompute_checked_in_results", _boom)
+
+    # Act
+    bare_controller._on_search_failed("unknown special query: malongo*")
+
+    # Assert
+    assert bare_controller.isSearching is False
+    assert bare_controller._loading is False
+    assert bare_controller.totalResults == 0
+    assert bare_controller.checkedCount == 0
+    assert bare_controller.checkedInResultsCount == 0
 
 
 def test_selectResult_with_existing_status_clears_notification(
