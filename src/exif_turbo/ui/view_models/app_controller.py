@@ -1401,12 +1401,53 @@ class AppController(QObject):
             return
         self._run_search()
 
+    def _ai_search_is_unfiltered_empty(self) -> bool:
+        """True when AI mode should fall back to a normal empty search.
+
+        When the AI query is blank and neither the timeline (date) filter nor
+        any search-field-area filter (folder, format, marked-only) is active,
+        the semantic result set is simply "everything in scope". In that case
+        the normal paginated search yields the same images without touching the
+        FAISS/AI database or hydrating every indexed row at once.
+        """
+        return (
+            not self._last_ai_query.strip()
+            and self._date_from is None
+            and self._date_to is None
+            and not self._ext_filter
+            and not self._checked_only_filter_active
+            and self._current_path_filter() is None
+        )
+
+    def _results_use_ai_pipeline(self) -> bool:
+        """Whether result handling should use the in-memory AI result pipeline.
+
+        AI mode with an active query or filter caches the full ranked result
+        set in memory and derives facets from it. The unfiltered-empty case
+        instead flows through the normal paginated pipeline (see
+        :meth:`_ai_search_is_unfiltered_empty`).
+        """
+        return self._is_ai_search_mode and not self._ai_search_is_unfiltered_empty()
+
+    def _run_empty_ai_fallback_search(self) -> None:
+        """Show all in-scope images via the normal paginated search pipeline.
+
+        Used when AI mode has a blank query and no active filters, avoiding the
+        cost of loading the FAISS index and hydrating every indexed row at once.
+        """
+        self._query_text = ""
+        self._current_result_row = 0
+        self._run_search()
+
     def _rerun_ai_search_for_filter_change(self) -> bool:
         if not self._is_ai_search_mode:
             return False
         if not self._has_ai_search_run or self._db_path is None:
             return False
         self._ai_select_first = True
+        if self._ai_search_is_unfiltered_empty():
+            self._run_empty_ai_fallback_search()
+            return True
         self._start_ai_search_worker(self._last_ai_query, self._last_ai_precision)
         return True
 
@@ -1762,7 +1803,7 @@ class AppController(QObject):
         # For AI searches, store all results in-memory and load only the first
         # page into the model; further pages are served from _ai_result_cache
         # by loadMore() without touching the database.
-        if self._is_ai_search_mode:
+        if self._results_use_ai_pipeline():
             self._ai_result_cache = all_results
             # Timeline facet source: the semantic set before date filtering.
             # Fall back to the (date-filtered) result paths if the worker did
@@ -1868,7 +1909,7 @@ class AppController(QObject):
             QTimer.singleShot(0, self.searchRestoreReady.emit)
         self._loading = False
         self._consume_pending_load_more_request()
-        if self._is_ai_search_mode and self._repo is not None:
+        if self._results_use_ai_pipeline() and self._repo is not None:
             ai_paths = self._ai_format_facet_source_paths()
             format_counts = self._repo.get_format_counts_by_paths(ai_paths)
         self._apply_format_counts(format_counts)
@@ -1890,7 +1931,7 @@ class AppController(QObject):
 
     def _schedule_year_counts_reload(self, serial: int) -> None:
         """Refresh year counts after the current search result has rendered."""
-        if self._is_ai_search_mode:
+        if self._results_use_ai_pipeline():
             # AI-mode year counts currently depend on in-memory AI path sets.
             # Keep the existing synchronous path for that mode.
             def _reload_ai() -> None:
@@ -2010,7 +2051,7 @@ class AppController(QObject):
     def _load_year_counts(self) -> None:
         if self._repo is None:
             return
-        if self._is_ai_search_mode:
+        if self._results_use_ai_pipeline():
             ai_paths = self._ai_facet_source_paths()
             counts = self._repo.get_year_counts_by_paths(ai_paths)
         else:
@@ -2114,7 +2155,7 @@ class AppController(QObject):
         if self._loading:
             self._pending_load_more_request = True
             return False
-        if self._is_ai_search_mode:
+        if self._results_use_ai_pipeline():
             if self._loaded_results >= self._total_results:
                 self._pending_load_more_request = False
                 return False
@@ -2851,6 +2892,9 @@ class AppController(QObject):
         self._last_ai_precision = precision
         self._has_ai_search_run = True
         self._ai_select_first = True
+        if self._ai_search_is_unfiltered_empty():
+            self._run_empty_ai_fallback_search()
+            return
         self._start_ai_search_worker(query, precision)
 
     def _start_ai_search_worker(self, query: str, precision: str) -> None:
