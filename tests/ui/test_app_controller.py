@@ -489,6 +489,30 @@ def test_search_with_existing_status_clears_notification(
     assert bare_controller.statusIsError is False
 
 
+def test_on_search_failed_recompute_error_clears_busy_and_loading_state(
+    bare_controller: AppController,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    bare_controller._set_search_busy_ui(True)
+    bare_controller._loading = True
+
+    def _boom() -> None:
+        raise RuntimeError("recompute failed")
+
+    monkeypatch.setattr(bare_controller, "_recompute_checked_in_results", _boom)
+
+    # Act
+    bare_controller._on_search_failed("unknown special query: malongo*")
+
+    # Assert
+    assert bare_controller.isSearching is False
+    assert bare_controller._loading is False
+    assert bare_controller.totalResults == 0
+    assert bare_controller.checkedCount == 0
+    assert bare_controller.checkedInResultsCount == 0
+
+
 def test_selectResult_with_existing_status_clears_notification(
     qtbot: QtBot,
     bare_controller: AppController,

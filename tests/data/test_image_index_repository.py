@@ -10,6 +10,27 @@ from exif_turbo.data.image_index_repository import ImageIndexRepository
 from tests.conftest import make_jpeg, make_png
 
 
+class _SpecialQueryErrorOnceConnection:
+    """Proxy that simulates SQLCipher rejecting wildcard FTS MATCH once."""
+
+    def __init__(self, inner) -> None:  # type: ignore[no-untyped-def]
+        self._inner = inner
+        self._raised = False
+        self.fts_queries: list[str] = []
+
+    def execute(self, sql: str, args: tuple = ()):  # type: ignore[no-untyped-def]
+        if "MATCH ?" in sql and args and isinstance(args[0], str):
+            query = args[0]
+            self.fts_queries.append(query)
+            if "*" in query and not self._raised:
+                self._raised = True
+                raise sqlcipher3.OperationalError(f"unknown special query: {query}")
+        return self._inner.execute(sql, args)
+
+    def __getattr__(self, name: str):
+        return getattr(self._inner, name)
+
+
 # ── upsert / search ──────────────────────────────────────────────────────────
 
 
@@ -107,6 +128,45 @@ def test_search_fts_no_match_returns_empty(repo: ImageIndexRepository, tmp_path:
 
     rows = repo.search_images("Leica", limit=10, offset=0)
     assert rows == []
+
+
+def test_count_images_wildcard_special_query_falls_back_without_asterisk(
+    repo: ImageIndexRepository,
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    path = str(make_jpeg(tmp_path / "malongo.jpg"))
+    repo.upsert_image(path, "malongo.jpg", 1.0, 100, {}, "malongo jpg")
+    repo.commit()
+    proxy = _SpecialQueryErrorOnceConnection(repo.conn)
+    repo.conn = proxy
+
+    # Act
+    count = repo.count_images("malongo*")
+
+    # Assert
+    assert count == 1
+    assert proxy.fts_queries[:2] == ["malongo*", "malongo"]
+
+
+def test_search_images_wildcard_special_query_falls_back_without_asterisk(
+    repo: ImageIndexRepository,
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    path = str(make_jpeg(tmp_path / "malongo.jpg"))
+    repo.upsert_image(path, "malongo.jpg", 1.0, 100, {}, "malongo jpg")
+    repo.commit()
+    proxy = _SpecialQueryErrorOnceConnection(repo.conn)
+    repo.conn = proxy
+
+    # Act
+    rows = repo.search_images("malongo*", limit=10, offset=0)
+
+    # Assert
+    assert len(rows) == 1
+    assert rows[0][2] == "malongo.jpg"
+    assert proxy.fts_queries[:2] == ["malongo*", "malongo"]
 
 
 # ── FTS5 logical operators ────────────────────────────────────────────────────

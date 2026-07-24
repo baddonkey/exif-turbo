@@ -1994,7 +1994,12 @@ class AppController(QObject):
         self._loaded_offset = 0
         self._loading = False
         self._consume_pending_load_more_request()
-        self._recompute_checked_in_results()
+        try:
+            self._recompute_checked_in_results()
+        except Exception as exc:
+            _log.warning("Failed to recompute checked counters after search failure: %s", exc)
+            self._checked_total_count = 0
+            self._checked_in_results_count = 0
         self.checkedCountChanged.emit()
         self.totalResultsChanged.emit()
         self.loadedResultsChanged.emit()

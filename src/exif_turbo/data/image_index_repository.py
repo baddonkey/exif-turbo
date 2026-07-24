@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from os.path import commonpath
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
@@ -371,7 +372,10 @@ class ImageIndexRepository:
 
         sql_returning = sql + " RETURNING path"
         with self.conn:
-            cursor = self.conn.execute(sql_returning, args)
+            if query.strip():
+                cursor = self._execute_fts_query(sql_returning, args, fts_query)
+            else:
+                cursor = self.conn.execute(sql_returning, args)
             return [row[0] for row in cursor.fetchall()]
 
     def bulk_invert_images(
@@ -417,7 +421,10 @@ class ImageIndexRepository:
 
         sql_returning = sql + " RETURNING path, marked"
         with self.conn:
-            cursor = self.conn.execute(sql_returning, args)
+            if query.strip():
+                cursor = self._execute_fts_query(sql_returning, args, fts_query)
+            else:
+                cursor = self.conn.execute(sql_returning, args)
             rows = cursor.fetchall()
         added = [path for path, m in rows if m == 1]
         removed = [path for path, m in rows if m == 0]
@@ -616,9 +623,33 @@ class ImageIndexRepository:
         ``img004.png`` becomes the implicit-AND query ``img004 png``, which
         correctly matches images whose FTS5 document contains both tokens.
         """
-        import re
         sanitized = re.sub(r'[^\w\s"*^()]', ' ', query)
         return ' '.join(sanitized.split())
+
+    @staticmethod
+    def _drop_prefix_wildcards(fts_query: str) -> str:
+        """Return a wildcard-free fallback query for strict SQLCipher builds."""
+        return ' '.join(re.sub(r'\*+', ' ', fts_query).split())
+
+    def _execute_fts_query(self, sql: str, args: tuple, fts_query: str):
+        """Execute an FTS MATCH query with a compatibility fallback.
+
+        Some SQLCipher/SQLite builds reject otherwise valid FTS prefix
+        wildcard expressions (for example ``malongo*``) with
+        ``OperationalError: unknown special query``. Retry once without
+        wildcard operators so searches still complete instead of failing.
+        """
+        try:
+            return self.conn.execute(sql, args)
+        except sqlcipher3.OperationalError as exc:
+            msg = str(exc).lower()
+            if "unknown special query" not in msg or "*" not in fts_query:
+                raise
+            fallback_query = self._drop_prefix_wildcards(fts_query)
+            if not fallback_query:
+                raise
+            fallback_args = (fallback_query,) + args[1:]
+            return self.conn.execute(sql, fallback_args)
 
     def search_images(
         self,
@@ -665,6 +696,7 @@ class ImageIndexRepository:
                 "LIMIT ? OFFSET ?"
             )
             args = (fts_query,) + ext_args + path_args + date_args + (limit, offset)
+            cur = self._execute_fts_query(sql, args, fts_query)
         else:
             sql = (
                 "SELECT id, path, filename, metadata_json, size, mtime "
@@ -674,8 +706,7 @@ class ImageIndexRepository:
                 "LIMIT ? OFFSET ?"
             )
             args = ext_args + path_args + date_args + (limit, offset)
-
-        cur = self.conn.execute(sql, args)
+            cur = self.conn.execute(sql, args)
         return cur.fetchall()
 
     def count_images(
@@ -714,14 +745,14 @@ class ImageIndexRepository:
                 f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
             )
             args = (fts_query,) + ext_args + path_args + date_args
+            cur = self._execute_fts_query(sql, args, fts_query)
         else:
             sql = (
                 f"SELECT COUNT(*) FROM images "
                 f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
             )
             args = ext_args + path_args + date_args
-
-        cur = self.conn.execute(sql, args)
+            cur = self.conn.execute(sql, args)
         return int(cur.fetchone()[0])
 
     def find_image_offset(
@@ -765,6 +796,7 @@ class ImageIndexRepository:
                 "WHERE image_id = ?"
             )
             args = (fts_query,) + ext_args + path_args + date_args + (image_id,)
+            row = self._execute_fts_query(sql, args, fts_query).fetchone()
         else:
             sql = (
                 "SELECT row_offset FROM ("
@@ -776,8 +808,7 @@ class ImageIndexRepository:
                 "WHERE image_id = ?"
             )
             args = ext_args + path_args + date_args + (image_id,)
-
-        row = self.conn.execute(sql, args).fetchone()
+            row = self.conn.execute(sql, args).fetchone()
         if row is None:
             return None
         return int(row[0])
@@ -819,14 +850,14 @@ class ImageIndexRepository:
                 f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
             )
             args = (fts_query,) + ext_args + path_args + date_args
+            cur = self._execute_fts_query(sql, args, fts_query)
         else:
             sql = (
                 "SELECT path FROM images "
                 f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
             )
             args = ext_args + path_args + date_args
-
-        cur = self.conn.execute(sql, args)
+            cur = self.conn.execute(sql, args)
         return [row[0] for row in cur.fetchall()]
 
     def _build_ext_clause(self, ext_filter: str) -> tuple[str, tuple]:
@@ -911,6 +942,7 @@ class ImageIndexRepository:
                 "GROUP BY yr ORDER BY yr"
             )
             args = (fts_query,) + ext_args + path_args
+            cur = self._execute_fts_query(sql, args, fts_query)
         else:
             sql = (
                 "SELECT CAST(strftime('%Y', datetime(captured_at, 'unixepoch')) AS INTEGER) AS yr, "
@@ -920,8 +952,7 @@ class ImageIndexRepository:
                 "GROUP BY yr ORDER BY yr"
             )
             args = ext_args + path_args
-
-        cur = self.conn.execute(sql, args)
+            cur = self.conn.execute(sql, args)
         return [(int(row[0]), int(row[1])) for row in cur.fetchall()]
 
     # Extensions that should be merged into a single facet key.
@@ -968,6 +999,7 @@ class ImageIndexRepository:
                 " ORDER BY cnt DESC, images.ext ASC"
             )
             args = (fts_query,) + path_args + date_args
+            cur = self._execute_fts_query(sql, args, fts_query)
         else:
             sql = (
                 "SELECT ext, COUNT(*) AS cnt FROM images"
@@ -976,7 +1008,7 @@ class ImageIndexRepository:
                 " ORDER BY cnt DESC, ext ASC"
             )
             args = path_args + date_args
-        cur = self.conn.execute(sql, args)
+            cur = self.conn.execute(sql, args)
         return [(str(row[0]), int(row[1])) for row in cur.fetchall()]
 
     def get_format_counts_by_paths(self, paths: List[str]) -> List[Tuple[str, int]]:
