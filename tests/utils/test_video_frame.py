@@ -41,6 +41,10 @@ def test_extract_video_frame_webm_sample_returns_thumbnail_sized_image() -> None
     # Act
     proc.start()
     child_conn.close()  # parent doesn't write
+    if not parent_conn.poll(60):
+        proc.terminate()
+        proc.join(timeout=10)
+        raise AssertionError("Child process produced no result within 60s (likely native crash)")
     result = parent_conn.recv()
     proc.join(timeout=60)
 

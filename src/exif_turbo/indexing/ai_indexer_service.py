@@ -141,6 +141,8 @@ class AiIndexerService:
 
     def _ensure_model_loaded(self) -> None:
         global _cached_model, _cached_preprocess
+        if self._model is not None:
+            return
         if _cached_model is not None:
             self._model = _cached_model
             self._preprocess = _cached_preprocess
