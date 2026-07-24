@@ -109,9 +109,13 @@ def test_ai_indexer_service_build_index_vectorises_images(
         np.stack([_fake_vec() for _ in image_files])
     ).float()
     fake_preprocess = MagicMock(return_value=torch.zeros(3, 224, 224))
-    fake_open_clip = MagicMock()
-    fake_open_clip.create_model_and_transforms.return_value = (
-        fake_model, MagicMock(), fake_preprocess
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_model",
+        fake_model,
+    )
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_preprocess",
+        fake_preprocess,
     )
 
     # Act
