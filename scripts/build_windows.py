@@ -79,20 +79,6 @@ def compile_translations() -> None:
     print("  Translation catalogs compiled.")
 
 
-def commit_version_info(version: str) -> None:
-    """Stage and commit auto-generated version_info.py if it changed."""
-    status = subprocess.run(
-        ["git", "status", "--short", "version_info.py"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-    )
-    if status.stdout.strip():
-        run(["git", "add", "version_info.py"])
-        run(["git", "commit", "-m", f"chore: update version_info.py to {version}"])
-        print(f"  Committed version_info.py ({version}).")
-
-
 def stage_exiftool() -> Path:
     """Download and stage the ExifTool 64-bit Windows binary for the MSI.
 
@@ -192,8 +178,6 @@ def main() -> None:
 
     run([pyinstaller, "exif-turbo.spec", "--noconfirm", "--clean"])
     print("  PyInstaller build complete.")
-
-    commit_version_info(version)
 
     app_dir = (REPO_ROOT / "dist" / "exif-turbo").resolve()
     msi_out = REPO_ROOT / "dist" / f"exif-turbo-{version}-windows.msi"

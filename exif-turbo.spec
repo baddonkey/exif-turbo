@@ -2,9 +2,14 @@
 # Windows PyInstaller spec — produces a onedir bundle with the GUI.
 # Run via: scripts\build_windows.ps1
 import re
+import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files
+
+# Make the shared version_info generator importable (cwd is the repo root).
+sys.path.insert(0, str(Path('scripts').resolve()))
+from gen_version_info import write_version_info  # noqa: E402
 
 # Read version from the single source of truth
 _version_match = re.search(
@@ -13,48 +18,9 @@ _version_match = re.search(
     re.MULTILINE,
 )
 VERSION = _version_match.group(1) if _version_match else '0.0.0'
-_major, _minor, _patch = (VERSION.split('.') + ['0', '0', '0'])[:3]
-VERSION_TUPLE = (int(_major), int(_minor), int(_patch), 0)
 
 # Generate version_info.py for Windows exe metadata
-Path('version_info.py').write_text(
-    f'''\
-# Auto-generated from exif-turbo.spec — do not edit manually.
-VSVersionInfo(
-    ffi=FixedFileInfo(
-        filevers={VERSION_TUPLE},
-        prodvers={VERSION_TUPLE},
-        mask=0x3F,
-        flags=0x0,
-        OS=0x40004,
-        fileType=0x1,
-        subtype=0x0,
-        date=(0, 0),
-    ),
-    kids=[
-        StringFileInfo(
-            [
-                StringTable(
-                    "040904B0",
-                    [
-                        StringStruct("CompanyName", "exif-turbo"),
-                        StringStruct("FileDescription", "exif-turbo — Image EXIF metadata search and indexing tool"),
-                        StringStruct("FileVersion", "{VERSION}"),
-                        StringStruct("InternalName", "exif-turbo"),
-                        StringStruct("LegalCopyright", "Copyright (c) 2025 exif-turbo contributors"),
-                        StringStruct("OriginalFilename", "exif-turbo.exe"),
-                        StringStruct("ProductName", "exif-turbo"),
-                        StringStruct("ProductVersion", "{VERSION}"),
-                    ],
-                )
-            ]
-        ),
-        VarFileInfo([VarStruct("Translation", [1033, 1200])]),
-    ],
-)
-''',
-    encoding='utf-8',
-)
+write_version_info(VERSION, Path('version_info.py'))
 
 _icon_path = Path('assets\\icon.ico')
 _icon_args = [str(_icon_path)] if _icon_path.exists() else []
