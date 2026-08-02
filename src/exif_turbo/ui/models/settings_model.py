@@ -11,6 +11,11 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from exif_turbo.i18n import _, apply_language, available_languages, current_theme, set_theme
 from exif_turbo.utils.json_export import JsonExportFormat
+from exif_turbo.utils.preview_render import (
+    DEFAULT_VIPS_ALLOWED_EXTENSIONS,
+    configure_vips_allowed_extensions,
+    normalize_vips_extension,
+)
 
 
 _CPU_COUNT = os.cpu_count() or 2
@@ -71,6 +76,7 @@ class SettingsModel(QObject):
     languageChanged = Signal()
     retranslateRequested = Signal()
     previewMaxSizeChanged = Signal()
+    libvipsExtensionsChanged = Signal()
     sortByChanged = Signal()
     aiEnabledChanged = Signal()
     jsonExportFormatChanged = Signal()
@@ -83,12 +89,14 @@ class SettingsModel(QObject):
         self._theme: str = current_theme()
         self._language: str = "en"
         self._preview_max_size: int = _DEFAULT_PREVIEW_SIZE
+        self._libvips_extensions: List[str] = list(DEFAULT_VIPS_ALLOWED_EXTENSIONS)
         self._sort_by: str = _DEFAULT_SORT
         self._ai_enabled: bool = False
         self._json_pretty: bool = _DEFAULT_JSON_PRETTY
         self._json_indent_style: str = _DEFAULT_JSON_INDENT_STYLE
         self._json_indent_size: int = _DEFAULT_JSON_INDENT_SIZE
         self._load()
+        configure_vips_allowed_extensions(self._libvips_extensions)
 
     # ── Properties ───────────────────────────────────────────────────────────
 
@@ -167,6 +175,32 @@ class SettingsModel(QObject):
             return
         self._preview_max_size = value
         self.previewMaxSizeChanged.emit()
+        self._save()
+
+    # ── libvips security ─────────────────────────────────────────────────────
+
+    @Property("QVariantList", notify=libvipsExtensionsChanged)
+    def libvipsExtensions(self) -> List[str]:
+        return list(self._libvips_extensions)
+
+    @Slot(str)
+    def addLibvipsExtension(self, value: str) -> None:
+        extension = normalize_vips_extension(value)
+        if extension is None or extension in self._libvips_extensions:
+            return
+        self._libvips_extensions.append(extension)
+        self._apply_libvips_extensions()
+
+    @Slot(int)
+    def removeLibvipsExtension(self, index: int) -> None:
+        if not 0 <= index < len(self._libvips_extensions):
+            return
+        del self._libvips_extensions[index]
+        self._apply_libvips_extensions()
+
+    def _apply_libvips_extensions(self) -> None:
+        configure_vips_allowed_extensions(self._libvips_extensions)
+        self.libvipsExtensionsChanged.emit()
         self._save()
 
     # ── Theme ─────────────────────────────────────────────────────────────────
@@ -328,6 +362,13 @@ class SettingsModel(QObject):
                 self._blacklist = [str(p) for p in data["blacklist"] if p]
             if isinstance(data.get("previewMaxSize"), int) and data["previewMaxSize"] in _PREVIEW_SIZE_CHOICES:
                 self._preview_max_size = data["previewMaxSize"]
+            if isinstance(data.get("libvipsExtensions"), list):
+                loaded_extensions: List[str] = []
+                for value in data["libvipsExtensions"]:
+                    extension = normalize_vips_extension(str(value))
+                    if extension is not None and extension not in loaded_extensions:
+                        loaded_extensions.append(extension)
+                self._libvips_extensions = loaded_extensions
             if isinstance(data.get("sortBy"), str) and data["sortBy"] in _VALID_SORTS:
                 self._sort_by = data["sortBy"]
             if isinstance(data.get("language"), str) and data["language"] in {c for c, _ in available_languages()}:
@@ -356,6 +397,7 @@ class SettingsModel(QObject):
                         "workerCount": self._worker_count,
                         "blacklist": self._blacklist,
                         "previewMaxSize": self._preview_max_size,
+                        "libvipsExtensions": self._libvips_extensions,
                         "sortBy": self._sort_by,
                         "language": self._language,
                         "aiEnabled": self._ai_enabled,
