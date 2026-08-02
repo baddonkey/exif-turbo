@@ -4,7 +4,8 @@ Given either ``major minor patch``, ``x.y.z``, or a bump keyword
 (``patch``, ``minor``, ``major``) this script will:
 
 Prepare-PR stage (default):
-1. Bump version in ``src/exif_turbo/__init__.py`` and ``pyproject.toml``.
+1. Bump version in ``src/exif_turbo/__init__.py``, ``pyproject.toml`` and
+   the Windows exe-metadata file ``version_info.py``.
 2. Commit the version bump on the current branch.
 3. Push the branch and create (or reuse) a PR to ``main``.
 
@@ -35,10 +36,14 @@ import sys
 import zipfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from gen_version_info import write_version_info  # noqa: E402
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INIT_FILE = REPO_ROOT / "src" / "exif_turbo" / "__init__.py"
 PYPROJECT_FILE = REPO_ROOT / "pyproject.toml"
+VERSION_INFO_FILE = REPO_ROOT / "version_info.py"
 
 
 class ShellError(RuntimeError):
@@ -153,9 +158,13 @@ def write_version(version: str) -> None:
         raise ShellError(f"Failed to update version in {PYPROJECT_FILE}")
     PYPROJECT_FILE.write_text(pyproject_new, encoding="utf-8")
 
+    # Regenerate the Windows exe-metadata file so it lands in the release PR
+    # instead of being committed directly to a protected 'main' at build time.
+    write_version_info(version, VERSION_INFO_FILE)
+
 
 def commit_version_bump(version: str) -> None:
-    run(["git", "add", str(INIT_FILE), str(PYPROJECT_FILE)])
+    run(["git", "add", str(INIT_FILE), str(PYPROJECT_FILE), str(VERSION_INFO_FILE)])
     run(["git", "commit", "-m", f"chore: bump version to {version}"])
 
 

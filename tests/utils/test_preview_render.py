@@ -1,11 +1,27 @@
 from __future__ import annotations
 
+import atexit
+import os
+import sys
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
-from exif_turbo.utils.preview_render import MAX_PREVIEW_PX, MAX_PREVIEW_SOURCE_PX, render_preview
+from exif_turbo.utils.preview_render import (
+    DEFAULT_VIPS_ALLOWED_EXTENSIONS,
+    MAX_PREVIEW_PX,
+    MAX_PREVIEW_SOURCE_PX,
+    configure_vips_allowed_extensions,
+    render_preview,
+)
+
+
+@pytest.fixture(autouse=True)
+def default_vips_allowed_extensions() -> None:
+    configure_vips_allowed_extensions(DEFAULT_VIPS_ALLOWED_EXTENSIONS)
+    yield
+    configure_vips_allowed_extensions(DEFAULT_VIPS_ALLOWED_EXTENSIONS)
 
 
 def test_render_preview_clamps_requested_target_to_max_preview_px(
@@ -106,4 +122,110 @@ def test_render_preview_uses_vips_for_oversized_source_images(
     # Assert
     assert vips_calls == [str(src)]
     assert result is expected
+
+
+def test_load_vips_disallowed_extension_rejects_before_native_decode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    import exif_turbo.utils.preview_render as preview_render
+
+    src = tmp_path / "crafted.bmp"
+    native_calls: list[str] = []
+
+    class FakeVipsImage:
+        @staticmethod
+        def thumbnail(path: str, *_args: object, **_kwargs: object) -> None:
+            native_calls.append(path)
+
+    class FakePylibvips:
+        Image = FakeVipsImage
+
+    monkeypatch.setattr(preview_render, "_pyvips_mod", FakePylibvips())
+
+    # Act / Assert
+    with pytest.raises(RuntimeError, match="not allowed"):
+        preview_render._load_vips(str(src), (128, 128))
+    assert native_calls == []
+
+
+def test_load_vips_user_added_extension_reaches_native_decode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    import exif_turbo.utils.preview_render as preview_render
+
+    src = tmp_path / "scan.BMP"
+    configure_vips_allowed_extensions(["bmp"])
+
+    class FakeVipsResult:
+        interpretation = "srgb"
+        format = "uchar"
+        bands = 3
+        width = 1
+        height = 1
+
+        def hasalpha(self) -> bool:
+            return False
+
+        def write_to_memory(self) -> bytes:
+            return b"\x10\x20\x30"
+
+    native_calls: list[str] = []
+
+    class FakeVipsImage:
+        @staticmethod
+        def thumbnail(path: str, *_args: object, **_kwargs: object) -> FakeVipsResult:
+            native_calls.append(path)
+            return FakeVipsResult()
+
+    class FakePylibvips:
+        Image = FakeVipsImage
+
+    monkeypatch.setattr(preview_render, "_pyvips_mod", FakePylibvips())
+
+    # Act
+    result = preview_render._load_vips(str(src), (128, 128))
+
+    # Assert
+    assert native_calls == [str(src)]
+    assert result.getpixel((0, 0)) == (16, 32, 48)
+
+
+def test_ensure_pyvips_enables_untrusted_block_before_initialization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    import exif_turbo.utils.preview_render as preview_render
+
+    class FakePylibvips:
+        @staticmethod
+        def version(part: int) -> int:
+            return (8, 18, 4)[part]
+
+        @staticmethod
+        def cache_set_max(_value: int) -> None:
+            pass
+
+        @staticmethod
+        def cache_set_max_mem(_value: int) -> None:
+            pass
+
+        @staticmethod
+        def shutdown() -> None:
+            pass
+
+    fake_module = FakePylibvips()
+    monkeypatch.setitem(sys.modules, "pyvips", fake_module)
+    monkeypatch.setattr(preview_render, "_PYVIPS_AVAILABLE", None)
+    monkeypatch.setattr(preview_render, "_pyvips_mod", None)
+    monkeypatch.setattr(atexit, "register", lambda _callback: None)
+    monkeypatch.setenv("VIPS_BLOCK_UNTRUSTED", "0")
+
+    # Act
+    available = preview_render._ensure_pyvips()
+
+    # Assert
+    assert available is True
+    assert os.environ["VIPS_BLOCK_UNTRUSTED"] == "1"
 
