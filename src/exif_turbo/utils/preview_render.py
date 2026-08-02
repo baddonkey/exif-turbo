@@ -19,8 +19,10 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 import threading
 import warnings
+from collections.abc import Iterable
 from pathlib import Path
 
 # Pillow emits UserWarning for malformed EXIF fields in TIFF files
@@ -51,6 +53,34 @@ _pyvips_lock = threading.Lock()
 # _internal/ directory stays in the DLL search path for the process lifetime.
 _vips_dll_dir: object = None
 
+DEFAULT_VIPS_ALLOWED_EXTENSIONS = (
+    ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".gif",
+)
+_vips_allowed_extensions = frozenset(DEFAULT_VIPS_ALLOWED_EXTENSIONS)
+_EXTENSION_RE = re.compile(r"^\.[a-z0-9][a-z0-9+-]*$")
+
+
+def normalize_vips_extension(extension: str) -> str | None:
+    """Return a normalized file extension, or ``None`` when invalid."""
+    normalized = extension.strip().lower()
+    if normalized and not normalized.startswith("."):
+        normalized = f".{normalized}"
+    return normalized if _EXTENSION_RE.fullmatch(normalized) else None
+
+
+def configure_vips_allowed_extensions(extensions: Iterable[str]) -> None:
+    """Replace the extensions permitted to reach the native libvips loader."""
+    global _vips_allowed_extensions
+    _vips_allowed_extensions = frozenset(
+        normalized
+        for extension in extensions
+        if (normalized := normalize_vips_extension(extension)) is not None
+    )
+
+
+def _vips_extension_allowed(path: str) -> bool:
+    return Path(path).suffix.lower() in _vips_allowed_extensions
+
 
 def _ensure_pyvips() -> bool:  # pragma: no cover — tested via integration path
     """Initialise pyvips on first use; return True if available."""
@@ -76,7 +106,14 @@ def _ensure_pyvips() -> bool:  # pragma: no cover — tested via integration pat
             # calls don't each spawn cpu_count() threads, exhausting memory on
             # large TIFFs.  setdefault preserves any explicit user override.
             _os.environ.setdefault("VIPS_CONCURRENCY", "1")
+            # libvips 8.13+ marks insufficiently fuzzed operations as untrusted.
+            # This must be set before import because libvips reads it while
+            # initialising. It is mandatory even when users expand the extension
+            # allowlist below: extensions are not a reliable content-type check.
+            _os.environ["VIPS_BLOCK_UNTRUSTED"] = "1"
             import pyvips as _mod
+            if tuple(_mod.version(part) for part in range(2)) < (8, 13):
+                raise ImportError("libvips 8.13 or newer is required")
             # Disable the operation cache.  We process unique images (never the
             # same path twice in a session) so the cache buys nothing, and
             # leaving it enabled causes processed image data to accumulate
@@ -258,6 +295,10 @@ def _load_vips(path: str, target: tuple[int, int]) -> Image.Image:
     output size, so peak RAM scales with the *output* rather than the source.
     EXIF rotation is applied automatically.
     """
+    if not _vips_extension_allowed(path):
+        raise RuntimeError(
+            f"libvips loading is not allowed for extension {Path(path).suffix!r}"
+        )
     vips = _pyvips_mod.Image.thumbnail(path, target[0], height=target[1], size="down")
     if vips.hasalpha():
         vips = vips.flatten(background=[255, 255, 255])

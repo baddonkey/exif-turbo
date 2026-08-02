@@ -103,6 +103,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "thread": "Thread",
         "threads": "Threads",
         "Factory default: %1 (%2 CPU threads detected)": "Werkseinstellung: %1 (%2 erkannte CPU-Threads)",
+        "libvips Allowed Extensions": "Von libvips erlaubte Erweiterungen",
+        "Only files with these extensions may use libvips for large or unusual images. Keep this list limited to formats you trust and need. Untrusted libvips operations remain blocked for every format.":
+            "Nur Dateien mit diesen Erweiterungen dürfen libvips für große oder ungewöhnliche Bilder verwenden. Beschränken Sie diese Liste auf Formate, denen Sie vertrauen und die Sie benötigen. Nicht vertrauenswürdige libvips-Operationen bleiben für jedes Format blockiert.",
+        "New extension, e.g. .bmp": "Neue Erweiterung, z.B. .bmp",
+        "Removing an extension only disables the libvips fallback; normal Pillow decoding remains available. Changes apply immediately.":
+            "Das Entfernen einer Erweiterung deaktiviert nur den libvips-Rückfall; die normale Dekodierung mit Pillow bleibt verfügbar. Änderungen werden sofort wirksam.",
         "Indexing Blacklist": "Indizierungs-Blacklist",
         "File and folder name patterns to skip during indexing. Supports wildcards (e.g. *, ?).\nChanges take effect on the next rescan.":
             "Datei- und Ordnernamenmuster, die bei der Indizierung \u00fcbersprungen werden. Unterst\u00fctzt Platzhalter (z.B. *, ?).\n\u00c4nderungen werden beim n\u00e4chsten Neuindizieren wirksam.",
@@ -393,6 +399,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "thread": "thread",
         "threads": "threads",
         "Factory default: %1 (%2 CPU threads detected)": "Valeur par d\u00e9faut\u00a0: %1 (%2 threads CPU d\u00e9tect\u00e9s)",
+        "libvips Allowed Extensions": "Extensions autorisées pour libvips",
+        "Only files with these extensions may use libvips for large or unusual images. Keep this list limited to formats you trust and need. Untrusted libvips operations remain blocked for every format.":
+            "Seuls les fichiers portant ces extensions peuvent utiliser libvips pour les images volumineuses ou inhabituelles. Limitez cette liste aux formats dont vous avez besoin et auxquels vous faites confiance. Les opérations libvips non fiables restent bloquées pour tous les formats.",
+        "New extension, e.g. .bmp": "Nouvelle extension, ex. .bmp",
+        "Removing an extension only disables the libvips fallback; normal Pillow decoding remains available. Changes apply immediately.":
+            "La suppression d’une extension désactive uniquement le repli sur libvips ; le décodage normal avec Pillow reste disponible. Les modifications s’appliquent immédiatement.",
         "Indexing Blacklist": "Liste noire d\u2019indexation",
         "File and folder name patterns to skip during indexing. Supports wildcards (e.g. *, ?).\nChanges take effect on the next rescan.":
             "Mod\u00e8les de noms de fichiers et dossiers \u00e0 ignorer lors de l\u2019indexation. Supporte les caract\u00e8res g\u00e9n\u00e9riques (ex. *, ?).\nLes modifications prennent effet lors de la prochaine r\u00e9indexation.",
@@ -690,6 +702,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "threads": "thread",
         "Factory default: %1 (%2 CPU threads detected)":
             "Impostazione predefinita: %1 (%2 thread CPU rilevati)",
+        "libvips Allowed Extensions": "Estensioni consentite per libvips",
+        "Only files with these extensions may use libvips for large or unusual images. Keep this list limited to formats you trust and need. Untrusted libvips operations remain blocked for every format.":
+            "Solo i file con queste estensioni possono usare libvips per immagini grandi o insolite. Limita l’elenco ai formati necessari e considerati attendibili. Le operazioni libvips non attendibili restano bloccate per ogni formato.",
+        "New extension, e.g. .bmp": "Nuova estensione, es. .bmp",
+        "Removing an extension only disables the libvips fallback; normal Pillow decoding remains available. Changes apply immediately.":
+            "La rimozione di un’estensione disabilita solo il ripiego su libvips; la normale decodifica con Pillow resta disponibile. Le modifiche hanno effetto immediato.",
         "Indexing Blacklist": "Lista nera indicizzazione",
         "File and folder name patterns to skip during indexing. Supports wildcards (e.g. *, ?).\nChanges take effect on the next rescan.":
             "Modelli di nomi di file e cartelle da ignorare durante l\u2019indicizzazione. Supporta caratteri jolly (es. *, ?).\nLe modifiche hanno effetto alla prossima reindicizzazione.",
@@ -988,6 +1006,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "threads": "threads",
         "Factory default: %1 (%2 CPU threads detected)":
             "Predefin\u00ec: %1 (%2 threads CPU detectads)",
+        "libvips Allowed Extensions": "Extensiuns permessas per libvips",
+        "Only files with these extensions may use libvips for large or unusual images. Keep this list limited to formats you trust and need. Untrusted libvips operations remain blocked for every format.":
+            "Mo datotecas cun questas extensiuns dastgan utilisar libvips per maletgs gronds u nunusitads. Limitai questa glista als formats che Vus fidais e duvrais. Operaziuns libvips betg fidablas restan bloccadas per mintga format.",
+        "New extension, e.g. .bmp": "Nova extensiun, p.ex. .bmp",
+        "Removing an extension only disables the libvips fallback; normal Pillow decoding remains available. Changes apply immediately.":
+            "Allontanar ina extensiun deactivescha mo il fallback libvips; la decodaziun normala cun Pillow resta disponibla. Midadas vegnan applitgadas immediatamain.",
         "Indexing Blacklist": "Glista naira d\u2019indexaziun",
         "File and folder name patterns to skip during indexing. Supports wildcards (e.g. *, ?).\nChanges take effect on the next rescan.":
             "Schemes da nums da datotecas e cartellas da sursiglir durant l\u2019indexaziun. Supporta caratters jolly (p.ex. *, ?).\nMutaziuns vegnan activas en la proxima re-indexaziun.",

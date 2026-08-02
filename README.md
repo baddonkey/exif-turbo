@@ -288,6 +288,14 @@ Images exceeding **100 megapixels** (stitched panoramas, medium-format scanner o
 
 libvips is initialised lazily on first use (not at app startup) to avoid a GLib/Qt thread-pool conflict on macOS that causes `abort()` during Qt event processing on macOS arm64.
 
+Before libvips is initialised, exif-turbo sets `VIPS_BLOCK_UNTRUSTED=1` so
+operations that libvips marks as insufficiently fuzzed cannot process image
+content. Native loading also requires libvips 8.13 or newer and is restricted to
+a per-database extension allowlist. The default list is JPEG, PNG, TIFF, WebP,
+and GIF; users can add or remove extensions under **Settings → libvips Allowed
+Extensions**. The extension list is defense in depth and never disables the
+untrusted-operation block.
+
 libvips is now **bundled in every package**:
 
 - **Windows MSI** — `_libvips.pyd` and `libvips-42-*.dll` ship inside `_internal/`; a runtime `os.add_dll_directory` call before the first import adds `_internal/` to the Windows DLL search path so the CFFI extension can locate its native library (Python 3.8+ restricts the default DLL search path via `SetDefaultDllDirectories`).

@@ -4133,6 +4133,113 @@ ApplicationWindow {
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
 
+                    // ── libvips allowed extensions ──────────────────────
+                    Label {
+                        text: qsTr("libvips Allowed Extensions")
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                        Layout.bottomMargin: 6
+                    }
+                    Label {
+                        text: qsTr("Only files with these extensions may use libvips for large or unusual images. Keep this list limited to formats you trust and need. Untrusted libvips operations remain blocked for every format.")
+                        font.pixelSize: 12
+                        opacity: 0.6
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 14
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: libvipsExtensionView.contentHeight + 2
+                        color: Material.background
+                        border.color: Material.dividerColor
+                        border.width: 1
+                        radius: 4
+                        clip: true
+                        Layout.bottomMargin: 10
+
+                        ListView {
+                            id: libvipsExtensionView
+                            anchors.fill: parent
+                            interactive: false
+                            model: settingsModel ? settingsModel.libvipsExtensions : []
+
+                            delegate: Rectangle {
+                                width: libvipsExtensionView.width
+                                height: 34
+                                color: index % 2 === 0 ? Material.background : Qt.darker(Material.background, 1.03)
+
+                                RowLayout {
+                                    anchors { fill: parent; leftMargin: 12; rightMargin: 6 }
+                                    spacing: 8
+
+                                    Label {
+                                        Layout.fillWidth: true
+                                        text: modelData
+                                        font.pixelSize: 12
+                                        font.family: root.monoFont
+                                        elide: Text.ElideRight
+                                    }
+
+                                    ToolButton {
+                                        icon.name: "window-close"
+                                        text: "✕"
+                                        implicitWidth: 28; implicitHeight: 28
+                                        font.pixelSize: 11
+                                        opacity: 0.6
+                                        onClicked: settingsModel.removeLibvipsExtension(index)
+                                        ToolTip.text: qsTr("Remove")
+                                        ToolTip.visible: hovered
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        spacing: 8
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 8
+
+                        TextField {
+                            id: newLibvipsExtensionField
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("New extension, e.g. .bmp")
+                            font.pixelSize: 12
+                            font.family: root.monoFont
+                            validator: RegularExpressionValidator {
+                                regularExpression: /^\.?[A-Za-z0-9][A-Za-z0-9+-]*$/
+                            }
+                            onAccepted: {
+                                if (acceptableInput) {
+                                    settingsModel.addLibvipsExtension(text)
+                                    text = ""
+                                }
+                            }
+                        }
+
+                        Button {
+                            text: qsTr("Add")
+                            enabled: newLibvipsExtensionField.acceptableInput
+                            onClicked: {
+                                settingsModel.addLibvipsExtension(newLibvipsExtensionField.text)
+                                newLibvipsExtensionField.text = ""
+                            }
+                        }
+                    }
+
+                    Label {
+                        text: qsTr("Removing an extension only disables the libvips fallback; normal Pillow decoding remains available. Changes apply immediately.")
+                        font.pixelSize: 11
+                        opacity: 0.45
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 28
+                    }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
+
                     // ── JSON export formatting ────────────────────────────
                     Label {
                         text: qsTr("JSON Export Formatting")

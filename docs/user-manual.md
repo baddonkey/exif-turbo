@@ -807,6 +807,18 @@ Choose a value (in pixels) from the dropdown — the change applies to
 subsequently built previews; existing cached previews are unaffected until
 you rebuild them via **Build Previews** on a folder row.
 
+### libvips Allowed Extensions
+
+Controls which file extensions may use the native libvips fallback for images
+that are unusually large or cannot be decoded correctly by Pillow. The default
+list covers JPEG, PNG, TIFF, WebP, and GIF. Add an extension such as `.bmp` only
+when you need libvips support for that format; remove an extension to prevent
+that format from reaching libvips. Normal Pillow decoding remains available.
+
+Changes apply immediately and are stored per database. Operations that libvips
+marks as untrusted remain blocked regardless of this list; adding an extension
+does not weaken that mandatory protection.
+
 ### Indexing Blacklist
 
 A list of file and folder name patterns to skip during indexing. Supports
