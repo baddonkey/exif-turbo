@@ -1,0 +1,413 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from PySide6.QtCore import QObject, QUrl, Signal
+from pytestqt.qtbot import QtBot
+
+from exif_turbo.data.image_index_repository import ImageIndexRepository
+from exif_turbo.models.search_result import SearchResult
+from exif_turbo.models.tag_proposal import TagProposal, TagProposalStatus
+from exif_turbo.models.tgm import TgmCategory, TgmConcept, TgmSnapshot, TgmSourceFormat
+from exif_turbo.tagging.tgm_snapshot_repository import TgmSnapshotRepository
+from exif_turbo.tagging.derivative_export_service import (
+    DerivativeExportItemResult,
+    DerivativeExportResult,
+    DerivativeExportStatus,
+)
+from exif_turbo.ui.models.exif_list_model import ExifListModel
+from exif_turbo.ui.models.folder_list_model import FolderListModel
+from exif_turbo.ui.models.search_list_model import SearchListModel
+from exif_turbo.ui.models.settings_model import SettingsModel
+from exif_turbo.ui.view_models import app_controller as app_controller_module
+from exif_turbo.ui.view_models.app_controller import AppController
+
+
+def _snapshot() -> TgmSnapshot:
+    return TgmSnapshot(
+        concepts=(
+            TgmConcept(
+                concept_id="loc-tgm:tgm000001",
+                tnr="tgm000001",
+                label="Forests",
+                categories=(TgmCategory.SUBJECT,),
+                aliases=("Woods",),
+            ),
+        ),
+        diagnostics=(),
+        source_url="https://example.test/tgm.xml",
+        source_format=TgmSourceFormat.XML,
+        distribution_date="2026-07-29",
+        imported_at=datetime(2026, 8, 9, tzinfo=UTC),
+        raw_sha256="snapshot",
+        raw_size_bytes=100,
+    )
+
+
+@pytest.fixture
+def tagging_controller(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[AppController, SearchListModel, Path, Path]:
+    db_path = tmp_path / "images.db"
+    image_path = tmp_path / "photo.jpg"
+    image_path.write_bytes(b"image")
+    repository = ImageIndexRepository(db_path)
+    repository.upsert_image(str(image_path), image_path.name, 1.0, 5, {}, "")
+    repository.close()
+    snapshot_path = tmp_path / "tgm-snapshot.json.gz"
+    TgmSnapshotRepository(snapshot_path).activate(_snapshot())
+    monkeypatch.setattr(app_controller_module, "tgm_snapshot_path", lambda _db: snapshot_path)
+    monkeypatch.setattr(
+        app_controller_module,
+        "tgm_vector_metadata_path",
+        lambda _db: tmp_path / "missing-vector-metadata.json",
+    )
+    monkeypatch.setattr(app_controller_module, "get_exiftool_version", lambda: "test")
+    search_model = SearchListModel(tmp_path / "thumbs")
+    settings = SettingsModel(tmp_path / "settings.json")
+    settings.setTaggingEnabled(True)
+    controller = AppController(
+        db_path,
+        search_model,
+        ExifListModel(),
+        FolderListModel(),
+        settings=settings,
+        cache_dir=tmp_path / "thumbs",
+    )
+    monkeypatch.setattr(controller, "search", lambda _query: None)
+    monkeypatch.setattr(controller, "_start_auto_thumbs", lambda: None)
+    controller._do_unlock("")
+    search_model.set_rows(
+        [
+            SearchResult(
+                path=str(image_path),
+                filename=image_path.name,
+                metadata_json="{}",
+                size=5,
+                mtime=1.0,
+                image_id=1,
+            )
+        ]
+    )
+    controller._current_result_row = 0
+    yield controller, search_model, db_path, image_path
+    controller.close()
+
+
+def test_app_controller_unlock_initializes_tagging_services_and_status(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange / Act
+    controller, _model, _db_path, _image_path = tagging_controller
+
+    # Assert
+    assert controller.taggingAvailable is True
+    assert controller.tgmInstalled is True
+    assert controller.tgmSourceDate == "2026-07-29"
+    assert controller.tgmSubjectCount == 1
+
+
+def test_app_controller_restart_reuses_installed_tgm_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    db_path = tmp_path / "library.db"
+    ImageIndexRepository(db_path).close()
+    snapshot_path = tmp_path / ".library.exif-turbo" / "tgm" / "tgm-snapshot.json.gz"
+    TgmSnapshotRepository(snapshot_path).activate(_snapshot())
+    monkeypatch.setattr(app_controller_module, "tgm_snapshot_path", lambda _db: snapshot_path)
+    monkeypatch.setattr(
+        app_controller_module,
+        "tgm_vector_metadata_path",
+        lambda _db: tmp_path / "missing-vector-metadata.json",
+    )
+    monkeypatch.setattr(app_controller_module, "get_exiftool_version", lambda: "test")
+
+    def create_controller() -> AppController:
+        controller = AppController(
+            db_path,
+            SearchListModel(tmp_path / "thumbs"),
+            ExifListModel(),
+            FolderListModel(),
+            settings=SettingsModel(tmp_path / "settings.json"),
+            cache_dir=tmp_path / "thumbs",
+        )
+        monkeypatch.setattr(controller, "search", lambda _query: None)
+        monkeypatch.setattr(controller, "_start_auto_thumbs", lambda: None)
+        controller._do_unlock("")
+        return controller
+
+    first_controller = create_controller()
+    assert first_controller.tgmInstalled is True
+    first_controller.close()
+
+    # Act
+    restarted_controller = create_controller()
+
+    # Assert
+    assert restarted_controller.tgmInstalled is True
+    assert restarted_controller.tgmSourceDate == "2026-07-29"
+    restarted_controller.close()
+
+
+def test_app_controller_selected_filename_comes_from_selected_model_row(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange / Act
+    controller, _model, _db_path, image_path = tagging_controller
+
+    # Assert
+    assert controller.selectedFilename == image_path.name
+
+
+def test_app_controller_tgm_search_resolves_alias(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _model, _db_path, _image_path = tagging_controller
+
+    # Act
+    controller.searchTgm("wood")
+
+    # Assert
+    model = controller.tgmSearchModel
+    assert model.rowCount() == 1
+    assert model.data(model.index(0), model.LabelRole) == "Forests"
+
+
+def test_app_controller_manual_add_and_remove_refreshes_accepted_model(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _model, _db_path, image_path = tagging_controller
+
+    # Act
+    controller.addSelectedTgmConcept("Woods")
+    added_count = controller.acceptedTagsModel.rowCount()
+    controller.removeSelectedTgmConcept("loc-tgm:tgm000001")
+
+    # Assert
+    assert added_count == 1
+    assert controller.acceptedTagsModel.rowCount() == 0
+    assert Path(f"{image_path}.sidecar.json").exists()
+
+
+def test_app_controller_proposal_accept_and_reject_refresh_state(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _model, db_path, image_path = tagging_controller
+    repository = ImageIndexRepository(db_path)
+    proposal = TagProposal(
+        image_path=str(image_path),
+        concept_id="loc-tgm:tgm000001",
+        label="Forests",
+        category="subject",
+        provider_fingerprint="provider-a",
+        score=0.8,
+        rank=1,
+    )
+    repository.replace_pending_proposals(str(image_path), "provider-a", [proposal])
+
+    # Act
+    controller.rejectSelectedProposal(proposal.concept_id, "provider-a")
+    rejected = repository.get_proposals(
+        str(image_path), status=TagProposalStatus.REJECTED
+    )
+    repository.replace_pending_proposals(str(image_path), "provider-b", [
+        TagProposal(
+            image_path=str(image_path),
+            concept_id=proposal.concept_id,
+            label=proposal.label,
+            category=proposal.category,
+            provider_fingerprint="provider-b",
+            score=proposal.score,
+            rank=proposal.rank,
+        )
+    ])
+    controller.acceptSelectedProposal(proposal.concept_id, "provider-b")
+    repository.close()
+
+    # Assert
+    assert len(rejected) == 1
+    assert controller.acceptedTagsModel.rowCount() == 1
+    assert controller.pendingProposalsModel.rowCount() == 0
+
+
+class FakeDerivativeWorker(QObject):
+    progress = Signal(int, int, object)
+    result_ready = Signal(object)
+    canceled = Signal(object)
+    failed = Signal(str)
+    finished = Signal()
+    instances: list[FakeDerivativeWorker] = []
+
+    def __init__(
+        self,
+        db_path: Path,
+        key: str,
+        indexed_roots: dict[Path, str],
+        output_root: Path,
+    ) -> None:
+        super().__init__()
+        self.db_path = db_path
+        self.key = key
+        self.indexed_roots = indexed_roots
+        self.output_root = output_root
+        self.started = False
+        self.instances.append(self)
+
+    def start(self) -> None:
+        self.started = True
+
+    def cancel(self) -> None:
+        pass
+
+    def isRunning(self) -> bool:
+        return False
+
+
+def test_app_controller_derivative_slot_converts_url_and_enabled_roots(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    controller, _model, _db_path, _image_path = tagging_controller
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    assert controller._folder_repo is not None
+    controller._folder_repo.add(str(source_root))
+    FakeDerivativeWorker.instances.clear()
+    monkeypatch.setattr(app_controller_module, "DerivativeExportWorker", FakeDerivativeWorker)
+    output_root = tmp_path / "output"
+
+    # Act
+    controller.generateDerivativesForMarked(QUrl.fromLocalFile(str(output_root)).toString())
+
+    # Assert
+    worker = FakeDerivativeWorker.instances[0]
+    assert worker.output_root == output_root
+    assert worker.indexed_roots == {source_root: "source"}
+    assert worker.started is True
+
+
+def test_app_controller_derivative_result_explains_destinations_and_skip_reasons(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    controller, _model, _db_path, image_path = tagging_controller
+    destination = tmp_path / "output" / image_path.name
+    result = DerivativeExportResult(
+        (
+            DerivativeExportItemResult(
+                image_path,
+                destination,
+                DerivativeExportStatus.COPIED,
+            ),
+            DerivativeExportItemResult(
+                tmp_path / "untagged.jpg",
+                tmp_path / "output" / "untagged.jpg",
+                DerivativeExportStatus.SKIPPED_UNTAGGED,
+                "image has no accepted tags",
+            ),
+            DerivativeExportItemResult(
+                tmp_path / "existing.jpg",
+                tmp_path / "output" / "existing.jpg",
+                DerivativeExportStatus.SKIPPED_EXISTING,
+                "destination already exists",
+            ),
+        )
+    )
+
+    # Act
+    controller._on_derivative_result(result)
+
+    # Assert
+    assert str(destination) in controller.derivativeResultSummary
+    assert "1 marked image(s) had no accepted tags" in controller.derivativeResultSummary
+    assert "1 destination file(s) already existed" in controller.derivativeResultSummary
+
+
+def test_app_controller_derivative_result_for_multiple_files_names_output_folder(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    controller, _model, _db_path, image_path = tagging_controller
+    output_dir = tmp_path / "output"
+    result = DerivativeExportResult(
+        (
+            DerivativeExportItemResult(
+                image_path,
+                output_dir / image_path.name,
+                DerivativeExportStatus.COPIED,
+            ),
+            DerivativeExportItemResult(
+                tmp_path / "second.jpg",
+                output_dir / "second.jpg",
+                DerivativeExportStatus.COPIED,
+            ),
+        )
+    )
+
+    # Act
+    controller._on_derivative_result(result)
+
+    # Assert
+    assert controller.derivativeResultSummary == (
+        f"Created 2 derivatives in {output_dir}."
+    )
+
+
+def test_app_controller_bulk_add_result_explains_unchanged_images(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _model, _db_path, _image_path = tagging_controller
+    controller._bulk_tag_action = "add"
+    result = SimpleNamespace(
+        succeeded_count=1,
+        skipped_count=2,
+        conflicted_count=1,
+        failed_count=1,
+        cancelled=False,
+    )
+
+    # Act
+    controller._on_bulk_tag_result(result)
+
+    # Assert
+    assert controller.taggingBulkSummary == (
+        "Added to 1 image(s). Already tagged: 2. Problems: 2."
+    )
+
+
+def test_app_controller_bulk_remove_result_explains_unchanged_images(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _model, _db_path, _image_path = tagging_controller
+    controller._bulk_tag_action = "remove"
+    result = SimpleNamespace(
+        succeeded_count=2,
+        skipped_count=1,
+        conflicted_count=0,
+        failed_count=0,
+        cancelled=False,
+    )
+
+    # Act
+    controller._on_bulk_tag_result(result)
+
+    # Assert
+    assert controller.taggingBulkSummary == (
+        "Removed from 2 image(s). Already absent: 1. Problems: 0."
+    )

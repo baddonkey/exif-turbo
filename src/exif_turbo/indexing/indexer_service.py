@@ -14,6 +14,7 @@ _log = logging.getLogger(__name__)
 
 from ..data.image_index_repository import ImageIndexRepository
 from ..models.indexed_image import IndexedImage
+from ..tagging.sidecar_synchronizer import SidecarSynchronizer
 from .exif_metadata_extractor import ExifMetadataExtractor
 from .image_finder import ImageFinder
 from .metadata_extractor import MetadataExtractor
@@ -174,10 +175,12 @@ class IndexerService:
         repo: ImageIndexRepository,
         extractor: MetadataExtractor | None = None,
         finder: ImageFinder | None = None,
+        sidecar_synchronizer: SidecarSynchronizer | None = None,
     ) -> None:
         self.repo = repo
         self.extractor = extractor or ExifMetadataExtractor()
         self.finder = finder or ImageFinder()
+        self.sidecar_synchronizer = sidecar_synchronizer or SidecarSynchronizer(repo)
 
     def build_index(
         self,
@@ -436,6 +439,12 @@ class IndexerService:
         # Flush any remaining buffered writes before the cleanup phase.
         if not canceled:
             flush_batch()
+            sync_result = self.sidecar_synchronizer.synchronize(
+                existing_paths,
+                cancel_check=cancel_check,
+            )
+            error_count += sync_result.error_count
+            canceled = sync_result.canceled
             # Fold the WAL into the main DB file now that all writes are done.
             # One checkpoint here (rather than after every batch) avoids I/O
             # pressure on the indexer thread during scanning, which was causing

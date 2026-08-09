@@ -49,6 +49,14 @@ ApplicationWindow {
     function openFolderFilterPopup() { folderMultiCombo.popup.open() }
     // Automation helper: used by the screenshot script to close the folder filter popup
     function closeFolderFilterPopup() { folderMultiCombo.popup.close() }
+    // Automation helper: used by the tagging acceptance script.
+    function openTaggingSettingsForAutomation() {
+        taggingDrawer.close()
+        mainTabBar.currentIndex = 3
+        Qt.callLater(function() {
+            settingsScroll.contentItem.contentY = Math.max(0, taggingSettingsSection.y - 120)
+        })
+    }
     readonly property string _licenseBgColor: _toRgb(Material.background)
     readonly property string _licenseTextColor: _toRgb(Material.foreground)
     readonly property string _licenseBorderColor: _toRgb(Qt.darker(Material.background, 1.4))
@@ -163,6 +171,11 @@ ApplicationWindow {
         sequence: "Space"
         enabled: controller && (mainTabBar.currentIndex === 0 || mainTabBar.currentIndex === 1)
         onActivated: controller.toggleChecked(controller.currentResultRow)
+    }
+    Shortcut {
+        sequence: "Ctrl+T"
+        enabled: !_isLocked && (mainTabBar.currentIndex === 0 || mainTabBar.currentIndex === 1)
+        onActivated: taggingDrawer.opened ? taggingDrawer.close() : taggingDrawer.openAndFocus()
     }
 
     property bool findBarVisible: false
@@ -1158,6 +1171,29 @@ ApplicationWindow {
                 searchField.text = savedQuery
             }
         }
+    }
+
+    ToolButton {
+        id: taggingWorkbenchButton
+        objectName: "taggingWorkbenchButton"
+        anchors { top: parent.top; right: parent.right; rightMargin: 8 }
+        width: 40; height: 40
+        z: 11
+        visible: !_isLocked && (mainTabBar.currentIndex === 0 || mainTabBar.currentIndex === 1)
+        enabled: !_isLocked
+        text: "\uD83C\uDFF7\uFE0F"
+        font.pixelSize: 17
+        onClicked: taggingDrawer.opened ? taggingDrawer.close() : taggingDrawer.openAndFocus()
+        ToolTip.text: qsTr("Open tagging (Ctrl+T)")
+        ToolTip.visible: hovered
+        ToolTip.delay: 400
+    }
+
+    TaggingDrawer {
+        id: taggingDrawer
+        appController: controller
+        appSettings: settingsModel
+        selectedFilename: controller ? controller.selectedFilename : ""
     }
 
     // ── Search tab ───────────────────────────────────────────────────────
@@ -4012,6 +4048,8 @@ ApplicationWindow {
         visible: !_isLocked && mainTabBar.currentIndex === 3
 
         ScrollView {
+            id: settingsScroll
+            objectName: "settingsScrollView"
             anchors.fill: parent
             contentWidth: parent.width
             clip: true
@@ -4597,6 +4635,17 @@ ApplicationWindow {
 
                     // spacer below the section
                     Item { height: 28; Layout.fillWidth: true }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
+
+                    TaggingSettings {
+                        id: taggingSettingsSection
+                        appController: controller
+                        appSettings: settingsModel
+                        aiFeatureAvailable: root._aiFeatureAvailable
+                        aiEnabled: root._aiEnabled
+                        Layout.bottomMargin: 28
+                    }
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
 

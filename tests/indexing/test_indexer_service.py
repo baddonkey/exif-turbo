@@ -7,6 +7,7 @@ These tests create real image files on disk, run the full indexing pipeline
 and verify the results are queryable via search.  No mocking.
 """
 
+import json
 from pathlib import Path
 from typing import List
 from unittest.mock import MagicMock
@@ -17,6 +18,9 @@ from PIL import Image
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.indexing.indexer_service import IndexerService
 from exif_turbo.indexing.metadata_extractor import MetadataExtractor
+from exif_turbo.models.image_sidecar import ImageSidecar, SidecarSource
+from exif_turbo.models.image_tag import ImageTag, TagProvenance
+from exif_turbo.tagging.sidecar_repository import FilesystemSidecarRepository
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -40,6 +44,40 @@ class _FakeExtractor(MetadataExtractor):
 
     def extract(self, path: Path) -> dict[str, str]:
         return self._meta.get(path.stem, {"FakeKey": path.stem})
+
+
+def _write_sidecar(
+    image_path: Path,
+    label: str,
+    *,
+    source_filename: str | None = None,
+) -> None:
+    repository = FilesystemSidecarRepository()
+    sidecar = ImageSidecar(
+        source=SidecarSource(filename=source_filename or image_path.name),
+        updated_at="2026-08-09T12:30:00Z",
+        tags=(
+            ImageTag(
+                concept_id="loc-tgm:tgm000001",
+                label=label,
+                category="subject",
+                provenance=TagProvenance(
+                    method="manual",
+                    accepted_at="2026-08-09T12:30:00Z",
+                    vocabulary_checksum="sha256:abc123",
+                ),
+            ),
+        ),
+    )
+    loaded = repository.read(image_path)
+    expected_revision = None if loaded is None else loaded.revision
+    if source_filename is None:
+        repository.write(image_path, sidecar, expected_revision=expected_revision)
+        return
+    repository.sidecar_path(image_path).write_text(
+        json.dumps(sidecar.to_dict()),
+        encoding="utf-8",
+    )
 
 
 @pytest.fixture
@@ -132,6 +170,167 @@ def test_build_index_skips_unchanged_file_on_second_run(
     # Assert — extractor was not called again
     assert first_call_count == 1
     assert len(extract_calls) == 1
+
+
+def test_build_index_created_sidecar_becomes_searchable_on_unchanged_rescan(
+    repo: ImageIndexRepository, image_folder: Path
+) -> None:
+    # Arrange
+    image_path = _make_jpeg(image_folder / "archive.photo.jpg")
+    extract_calls: list[Path] = []
+
+    class _TrackingExtractor(MetadataExtractor):
+        def extract(self, path: Path) -> dict[str, str]:
+            extract_calls.append(path)
+            return {"Make": "Canon"}
+
+    service = IndexerService(repo, extractor=_TrackingExtractor())
+    service.build_index([image_folder])
+    original_stat = image_path.stat()
+    original_bytes = image_path.read_bytes()
+    _write_sidecar(image_path, "Mountain landscapes")
+
+    # Act
+    count, error_count = service.build_index([image_folder])
+
+    # Assert
+    assert (count, error_count) == (1, 0)
+    assert len(repo.search_images("Mountain landscapes", limit=10, offset=0)) == 1
+    assert extract_calls == [image_path]
+    assert image_path.read_bytes() == original_bytes
+    assert image_path.stat().st_mtime_ns == original_stat.st_mtime_ns
+    assert (image_folder / "archive.photo.jpg.sidecar.json").exists()
+
+
+def test_build_index_changed_sidecar_replaces_searchable_tags(
+    repo: ImageIndexRepository, image_folder: Path
+) -> None:
+    # Arrange
+    image_path = _make_jpeg(image_folder / "photo.jpg")
+    service = IndexerService(repo, extractor=_FakeExtractor())
+    _write_sidecar(image_path, "Old mountain term")
+    service.build_index([image_folder])
+    _write_sidecar(image_path, "New coastal term")
+
+    # Act
+    _, error_count = service.build_index([image_folder])
+
+    # Assert
+    assert error_count == 0
+    assert repo.search_images("Old mountain term", limit=10, offset=0) == []
+    assert len(repo.search_images("New coastal term", limit=10, offset=0)) == 1
+
+
+def test_build_index_deleted_sidecar_clears_tag_search_and_preserves_exif_search(
+    repo: ImageIndexRepository, image_folder: Path
+) -> None:
+    # Arrange
+    image_path = _make_jpeg(image_folder / "photo.jpg")
+    service = IndexerService(
+        repo,
+        extractor=_FakeExtractor({"photo": {"Make": "Hasselblad"}}),
+    )
+    _write_sidecar(image_path, "Vanishing tag")
+    service.build_index([image_folder])
+    FilesystemSidecarRepository.sidecar_path(image_path).unlink()
+
+    # Act
+    _, error_count = service.build_index([image_folder])
+
+    # Assert
+    assert error_count == 0
+    assert repo.search_images("Vanishing tag", limit=10, offset=0) == []
+    assert len(repo.search_images("Hasselblad", limit=10, offset=0)) == 1
+    assert repo.get_sidecar_sync_state(str(image_path)) is None
+
+
+def test_build_index_malformed_sidecar_preserves_tags_and_records_error(
+    repo: ImageIndexRepository, image_folder: Path
+) -> None:
+    # Arrange
+    image_path = _make_jpeg(image_folder / "photo.jpg")
+    service = IndexerService(repo, extractor=_FakeExtractor())
+    _write_sidecar(image_path, "Preserved valid tag")
+    service.build_index([image_folder])
+    sidecar_path = FilesystemSidecarRepository.sidecar_path(image_path)
+    sidecar_path.write_text("{malformed sidecar content", encoding="utf-8")
+
+    # Act
+    _, error_count = service.build_index([image_folder])
+    _, unchanged_error_count = service.build_index([image_folder])
+
+    # Assert
+    state = repo.get_sidecar_sync_state(str(image_path))
+    assert error_count == 1
+    assert unchanged_error_count == 1
+    assert len(repo.search_images("Preserved valid tag", limit=10, offset=0)) == 1
+    assert state is not None
+    assert state.sync_status == "error"
+    assert state.error is not None and "invalid sidecar JSON" in state.error
+    assert state.size == sidecar_path.stat().st_size
+    assert state.checksum
+
+
+def test_build_index_mismatched_sidecar_source_records_error_without_tags(
+    repo: ImageIndexRepository, image_folder: Path
+) -> None:
+    # Arrange
+    image_path = _make_jpeg(image_folder / "photo.jpg")
+    service = IndexerService(repo, extractor=_FakeExtractor())
+    service.build_index([image_folder])
+    _write_sidecar(
+        image_path,
+        "Wrong source tag",
+        source_filename="different.jpg",
+    )
+
+    # Act
+    _, error_count = service.build_index([image_folder])
+
+    # Assert
+    state = repo.get_sidecar_sync_state(str(image_path))
+    assert error_count == 1
+    assert repo.search_images("Wrong source tag", limit=10, offset=0) == []
+    assert state is not None
+    assert state.error == "source.filename must match the original image filename"
+
+
+def test_build_index_without_sidecar_does_not_create_one(
+    repo: ImageIndexRepository, image_folder: Path
+) -> None:
+    # Arrange
+    image_path = _make_jpeg(image_folder / "photo.jpg")
+
+    # Act
+    IndexerService(repo, extractor=_FakeExtractor()).build_index([image_folder])
+
+    # Assert
+    assert not FilesystemSidecarRepository.sidecar_path(image_path).exists()
+
+
+def test_build_index_cancellation_skips_sidecar_sync_and_stale_cleanup(
+    repo: ImageIndexRepository, image_folder: Path
+) -> None:
+    # Arrange
+    image_path = _make_jpeg(image_folder / "photo.jpg")
+    stale_image_path = _make_jpeg(image_folder / "stale.jpg")
+    service = IndexerService(repo, extractor=_FakeExtractor())
+    _write_sidecar(image_path, "Previously synchronized")
+    service.build_index([image_folder])
+    _write_sidecar(image_path, "Must wait until next scan")
+    stale_image_path.unlink()
+
+    # Act
+    count, error_count = service.build_index(
+        [image_folder],
+        cancel_check=lambda: True,
+    )
+
+    # Assert
+    assert (count, error_count) == (0, 0)
+    assert len(repo.search_images("Previously synchronized", limit=10, offset=0)) == 1
+    assert repo.search_images("Must wait until next scan", limit=10, offset=0) == []
+    assert repo.count_images("") == 2
 
 
 def test_build_index_reindexes_changed_file(

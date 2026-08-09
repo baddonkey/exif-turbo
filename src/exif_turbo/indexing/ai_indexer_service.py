@@ -35,8 +35,9 @@ if TYPE_CHECKING:
 _log = logging.getLogger(__name__)
 
 _BATCH_SIZE = 32
-_MODEL_NAME = "ViT-B-32"
-_PRETRAINED = "openai"
+CLIP_MODEL_NAME = "ViT-B-32"
+CLIP_PRETRAINED = "openai"
+CLIP_VECTOR_DIMENSION = 512
 _OPEN_CLIP_CACHE_DIRNAME = "open_clip"
 _BPE_VOCAB_FILENAME = "bpe_simple_vocab_16e6.txt.gz"
 _BPE_VOCAB_URLS = (
@@ -127,15 +128,31 @@ class AiIndexerService:
 
     def encode_text(self, text: str) -> "np.ndarray":
         """Return a normalised 512-d float32 vector for *text* (for search)."""
+        return self.encode_texts([text], batch_size=1)[0]
+
+    def encode_texts(
+        self, texts: List[str], batch_size: int = _BATCH_SIZE
+    ) -> "np.ndarray":
+        """Encode text in bounded batches as normalized float32 rows."""
         import torch  # noqa: PLC0415
 
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        if not texts:
+            return np.empty((0, CLIP_VECTOR_DIMENSION), dtype=np.float32)
         self._ensure_model_loaded()
         tokenizer = self._get_tokenizer()
-        with torch.no_grad():
-            tokens = tokenizer([text])
-            vec = self._model.encode_text(tokens).float().numpy()  # type: ignore[union-attr]
-        vec = vec / np.linalg.norm(vec, axis=1, keepdims=True)
-        return vec.squeeze(0)
+        batches: list[np.ndarray] = []
+        for start in range(0, len(texts), batch_size):
+            with torch.no_grad():
+                tokens = tokenizer(texts[start : start + batch_size])
+                encoded = self._model.encode_text(tokens).float().numpy()  # type: ignore[union-attr]
+            vectors = np.asarray(encoded, dtype=np.float32)
+            norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+            if np.any(norms == 0):
+                raise ValueError("CLIP returned a zero-length text vector")
+            batches.append(np.ascontiguousarray(vectors / norms, dtype=np.float32))
+        return np.concatenate(batches, axis=0)
 
     # ── Internals ─────────────────────────────────────────────────────────
 
@@ -151,10 +168,10 @@ class AiIndexerService:
 
         open_clip = self._import_open_clip()
 
-        _log.debug("Loading CLIP model %s (%s)…", _MODEL_NAME, _PRETRAINED)
+        _log.debug("Loading CLIP model %s (%s)…", CLIP_MODEL_NAME, CLIP_PRETRAINED)
         model, _, preprocess = open_clip.create_model_and_transforms(
-            _MODEL_NAME,
-            pretrained=_PRETRAINED,
+            CLIP_MODEL_NAME,
+            pretrained=CLIP_PRETRAINED,
             cache_dir=str(self._cache_dir),
         )
         model.eval()

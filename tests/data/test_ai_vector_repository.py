@@ -90,6 +90,39 @@ def test_ai_vector_repository_get_indexed_paths_reflects_added_entries(tmp_path:
     assert "/photos/new.jpg" not in already
 
 
+def test_ai_vector_repository_get_vector_returns_reconstructed_vector(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    expected = _random_vec()
+    repo.add_images(expected, ["/photos/a.jpg"])
+
+    # Act
+    actual = repo.get_vector("/photos/a.jpg")
+
+    # Assert
+    assert actual is not None
+    assert np.allclose(actual, expected)
+
+
+def test_ai_vector_repository_get_vectors_returns_found_and_missing_paths(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    expected = _random_vec()
+    repo.add_images(expected, ["/photos/a.jpg"])
+
+    # Act
+    actual = repo.get_vectors(["/photos/missing.jpg", "/photos/a.jpg"])
+
+    # Assert
+    assert actual["/photos/missing.jpg"] is None
+    assert actual["/photos/a.jpg"] is not None
+    assert np.allclose(actual["/photos/a.jpg"], expected)
+
+
 # ── remove_folder ─────────────────────────────────────────────────────────────
 
 def test_ai_vector_repository_remove_folder_drops_all_paths_in_folder(tmp_path: Path) -> None:

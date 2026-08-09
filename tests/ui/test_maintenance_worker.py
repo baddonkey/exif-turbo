@@ -13,6 +13,7 @@ import pytest
 from PIL import Image
 from pytestqt.qtbot import QtBot
 
+from exif_turbo.config import tgm_snapshot_path
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.data.indexed_folder_repository import IndexedFolderRepository
 from exif_turbo.ui.workers.maintenance_worker import MaintenanceWorker
@@ -169,6 +170,33 @@ def test_reset_database_flags_db_phase_not_cancelable(
 
     # Assert — cache phase is cancelable (True) then the DB phase is not (False)
     assert flags == [True, False]
+
+
+def test_reset_database_same_stem_preserves_other_database_tgm(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    application_db = tmp_path / "application" / "index" / "index.db"
+    temporary_db = tmp_path / "test-run" / "index.db"
+    application_db.parent.mkdir(parents=True)
+    temporary_db.parent.mkdir(parents=True)
+    ImageIndexRepository(application_db, key="").close()
+    ImageIndexRepository(temporary_db, key="").close()
+    application_snapshot = tgm_snapshot_path(application_db)
+    application_snapshot.parent.mkdir(parents=True)
+    application_snapshot.write_bytes(b"persistent TGM")
+    temporary_snapshot = tgm_snapshot_path(temporary_db)
+    temporary_snapshot.parent.mkdir(parents=True)
+    temporary_snapshot.write_bytes(b"temporary TGM")
+    worker = MaintenanceWorker(temporary_db, "", "reset_database")
+
+    # Act
+    worker.run()
+
+    # Assert
+    assert application_snapshot.read_bytes() == b"persistent TGM"
+    assert not temporary_snapshot.exists()
 
 
 def test_unknown_operation_emits_failed(qtbot: QtBot, tmp_path: Path) -> None:

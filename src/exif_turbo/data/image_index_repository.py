@@ -5,11 +5,15 @@ import os
 import re
 from os.path import commonpath
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 import sqlcipher3
 
+from ..models.image_sidecar import ImageSidecar
+from ..models.image_tag import ImageTag, TagProvenance
+from ..models.tag_proposal import TagProposal, TagProposalStatus
 from ._connection import open_encrypted_connection, rekey_connection
+from .sidecar_sync_state import SidecarSyncState
 
 # Width/height key-pairs tried in priority order (exiftool -g1 format).
 _DIM_KEY_PAIRS: tuple[tuple[str, str], ...] = (
@@ -87,7 +91,64 @@ class ImageIndexRepository:
             );
 
             CREATE VIRTUAL TABLE IF NOT EXISTS images_fts
-            USING fts5(path, filename, metadata_text);
+            USING fts5(path, filename, metadata_text, tags_text);
+
+            CREATE TABLE IF NOT EXISTS image_sidecar_state (
+                image_id INTEGER PRIMARY KEY REFERENCES images(id) ON DELETE CASCADE,
+                sidecar_path TEXT NOT NULL,
+                mtime_ns INTEGER NOT NULL,
+                size INTEGER NOT NULL,
+                checksum TEXT NOT NULL,
+                schema_version INTEGER NOT NULL,
+                sync_status TEXT NOT NULL,
+                error TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS accepted_image_tags (
+                image_id INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE,
+                concept_id TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                canonical_label TEXT NOT NULL,
+                vocabulary TEXT NOT NULL,
+                category TEXT NOT NULL,
+                provenance_method TEXT NOT NULL,
+                accepted_at TEXT NOT NULL,
+                confidence REAL,
+                model TEXT,
+                vocabulary_checksum TEXT NOT NULL,
+                tag_extra_json TEXT NOT NULL DEFAULT '{}',
+                provenance_extra_json TEXT NOT NULL DEFAULT '{}',
+                PRIMARY KEY (image_id, concept_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS accepted_image_tag_aliases (
+                image_id INTEGER NOT NULL,
+                concept_id TEXT NOT NULL,
+                alias TEXT NOT NULL,
+                PRIMARY KEY (image_id, concept_id, alias),
+                FOREIGN KEY (image_id, concept_id)
+                    REFERENCES accepted_image_tags(image_id, concept_id)
+                    ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_accepted_image_tags_concept
+                ON accepted_image_tags(concept_id);
+
+            CREATE TABLE IF NOT EXISTS image_tag_proposals (
+                image_id INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE,
+                concept_id TEXT NOT NULL,
+                provider_fingerprint TEXT NOT NULL,
+                canonical_label TEXT NOT NULL,
+                category TEXT NOT NULL,
+                score REAL NOT NULL,
+                rank INTEGER NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('pending', 'rejected')),
+                provider_model TEXT NOT NULL DEFAULT 'clip',
+                PRIMARY KEY (image_id, concept_id, provider_fingerprint)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_image_tag_proposals_fingerprint
+                ON image_tag_proposals(provider_fingerprint, status);
 
             CREATE INDEX IF NOT EXISTS idx_images_filename  ON images(filename COLLATE NOCASE);
             CREATE INDEX IF NOT EXISTS idx_images_path_nocase ON images(path COLLATE NOCASE);
@@ -103,6 +164,18 @@ class ImageIndexRepository:
             CREATE INDEX IF NOT EXISTS idx_image_folders_folder ON image_folders(folder_id);
             """
         )
+        self._migrate_fts_tags_text()
+        proposal_columns = {
+            row[1]
+            for row in self.conn.execute(
+                "PRAGMA table_info(image_tag_proposals)"
+            ).fetchall()
+        }
+        if "provider_model" not in proposal_columns:
+            self.conn.execute(
+                "ALTER TABLE image_tag_proposals "
+                "ADD COLUMN provider_model TEXT NOT NULL DEFAULT 'clip'"
+            )
         # Add marked column for existing databases (one-time migration).
         existing_cols = {
             row[1]
@@ -191,19 +264,413 @@ class ImageIndexRepository:
                     """,
                     (path, filename, ext, mtime, size, metadata_json, captured_at),
                 )
-                self.conn.execute(
-                    """
-                    INSERT OR REPLACE INTO images_fts (rowid, path, filename, metadata_text)
-                    VALUES ((SELECT id FROM images WHERE path = ?), ?, ?, ?)
-                    """,
-                    (path, path, filename, metadata_text),
-                )
+                self._refresh_fts_row(path, metadata_text=metadata_text)
                 if folder_id is not None:
                     self.conn.execute(
                         "INSERT OR IGNORE INTO image_folders (image_id, folder_id) "
                         "VALUES ((SELECT id FROM images WHERE path = ?), ?)",
                         (path, folder_id),
                     )
+
+    def replace_accepted_tags_and_sidecar_state(
+        self,
+        image_path: str,
+        sidecar: ImageSidecar,
+        *,
+        sidecar_path: str,
+        sidecar_mtime_ns: int,
+        sidecar_size: int,
+        sidecar_checksum: str,
+        sync_status: str,
+        sync_error: str | None = None,
+        aliases: Mapping[str, Iterable[str]] | None = None,
+        accepted_proposals: Iterable[tuple[str, str]] = (),
+    ) -> None:
+        """Atomically replace an image's accepted tags, cache state, and FTS text."""
+        image_row = self.conn.execute(
+            "SELECT id FROM images WHERE path = ?", (image_path,)
+        ).fetchone()
+        if image_row is None:
+            raise ValueError(f"image is not indexed: {image_path}")
+        image_id = int(image_row[0])
+        aliases_by_concept = aliases or {}
+        accepted_proposal_rows = tuple(accepted_proposals)
+        concept_ids = {tag.concept_id for tag in sidecar.tags}
+        unknown_alias_concepts = set(aliases_by_concept) - concept_ids
+        if unknown_alias_concepts:
+            raise ValueError(
+                "aliases supplied for unknown concepts: "
+                + ", ".join(sorted(unknown_alias_concepts))
+            )
+
+        with self.conn:
+            self.conn.execute(
+                "DELETE FROM accepted_image_tags WHERE image_id = ?", (image_id,)
+            )
+            for position, tag in enumerate(sidecar.tags):
+                self.conn.execute(
+                    """
+                    INSERT INTO accepted_image_tags (
+                        image_id, concept_id, position, canonical_label,
+                        vocabulary, category, provenance_method, accepted_at,
+                        confidence, model, vocabulary_checksum, tag_extra_json,
+                        provenance_extra_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        image_id,
+                        tag.concept_id,
+                        position,
+                        tag.label,
+                        tag.vocabulary,
+                        tag.category,
+                        tag.provenance.method,
+                        tag.provenance.accepted_at,
+                        tag.provenance.confidence,
+                        tag.provenance.model,
+                        tag.provenance.vocabulary_checksum,
+                        json.dumps(tag.extra, ensure_ascii=False, sort_keys=True),
+                        json.dumps(
+                            tag.provenance.extra,
+                            ensure_ascii=False,
+                            sort_keys=True,
+                        ),
+                    ),
+                )
+                self.conn.executemany(
+                    "INSERT INTO accepted_image_tag_aliases "
+                    "(image_id, concept_id, alias) VALUES (?, ?, ?)",
+                    (
+                        (image_id, tag.concept_id, alias.strip())
+                        for alias in aliases_by_concept.get(tag.concept_id, ())
+                        if alias.strip()
+                    ),
+                )
+            self.conn.executemany(
+                "DELETE FROM image_tag_proposals "
+                "WHERE image_id = ? AND concept_id = ? "
+                "AND provider_fingerprint = ?",
+                (
+                    (image_id, concept_id, provider_fingerprint)
+                    for concept_id, provider_fingerprint in accepted_proposal_rows
+                ),
+            )
+            self.conn.execute(
+                """
+                INSERT INTO image_sidecar_state (
+                    image_id, sidecar_path, mtime_ns, size, checksum,
+                    schema_version, sync_status, error
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(image_id) DO UPDATE SET
+                    sidecar_path=excluded.sidecar_path,
+                    mtime_ns=excluded.mtime_ns,
+                    size=excluded.size,
+                    checksum=excluded.checksum,
+                    schema_version=excluded.schema_version,
+                    sync_status=excluded.sync_status,
+                    error=excluded.error
+                """,
+                (
+                    image_id,
+                    sidecar_path,
+                    sidecar_mtime_ns,
+                    sidecar_size,
+                    sidecar_checksum,
+                    sidecar.schema_version,
+                    sync_status,
+                    sync_error,
+                ),
+            )
+            self._refresh_fts_row(
+                image_path,
+                tags_text=self._build_tags_text(image_id),
+            )
+
+    def get_accepted_tags(self, image_path: str) -> tuple[ImageTag, ...]:
+        rows = self.conn.execute(
+            """
+            SELECT concept_id, canonical_label, vocabulary, category,
+                   provenance_method, accepted_at, confidence, model,
+                   vocabulary_checksum, tag_extra_json, provenance_extra_json
+            FROM accepted_image_tags
+            WHERE image_id = (SELECT id FROM images WHERE path = ?)
+            ORDER BY position
+            """,
+            (image_path,),
+        ).fetchall()
+        return tuple(
+            ImageTag(
+                concept_id=row[0],
+                label=row[1],
+                vocabulary=row[2],
+                category=row[3],
+                provenance=TagProvenance(
+                    method=row[4],
+                    accepted_at=row[5],
+                    confidence=row[6],
+                    model=row[7],
+                    vocabulary_checksum=row[8],
+                    extra=json.loads(row[10]),
+                ),
+                extra=json.loads(row[9]),
+            )
+            for row in rows
+        )
+
+    def get_sidecar_sync_state(self, image_path: str) -> SidecarSyncState | None:
+        row = self.conn.execute(
+            """
+            SELECT state.sidecar_path, state.mtime_ns, state.size,
+                   state.checksum, state.schema_version, state.sync_status,
+                   state.error
+            FROM image_sidecar_state AS state
+            JOIN images ON images.id = state.image_id
+            WHERE images.path = ?
+            """,
+            (image_path,),
+        ).fetchone()
+        if row is None:
+            return None
+        return SidecarSyncState(
+            sidecar_path=str(row[0]),
+            mtime_ns=int(row[1]),
+            size=int(row[2]),
+            checksum=str(row[3]),
+            schema_version=int(row[4]),
+            sync_status=str(row[5]),
+            error=None if row[6] is None else str(row[6]),
+        )
+
+    def record_sidecar_sync_error(
+        self,
+        image_path: str,
+        *,
+        sidecar_path: str,
+        sidecar_mtime_ns: int,
+        sidecar_size: int,
+        sidecar_checksum: str,
+        sync_error: str,
+    ) -> None:
+        """Record an observed invalid sidecar without changing accepted tags."""
+        with self.conn:
+            self.conn.execute(
+                """
+                INSERT INTO image_sidecar_state (
+                    image_id, sidecar_path, mtime_ns, size, checksum,
+                    schema_version, sync_status, error
+                )
+                SELECT id, ?, ?, ?, ?, 0, 'error', ?
+                FROM images WHERE path = ?
+                ON CONFLICT(image_id) DO UPDATE SET
+                    sidecar_path=excluded.sidecar_path,
+                    mtime_ns=excluded.mtime_ns,
+                    size=excluded.size,
+                    checksum=excluded.checksum,
+                    sync_status=excluded.sync_status,
+                    error=excluded.error
+                """,
+                (
+                    sidecar_path,
+                    sidecar_mtime_ns,
+                    sidecar_size,
+                    sidecar_checksum,
+                    sync_error,
+                    image_path,
+                ),
+            )
+
+    def clear_accepted_tags_and_sidecar_state(self, image_path: str) -> None:
+        """Clear derived sidecar data without touching the filesystem sidecar."""
+        with self.conn:
+            self.conn.execute(
+                "DELETE FROM accepted_image_tags "
+                "WHERE image_id = (SELECT id FROM images WHERE path = ?)",
+                (image_path,),
+            )
+            self.conn.execute(
+                "DELETE FROM image_sidecar_state "
+                "WHERE image_id = (SELECT id FROM images WHERE path = ?)",
+                (image_path,),
+            )
+            self._refresh_fts_row(image_path, tags_text="")
+
+    def get_marked_concept_counts(self) -> dict[str, int]:
+        rows = self.conn.execute(
+            """
+            SELECT tags.concept_id, COUNT(*)
+            FROM accepted_image_tags AS tags
+            JOIN images ON images.id = tags.image_id
+            WHERE images.marked = 1
+            GROUP BY tags.concept_id
+            ORDER BY tags.concept_id
+            """
+        ).fetchall()
+        return {str(concept_id): int(count) for concept_id, count in rows}
+
+    def refresh_accepted_tag_aliases(
+        self,
+        aliases: Mapping[str, Iterable[str]],
+    ) -> int:
+        """Refresh derived aliases and FTS text without changing sidecars."""
+        accepted_rows = self.conn.execute(
+            "SELECT image_id, concept_id FROM accepted_image_tags"
+        ).fetchall()
+        affected_image_ids = {int(row[0]) for row in accepted_rows}
+        with self.conn:
+            self.conn.execute("DELETE FROM accepted_image_tag_aliases")
+            self.conn.executemany(
+                "INSERT INTO accepted_image_tag_aliases "
+                "(image_id, concept_id, alias) VALUES (?, ?, ?)",
+                (
+                    (int(image_id), str(concept_id), alias.strip())
+                    for image_id, concept_id in accepted_rows
+                    for alias in aliases.get(str(concept_id), ())
+                    if alias.strip()
+                ),
+            )
+            for image_id in affected_image_ids:
+                path_row = self.conn.execute(
+                    "SELECT path FROM images WHERE id = ?", (image_id,)
+                ).fetchone()
+                if path_row is not None:
+                    self._refresh_fts_row(
+                        str(path_row[0]),
+                        tags_text=self._build_tags_text(image_id),
+                    )
+        return len(accepted_rows)
+
+    def replace_pending_proposals(
+        self,
+        image_path: str,
+        provider_fingerprint: str,
+        proposals: Iterable[TagProposal],
+    ) -> None:
+        """Replace pending rows while preserving rejections for this provider."""
+        image_row = self.conn.execute(
+            "SELECT id FROM images WHERE path = ?", (image_path,)
+        ).fetchone()
+        if image_row is None:
+            raise ValueError(f"image is not indexed: {image_path}")
+        image_id = int(image_row[0])
+        proposal_rows = tuple(proposals)
+        if any(row.image_path != image_path for row in proposal_rows):
+            raise ValueError("proposal image path does not match replacement target")
+        if any(row.provider_fingerprint != provider_fingerprint for row in proposal_rows):
+            raise ValueError("proposal fingerprint does not match replacement target")
+        with self.conn:
+            self.conn.execute(
+                "DELETE FROM image_tag_proposals "
+                "WHERE image_id = ? AND provider_fingerprint = ? AND status = 'pending'",
+                (image_id, provider_fingerprint),
+            )
+            self.conn.executemany(
+                """
+                INSERT OR IGNORE INTO image_tag_proposals (
+                    image_id, concept_id, provider_fingerprint, canonical_label,
+                    category, score, rank, status, provider_model
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+                """,
+                (
+                    (
+                        image_id,
+                        proposal.concept_id,
+                        provider_fingerprint,
+                        proposal.label,
+                        proposal.category,
+                        proposal.score,
+                        proposal.rank,
+                        proposal.provider_model,
+                    )
+                    for proposal in proposal_rows
+                ),
+            )
+
+    def reject_proposal(
+        self,
+        image_path: str,
+        concept_id: str,
+        provider_fingerprint: str,
+    ) -> bool:
+        with self.conn:
+            cursor = self.conn.execute(
+                """
+                UPDATE image_tag_proposals SET status = 'rejected'
+                WHERE image_id = (SELECT id FROM images WHERE path = ?)
+                  AND concept_id = ? AND provider_fingerprint = ?
+                """,
+                (image_path, concept_id, provider_fingerprint),
+            )
+        return cursor.rowcount > 0
+
+    def get_proposals(
+        self,
+        image_path: str,
+        *,
+        provider_fingerprint: str | None = None,
+        status: TagProposalStatus | None = None,
+    ) -> tuple[TagProposal, ...]:
+        clauses = ["images.path = ?"]
+        arguments: list[object] = [image_path]
+        if provider_fingerprint is not None:
+            clauses.append("proposals.provider_fingerprint = ?")
+            arguments.append(provider_fingerprint)
+        if status is not None:
+            clauses.append("proposals.status = ?")
+            arguments.append(status.value)
+        rows = self.conn.execute(
+            """
+            SELECT proposals.concept_id, proposals.canonical_label,
+                   proposals.category, proposals.provider_fingerprint,
+                     proposals.score, proposals.rank, proposals.status,
+                     proposals.provider_model
+            FROM image_tag_proposals AS proposals
+            JOIN images ON images.id = proposals.image_id
+            WHERE """ + " AND ".join(clauses) + " ORDER BY proposals.rank",
+            tuple(arguments),
+        ).fetchall()
+        return tuple(
+            TagProposal(
+                image_path=image_path,
+                concept_id=str(row[0]),
+                label=str(row[1]),
+                category=str(row[2]),
+                provider_fingerprint=str(row[3]),
+                score=float(row[4]),
+                rank=int(row[5]),
+                status=TagProposalStatus(str(row[6])),
+                provider_model=str(row[7]),
+            )
+            for row in rows
+        )
+
+    def invalidate_stale_proposals(self, current_provider_fingerprint: str) -> int:
+        with self.conn:
+            cursor = self.conn.execute(
+                "DELETE FROM image_tag_proposals WHERE provider_fingerprint != ?",
+                (current_provider_fingerprint,),
+            )
+        return cursor.rowcount
+
+    def clear_proposals(
+        self,
+        *,
+        image_path: str | None = None,
+        provider_fingerprint: str | None = None,
+    ) -> int:
+        clauses: list[str] = []
+        arguments: list[object] = []
+        if image_path is not None:
+            clauses.append("image_id = (SELECT id FROM images WHERE path = ?)")
+            arguments.append(image_path)
+        if provider_fingerprint is not None:
+            clauses.append("provider_fingerprint = ?")
+            arguments.append(provider_fingerprint)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        with self.conn:
+            cursor = self.conn.execute(
+                "DELETE FROM image_tag_proposals" + where, tuple(arguments)
+            )
+        return cursor.rowcount
 
     def delete_missing(
         self,
@@ -493,7 +960,7 @@ class ImageIndexRepository:
         self.conn.execute("DROP TABLE IF EXISTS images_fts")
         self.conn.execute(
             "CREATE VIRTUAL TABLE images_fts"
-            " USING fts5(path, filename, metadata_text)"
+            " USING fts5(path, filename, metadata_text, tags_text)"
         )
         self.conn.commit()
 
@@ -1333,3 +1800,105 @@ class ImageIndexRepository:
 
     def close(self) -> None:
         self.conn.close()
+
+    def _migrate_fts_tags_text(self) -> None:
+        # FTS5 exposes internal hidden columns via table_xinfo, so table_info is
+        # intentionally used here to inspect only the declared searchable fields.
+        columns = {
+            str(row[1])
+            for row in self.conn.execute("PRAGMA table_info(images_fts)").fetchall()
+        }
+        if "tags_text" in columns:
+            return
+        with self.conn:
+            self.conn.execute(
+                "CREATE VIRTUAL TABLE images_fts_new "
+                "USING fts5(path, filename, metadata_text, tags_text)"
+            )
+            self.conn.execute(
+                """
+                INSERT INTO images_fts_new (
+                    rowid, path, filename, metadata_text, tags_text
+                )
+                SELECT images.id, images.path, images.filename,
+                       COALESCE(images_fts.metadata_text, ''),
+                       COALESCE((
+                           SELECT group_concat(search_term, ' ')
+                           FROM (
+                               SELECT canonical_label AS search_term
+                               FROM accepted_image_tags
+                               WHERE image_id = images.id
+                               UNION ALL
+                               SELECT concept_id
+                               FROM accepted_image_tags
+                               WHERE image_id = images.id
+                               UNION ALL
+                               SELECT vocabulary
+                               FROM accepted_image_tags
+                               WHERE image_id = images.id
+                               UNION ALL
+                               SELECT category
+                               FROM accepted_image_tags
+                               WHERE image_id = images.id
+                               UNION ALL
+                               SELECT alias
+                               FROM accepted_image_tag_aliases
+                               WHERE image_id = images.id
+                           )
+                       ), '')
+                FROM images
+                LEFT JOIN images_fts ON images_fts.rowid = images.id
+                """
+            )
+            self.conn.execute("DROP TABLE images_fts")
+            self.conn.execute("ALTER TABLE images_fts_new RENAME TO images_fts")
+
+    def _refresh_fts_row(
+        self,
+        image_path: str,
+        *,
+        metadata_text: str | None = None,
+        tags_text: str | None = None,
+    ) -> None:
+        image_row = self.conn.execute(
+            "SELECT id, path, filename FROM images WHERE path = ?", (image_path,)
+        ).fetchone()
+        if image_row is None:
+            return
+        current_fts = self.conn.execute(
+            "SELECT metadata_text, tags_text FROM images_fts WHERE rowid = ?",
+            (image_row[0],),
+        ).fetchone()
+        current_metadata = current_fts[0] if current_fts is not None else ""
+        current_tags = current_fts[1] if current_fts is not None else ""
+        self.conn.execute(
+            """
+            INSERT OR REPLACE INTO images_fts (
+                rowid, path, filename, metadata_text, tags_text
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                image_row[0],
+                image_row[1],
+                image_row[2],
+                current_metadata if metadata_text is None else metadata_text,
+                current_tags if tags_text is None else tags_text,
+            ),
+        )
+
+    def _build_tags_text(self, image_id: int) -> str:
+        rows = self.conn.execute(
+            """
+            SELECT canonical_label FROM accepted_image_tags WHERE image_id = ?
+            UNION ALL
+            SELECT concept_id FROM accepted_image_tags WHERE image_id = ?
+            UNION ALL
+            SELECT vocabulary FROM accepted_image_tags WHERE image_id = ?
+            UNION ALL
+            SELECT category FROM accepted_image_tags WHERE image_id = ?
+            UNION ALL
+            SELECT alias FROM accepted_image_tag_aliases WHERE image_id = ?
+            """,
+            (image_id, image_id, image_id, image_id, image_id),
+        ).fetchall()
+        return " ".join(str(row[0]) for row in rows)

@@ -1,0 +1,63 @@
+from __future__ import annotations
+
+import threading
+from pathlib import Path
+
+from PySide6.QtCore import QThread, Signal
+
+from ...config import (
+    ai_id_map_path,
+    ai_index_path,
+    tgm_concept_map_path,
+    tgm_snapshot_path,
+    tgm_term_index_path,
+    tgm_vector_metadata_path,
+)
+from ...data.ai_vector_repository import AiVectorRepository
+from ...data.tgm_vector_repository import TgmVectorRepository
+from ...indexing.ai_indexer_service import AiIndexerService
+from ...tagging.tgm_snapshot_repository import TgmSnapshotRepository
+from ...tagging.tgm_vector_index_service import TgmVectorIndexService
+
+
+class TgmVectorBuildWorker(QThread):
+    progress = Signal(int, int, str)
+    result_ready = Signal(object)
+    failed = Signal(str)
+    canceled = Signal(object)
+
+    def __init__(self, db_path: Path) -> None:
+        super().__init__()
+        self._db_path = db_path
+        self._cancel_event = threading.Event()
+
+    def cancel(self) -> None:
+        self._cancel_event.set()
+
+    def run(self) -> None:
+        try:
+            image_vectors = AiVectorRepository(
+                ai_index_path(self._db_path), ai_id_map_path(self._db_path)
+            )
+            image_vectors.load()
+            term_vectors = TgmVectorRepository(
+                tgm_term_index_path(self._db_path),
+                tgm_concept_map_path(self._db_path),
+                tgm_vector_metadata_path(self._db_path),
+            )
+            term_vectors.load()
+            service = TgmVectorIndexService(
+                TgmSnapshotRepository(tgm_snapshot_path(self._db_path)),
+                term_vectors,
+                AiIndexerService(image_vectors),
+            )
+            result = service.build(
+                on_progress=self.progress.emit,
+                cancel_check=self._cancel_event.is_set,
+            )
+            if result.completed:
+                self.result_ready.emit(result)
+            else:
+                self.canceled.emit(result)
+        except Exception as exc:  # noqa: BLE001
+            self.failed.emit(str(exc))

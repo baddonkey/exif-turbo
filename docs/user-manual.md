@@ -20,9 +20,10 @@ thumbnails and previews extracted from the embedded thumbnail or a frame at
 7. [Browsing by Folder](#7-browsing-by-folder)
 8. [Viewing Metadata and EXIF Tags](#8-viewing-metadata-and-exif-tags)
 9. [Marking Images & Bulk Actions](#9-marking-images--bulk-actions)
-10. [Settings](#10-settings)
-11. [Keyboard Shortcuts](#11-keyboard-shortcuts)
-12. [FAQ](#12-faq)
+10. [Tagging with TGM](#10-tagging-with-tgm)
+11. [Settings](#11-settings)
+12. [Keyboard Shortcuts](#12-keyboard-shortcuts)
+13. [FAQ](#13-faq)
 
 ---
 
@@ -789,9 +790,171 @@ shown in full and never truncated.
 
 ---
 
-## 10. Settings
+## 10. Tagging with TGM
+
+Tagging assigns controlled Library of Congress Thesaurus for Graphic Materials
+(TGM) terms without writing metadata into the original image. It is disabled
+by default for each database. Enable it under **Settings → Tagging and TGM**,
+then click **Install TGM**. Installation downloads the official TGM v1 XML
+distribution over HTTPS and falls back to the official tagged-text distribution
+if XML cannot be downloaded or validated.
+
+The application stores the normalized TGM snapshot and its checksum in the
+current database's application-data directory. The source checksum records
+provenance and detects changes; it is not a publisher signature. TGM content is
+downloaded on demand rather than bundled while redistribution and attribution
+requirements remain under review. See the LOC [TGM download
+page](https://guides.loc.gov/tgm-i/download-tgm), [field
+definitions](https://www.loc.gov/pictures/collection/tgm/fields.html), and
+[application guidance](https://guides.loc.gov/tgm-i).
+
+### Sidecars and search
+
+The first accepted tag for `photo.jpg` creates `photo.jpg.sidecar.json` beside
+the image. Sidecars are deterministic UTF-8 JSON and are the authoritative
+store for accepted tags. They are plain text: SQLCipher database encryption
+does **not** encrypt them, so they inherit the source folder's permissions and
+backup policy. Tagging never changes the original image's bytes or timestamp.
+
+Each accepted term stores a canonical ID such as `loc-tgm:tgm000001`, its
+canonical label, subject or genre/form category, and acceptance provenance.
+The importer supports the official TGM v1 XML and tagged-text structures.
+Canonical descriptors use merged TGM `TNR` numbers; `UF` and non-descriptor
+`USE` terms become aliases that resolve to the canonical concept. Only
+postable subject (`TTCSubj`, MARC 150/650) and genre/form (`TTCForm`, MARC
+155/655) concepts can be accepted.
+
+Accepted canonical labels, qualified IDs, categories, vocabulary identity, and
+known aliases are copied into the encrypted database's FTS5 cache. Search uses
+the normal EXIF query box and syntax; pending and rejected proposals are not
+searchable. A regular or full image scan synchronizes new, changed, or deleted
+sidecars even when the original image stamp did not change. Malformed sidecars
+are reported and left untouched.
+
+Move or rename a sidecar together with its image. Version 1 does not infer an
+external rename. Removing an image or indexed folder clears only database
+cache rows; it does not delete a sidecar. Deleting a sidecar removes its
+accepted tags from FTS after the next synchronization.
+
+### Tagging drawer
+
+From the **Search** or **Browse** tab, click the tag button at the upper right
+or press **Ctrl+T**. The non-modal drawer contains these controls:
+
+- **Add TGM term** searches canonical labels and aliases after a short delay.
+  Click a result or the **+** button to add it to the focused image; the
+  adjacent bulk button applies it to every marked image. **Enter** accepts the
+  highlighted result, and **Down** moves through results.
+- Choose **Current image** to tag only the focused image, or **Marked images**
+  to apply every action to the marked set. The workbench shows only the tag
+  list and commands for the chosen target.
+- In **Current image** mode, the tag list shows that image's canonical tags,
+  category, and provenance. The minus button removes a tag from that image.
+- In **Marked images** mode, the tag list shows whether each term occurs on
+  **all marked images** or on *N of M marked images*. The minus button removes
+  that concept from all marked images.
+- **Tag proposals** can generate suggestions for the selected image or all
+  marked images. Each row shows its score and provider and has accept and
+  reject buttons. Rejected proposals remain suppressed for the current TGM,
+  prompt, and model fingerprint.
+- **Auto-accept Marked** appears only when auto-accept is enabled. It asks for
+  confirmation, regenerates proposals, and accepts only scores at or above the
+  configured auto-accept threshold.
+- **Tagged derivatives → Choose Output Folder** shows how many marked images
+  have accepted tags and can be exported, then starts derivative generation
+  after confirmation. The result lists the exact destination for a single
+  created derivative and separately reports untagged images, existing files,
+  and failures.
+
+Long-running TGM, proposal, bulk-tag, and derivative operations show progress
+and a **Cancel** button. Cancellation stops before the next item; completed
+sidecar or derivative writes remain valid, and the final summary reports
+successes, skips, conflicts, failures, or cancellations.
+
+### Marks and bulk behavior
+
+The drawer reuses the same persistent marks described in [section
+9](#9-marking-images--bulk-actions); it does not maintain a second selection.
+Press **Space** to toggle the focused image's mark. Bulk add and remove process
+the enabled-folder marked set one image at a time. Existing tags are skipped,
+external sidecar edits are reported as conflicts, and malformed or read-only
+sidecars fail without replacing them. Auto-accept has an explicit confirmation;
+the current bulk add/remove buttons do not show a separate confirmation dialog.
+
+### CLIP proposal prerequisites
+
+Manual TGM search and tagging do not require AI. Proposals do. They require:
+
+1. **AI Features** enabled in Settings. This is unavailable on macOS Intel.
+2. Image CLIP vectors built separately with **AI-Scan** or **AI Full Rescan**
+   for the relevant indexed folder.
+3. A separate TGM term-vector index built with **Build Vectors** under
+   **Tagging and TGM**.
+
+The image FAISS index remains image-only; TGM concepts are stored in a separate
+FAISS index. Installing a new TGM snapshot makes term vectors stale and requires
+**Rebuild Vectors**, but does not require rebuilding image vectors. Proposal
+generation never scans original images implicitly: a missing image vector is
+reported as requiring an AI scan.
+
+The proposal threshold defaults to **0.24**. Optional auto-accept is off by
+default and uses the stricter **0.32** threshold. The auto-accept threshold is
+always kept at least 0.01 above the proposal threshold. Scores are model- and
+dataset-dependent similarities, not calibrated probabilities; review results
+before enabling automatic acceptance.
+
+### Tagged derivatives
+
+Derivative generation copies only marked images that have accepted tags. The
+chosen output root must be outside every indexed source root. The exporter:
+
+- preserves each source format and relative source folder tree;
+- adds collision-safe top-level labels when marks span multiple indexed roots;
+- skips untagged images and existing destination files without overwriting;
+- writes accepted canonical labels to **XMP Subject** and **IPTC Keywords** on
+  a temporary copy, verifies both fields with ExifTool, then publishes it;
+- removes an incomplete temporary copy after a write or verification failure;
+- never copies sidecars into the derivative tree.
+
+Originals are explicitly forbidden as metadata-write targets. Other copied
+metadata is preserved, but version 1 does not convert formats, provide custom
+metadata mappings, or overwrite existing derivatives. Some source formats may
+not support the requested writable metadata; those items are reported as
+failures and the source remains unchanged.
+
+### Lifecycle and reset
+
+Disabling tagging hides the workbench but does not delete sidecars, proposals,
+the installed TGM snapshot, or cached accepted tags. Already synchronized tags
+remain searchable. Closing the app requests cancellation of running tagging
+workers; completed item-level writes remain in place.
+
+**Reset Database** clears image/tag/proposal rows, marks, indexed folders,
+thumbnail and preview caches, and the per-database TGM snapshot and vector
+index. It deliberately does not traverse source folders to delete adjacent
+sidecars. The separate image AI index files are not explicitly deleted by
+reset; use **AI Full Rescan** after rebuilding the image index when a clean
+semantic index is required. Re-add and scan folders to synchronize sidecars,
+then reinstall TGM before editing tags or generating proposals.
+
+---
+
+## 11. Settings
 
 Click the **Settings** tab to configure application behaviour.
+
+### Tagging and TGM
+
+**Enable tagging for this database** controls the drawer UI. The section also
+shows whether TGM is installed, subject and genre/form counts, source date,
+checksum, and importer diagnostics. **Install TGM** / **Update TGM** validates
+and atomically activates a new official snapshot; a failed update leaves the
+previous snapshot active. **Build Vectors** / **Rebuild Vectors** creates the
+separate CLIP TGM term index and is enabled only when AI is available and on.
+
+**Proposal threshold** defaults to 24%. **Auto-accept proposals** is off by
+default; when enabled, **Auto-accept threshold** defaults to 32% and must remain
+strictly above the proposal threshold.
 
 ### Worker Threads
 
@@ -909,7 +1072,8 @@ Click **OK** to confirm. This permanently:
 
 - Deletes all indexed images from the database
 - Removes all indexed folder records
-- Wipes the thumbnail cache on disk
+- Wipes the thumbnail and preview cache on disk
+- Removes the per-database TGM snapshot and TGM term-vector index
 
 The database is vacuumed and checkpointed immediately, so the database file
 shrinks to near-zero on disk straight away.
@@ -922,13 +1086,16 @@ The vacuum phase cannot be interrupted — the overlay hides its **Cancel**
 button and shows a *"This step cannot be canceled…"* notice until it finishes.
 
 > **This action cannot be undone.** After a reset you will need to re-add your
-> folders and run a full rescan to rebuild the index.
+> folders and run a full rescan to rebuild the index. Adjacent tagging sidecars
+> are not deleted; rescanning imports them again. Reinstall TGM before editing
+> tags or rebuilding proposal vectors. Existing image AI vector files are not
+> explicitly deleted; run **AI Full Rescan** when you need to rebuild them.
 
 The **Reset Database…** button is disabled while indexing is in progress.
 
 ---
 
-## 11. Keyboard Shortcuts
+## 12. Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
@@ -937,6 +1104,8 @@ The **Reset Database…** button is disabled while indexing is in progress.
 | `Escape` | Close the find-in-metadata bar |
 | `F3` | Jump to next match in metadata |
 | `Shift+F3` | Jump to previous match in metadata |
+| `Ctrl+T` | Open / close the tagging drawer in Search or Browse |
+| `Space` | Toggle the mark on the focused Search or Browse image |
 | `↓` | Select the next result (Search tab) / next image (Browse tab) |
 | `↑` | Select the previous result (Search tab) / previous image (Browse tab) |
 | `Page Down` | Jump one page forward in results (Search tab) / Browse image list |
@@ -945,7 +1114,7 @@ The **Reset Database…** button is disabled while indexing is in progress.
 
 ---
 
-## 12. FAQ
+## 13. FAQ
 
 **Q: Why does the status bar say "Indexing…" even after I switch tabs?**  
 A: The indexer runs in the background across all tabs. The pulsing blue dot in

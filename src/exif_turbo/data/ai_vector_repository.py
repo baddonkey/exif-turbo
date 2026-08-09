@@ -32,6 +32,7 @@ class AiVectorRepository:
         self._index = None
         # Maps str(sequential_faiss_id) → absolute image path.
         self._id_map: Dict[str, str] = {}
+        self._path_map: Dict[str, int] = {}
 
     @property
     def storage_dir(self) -> Path:
@@ -50,6 +51,7 @@ class AiVectorRepository:
                 self._index = faiss.read_index(str(self._index_path))
                 raw = json.loads(self._id_map_path.read_text(encoding="utf-8"))
                 self._id_map = {str(k): v for k, v in raw.items()}
+                self._rebuild_path_map()
                 _log.debug(
                     "AI index loaded: %d vectors from %s",
                     self._index.ntotal,
@@ -61,6 +63,7 @@ class AiVectorRepository:
 
         self._index = faiss.IndexFlatIP(_DIM)
         self._id_map = {}
+        self._path_map = {}
 
     def save(self) -> None:
         """Persist the current index and id-map to disk."""
@@ -77,7 +80,22 @@ class AiVectorRepository:
 
     def get_indexed_paths(self) -> set[str]:
         """Return the set of image paths that already have a vector."""
-        return set(self._id_map.values())
+        return set(self._path_map)
+
+    def get_vector(self, image_path: str) -> "np.ndarray | None":
+        """Return a copy of the vector for *image_path*, or ``None``."""
+        if self._index is None:
+            raise RuntimeError("load() must be called before get_vector()")
+        row_id = self._path_map.get(image_path)
+        if row_id is None:
+            return None
+        vector = np.empty(_DIM, dtype=np.float32)
+        self._index.reconstruct(row_id, vector)
+        return vector
+
+    def get_vectors(self, image_paths: List[str]) -> Dict[str, "np.ndarray | None"]:
+        """Return vectors keyed by each requested path, preserving misses."""
+        return {image_path: self.get_vector(image_path) for image_path in image_paths}
 
     # ── Mutations ─────────────────────────────────────────────────────────
 
@@ -100,7 +118,9 @@ class AiVectorRepository:
         start_id = self._index.ntotal
         self._index.add(vecs)
         for i, path in enumerate(paths):
-            self._id_map[str(start_id + i)] = path
+            row_id = start_id + i
+            self._id_map[str(row_id)] = path
+            self._path_map[path] = row_id
 
     def remove_folder(self, folder_path: str) -> None:
         """Remove every vector whose path is inside *folder_path*.
@@ -123,6 +143,7 @@ class AiVectorRepository:
         if not keep_ids:
             self._index = self._faiss.IndexFlatIP(_DIM)
             self._id_map = {}
+            self._path_map = {}
             return
 
         # Reconstruct surviving vectors by their sequential FAISS position.
@@ -139,6 +160,12 @@ class AiVectorRepository:
         }
         self._index = new_index
         self._id_map = new_map
+        self._rebuild_path_map()
+
+    def _rebuild_path_map(self) -> None:
+        self._path_map = {
+            path: int(row_id) for row_id, path in self._id_map.items()
+        }
 
     # ── Search ────────────────────────────────────────────────────────────
 
