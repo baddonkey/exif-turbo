@@ -94,6 +94,11 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
     assert "showFreeTagSuggestions = false" in drawer_source
     assert "visible: drawer.showFreeTagSuggestions && count > 0" in drawer_source
     assert "onPressed: drawer.addFreeTag(label)" in drawer_source
+    assert "required property int index" in drawer_source
+    assert "onClicked: selectResultTimer.restart()" in drawer_source
+    assert "selectResultTimer.stop()" in drawer_source
+    assert "interval: Qt.styleHints.mouseDoubleClickInterval" in drawer_source
+    assert "onTriggered: tgmSearchField.text = label" in drawer_source
     assert "appController.generateSelectedTagProposals()" in drawer_source
     assert "Generate Tagged Derivatives for Current &Results..." in source
     assert "Generate Tagged Derivatives for &Marked Images" in source
