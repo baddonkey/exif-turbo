@@ -23,6 +23,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+try:
+    from audit_release_artifact import audit_release_payload
+except ModuleNotFoundError:
+    from scripts.audit_release_artifact import audit_release_payload
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -244,7 +249,9 @@ def main() -> None:
 
     app = REPO_ROOT / "dist" / "exif-turbo.app"
     create_lproj_dirs(app)
+    audit_release_payload(app, verify_native_hashes=False)
     sign_bundle(app, args.sign_identity)
+    audit_release_payload(app, verify_native_hashes=False)
     dmg_out = build_dmg(app, version, arch_suffix)
 
     print()

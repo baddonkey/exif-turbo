@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import hashlib
 import shutil
 import sysconfig
 import tempfile
@@ -27,6 +28,41 @@ _QT_LICENSES = {
         "permanent authorization for you to choose that version",
     ),
     "Qt-GPL-exception-1.0.txt": ("The Qt Company GPL Exception 1.0", 800, "Exception 2:"),
+}
+_LIBVIPS_FILES = {
+    "LIBVIPS-LGPL-2.1.txt": (
+        "https://raw.githubusercontent.com/libvips/libvips/v{version}/LICENSE",
+        "GNU LESSER GENERAL PUBLIC LICENSE",
+        25_000,
+        "END OF TERMS AND CONDITIONS",
+    ),
+    "LGPL-3.0-only.txt": (
+        "https://www.gnu.org/licenses/lgpl-3.0.txt",
+        "GNU LESSER GENERAL PUBLIC LICENSE",
+        7_000,
+        "permanent authorization for you to choose that version",
+    ),
+    "PACKAGING-APACHE-2.0.txt": (
+        "https://raw.githubusercontent.com/kleisauke/libvips-packaging/"
+        "v{version}/LICENSE",
+        "Apache License",
+        11_000,
+        "END OF TERMS AND CONDITIONS",
+    ),
+    "THIRD-PARTY-NOTICES.md": (
+        "https://raw.githubusercontent.com/kleisauke/libvips-packaging/"
+        "v{version}/THIRD-PARTY-NOTICES.md",
+        "# Third-party notices",
+        4_000,
+        "libvips       | LGPLv3",
+    ),
+    "VERSIONS.properties": (
+        "https://raw.githubusercontent.com/kleisauke/libvips-packaging/"
+        "v{version}/versions.properties",
+        "VERSION_AOM=",
+        500,
+        "VERSION_VIPS={version}",
+    ),
 }
 
 
@@ -158,6 +194,92 @@ def _qt_license_files(version: str) -> tuple[Path, ...]:
     return tuple(cache_dir / filename for filename in _QT_LICENSES)
 
 
+def _libvips_license_files(version: str) -> tuple[Path, ...]:
+    cache_dir = REPO_ROOT / "build" / "license-cache" / "libvips" / version
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    for filename, (url_template, heading, minimum_size, required_template) in (
+        _LIBVIPS_FILES.items()
+    ):
+        target = cache_dir / filename
+        required_text = required_template.format(version=version)
+        if target.is_file():
+            cached = target.read_text(encoding="utf-8", errors="replace")
+            if (
+                len(cached.encode("utf-8")) >= minimum_size
+                and heading in cached
+                and required_text in cached
+            ):
+                continue
+        url = url_template.format(version=version)
+        try:
+            with urllib.request.urlopen(url, timeout=60) as response:  # noqa: S310
+                contents = response.read()
+        except OSError as exc:
+            raise LicenseStagingError(
+                f"could not download libvips {version} compliance file: {filename}"
+            ) from exc
+        text = contents.decode("utf-8")
+        if (
+            len(contents) < minimum_size
+            or heading not in text
+            or required_text not in text
+        ):
+            raise LicenseStagingError(
+                f"downloaded libvips compliance file is invalid: {filename}"
+            )
+        target.write_text(text, encoding="utf-8")
+    return tuple(cache_dir / filename for filename in _LIBVIPS_FILES)
+
+
+def _write_libvips_source_notice(target: Path, version: str) -> None:
+    target.write_text(
+        f"""libvips {version} source and replacement information
+================================================
+
+This release includes shared libraries supplied by pyvips-binary {version}.
+The exact build scripts, dependency versions, and corresponding source links are:
+
+https://github.com/kleisauke/libvips-packaging/tree/v{version}
+https://github.com/libvips/libvips/tree/v{version}
+
+The bundled libraries are separate shared-library files. You may replace a
+library with a modified, interface-compatible build by replacing the matching
+file in the application's internal library directory. Keep the original
+filename because the Python extension loads that name. Back up the application
+first. On macOS, replacing a dylib invalidates the app signature; ad-hoc re-sign
+the modified app with: codesign --force --deep --sign - exif-turbo.app
+
+NATIVE-FILES.sha256 identifies the native libvips files as supplied by the
+pyvips-binary wheel. Packaging tools may rewrite ELF or Mach-O loader metadata,
+so packaged Linux and macOS file hashes can legitimately differ.
+
+No warranty or support is provided for modified libraries or modified bundles.
+See LIBVIPS-LGPL-2.1.txt and THIRD-PARTY-NOTICES.md in this directory.
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_libvips_hash_manifest(target: Path, package: Distribution) -> None:
+    entries: list[str] = []
+    for relative in package.files or ():
+        source = Path(package.locate_file(relative))
+        name = source.name.casefold()
+        if not (
+            name.startswith(("libvips", "vips-"))
+            and (name.endswith((".dll", ".dylib", ".so")) or ".so." in name)
+            and source.is_file()
+        ):
+            continue
+        digest = hashlib.sha256(source.read_bytes()).hexdigest()
+        entries.append(f"{digest}  {source.name}")
+    if not entries:
+        raise LicenseStagingError(
+            f"pyvips-binary {package.version} contains no libvips shared library"
+        )
+    target.write_text("\n".join(sorted(entries)) + "\n", encoding="ascii")
+
+
 def stage_runtime_licenses(
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     *,
@@ -226,6 +348,18 @@ def stage_runtime_licenses(
                 qt_dir.mkdir(parents=True)
                 for source in _qt_license_files(version):
                     shutil.copy2(source, qt_dir / source.name)
+
+            if canonicalize_name(name) == "pyvips-binary":
+                libvips_dir = staged / "libvips" / version
+                libvips_dir.mkdir(parents=True)
+                for source in _libvips_license_files(version):
+                    shutil.copy2(source, libvips_dir / source.name)
+                _write_libvips_source_notice(
+                    libvips_dir / "SOURCE-AND-REPLACEMENT.txt", version
+                )
+                _write_libvips_hash_manifest(
+                    libvips_dir / "NATIVE-FILES.sha256", package
+                )
 
         (staged / "PYTHON-RUNTIME-LICENSES.txt").write_text(
             "\n".join(manifest), encoding="utf-8"

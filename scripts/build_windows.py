@@ -31,6 +31,11 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+try:
+    from audit_release_artifact import audit_release_payload
+except ModuleNotFoundError:
+    from scripts.audit_release_artifact import audit_release_payload
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -187,6 +192,30 @@ def stage_exiftool() -> Path:
     return staged
 
 
+def audit_msi(msi: Path) -> None:
+    """Extract the completed MSI and audit the exact installed payload."""
+    with tempfile.TemporaryDirectory() as temporary:
+        extracted = Path(temporary) / "extracted"
+        extracted.mkdir()
+        result = subprocess.run(
+            [
+                "msiexec.exe",
+                "/a",
+                str(msi),
+                "/qn",
+                f"TARGETDIR={extracted}",
+            ],
+            cwd=REPO_ROOT,
+            check=False,
+        )
+        if result.returncode != 0:
+            fail(f"Could not extract MSI for compliance audit ({result.returncode})")
+        executables = list(extracted.rglob("exif-turbo.exe"))
+        if len(executables) != 1:
+            fail("Extracted MSI does not contain exactly one exif-turbo.exe")
+        audit_release_payload(executables[0].parent, expect_exiftool=True)
+
+
 def generate_icon() -> Path:
     icon_file = REPO_ROOT / "assets" / "icon.ico"
     logo_png = REPO_ROOT / "src" / "exif_turbo" / "assets" / "logo.png"
@@ -226,6 +255,7 @@ def main() -> None:
     msi_out = REPO_ROOT / "dist" / f"exif-turbo-{version}-windows.msi"
     icon_file = generate_icon()
     exiftool_dir = stage_exiftool()
+    audit_release_payload(app_dir)
 
     run(
         [
@@ -248,6 +278,7 @@ def main() -> None:
             str(msi_out),
         ]
     )
+    audit_msi(msi_out)
 
     print()
     print("Done! Artifacts:")

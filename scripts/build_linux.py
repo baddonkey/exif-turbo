@@ -30,6 +30,11 @@ import tempfile
 import textwrap
 from pathlib import Path
 
+try:
+    from audit_release_artifact import audit_release_payload
+except ModuleNotFoundError:
+    from scripts.audit_release_artifact import audit_release_payload
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -164,6 +169,7 @@ def build_deb(
     with tempfile.TemporaryDirectory() as tmp:
         staging = Path(tmp) / "staging"
         has_icon = create_package_staging(bundle_dir, version, staging)
+        audit_release_payload(staging, verify_native_hashes=False)
 
         installed_kb = (
             sum(f.stat().st_size for f in staging.rglob("*") if f.is_file()) // 1024
@@ -233,6 +239,7 @@ def build_rpm(bundle_dir: Path, version: str) -> Path:
 
         staging = tmp_path / "staging"
         has_icon = create_package_staging(bundle_dir, version, staging)
+        audit_release_payload(staging, verify_native_hashes=False)
 
         icon_files_line = (
             "/usr/share/icons/hicolor/256x256/apps/exif-turbo.png" if has_icon else ""

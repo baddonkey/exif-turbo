@@ -5,7 +5,10 @@ licenses and upstream URLs.
 
 Release bundles include the exact license files collected from the active build
 environment in the `licenses/` folder, together with the matching CPython and
-Qt open-source license texts.
+Qt open-source license texts. The `licenses/libvips/<version>/` directory also
+contains the exact libvips LGPL text, the native bundle's third-party notices,
+dependency version manifest, build-script license, and corresponding source and
+replacement instructions.
 
 ---
 
@@ -26,6 +29,14 @@ These packages are required at runtime by the application.
 | [pyvips-binary](https://pypi.org/project/pyvips-binary/) | Pre-built libvips shared library — bundled libvips binary wheels that provide the native library for `pyvips` on Windows and Linux without a separate system install | LGPL-3.0-or-later | https://github.com/kleisauke/pyvips-binary |
 | [faiss-cpu](https://pypi.org/project/faiss-cpu/) | AI vector search index — stores and queries CLIP embeddings for AI-based image search using an inner-product FAISS index | MIT | https://github.com/facebookresearch/faiss |
 | [open-clip-torch](https://pypi.org/project/open-clip-torch/) | AI search and AI indexing — loads the CLIP model/tokenizer used to embed images and text; downloads its runtime cache into the per-database user folder under `~/.exif-turbo/data/<db-stem>/open_clip/` | MIT | https://github.com/mlfoundations/open_clip |
+
+The `pyvips-binary` wheel contains dynamically loaded, separate shared-library
+files built by [libvips-packaging](https://github.com/kleisauke/libvips-packaging).
+Release recipients can replace those files with interface-compatible modified
+builds. Exact versioned source and build links are shipped in
+`licenses/libvips/<version>/SOURCE-AND-REPLACEMENT.txt`. On macOS, replacing a
+signed `.dylib` invalidates the app signature; the modified app must be signed
+again locally, for example with `codesign --force --deep --sign - exif-turbo.app`.
 
 ---
 

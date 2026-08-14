@@ -19,6 +19,7 @@ class FakeDistribution:
         *,
         requires: tuple[str, ...] = (),
         license_files: dict[str, str] | None = None,
+        native_files: dict[str, str] | None = None,
     ) -> None:
         self._root = root
         self.metadata = Message()
@@ -29,6 +30,12 @@ class FakeDistribution:
         self.files: list[PackagePath] = []
         for filename, contents in (license_files or {}).items():
             relative = PackagePath(f"{name}-{version}.dist-info/licenses/{filename}")
+            target = root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(contents, encoding="utf-8")
+            self.files.append(relative)
+        for filename, contents in (native_files or {}).items():
+            relative = PackagePath(filename)
             target = root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(contents, encoding="utf-8")
@@ -165,4 +172,56 @@ def test_stage_runtime_licenses_package_without_license_raises_error(
     # Assert
     assert (output_dir / "STAGING-COMPLETE").read_text(encoding="ascii") == (
         "previous\n"
+    )
+
+
+def test_stage_runtime_licenses_pyvips_binary_adds_native_compliance_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    _write_project_notices(project_root)
+    package = FakeDistribution(
+        tmp_path,
+        "pyvips-binary",
+        "8.18.4",
+        license_files={"LICENSE": "wrapper terms"},
+        native_files={"pyvips_binary.libs/libvips-42.dll": "native library"},
+    )
+    python_license = tmp_path / "PYTHON-LICENSE.txt"
+    python_license.write_text("Python terms", encoding="utf-8")
+    native_license = tmp_path / "LIBVIPS-LGPL-2.1.txt"
+    native_license.write_text("LGPL terms", encoding="utf-8")
+    monkeypatch.setattr(stage_runtime_licenses, "REPO_ROOT", project_root)
+    monkeypatch.setattr(
+        stage_runtime_licenses, "_python_license_file", lambda: python_license
+    )
+    monkeypatch.setattr(
+        stage_runtime_licenses,
+        "_libvips_license_files",
+        lambda _version: (native_license,),
+    )
+    monkeypatch.setattr(
+        stage_runtime_licenses,
+        "distribution",
+        lambda _name: _as_distribution(package),
+    )
+    output_dir = tmp_path / "staged"
+
+    # Act
+    stage_runtime_licenses.stage_runtime_licenses(
+        output_dir, requirements=("pyvips-binary",)
+    )
+
+    # Assert
+    libvips_dir = output_dir / "libvips" / "8.18.4"
+    assert (libvips_dir / "LIBVIPS-LGPL-2.1.txt").read_text(
+        encoding="utf-8"
+    ) == "LGPL terms"
+    assert "libvips-packaging/tree/v8.18.4" in (
+        libvips_dir / "SOURCE-AND-REPLACEMENT.txt"
+    ).read_text(encoding="utf-8")
+    assert "libvips-42.dll" in (libvips_dir / "NATIVE-FILES.sha256").read_text(
+        encoding="ascii"
     )
