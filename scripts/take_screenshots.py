@@ -28,6 +28,8 @@ Output files:
     07_folder_filter.png     -- folder filter popup (Schlösser, Sky, Wildlife)
     08_gps_location_bar.png  -- GPS location bar (image with GPS coordinates selected)
     09_ai_search_mode.png    -- Search tab in AI mode (EXIF/AI toggle + precision picker)
+    10_tagging_drawer.png    -- Current-image tagging drawer and derivative preview
+    11_tagging_settings.png  -- Per-database Tagging and TGM settings
 """
 
 from __future__ import annotations
@@ -59,7 +61,7 @@ THUMB_CACHE = SCREENSHOTS_DIR / "thumbs"
 
 # -- Qt must be imported after sys.path is updated ----------------------------
 from PySide6.QtCore import QTimer, QUrl  # noqa: E402
-from PySide6.QtGui import QGuiApplication, QIcon, QImageReader  # noqa: E402
+from PySide6.QtGui import QFont, QFontDatabase, QGuiApplication, QIcon, QImageReader  # noqa: E402
 from PySide6.QtQml import QQmlApplicationEngine  # noqa: E402
 from PySide6.QtQuickControls2 import QQuickStyle  # noqa: E402
 
@@ -89,6 +91,8 @@ _STEPS = [
     "06_indexed_folders",
     "07_folder_filter",
     "08_gps_location_bar",
+    "10_tagging_drawer",
+    "11_tagging_settings",
 ]
 
 
@@ -290,6 +294,9 @@ def _run_gui() -> None:
     app.setApplicationName("Exif-Turbo")
 
     if os.name == "nt":
+        ui_font = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "segoeui.ttf"
+        if ui_font.exists() and QFontDatabase.addApplicationFont(str(ui_font)) >= 0:
+            app.setFont(QFont("Segoe UI", 10))
         try:
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
                 "exif-turbo.screenshots"
@@ -311,7 +318,7 @@ def _run_gui() -> None:
     search_model = SearchListModel(cache_dir=THUMB_CACHE)
     exif_model = ExifListModel()
     folder_model = FolderListModel()
-    settings = SettingsModel(DB_PATH.parent / "settings.json")
+    settings = SettingsModel(THUMB_CACHE / "settings.json")
     thumb_provider = ThumbnailImageProvider()
     ctrl = AppController(
         DB_PATH,
@@ -348,7 +355,9 @@ def _run_gui() -> None:
         sys.exit(1)
 
     root = engine.rootObjects()[0]
-    root.showMaximized()
+    root.showNormal()
+    root.setProperty("width", 1200)
+    root.setProperty("height", 800)
 
     def switch_tab(index: int) -> None:
         """Switch the main tab bar by objectName."""
@@ -473,6 +482,45 @@ def _run_gui() -> None:
 
     def step_7_gps_grab() -> None:
         _grab(root, "08_gps_location_bar")
+        QTimer.singleShot(500, step_8_tagging_setup)
+
+    # -- Step 8: current-image tagging drawer --------------------------------
+    def step_8_tagging_setup() -> None:
+        from PySide6.QtCore import QMetaObject, QObject, Qt
+
+        ctrl.setTaggingEnabled(True)
+        ctrl._free_tags_model.set_rows(("Alpine landscape", "Travel"))
+        ctrl._derivative_tags_model.set_rows(
+            (*ctrl._embedded_tags, "Alpine landscape", "Travel")
+        )
+        drawer = root.findChild(QObject, "taggingDrawer")
+        if drawer is None:
+            print("  WARNING: taggingDrawer not found -- capture may be incomplete")
+        else:
+            QMetaObject.invokeMethod(
+                drawer, "openAndFocus", Qt.ConnectionType.DirectConnection
+            )
+        print("  Tagging drawer open -- waiting for view to settle ...")
+        QTimer.singleShot(1000, step_8_tagging_grab)
+
+    def step_8_tagging_grab() -> None:
+        _grab(root, "10_tagging_drawer")
+        QTimer.singleShot(500, step_9_tagging_settings_setup)
+
+    # -- Step 9: Tagging and TGM settings ------------------------------------
+    def step_9_tagging_settings_setup() -> None:
+        from PySide6.QtCore import QMetaObject, Qt
+
+        QMetaObject.invokeMethod(
+            root,
+            "openTaggingSettingsForAutomation",
+            Qt.ConnectionType.DirectConnection,
+        )
+        print("  Tagging settings open -- waiting for view to settle ...")
+        QTimer.singleShot(1000, step_9_tagging_settings_grab)
+
+    def step_9_tagging_settings_grab() -> None:
+        _grab(root, "11_tagging_settings")
         print(f"  Done -- screenshots in {SCREENSHOTS_DIR.relative_to(_REPO_ROOT)}/")
         QTimer.singleShot(300, app.quit)
 

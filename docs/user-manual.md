@@ -844,6 +844,8 @@ accepted tags from FTS after the next synchronization.
 From the **Search** or **Browse** tab, click the tag button at the upper right
 or press **Ctrl+T**. The non-modal drawer contains these controls:
 
+![Current-image tagging drawer](screenshots/10_tagging_drawer.png)
+
 - **Existing image tags** lists keywords already embedded in the original
   image's XMP or IPTC metadata. This section is informational and read-only;
   EXIF Turbo reads the indexed metadata snapshot and never changes the source
@@ -872,15 +874,12 @@ Long-running TGM and proposal operations show progress and a **Cancel** button.
 Derivative generation starts from the **Action** menu; the drawer footer is
 only a read-only preview.
 
-### Marks and bulk behavior
+### Marks and derivative scope
 
-The separate marked-image tool reuses the persistent marks described in
-[section 9](#9-marking-images--bulk-actions); it does not maintain a second
-selection. Press **Space** to toggle the focused image's mark. Bulk add and
-remove process the enabled-folder marked set one image at a time. Existing tags
-are skipped, external sidecar edits are reported as conflicts, and malformed or
-read-only sidecars fail without replacing them. Auto-accept requires explicit
-confirmation.
+The tagging drawer always edits only the focused image; version 1 has no bulk
+tag-editing view. Marks remain useful as a derivative scope. Press **Space** to
+toggle the focused image's mark, then use **Action → Generate Tagged
+Derivatives for Marked Images…** to process that persistent marked set.
 
 ### CLIP proposal prerequisites
 
@@ -952,6 +951,8 @@ then reinstall TGM before editing tags or generating proposals.
 Click the **Settings** tab to configure application behaviour.
 
 ### Tagging and TGM
+
+![Tagging and TGM settings](screenshots/11_tagging_settings.png)
 
 **Enable tagging for this database** controls the drawer UI. The section also
 shows whether TGM is installed, subject and genre/form counts, source date,

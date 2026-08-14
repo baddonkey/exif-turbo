@@ -6,7 +6,7 @@ This document is the product and technical contract for non-destructive image
 tagging in EXIF Turbo. Sections 1-16 describe the implemented version 1
 contract; sections 17-18 record remaining release questions and decisions.
 
-### Implementation status (2026-08-09)
+### Implementation status (2026-08-14)
 
 The end-to-end feature is implemented:
 
@@ -23,22 +23,24 @@ The end-to-end feature is implemented:
   labels, IDs, categories, vocabulary identity, and active aliases.
 - The Search/Browse tag button and `Ctrl+T` open the non-modal current-image
   drawer. It provides reusable custom tags, canonical/alias TGM search,
-  selected-image add/remove, and proposal generation and review.
+  selected-image add/remove, proposal generation and review, a read-only view
+  of embedded source keywords, and a fixed final-derivative keyword preview.
 - Proposal generation requires AI enabled, an explicit image AI scan, and an
   independently built TGM term-vector index. Defaults are 0.24 for proposals
   and 0.32 for auto-accept; auto-accept is disabled by default and its threshold
   is kept at least 0.01 above the proposal threshold.
 - Derivatives preserve source format and relative trees, require an output root
   outside indexed sources, skip untagged/existing destinations, write and
-  verify XMP Subject plus IPTC Keywords on temporary copies, and never copy
-  sidecars or overwrite originals.
+  verify the deduplicated union of live embedded keywords and accepted labels
+  in XMP Subject plus IPTC Keywords on temporary copies, and never copy sidecars
+  or overwrite originals.
 
 Known version 1 limitations include no sidecar encryption/relocation/cloud
 sync, no generic or additional vocabulary import, no hierarchical tag browser,
 no OCR provider, no derivative format conversion/custom mapping/overwrite,
-and no automatic image-vector creation during proposal generation. Bulk
-add/remove currently executes directly after the drawer action; only bulk
-auto-accept and derivative generation have confirmation dialogs.
+and no automatic image-vector creation during proposal generation. Version 1
+does not expose bulk tag add/remove or bulk proposal review in the GUI; marks
+are available as a derivative-export scope.
 
 ## 1. Summary
 
@@ -53,17 +55,18 @@ with a separate index of TGM term vectors to propose tags. Users may review
 proposals or explicitly enable automatic acceptance above a configured
 threshold.
 
-Marked images form the working set for bulk tagging and derivative generation.
-Derivative generation copies each original into an output tree and writes the
-accepted canonical TGM labels to the copy's XMP and IPTC metadata. Original
-images are never metadata-write targets.
+Marked images form one working set for derivative generation; the complete
+current result set is the other. Derivative generation copies each eligible
+original into an output tree and writes merged embedded and accepted labels to
+the copy's XMP and IPTC metadata. Original images are never metadata-write
+targets.
 
 ## 2. Goals
 
 - Keep original image and media files byte-for-byte unchanged during tagging.
 - Store accepted tags in portable sidecars beside their source images.
 - Make accepted sidecar tags available to the existing SQLite FTS5 search.
-- Support fast keyboard-oriented tagging of one image or a marked set.
+- Support fast keyboard-oriented tagging of the focused image.
 - Propose canonical TGM terms using existing CLIP image vectors.
 - Support review-first proposals and optional threshold-based auto-acceptance.
 - Generate tagged derivatives without modifying originals.
@@ -451,19 +454,18 @@ changed from the drawer. A fixed footer displays the final derivative keyword
 preview: existing embedded keywords merged with accepted controlled and custom
 tags, case-insensitively deduplicated and deterministically sorted.
 
-### 10.2 Bulk tagging
+### 10.2 Marks and derivative scope
 
-The existing marked-image state is reused as the bulk working set. The
-dedicated **Marked Images** tab shows the marked count and aggregate tag state:
+The tagging drawer deliberately operates only on the focused image. Version 1
+does not expose bulk tag add/remove, aggregate tag state, or marked-image
+proposal review in QML. Existing internal marked-tag models and worker services
+are reserved for a future bulk-tagging interface.
 
-- `all`: every marked image has the concept.
-- `some`: only part of the marked set has the concept.
-- `none`: no marked image has the concept.
-
-Users can add or remove a concept across marks, apply a type-ahead result to all
-marks, or generate proposals for marks. Bulk auto-acceptance requires
-confirmation. Operations run in cancellable QThreads with per-image progress
-and a final summary of succeeded, skipped, conflicted, and failed items.
+Marks remain persistent across Search and Browse and are exposed to tagging as
+the **Generate Tagged Derivatives for Marked Images** scope. The other export
+scope processes the complete current result set, including unloaded pages.
+Both scopes run in a cancellable worker and summarize created, skipped,
+canceled, and failed items.
 
 Space remains the mark toggle. `Ctrl+T` opens/closes the current-image drawer.
 Custom tags are available whenever tagging is enabled, without requiring TGM
@@ -584,7 +586,7 @@ tags can be edited or proposals rebuilt.
 - TGM, prompt, normalization, and CLIP fingerprint invalidation.
 - Missing image vectors produce an actionable state.
 
-### 14.5 Bulk operations and derivatives
+### 14.5 Internal bulk services and derivatives
 
 - Mixed aggregate tag states, partial completion, cancellation, and conflicts.
 - Preserved folder trees, multiple source roots, and destination collisions.
@@ -602,7 +604,7 @@ protection. AI tests must never trigger a real CLIP download.
 2. SQLite tag cache, FTS migration, synchronization, and tests.
 3. TGM importer, normalized repository, managed update flow, and tests.
 4. TGM term vectors, image-vector lookup, proposal worker, and tests.
-5. Current-image tagging drawer and dedicated marked-images tool.
+5. Current-image tagging drawer; retain marked-image tagging services for a future UI.
 6. Derivative export service, ExifTool writer, marked-images integration, and tests.
 7. Documentation, translations, manual UX verification, and rollout.
 
@@ -619,8 +621,8 @@ Version 1 is complete when:
 4. CLIP can propose ranked canonical TGM tags from existing image vectors.
 5. Review-first and explicitly enabled threshold auto-acceptance both retain
    complete provenance.
-6. A user can apply and remove tags across marked images with progress,
-   cancellation, and conflict reporting.
+6. A user can review embedded source keywords and preview the exact merged,
+   deduplicated keyword set that will be written to a derivative.
 7. A user can generate derivatives that contain canonical TGM labels in XMP
    Subject and IPTC Keywords while original hashes and mtimes remain unchanged.
 8. Existing databases migrate without losing images, metadata, marks, or search
@@ -655,3 +657,5 @@ Version 1 is complete when:
 | 2026-08-09 | Ship review-first defaults of 0.24 proposal and 0.32 auto-accept, with auto-accept disabled and a minimum 0.01 threshold gap. |
 | 2026-08-09 | Use `Ctrl+T` for the Search/Browse tagging drawer and retain `Space` for marks. |
 | 2026-08-09 | Reset per-database TGM term-vector/cache state but preserve adjacent source sidecars and separately managed image AI files. |
+| 2026-08-14 | Keep version 1 tagging focused-image only; retain bulk-tagging services without exposing a marked-image tagging UI. |
+| 2026-08-14 | Merge live embedded keywords with accepted labels and deduplicate them before verified derivative writes. |
