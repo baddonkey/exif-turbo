@@ -17,6 +17,7 @@ Drawer {
     required property var appController
     required property var appSettings
     property string selectedFilename: ""
+    property bool showFreeTagSuggestions: false
     readonly property bool hasSelection: appController && appController.currentResultRow >= 0
     readonly property bool locallyBusy: appController && (
         appController.isTgmUpdating
@@ -35,9 +36,8 @@ Drawer {
 
     onOpened: {
         proposalGenerationTimer.restart()
-        if (appController && appController.freeTaggingAvailable)
-            appController.searchFreeTags("")
     }
+    onClosed: showFreeTagSuggestions = false
 
     function addFreeTag(label) {
         var normalized = label.trim()
@@ -45,7 +45,7 @@ Drawer {
             return
         appController.addSelectedFreeTag(normalized)
         freeTagField.clear()
-        appController.searchFreeTags("")
+        showFreeTagSuggestions = false
     }
 
     Connections {
@@ -53,7 +53,8 @@ Drawer {
         function onCurrentResultRowChanged() {
             if (drawer.opened) {
                 proposalGenerationTimer.restart()
-                appController.searchFreeTags(freeTagField.text)
+                if (drawer.showFreeTagSuggestions)
+                    appController.searchFreeTags(freeTagField.text)
             }
         }
     }
@@ -193,7 +194,15 @@ Drawer {
                             Layout.fillWidth: true
                             placeholderText: qsTr("Add or find a custom tag")
                             enabled: drawer.hasSelection
-                            onTextChanged: freeTagSearchTimer.restart()
+                            onTextEdited: {
+                                drawer.showFreeTagSuggestions = true
+                                freeTagSearchTimer.restart()
+                            }
+                            onActiveFocusChanged: {
+                                drawer.showFreeTagSuggestions = activeFocus
+                                if (activeFocus)
+                                    appController.searchFreeTags(text)
+                            }
                             Keys.onReturnPressed: drawer.addFreeTag(text)
                         }
                         Button {
@@ -212,7 +221,7 @@ Drawer {
                     }
 
                     Label {
-                        visible: freeTagSuggestions.count > 0
+                        visible: drawer.showFreeTagSuggestions && freeTagSuggestions.count > 0
                         text: qsTr("Remembered tags")
                         font.pixelSize: 10
                         opacity: 0.6
@@ -222,7 +231,7 @@ Drawer {
                         objectName: "freeTagSuggestions"
                         Layout.fillWidth: true
                         Layout.preferredHeight: Math.min(contentHeight, 120)
-                        visible: count > 0
+                        visible: drawer.showFreeTagSuggestions && count > 0
                         clip: true
                         model: appController ? appController.freeTagSuggestionsModel : null
                         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
@@ -231,7 +240,7 @@ Drawer {
                             width: freeTagSuggestions.width
                             height: 34
                             text: label
-                            onClicked: drawer.addFreeTag(label)
+                            onPressed: drawer.addFreeTag(label)
                         }
                     }
 

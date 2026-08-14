@@ -75,7 +75,13 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
     assert "function onCurrentResultRowChanged()" in drawer_source
     assert "onOpened: {" in drawer_source
     assert "proposalGenerationTimer.restart()" in drawer_source
-    assert 'appController.searchFreeTags("")' in drawer_source
+    assert "property bool showFreeTagSuggestions: false" in drawer_source
+    assert "onTextEdited: {" in drawer_source
+    assert "drawer.showFreeTagSuggestions = true" in drawer_source
+    assert "drawer.showFreeTagSuggestions = activeFocus" in drawer_source
+    assert "showFreeTagSuggestions = false" in drawer_source
+    assert "visible: drawer.showFreeTagSuggestions && count > 0" in drawer_source
+    assert "onPressed: drawer.addFreeTag(label)" in drawer_source
     assert "appController.generateSelectedTagProposals()" in drawer_source
     assert 'objectName: "tagProposalsScrollBar"' in drawer_source
     assert "active: proposalsList.contentHeight > proposalsList.height" in drawer_source
