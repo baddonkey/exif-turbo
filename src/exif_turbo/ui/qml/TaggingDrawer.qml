@@ -398,6 +398,7 @@ Drawer {
                             ScrollBar.vertical: ScrollBar {}
 
                             delegate: ItemDelegate {
+                                required property int index
                                 required property string conceptId
                                 required property string label
                                 required property var categories
@@ -406,8 +407,17 @@ Drawer {
                                 width: tgmResults.width
                                 height: 48
                                 highlighted: ListView.isCurrentItem
-                                onClicked: {
-                                    tgmResults.currentIndex = index
+                                onPressed: tgmResults.currentIndex = index
+                                onClicked: selectResultTimer.restart()
+                                onDoubleClicked: {
+                                    selectResultTimer.stop()
+                                    appController.addSelectedTgmConcept(conceptReference)
+                                }
+                                Timer {
+                                    id: selectResultTimer
+                                    interval: Qt.styleHints.mouseDoubleClickInterval
+                                    repeat: false
+                                    onTriggered: tgmSearchField.text = label
                                 }
                                 contentItem: ColumnLayout {
                                     spacing: 1

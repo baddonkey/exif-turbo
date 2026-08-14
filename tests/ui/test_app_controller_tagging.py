@@ -6,7 +6,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QObject, QUrl, Signal
+from PySide6.QtCore import QObject, QPoint, QPointF, QMetaObject, Qt, QUrl, Signal
+from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtQuick import QQuickItem, QQuickWindow
+from PySide6.QtTest import QTest
 from pytestqt.qtbot import QtBot
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
@@ -24,12 +27,18 @@ from exif_turbo.tagging.derivative_export_service import (
     DerivativeExportResult,
     DerivativeExportStatus,
 )
+from exif_turbo.ui.models.checked_filter_proxy_model import CheckedFilterProxyModel
 from exif_turbo.ui.models.exif_list_model import ExifListModel
 from exif_turbo.ui.models.folder_list_model import FolderListModel
 from exif_turbo.ui.models.search_list_model import SearchListModel
 from exif_turbo.ui.models.settings_model import SettingsModel
+from exif_turbo.ui.providers.preview_image_provider import PreviewImageProvider
+from exif_turbo.ui.providers.raw_image_provider import RawImageProvider
 from exif_turbo.ui.view_models import app_controller as app_controller_module
 from exif_turbo.ui.view_models.app_controller import AppController
+
+
+_QML_DIR = Path(__file__).resolve().parents[2] / "src" / "exif_turbo" / "ui" / "qml"
 
 
 def _snapshot() -> TgmSnapshot:
@@ -252,6 +261,137 @@ def test_app_controller_tgm_search_resolves_alias(
     model = controller.tgmSearchModel
     assert model.rowCount() == 1
     assert model.data(model.index(0), model.LabelRole) == "Forests"
+
+
+def test_tagging_drawer_clicking_tgm_result_populates_search_field(
+    qtbot: QtBot,
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, search_model, _db_path, _image_path = tagging_controller
+    settings_model = SettingsModel(search_model.cache_dir.parent / "qml-settings.json")
+    filter_proxy = CheckedFilterProxyModel()
+    filter_proxy.setSourceModel(search_model)
+    controller.set_filter_proxy(filter_proxy)
+
+    engine = QQmlApplicationEngine()
+    engine.addImageProvider("preview", PreviewImageProvider())
+    engine.addImageProvider("raw", RawImageProvider())
+    context = engine.rootContext()
+    context.setContextProperty("controller", controller)
+    context.setContextProperty("searchModel", search_model)
+    context.setContextProperty("filteredSearchModel", filter_proxy)
+    context.setContextProperty("exifModel", ExifListModel())
+    context.setContextProperty("folderListModel", FolderListModel())
+    context.setContextProperty("settingsModel", settings_model)
+    context.setContextProperty("thirdPartyLicensesHtml", "")
+    context.setContextProperty("userManualUrl", "")
+    engine.load(QUrl.fromLocalFile(str(_QML_DIR / "Main.qml")))
+    qtbot.waitUntil(lambda: bool(engine.rootObjects()), timeout=5_000)
+    root: QQuickWindow = engine.rootObjects()[0]  # type: ignore[assignment]
+    root.setWidth(1200)
+    root.setHeight(800)
+    root.show()
+    qtbot.waitExposed(root, timeout=3_000)
+
+    drawer = root.findChild(QObject, "taggingDrawer")
+    search_field = root.findChild(QQuickItem, "tgmSearchField")
+    results = root.findChild(QQuickItem, "tgmSearchResults")
+    assert drawer is not None
+    assert search_field is not None
+    assert results is not None
+    QMetaObject.invokeMethod(drawer, "openAndFocus", Qt.ConnectionType.DirectConnection)
+    qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=3_000)
+    controller.searchTgm("wood")
+    qtbot.waitUntil(
+        lambda: int(results.property("count")) == 1
+        and bool(results.property("visible"))
+        and float(results.property("width")) > 0
+        and float(results.property("height")) > 0,
+        timeout=3_000,
+    )
+    click_position = results.mapToScene(QPointF(results.width() / 2.0, 24.0))
+
+    # Act
+    QTest.mouseClick(
+        root,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+        QPoint(int(click_position.x()), int(click_position.y())),
+    )
+
+    # Assert
+    qtbot.waitUntil(
+        lambda: search_field.property("text") == "Forests",
+        timeout=3_000,
+    )
+    engine.deleteLater()
+    qtbot.wait(100)
+
+
+def test_tagging_drawer_double_clicking_tgm_result_adds_concept(
+    qtbot: QtBot,
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, search_model, _db_path, _image_path = tagging_controller
+    settings_model = SettingsModel(search_model.cache_dir.parent / "qml-settings.json")
+    filter_proxy = CheckedFilterProxyModel()
+    filter_proxy.setSourceModel(search_model)
+    controller.set_filter_proxy(filter_proxy)
+
+    engine = QQmlApplicationEngine()
+    engine.addImageProvider("preview", PreviewImageProvider())
+    engine.addImageProvider("raw", RawImageProvider())
+    context = engine.rootContext()
+    context.setContextProperty("controller", controller)
+    context.setContextProperty("searchModel", search_model)
+    context.setContextProperty("filteredSearchModel", filter_proxy)
+    context.setContextProperty("exifModel", ExifListModel())
+    context.setContextProperty("folderListModel", FolderListModel())
+    context.setContextProperty("settingsModel", settings_model)
+    context.setContextProperty("thirdPartyLicensesHtml", "")
+    context.setContextProperty("userManualUrl", "")
+    engine.load(QUrl.fromLocalFile(str(_QML_DIR / "Main.qml")))
+    qtbot.waitUntil(lambda: bool(engine.rootObjects()), timeout=5_000)
+    root: QQuickWindow = engine.rootObjects()[0]  # type: ignore[assignment]
+    root.setWidth(1200)
+    root.setHeight(800)
+    root.show()
+    qtbot.waitExposed(root, timeout=3_000)
+
+    drawer = root.findChild(QObject, "taggingDrawer")
+    search_field = root.findChild(QQuickItem, "tgmSearchField")
+    results = root.findChild(QQuickItem, "tgmSearchResults")
+    assert drawer is not None
+    assert search_field is not None
+    assert results is not None
+    QMetaObject.invokeMethod(drawer, "openAndFocus", Qt.ConnectionType.DirectConnection)
+    qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=3_000)
+    search_field.setProperty("text", "wood")
+    controller.searchTgm("wood")
+    qtbot.waitUntil(
+        lambda: int(results.property("count")) == 1
+        and bool(results.property("visible"))
+        and float(results.property("width")) > 0
+        and float(results.property("height")) > 0,
+        timeout=3_000,
+    )
+    click_position = results.mapToScene(QPointF(results.width() / 2.0, 24.0))
+
+    # Act
+    QTest.mouseDClick(
+        root,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+        QPoint(int(click_position.x()), int(click_position.y())),
+    )
+
+    # Assert
+    assert controller.acceptedTagsModel.rowCount() == 1
+    assert search_field.property("text") == "wood"
+    engine.deleteLater()
+    qtbot.wait(100)
 
 
 def test_app_controller_manual_add_and_remove_refreshes_accepted_model(
