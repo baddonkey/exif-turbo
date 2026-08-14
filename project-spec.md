@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-**exif-turbo** is a cross-platform desktop application and CLI tool for indexing, searching, and non-destructively tagging image metadata. It scans one or more folders, extracts metadata from every image using ExifTool, stores searchable derived state in an encrypted SQLite database, and exposes the corpus through SQLite FTS5 and optional CLIP retrieval. Accepted Library of Congress TGM terms live in adjacent plain-JSON sidecars so original images remain unchanged. A PySide6 QML UI provides real-time search, thumbnail preview, browsing, tagging, and marked-image bulk workflows.
+**exif-turbo** is a cross-platform desktop application and CLI tool for indexing, searching, and non-destructively tagging image metadata. It scans one or more folders, extracts metadata from every image using ExifTool, stores searchable derived state in an encrypted SQLite database, and exposes the corpus through SQLite FTS5 and optional CLIP retrieval. Accepted Library of Congress TGM terms live in adjacent plain-JSON sidecars so original images remain unchanged. A PySide6 QML UI provides real-time search, thumbnail preview, browsing, a focused-image tagging drawer, and a separate marked-image tool for bulk workflows.
 
 ---
 
@@ -191,7 +191,7 @@ JSON columns. Existing databases migrate `images_fts` transactionally to add
 | `IndexedFolder` | `id`, `path`, `display_name`, `status`, `image_count`, `error_message`, `enabled` |
 | `ImageSidecar` / `ImageTag` / `TagProvenance` | Schema-v1 authoritative accepted-tag document, original identity snapshot, canonical `loc-tgm:tgmNNNNNN` tags, manual/CLIP provenance, and forward-compatible unknown fields |
 | `TgmConcept` / `TgmSnapshot` | Canonical descriptors, aliases, subject and genre/form categories, relationships/notes, diagnostics, source URL/date/checksum, and normalized snapshot version |
-| `TagProposal` | Ranked pending/rejected canonical concept with score, category, provider model, and fingerprint |
+| `TagProposal` | Ranked ephemeral/rejected canonical concept with score, category, provider model, and fingerprint |
 
 `SearchResult.mtime` is populated from the DB-stored stamp so the UI can
 derive stable thumbnail cache names without a live `os.stat` call.
@@ -224,7 +224,7 @@ derive stable thumbnail cache names without a live `os.stat` call.
 | `workers/ai_search_worker.py` | `QThread` — semantic query worker used by Search-tab AI mode. Encodes query text with CLIP, searches FAISS with precision thresholds (**fine 0.22**, **normal 0.20**, **broad 0.18**), then hydrates ranked paths back to DB rows for display. |
 | `workers/tgm_update_worker.py` | Downloads official LOC XML over HTTPS with tagged-text fallback, validates a selectable-concept sanity minimum, atomically activates the normalized snapshot, and refreshes accepted-tag aliases/FTS. |
 | `workers/tgm_vector_build_worker.py` | Encodes canonical postable TGM concepts and aliases with the configured CLIP model into the separate term index; cancellation keeps the prior complete index active. |
-| `workers/tgm_proposal_worker.py` | Searches existing image vectors against current TGM term vectors, applies proposal/optional auto-accept thresholds, persists pending/rejected state, and reports missing image vectors as AI-scan-required without decoding originals. |
+| `workers/tgm_proposal_worker.py` | Searches existing image vectors against current TGM term vectors, applies proposal/optional auto-accept thresholds, returns ephemeral suggestions, persists rejection decisions, and reports missing image vectors as AI-scan-required without decoding originals. |
 | `workers/bulk_tag_worker.py` | Applies/removes one canonical concept across enabled-folder marks with per-image progress, cancellation, and succeeded/skipped/conflicted/failed summaries. |
 | `workers/derivative_export_worker.py` | Plans and exports marked tagged copies outside indexed roots, preserving relative trees/formats and delegating XMP/IPTC writes to the verified ExifTool adapter. |
 | `workers/thumb_worker.py` | `QThread` — generates thumbnail cache off the GUI thread; supports `pause()`/`resume()` via `threading.Event`. `build_thumb()` wraps `_open_image()` with `_call_with_timeout()` (`_DECODE_TIMEOUT_S = 300.0 s`); a `TimeoutError` calls `_mark_skip()` so the file is excluded from future runs. |
@@ -411,8 +411,9 @@ User chooses canonical term (or alias resolving to it)
 ```
 
 Regular and full image scans also run `SidecarSynchronizer` over every found
-image, independent of the image mtime/size decision. Pending and rejected
-proposals remain database-only and never enter `tags_text`.
+image, independent of the image mtime/size decision. Undecided proposals remain
+in memory only; rejected decisions remain database-only and never enter
+`tags_text`.
 
 ### TGM proposals
 
@@ -420,8 +421,9 @@ proposals remain database-only and never enter `tags_text`.
 Explicit TGM install/update → normalized snapshot (XML, text fallback)
 Explicit Build/Rebuild Vectors → separate tgm_terms.faiss + concept map
 Per-folder AI-Scan → separate image ai_index.faiss + path map
-Generate proposal → existing image vector searches current TGM term index
-  → threshold (default 0.24) → ranked pending proposals
+Open tagging drawer, change image, or manually generate
+  → existing image vector searches current TGM term index
+  → threshold (default 0.24) → ranked ephemeral proposals
   → manual accept/reject, or confirmed auto-accept (default threshold 0.32)
   → accepted concepts pass through the same sidecar mutation service
 ```

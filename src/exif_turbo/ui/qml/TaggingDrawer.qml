@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Layouts
-import QtQuick.Dialogs
 
 Drawer {
     id: drawer
@@ -19,23 +18,39 @@ Drawer {
     required property var appSettings
     property string selectedFilename: ""
     readonly property bool hasSelection: appController && appController.currentResultRow >= 0
-    readonly property int markedCount: appController ? appController.markedTagImageCount : 0
-    readonly property int taggedMarkedCount: appController ? appController.markedTaggedImageCount : 0
-    readonly property bool markedMode: taggingScope.currentIndex === 1
-    onMarkedCountChanged: {
-        if (markedCount === 0)
-            taggingScope.currentIndex = 0
-    }
     readonly property bool locallyBusy: appController && (
         appController.isTgmUpdating
-        || appController.isGeneratingTagProposals
-        || appController.isTaggingBulk
-        || appController.isExportingDerivatives)
+        || appController.isGeneratingTagProposals)
 
     function openAndFocus() {
         open()
         if (appController && appController.taggingAvailable)
             Qt.callLater(function() { tgmSearchField.forceActiveFocus() })
+    }
+
+    onOpened: proposalGenerationTimer.restart()
+
+    Connections {
+        target: appController
+        function onCurrentResultRowChanged() {
+            if (drawer.opened)
+                proposalGenerationTimer.restart()
+        }
+    }
+
+    Timer {
+        id: proposalGenerationTimer
+        interval: 100
+        repeat: false
+        onTriggered: {
+            if (!drawer.opened || !drawer.hasSelection || !appController.taggingProposalAvailable)
+                return
+            if (appController.isGeneratingTagProposals) {
+                restart()
+                return
+            }
+            appController.generateSelectedTagProposals()
+        }
     }
 
     function applyCurrentSearchResult() {
@@ -46,56 +61,7 @@ Drawer {
             item = tgmResults.itemAtIndex(0)
         if (!item)
             return
-        if (markedMode)
-            appController.applyConceptToMarked(item.conceptReference)
-        else
-            appController.addSelectedTgmConcept(item.conceptReference)
-    }
-
-    FolderDialog {
-        id: derivativeFolderDialog
-        title: qsTr("Choose derivative output folder")
-        onAccepted: {
-            derivativeConfirmDialog.outputUrl = selectedFolder.toString()
-            derivativeConfirmDialog.open()
-        }
-    }
-
-    Dialog {
-        id: derivativeConfirmDialog
-        property string outputUrl: ""
-        title: qsTr("Generate Tagged Derivatives")
-        modal: true
-        anchors.centerIn: Overlay.overlay
-        width: Math.min(440, drawer.width - 24)
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        onAccepted: drawer.appController.generateDerivativesForMarked(outputUrl)
-
-        Label {
-            width: parent.width
-            wrapMode: Text.WordWrap
-            text: qsTr("Images selected for export: %1. Marked images without accepted tags: %2. Source formats and relative folders are preserved. Originals remain unchanged.")
-                .arg(drawer.taggedMarkedCount)
-                .arg(drawer.markedCount - drawer.taggedMarkedCount)
-        }
-    }
-
-    Dialog {
-        id: autoAcceptConfirmDialog
-        title: qsTr("Auto-accept Tag Proposals")
-        modal: true
-        anchors.centerIn: Overlay.overlay
-        width: Math.min(420, drawer.width - 24)
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        onAccepted: drawer.appController.autoAcceptMarkedTagProposals()
-
-        Label {
-            width: parent.width
-            wrapMode: Text.WordWrap
-            text: qsTr("Generate and accept proposals scoring at least %1% for %2 marked image(s)?")
-                .arg(Math.round(drawer.appSettings.autoAcceptThreshold * 100))
-                .arg(drawer.markedCount)
-        }
+        appController.addSelectedTgmConcept(item.conceptReference)
     }
 
     background: Rectangle {
@@ -194,44 +160,6 @@ Drawer {
                     ColumnLayout {
                         Layout.fillWidth: true
                         Layout.margins: 14
-                        spacing: 6
-
-                        Label {
-                            text: qsTr("Tag")
-                            font.pixelSize: 13
-                            font.weight: Font.DemiBold
-                        }
-                        TabBar {
-                            id: taggingScope
-                            objectName: "taggingScope"
-                            Layout.fillWidth: true
-                            currentIndex: 0
-                            TabButton {
-                                objectName: "tagCurrentImageButton"
-                                text: qsTr("Current image")
-                            }
-                            TabButton {
-                                objectName: "tagMarkedImagesButton"
-                                text: qsTr("Marked images (%1)").arg(drawer.markedCount)
-                                enabled: drawer.markedCount > 0
-                            }
-                        }
-                        Label {
-                            Layout.fillWidth: true
-                            text: drawer.markedMode
-                                ? qsTr("Changes apply to every marked image.")
-                                : qsTr("Changes apply only to %1.").arg(drawer.selectedFilename || qsTr("the current image"))
-                            wrapMode: Text.WordWrap
-                            font.pixelSize: 11
-                            opacity: 0.65
-                        }
-                    }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Layout.margins: 14
                         spacing: 8
 
                         Label { text: qsTr("Add a TGM term"); font.pixelSize: 13; font.weight: Font.DemiBold }
@@ -244,7 +172,7 @@ Drawer {
                                 objectName: "tgmSearchField"
                                 Layout.fillWidth: true
                                 placeholderText: qsTr("Search terms and aliases")
-                                enabled: !appController.isTaggingBulk
+                                enabled: drawer.hasSelection
                                 onTextChanged: tgmSearchTimer.restart()
                                 Keys.onReturnPressed: drawer.applyCurrentSearchResult()
                                 Keys.onDownPressed: {
@@ -257,12 +185,9 @@ Drawer {
                             Button {
                                 objectName: "addTgmTermButton"
                                 text: qsTr("Add")
-                                enabled: (drawer.markedMode ? drawer.markedCount > 0 : drawer.hasSelection)
-                                    && tgmResults.count > 0 && !appController.isTaggingBulk
+                                enabled: drawer.hasSelection && tgmResults.count > 0
                                 onClicked: drawer.applyCurrentSearchResult()
-                                ToolTip.text: drawer.markedMode
-                                    ? qsTr("Add to all marked images")
-                                    : qsTr("Add to current image")
+                                ToolTip.text: qsTr("Add to current image")
                                 ToolTip.visible: hovered
                             }
                         }
@@ -318,7 +243,6 @@ Drawer {
                     Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor }
 
                     ColumnLayout {
-                        visible: !drawer.markedMode
                         Layout.fillWidth: true
                         Layout.margins: 14
                         spacing: 7
@@ -361,81 +285,11 @@ Drawer {
                                 ToolButton {
                                     text: "\u2212"
                                     implicitWidth: 30; implicitHeight: 30
-                                    enabled: !appController.isTaggingBulk
                                     onClicked: appController.removeSelectedTgmConcept(conceptId)
                                     ToolTip.text: qsTr("Remove from selected image")
                                     ToolTip.visible: hovered
                                 }
                             }
-                        }
-                    }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor }
-
-                    ColumnLayout {
-                        visible: drawer.markedMode
-                        Layout.fillWidth: true
-                        Layout.margins: 14
-                        spacing: 7
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Label {
-                                Layout.fillWidth: true
-                                text: qsTr("Tags on marked images")
-                                font.pixelSize: 13
-                                font.weight: Font.DemiBold
-                            }
-                            Label { text: qsTr("%1 marked").arg(drawer.markedCount); font.pixelSize: 11; opacity: 0.6 }
-                        }
-                        Label { visible: drawer.markedCount === 0; text: qsTr("Mark images to use bulk tagging."); opacity: 0.55; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-                        ListView {
-                            id: markedTagsList
-                            objectName: "markedTagsList"
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: Math.min(contentHeight, 150)
-                            visible: drawer.markedCount > 0
-                            interactive: contentHeight > height
-                            clip: true
-                            model: appController ? appController.markedTagsModel : null
-                            delegate: RowLayout {
-                                required property string conceptId
-                                required property string label
-                                required property var categories
-                                required property int count
-                                required property string membership
-                                width: markedTagsList.width
-                                height: 36
-                                spacing: 7
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 0
-                                    Label { Layout.fillWidth: true; text: label; elide: Text.ElideRight; font.pixelSize: 12 }
-                                    Label { Layout.fillWidth: true; text: categories.join(" / "); elide: Text.ElideRight; font.pixelSize: 9; opacity: 0.5 }
-                                }
-                                Label {
-                                    text: membership === "all"
-                                        ? qsTr("All marked images")
-                                        : qsTr("%1 of %2 marked images").arg(count).arg(drawer.markedCount)
-                                    font.pixelSize: 10
-                                    opacity: membership === "all" ? 0.8 : 0.55
-                                }
-                                ToolButton {
-                                    text: "\u2212"
-                                    implicitWidth: 30; implicitHeight: 30
-                                    enabled: !appController.isTaggingBulk
-                                    onClicked: appController.removeConceptFromMarked(conceptId)
-                                    ToolTip.text: qsTr("Remove from marked images")
-                                    ToolTip.visible: hovered
-                                }
-                            }
-                        }
-                        Label {
-                            Layout.fillWidth: true
-                            visible: appController && appController.taggingBulkSummary !== ""
-                            text: qsTr("Last action: %1").arg(appController.taggingBulkSummary)
-                            wrapMode: Text.WordWrap
-                            font.pixelSize: 11
-                            opacity: 0.7
                         }
                     }
 
@@ -462,23 +316,26 @@ Drawer {
                             onClicked: appController.rebuildTgmVectors()
                         }
                         Button {
-                            text: drawer.markedMode
-                                ? qsTr("Generate for marked images")
-                                : qsTr("Generate for current image")
-                            enabled: (drawer.markedMode ? drawer.markedCount > 0 : drawer.hasSelection)
-                                && appController.taggingProposalAvailable
+                            text: qsTr("Generate for current image")
+                            enabled: drawer.hasSelection && appController.taggingProposalAvailable
                                 && !appController.isGeneratingTagProposals
-                            onClicked: drawer.markedMode
-                                ? appController.generateMarkedTagProposals()
-                                : appController.generateSelectedTagProposals()
+                            onClicked: appController.generateSelectedTagProposals()
                         }
                         ListView {
                             id: proposalsList
                             objectName: "pendingProposalsList"
                             Layout.fillWidth: true
                             Layout.preferredHeight: Math.min(contentHeight, 190)
+                            interactive: contentHeight > height
                             clip: true
+                            boundsBehavior: Flickable.StopAtBounds
                             model: appController ? appController.pendingProposalsModel : null
+                            ScrollBar.vertical: ScrollBar {
+                                id: proposalsScrollBar
+                                objectName: "tagProposalsScrollBar"
+                                policy: ScrollBar.AsNeeded
+                                active: proposalsList.contentHeight > proposalsList.height
+                            }
                             delegate: RowLayout {
                                 required property string conceptId
                                 required property string label
@@ -487,6 +344,7 @@ Drawer {
                                 required property string provider
                                 required property string providerFingerprint
                                 width: proposalsList.width
+                                    - (proposalsScrollBar.visible ? proposalsScrollBar.width : 0)
                                 height: 44
                                 spacing: 6
                                 ColumnLayout {
@@ -512,45 +370,6 @@ Drawer {
                                 }
                             }
                         }
-                        Button {
-                            text: qsTr("Auto-accept Marked")
-                            visible: drawer.markedMode && (appSettings ? appSettings.autoAcceptEnabled : false)
-                            enabled: drawer.markedCount > 0 && appController.taggingProposalAvailable && !appController.isGeneratingTagProposals
-                            onClicked: autoAcceptConfirmDialog.open()
-                        }
-                    }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor }
-
-                    ColumnLayout {
-                        visible: drawer.markedMode
-                        Layout.fillWidth: true
-                        Layout.margins: 14
-                        spacing: 8
-                        Label { text: qsTr("Tagged derivatives"); font.pixelSize: 13; font.weight: Font.DemiBold }
-                        Label {
-                            Layout.fillWidth: true
-                            visible: drawer.markedCount > 0
-                            text: qsTr("Exportable marked images: %1 of %2")
-                                .arg(drawer.taggedMarkedCount)
-                                .arg(drawer.markedCount)
-                            wrapMode: Text.WordWrap
-                            font.pixelSize: 11
-                            opacity: 0.6
-                        }
-                        Button {
-                            text: qsTr("Choose Output Folder")
-                            enabled: drawer.taggedMarkedCount > 0 && !appController.isExportingDerivatives
-                            onClicked: derivativeFolderDialog.open()
-                        }
-                        Label {
-                            Layout.fillWidth: true
-                            visible: appController && appController.derivativeResultSummary !== ""
-                            text: appController.derivativeResultSummary
-                            wrapMode: Text.WordWrap
-                            font.pixelSize: 11
-                            opacity: 0.7
-                        }
                     }
                 }
 
@@ -563,13 +382,9 @@ Drawer {
                         Layout.fillWidth: true
                         from: 0
                         to: Math.max(1, appController.isTgmUpdating ? appController.tgmUpdateTotal
-                            : appController.isGeneratingTagProposals ? appController.proposalGenerationTotal
-                            : appController.isTaggingBulk ? appController.taggingBulkTotal
-                            : appController.derivativeTotal)
+                            : appController.proposalGenerationTotal)
                         value: appController.isTgmUpdating ? appController.tgmUpdateCurrent
-                            : appController.isGeneratingTagProposals ? appController.proposalGenerationCurrent
-                            : appController.isTaggingBulk ? appController.taggingBulkCurrent
-                            : appController.derivativeCurrent
+                            : appController.proposalGenerationCurrent
                         indeterminate: to <= 1
                     }
                     RowLayout {
@@ -577,18 +392,14 @@ Drawer {
                         Label {
                             Layout.fillWidth: true
                             text: appController.isTgmUpdating ? qsTr("Updating TGM")
-                                : appController.isGeneratingTagProposals ? qsTr("Generating proposals")
-                                : appController.isTaggingBulk ? qsTr("Updating marked images")
-                                : qsTr("Generating derivatives")
+                                : qsTr("Generating proposals")
                             font.pixelSize: 11
                         }
                         Button {
                             text: qsTr("Cancel")
                             onClicked: {
                                 if (appController.isTgmUpdating) appController.cancelTgmOperation()
-                                else if (appController.isGeneratingTagProposals) appController.cancelTagProposalGeneration()
-                                else if (appController.isTaggingBulk) appController.cancelBulkTagging()
-                                else appController.cancelDerivativeExport()
+                                else appController.cancelTagProposalGeneration()
                             }
                         }
                     }

@@ -189,23 +189,19 @@ def test_tagging_service_add_and_remove_preserve_unknown_fields_and_other_tags(
     assert loaded.sidecar.source.extra == {"source_extension": 1}
 
 
-def test_tagging_service_accept_pending_uses_manual_provenance_and_clears_proposal(
+def test_tagging_service_accept_proposal_uses_clip_provenance_without_pending_cache(
     tmp_path: Path,
 ) -> None:
     # Arrange
     service, image_repository, image_path = _service(tmp_path)
     proposal = _proposal(str(image_path), "loc-tgm:tgm000001", "Deer", 0.91)
-    image_repository.replace_pending_proposals(
-        str(image_path), proposal.provider_fingerprint, (proposal,)
-    )
 
     # Act
-    result = service.accept_pending_proposal(
-        str(image_path), proposal.concept_id, proposal.provider_fingerprint
-    )
+    result = service.accept_proposal(proposal)
 
     # Assert
-    assert result.sidecar.tags[0].provenance.method == "manual"
+    assert result.sidecar.tags[0].provenance.method == "clip"
+    assert result.sidecar.tags[0].provenance.confidence == 0.91
     assert image_repository.get_proposals(str(image_path)) == ()
 
 
@@ -215,14 +211,9 @@ def test_tagging_service_reject_proposal_does_not_write_sidecar(
     # Arrange
     service, image_repository, image_path = _service(tmp_path)
     proposal = _proposal(str(image_path), "loc-tgm:tgm000001", "Deer", 0.91)
-    image_repository.replace_pending_proposals(
-        str(image_path), proposal.provider_fingerprint, (proposal,)
-    )
 
     # Act
-    service.reject_proposal(
-        str(image_path), proposal.concept_id, proposal.provider_fingerprint
-    )
+    service.reject_proposal(proposal)
 
     # Assert
     assert not FilesystemSidecarRepository.sidecar_path(image_path).exists()
@@ -303,9 +294,6 @@ def test_tagging_service_auto_accepts_multiple_candidates_in_one_clip_write(
     proposals = (
         _proposal(str(image_path), "loc-tgm:tgm000001", "Deer", 0.91),
         _proposal(str(image_path), "loc-tgm:tgm000002", "Photographs", 0.87),
-    )
-    image_repository.replace_pending_proposals(
-        str(image_path), proposals[0].provider_fingerprint, proposals
     )
     batch = ProposalBatchResult(
         (

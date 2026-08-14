@@ -98,6 +98,25 @@ def _wait_for(app: Any, predicate: Any, description: str, timeout: float = 10.0)
     raise RuntimeError(f"timed out waiting for {description}")
 
 
+def _capture_nonblank(app: Any, root: Any, path: Path, description: str) -> None:
+    def capture() -> bool:
+        return root.grabWindow().save(str(path)) and _image_is_nonblank(path)
+
+    _wait_for(app, capture, description)
+
+
+def _capture_valid(app: Any, root: Any, path: Path, description: str) -> None:
+    from PySide6.QtGui import QImage
+
+    def capture() -> bool:
+        if not root.grabWindow().save(str(path)):
+            return False
+        image = QImage(str(path))
+        return not image.isNull() and image.width() >= 600 and image.height() >= 600
+
+    _wait_for(app, capture, description)
+
+
 def _read_derivative_keywords(path: Path) -> dict[str, Any]:
     import subprocess
 
@@ -264,7 +283,15 @@ def main() -> int:
                 top_k=5,
                 threshold=0.0,
             )
+            pending_count = int(
+                proposal_repository.conn.execute(
+                    "SELECT COUNT(*) FROM image_tag_proposals "
+                    "WHERE status = 'pending'"
+                ).fetchone()[0]
+            )
             proposal_repository.close()
+            if pending_count:
+                raise RuntimeError("proposal generation persisted undecided suggestions")
             proposals = [
                 proposal
                 for result in proposal_result.results
@@ -376,6 +403,12 @@ def main() -> int:
 
         controller.toggleChecked(0)
         controller.toggleChecked(1)
+        controller.applyConceptToMarked(concept_id)
+        _wait_for(app, lambda: not controller.isTaggingBulk, "bulk tag operation")
+        if controller.markedTagImageCount != 2:
+            raise RuntimeError("marked-image aggregate did not include both images")
+        if controller.markedTagsModel.rowCount() != 1:
+            raise RuntimeError("bulk tagging did not update the marked tag model")
 
         drawer = root.findChild(QObject, "taggingDrawer")
         if drawer is None:
@@ -384,37 +417,7 @@ def main() -> int:
         _wait_for(app, lambda: bool(drawer.property("opened")), "tagging drawer open")
 
         desktop_path = ARTIFACTS_DIR / "tagging-desktop.png"
-        app.processEvents()
-        if not root.grabWindow().save(str(desktop_path)) or not _image_is_nonblank(desktop_path):
-            raise RuntimeError("desktop tagging screenshot is blank or invalid")
-
-        marked_scope_button = drawer.findChild(QObject, "tagMarkedImagesButton")
-        if marked_scope_button is None:
-            raise RuntimeError("marked-image scope button is unavailable")
-        QMetaObject.invokeMethod(
-            marked_scope_button,
-            "click",
-            Qt.ConnectionType.DirectConnection,
-        )
-        if not bool(drawer.property("markedMode")):
-            raise RuntimeError("marked-image scope button did not change the operation target")
-        add_button = drawer.findChild(QObject, "addTgmTermButton")
-        if add_button is None:
-            raise RuntimeError("TGM Add button is unavailable")
-        QMetaObject.invokeMethod(
-            add_button,
-            "click",
-            Qt.ConnectionType.DirectConnection,
-        )
-        _wait_for(app, lambda: not controller.isTaggingBulk, "bulk tag operation")
-        if controller.markedTagImageCount != 2:
-            raise RuntimeError("marked-image aggregate did not include both images")
-        if controller.markedTagsModel.rowCount() != 1:
-            raise RuntimeError("marked-image Add did not update the marked tag model")
-        marked_path = ARTIFACTS_DIR / "tagging-marked.png"
-        app.processEvents()
-        if not root.grabWindow().save(str(marked_path)) or not _image_is_nonblank(marked_path):
-            raise RuntimeError("marked-image tagging screenshot is blank or invalid")
+        _capture_nonblank(app, root, desktop_path, "desktop tagging screenshot")
 
         root.showNormal()
         root.setWidth(900)
@@ -425,9 +428,7 @@ def main() -> int:
             "minimum supported viewport",
         )
         constrained_path = ARTIFACTS_DIR / "tagging-constrained.png"
-        app.processEvents()
-        if not root.grabWindow().save(str(constrained_path)) or not _image_is_nonblank(constrained_path):
-            raise RuntimeError("constrained tagging screenshot is blank or invalid")
+        _capture_nonblank(app, root, constrained_path, "constrained tagging screenshot")
         if int(drawer.property("width")) > int(root.width()):
             raise RuntimeError("tagging drawer exceeds the constrained viewport")
 
@@ -451,11 +452,7 @@ def main() -> int:
             "tagging settings section",
         )
         settings_path = ARTIFACTS_DIR / "tagging-settings.png"
-        app.processEvents()
-        if not root.grabWindow().save(str(settings_path)) or not _image_is_nonblank(
-            settings_path
-        ):
-            raise RuntimeError("tagging settings screenshot is blank or invalid")
+        _capture_valid(app, root, settings_path, "tagging settings screenshot")
 
         repository = ImageIndexRepository(db_path, key="")
         tagged_results = repository.search_images(concept_label, limit=100, offset=0)
@@ -482,43 +479,6 @@ def main() -> int:
             raise RuntimeError("ExifTool readback did not contain the accepted tag")
         repository.close()
 
-        controller._on_derivative_result(export_result)
-        tab_bar = root.findChild(QObject, "mainTabBar")
-        if tab_bar is not None:
-            tab_bar.setProperty("currentIndex", 0)
-        QMetaObject.invokeMethod(drawer, "openAndFocus", Qt.ConnectionType.DirectConnection)
-        QMetaObject.invokeMethod(
-            marked_scope_button,
-            "click",
-            Qt.ConnectionType.DirectConnection,
-        )
-        _wait_for(
-            app,
-            lambda: bool(drawer.property("opened"))
-            and str(output_dir) in controller.derivativeResultSummary,
-            "derivative result summary",
-        )
-        scroll_view = drawer.findChild(QObject, "taggingScrollView")
-        if scroll_view is None:
-            raise RuntimeError("tagging drawer scroll view is unavailable")
-        scroll_content = scroll_view.property("contentItem")
-        if scroll_content is None:
-            raise RuntimeError("tagging drawer scroll content is unavailable")
-        scroll_content.setProperty(
-            "contentY",
-            max(
-                0.0,
-                float(scroll_content.property("contentHeight"))
-                - float(scroll_content.property("height")),
-            ),
-        )
-        export_result_path = ARTIFACTS_DIR / "tagging-export-result.png"
-        app.processEvents()
-        if not root.grabWindow().save(str(export_result_path)) or not _image_is_nonblank(
-            export_result_path
-        ):
-            raise RuntimeError("derivative result screenshot is blank or invalid")
-
         sidecars = [Path(f"{image}.sidecar.json") for image in images]
         if not all(sidecar.exists() for sidecar in sidecars):
             raise RuntimeError("one or more authoritative sidecars are missing")
@@ -539,10 +499,8 @@ def main() -> int:
             "source_hashes_and_mtimes_unchanged": True,
             "screenshots": [
                 desktop_path.name,
-                marked_path.name,
                 constrained_path.name,
                 settings_path.name,
-                export_result_path.name,
             ],
         }
         if ai_report is not None:

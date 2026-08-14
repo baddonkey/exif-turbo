@@ -82,6 +82,31 @@ def test_pending_proposal_list_model_exposes_score_and_provider(qtbot: QtBot) ->
     assert model.data(model.index(0), model.ProviderFingerprintRole) == "fingerprint"
 
 
+def test_pending_proposal_list_model_finds_and_removes_ephemeral_row(
+    qtbot: QtBot,
+) -> None:
+    # Arrange
+    model = PendingProposalListModel()
+    proposal = TagProposal(
+        image_path="/photos/photo.jpg",
+        concept_id="loc-tgm:tgm000001",
+        label="Forests",
+        category="subject",
+        provider_fingerprint="fingerprint",
+        score=0.75,
+        rank=1,
+    )
+    model.set_rows([proposal])
+
+    # Act
+    found = model.find(proposal.concept_id, proposal.provider_fingerprint)
+    model.remove(proposal)
+
+    # Assert
+    assert found is proposal
+    assert model.rowCount() == 0
+
+
 def test_marked_tag_list_model_exposes_aggregate_count_and_membership(
     qtbot: QtBot,
 ) -> None:

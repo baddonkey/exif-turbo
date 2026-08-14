@@ -137,7 +137,7 @@ def test_tgm_proposal_service_missing_image_vector_returns_ai_scan_required(
     assert repository.get_proposals(image_path) == ()
 
 
-def test_tgm_proposal_service_persists_ranked_results_and_returns_auto_candidates(
+def test_tgm_proposal_service_returns_ranked_results_without_persisting_pending(
     tmp_path: Path,
 ) -> None:
     # Arrange
@@ -159,8 +159,9 @@ def test_tgm_proposal_service_persists_ranked_results_and_returns_auto_candidate
         "Deer",
         "Rivers",
     ]
-    assert [proposal.rank for proposal in repository.get_proposals(image_path)] == [1, 2, 3]
+    assert [proposal.rank for proposal in result.proposals] == [1, 2, 3]
     assert [proposal.label for proposal in result.auto_candidates] == ["Forests", "Deer"]
+    assert repository.get_proposals(image_path) == ()
     assert repository.get_accepted_tags(image_path) == ()
 
 
@@ -170,9 +171,11 @@ def test_tgm_proposal_service_excludes_accepted_and_rejected_current_concepts(
     # Arrange
     repository, service, image_path, fingerprint = _setup(tmp_path)
     _accept_first_concept(repository, image_path)
-    service.generate([image_path], fingerprint, top_k=3, threshold=0.0)
-    repository.reject_proposal(
-        image_path, "loc-tgm:tgm000002", fingerprint.identifier
+    rejected_proposal = service.generate(
+        [image_path], fingerprint, top_k=3, threshold=0.0
+    ).results[0].proposals[0]
+    repository.record_rejected_proposal(
+        rejected_proposal
     )
 
     # Act
@@ -222,7 +225,7 @@ def test_tgm_proposal_service_deduplicates_canonical_concepts(tmp_path: Path) ->
 
     # Assert
     assert len(batch.results[0].proposals) == 1
-    assert len(repository.get_proposals(image_path)) == 1
+    assert repository.get_proposals(image_path) == ()
 
 
 def test_tgm_proposal_repository_image_delete_cascades_proposals(

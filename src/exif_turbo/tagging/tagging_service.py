@@ -51,10 +51,6 @@ class TaggingFilesystemError(TaggingError):
     """Raised when an image or sidecar cannot be read or written."""
 
 
-class TaggingProposalError(TaggingError):
-    """Raised when a pending proposal cannot be found or decided."""
-
-
 class BulkTagStatus(StrEnum):
     SUCCEEDED = "succeeded"
     SKIPPED = "skipped"
@@ -86,7 +82,6 @@ class ImageTaggingState:
     image_path: str
     sidecar: ImageSidecar | None
     revision: SidecarRevision | None
-    proposals: tuple[TagProposal, ...]
     cache_state: SidecarSyncState | None
 
     @property
@@ -163,9 +158,6 @@ class TaggingService:
             image_path=image_path,
             sidecar=None if loaded is None else loaded.sidecar,
             revision=None if loaded is None else loaded.revision,
-            proposals=self._image_repository.get_proposals(
-                image_path, status=TagProposalStatus.PENDING
-            ),
             cache_state=self._image_repository.get_sidecar_sync_state(image_path),
         )
 
@@ -178,39 +170,22 @@ class TaggingService:
     def remove_concept(self, image_path: str, concept_id: str) -> TagMutationResult:
         return self._apply_tag_changes(image_path, removals=(concept_id,))
 
-    def accept_pending_proposal(
-        self,
-        image_path: str,
-        concept_id: str,
-        provider_fingerprint: str,
-    ) -> TagMutationResult:
-        proposal = self._find_pending_proposal(
-            image_path, concept_id, provider_fingerprint
-        )
+    def accept_proposal(self, proposal: TagProposal) -> TagMutationResult:
         concept = self._resolve_concept(proposal.concept_id)
-        tag = self._build_tag(
+        tag = self._build_clip_tag(
             concept,
             self._tgm_repository.load(),
             self._timestamp(),
+            proposal,
         )
         return self._apply_tag_changes(
-            image_path,
+            proposal.image_path,
             additions=(tag,),
-            accepted_proposals=((concept_id, provider_fingerprint),),
         )
 
-    def reject_proposal(
-        self,
-        image_path: str,
-        concept_id: str,
-        provider_fingerprint: str,
-    ) -> ProposalDecisionResult:
-        changed = self._image_repository.reject_proposal(
-            image_path, concept_id, provider_fingerprint
-        )
-        if not changed:
-            raise TaggingProposalError("pending proposal was not found")
-        return ProposalDecisionResult(image_path, concept_id, True)
+    def reject_proposal(self, proposal: TagProposal) -> ProposalDecisionResult:
+        self._image_repository.record_rejected_proposal(proposal)
+        return ProposalDecisionResult(proposal.image_path, proposal.concept_id, True)
 
     def add_concept_to_paths(
         self,
@@ -439,24 +414,6 @@ class TaggingService:
             if on_progress is not None:
                 on_progress(index + 1, len(paths), item)
         return BulkTagResult(tuple(items), False)
-
-    def _find_pending_proposal(
-        self,
-        image_path: str,
-        concept_id: str,
-        provider_fingerprint: str,
-    ) -> TagProposal:
-        proposals = self._image_repository.get_proposals(
-            image_path,
-            provider_fingerprint=provider_fingerprint,
-            status=TagProposalStatus.PENDING,
-        )
-        proposal = next(
-            (item for item in proposals if item.concept_id == concept_id), None
-        )
-        if proposal is None:
-            raise TaggingProposalError("pending proposal was not found")
-        return proposal
 
     def _resolve_concept(self, reference: str) -> TgmConcept:
         normalized = reference.strip()

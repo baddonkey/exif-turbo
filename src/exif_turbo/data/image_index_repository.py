@@ -176,6 +176,10 @@ class ImageIndexRepository:
                 "ALTER TABLE image_tag_proposals "
                 "ADD COLUMN provider_model TEXT NOT NULL DEFAULT 'clip'"
             )
+        self.conn.execute(
+            "DELETE FROM image_tag_proposals WHERE status = 'pending'"
+        )
+        self.conn.commit()
         # Add marked column for existing databases (one-time migration).
         existing_cols = {
             row[1]
@@ -539,68 +543,37 @@ class ImageIndexRepository:
                     )
         return len(accepted_rows)
 
-    def replace_pending_proposals(
-        self,
-        image_path: str,
-        provider_fingerprint: str,
-        proposals: Iterable[TagProposal],
-    ) -> None:
-        """Replace pending rows while preserving rejections for this provider."""
+    def record_rejected_proposal(self, proposal: TagProposal) -> None:
+        """Persist a rejected proposal as a user decision."""
         image_row = self.conn.execute(
-            "SELECT id FROM images WHERE path = ?", (image_path,)
+            "SELECT id FROM images WHERE path = ?", (proposal.image_path,)
         ).fetchone()
         if image_row is None:
-            raise ValueError(f"image is not indexed: {image_path}")
+            raise ValueError(f"image is not indexed: {proposal.image_path}")
         image_id = int(image_row[0])
-        proposal_rows = tuple(proposals)
-        if any(row.image_path != image_path for row in proposal_rows):
-            raise ValueError("proposal image path does not match replacement target")
-        if any(row.provider_fingerprint != provider_fingerprint for row in proposal_rows):
-            raise ValueError("proposal fingerprint does not match replacement target")
         with self.conn:
             self.conn.execute(
-                "DELETE FROM image_tag_proposals "
-                "WHERE image_id = ? AND provider_fingerprint = ? AND status = 'pending'",
-                (image_id, provider_fingerprint),
-            )
-            self.conn.executemany(
                 """
-                INSERT OR IGNORE INTO image_tag_proposals (
+                INSERT INTO image_tag_proposals (
                     image_id, concept_id, provider_fingerprint, canonical_label,
                     category, score, rank, status, provider_model
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'rejected', ?)
+                ON CONFLICT(image_id, concept_id, provider_fingerprint)
+                DO UPDATE SET status = 'rejected', canonical_label = excluded.canonical_label,
+                    category = excluded.category, score = excluded.score,
+                    rank = excluded.rank, provider_model = excluded.provider_model
                 """,
                 (
-                    (
-                        image_id,
-                        proposal.concept_id,
-                        provider_fingerprint,
-                        proposal.label,
-                        proposal.category,
-                        proposal.score,
-                        proposal.rank,
-                        proposal.provider_model,
-                    )
-                    for proposal in proposal_rows
+                    image_id,
+                    proposal.concept_id,
+                    proposal.provider_fingerprint,
+                    proposal.label,
+                    proposal.category,
+                    proposal.score,
+                    proposal.rank,
+                    proposal.provider_model,
                 ),
             )
-
-    def reject_proposal(
-        self,
-        image_path: str,
-        concept_id: str,
-        provider_fingerprint: str,
-    ) -> bool:
-        with self.conn:
-            cursor = self.conn.execute(
-                """
-                UPDATE image_tag_proposals SET status = 'rejected'
-                WHERE image_id = (SELECT id FROM images WHERE path = ?)
-                  AND concept_id = ? AND provider_fingerprint = ?
-                """,
-                (image_path, concept_id, provider_fingerprint),
-            )
-        return cursor.rowcount > 0
 
     def get_proposals(
         self,

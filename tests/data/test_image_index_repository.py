@@ -80,6 +80,49 @@ def test_count_images_after_insert_returns_correct_count(repo: ImageIndexReposit
     assert repo.count_images("") == 5
 
 
+def test_repository_reopen_removes_legacy_pending_proposals_only(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    db_path = tmp_path / "proposals.db"
+    image_path = str(make_jpeg(tmp_path / "photo.jpg"))
+    repo = ImageIndexRepository(db_path, key="")
+    repo.upsert_image(image_path, "photo.jpg", 1.0, 100, {}, "photo jpg")
+    image_id = int(
+        repo.conn.execute(
+            "SELECT id FROM images WHERE path = ?", (image_path,)
+        ).fetchone()[0]
+    )
+    for concept_id, status in (
+        ("loc-tgm:tgm000001", "pending"),
+        ("loc-tgm:tgm000002", "rejected"),
+    ):
+        repo.conn.execute(
+            """
+            INSERT INTO image_tag_proposals (
+                image_id, concept_id, provider_fingerprint, canonical_label,
+                category, score, rank, status, provider_model
+            ) VALUES (?, ?, 'provider-a', ?, 'subject', 0.8, 1, ?, 'clip')
+            """,
+            (image_id, concept_id, concept_id, status),
+        )
+    repo.commit()
+    repo.close()
+
+    # Act
+    reopened = ImageIndexRepository(db_path, key="")
+    statuses = [
+        str(row[0])
+        for row in reopened.conn.execute(
+            "SELECT status FROM image_tag_proposals ORDER BY status"
+        ).fetchall()
+    ]
+    reopened.close()
+
+    # Assert
+    assert statuses == ["rejected"]
+
+
 def test_find_image_offset_path_filter_returns_sorted_offset(repo: ImageIndexRepository, tmp_path: Path) -> None:
     # Arrange
     folder = tmp_path / "folder"

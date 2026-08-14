@@ -3590,19 +3590,25 @@ class AppController(QObject):
 
     @Slot()
     def refreshSelectedTaggingState(self) -> None:
+        self._refresh_selected_tagging_state(preserve_proposals=False)
+
+    def _refresh_selected_tagging_state(self, *, preserve_proposals: bool) -> None:
         path = self._search_model.get_path(self._current_result_row)
         if not path or self._tagging_service is None:
             self._accepted_tags_model.set_rows([])
-            self._pending_proposals_model.set_rows([])
+            if not preserve_proposals:
+                self._pending_proposals_model.set_rows([])
             return
         try:
             state = self._tagging_service.get_image_tagging_state(path)
             self._accepted_tags_model.set_rows(state.accepted_tags)
-            self._pending_proposals_model.set_rows(state.proposals)
+            if not preserve_proposals:
+                self._pending_proposals_model.set_rows([])
             self._selected_tagging_error = ""
         except Exception as exc:  # noqa: BLE001
             self._accepted_tags_model.set_rows([])
-            self._pending_proposals_model.set_rows([])
+            if not preserve_proposals:
+                self._pending_proposals_model.set_rows([])
             self._selected_tagging_error = str(exc)
         self.taggingStateChanged.emit()
 
@@ -3654,7 +3660,11 @@ class AppController(QObject):
         if path is None or self._tagging_service is None:
             return
         try:
-            self._tagging_service.accept_pending_proposal(path, concept_id, fingerprint)
+            proposal = self._pending_proposals_model.find(concept_id, fingerprint)
+            if proposal is None or proposal.image_path != path:
+                return
+            self._tagging_service.accept_proposal(proposal)
+            self._pending_proposals_model.remove(proposal)
             self._refresh_after_tag_mutation()
         except Exception as exc:  # noqa: BLE001
             self._selected_tagging_error = str(exc)
@@ -3668,14 +3678,18 @@ class AppController(QObject):
         if path is None or self._tagging_service is None:
             return
         try:
-            self._tagging_service.reject_proposal(path, concept_id, fingerprint)
-            self.refreshSelectedTaggingState()
+            proposal = self._pending_proposals_model.find(concept_id, fingerprint)
+            if proposal is None or proposal.image_path != path:
+                return
+            self._tagging_service.reject_proposal(proposal)
+            self._pending_proposals_model.remove(proposal)
+            self.taggingStateChanged.emit()
         except Exception as exc:  # noqa: BLE001
             self._selected_tagging_error = str(exc)
             self.taggingStateChanged.emit()
 
     def _refresh_after_tag_mutation(self) -> None:
-        self.refreshSelectedTaggingState()
+        self._refresh_selected_tagging_state(preserve_proposals=True)
         self._refresh_marked_tagging_state()
         if self._current_result_row >= 0:
             index = self._search_model.index(self._current_result_row)
@@ -3778,6 +3792,8 @@ class AppController(QObject):
         worker.finished.connect(lambda: self._release_worker("_proposal_worker", worker))
         self._proposal_operation = True
         self._proposal_error = ""
+        if not auto_accept:
+            self._pending_proposals_model.set_rows([])
         self.proposalOperationChanged.emit()
         worker.start()
 
@@ -3785,9 +3801,21 @@ class AppController(QObject):
         self._proposal_progress = (done, total)
         self.proposalOperationChanged.emit()
 
-    def _on_proposal_result(self, _result: object, _bulk_result: object) -> None:
+    def _on_proposal_result(self, result: object, _bulk_result: object) -> None:
         self._proposal_operation = False
-        self._refresh_after_tag_mutation()
+        selected_path = self._search_model.get_path(self._current_result_row)
+        matching_result = next(
+            (
+                item
+                for item in getattr(result, "results", ())
+                if getattr(item, "image_path", None) == selected_path
+            ),
+            None,
+        )
+        self._pending_proposals_model.set_rows(
+            () if matching_result is None else matching_result.proposals
+        )
+        self._refresh_selected_tagging_state(preserve_proposals=True)
         self.proposalOperationChanged.emit()
 
     def _on_proposal_failed(self, error: str) -> None:

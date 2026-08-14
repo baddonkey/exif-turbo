@@ -22,6 +22,7 @@ _QML_DIR = Path(__file__).resolve().parents[2] / "src" / "exif_turbo" / "ui" / "
 
 def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
     # Arrange
+    drawer_source = (_QML_DIR / "TaggingDrawer.qml").read_text(encoding="utf-8")
     source = "\n".join(
         path.read_text(encoding="utf-8")
         for path in (
@@ -40,17 +41,10 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
         "acceptSelectedProposal(",
         "rejectSelectedProposal(",
         "generateSelectedTagProposals(",
-        "generateMarkedTagProposals(",
-        "autoAcceptMarkedTagProposals(",
-        "applyConceptToMarked(",
-        "removeConceptFromMarked(",
-        "generateDerivativesForMarked(",
         "installOrUpdateTgm(",
         "rebuildTgmVectors(",
         "cancelTgmOperation(",
         "cancelTagProposalGeneration(",
-        "cancelBulkTagging(",
-        "cancelDerivativeExport(",
         "setTaggingEnabled(",
         "setProposalThreshold(",
         "setAutoAcceptEnabled(",
@@ -62,16 +56,21 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
 
     # Assert
     assert missing == []
-    assert 'text: qsTr("Last action: %1")' in source
-    assert 'text: appController.derivativeResultSummary' in source
-    assert "appController.taggingBulkSummary || appController.derivativeResultSummary" not in source
-    assert 'objectName: "tagCurrentImageButton"' in source
-    assert 'objectName: "tagMarkedImagesButton"' in source
     assert 'objectName: "addTgmTermButton"' in source
-    assert "readonly property bool markedMode: taggingScope.currentIndex === 1" in source
-    assert "if (markedCount === 0)" in source
-    assert "function applyCurrentSearchResult(toMarked)" not in source
-    assert "drawer.applyCurrentSearchResult()\n                                }" not in source
+    assert 'text: qsTr("Tags on current image")' in drawer_source
+    assert "Marked images" not in drawer_source
+    assert "markedMode" not in drawer_source
+    assert "applyConceptToMarked" not in drawer_source
+    assert "removeConceptFromMarked" not in drawer_source
+    assert "generateMarkedTagProposals" not in drawer_source
+    assert "autoAcceptMarkedTagProposals" not in drawer_source
+    assert "generateDerivativesForMarked" not in drawer_source
+    assert "function onCurrentResultRowChanged()" in drawer_source
+    assert "onOpened: proposalGenerationTimer.restart()" in drawer_source
+    assert "proposalGenerationTimer.restart()" in drawer_source
+    assert "appController.generateSelectedTagProposals()" in drawer_source
+    assert 'objectName: "tagProposalsScrollBar"' in drawer_source
+    assert "active: proposalsList.contentHeight > proposalsList.height" in drawer_source
 
 
 def test_main_qml_with_tagging_workbench_loads(
@@ -114,6 +113,7 @@ def test_main_qml_with_tagging_workbench_loads(
     assert root.findChild(QQuickItem, "taggingWorkbenchButton") is not None
     assert root.findChild(QObject, "taggingDrawer") is not None
     assert root.findChild(QQuickItem, "taggingEnabledSwitch") is not None
+    assert root.findChild(QQuickItem, "tagProposalsScrollBar") is not None
 
     controller.close()
     engine.deleteLater()

@@ -11,6 +11,11 @@ from pytestqt.qtbot import QtBot
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.models.search_result import SearchResult
 from exif_turbo.models.tag_proposal import TagProposal, TagProposalStatus
+from exif_turbo.models.tag_proposal import (
+    ProposalBatchResult,
+    ProposalGenerationResult,
+    ProposalGenerationStatus,
+)
 from exif_turbo.models.tgm import TgmCategory, TgmConcept, TgmSnapshot, TgmSourceFormat
 from exif_turbo.tagging.tgm_snapshot_repository import TgmSnapshotRepository
 from exif_turbo.tagging.derivative_export_service import (
@@ -213,30 +218,94 @@ def test_app_controller_proposal_accept_and_reject_refresh_state(
         score=0.8,
         rank=1,
     )
-    repository.replace_pending_proposals(str(image_path), "provider-a", [proposal])
+    controller._pending_proposals_model.set_rows([proposal])
 
     # Act
     controller.rejectSelectedProposal(proposal.concept_id, "provider-a")
     rejected = repository.get_proposals(
         str(image_path), status=TagProposalStatus.REJECTED
     )
-    repository.replace_pending_proposals(str(image_path), "provider-b", [
-        TagProposal(
-            image_path=str(image_path),
-            concept_id=proposal.concept_id,
-            label=proposal.label,
-            category=proposal.category,
-            provider_fingerprint="provider-b",
-            score=proposal.score,
-            rank=proposal.rank,
-        )
-    ])
+    accepted_proposal = TagProposal(
+        image_path=str(image_path),
+        concept_id=proposal.concept_id,
+        label=proposal.label,
+        category=proposal.category,
+        provider_fingerprint="provider-b",
+        score=proposal.score,
+        rank=proposal.rank,
+    )
+    controller._pending_proposals_model.set_rows([accepted_proposal])
     controller.acceptSelectedProposal(proposal.concept_id, "provider-b")
     repository.close()
 
     # Assert
     assert len(rejected) == 1
     assert controller.acceptedTagsModel.rowCount() == 1
+    assert controller.pendingProposalsModel.rowCount() == 0
+
+
+def test_app_controller_proposal_result_for_previous_selection_is_ignored(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    controller, search_model, _db_path, first_path = tagging_controller
+    second_path = tmp_path / "second.jpg"
+    second_path.write_bytes(b"second")
+    search_model.set_rows(
+        [
+            SearchResult(str(first_path), first_path.name, "{}", 5, 1.0, 1),
+            SearchResult(str(second_path), second_path.name, "{}", 6, 1.0, 2),
+        ]
+    )
+    proposal = TagProposal(
+        image_path=str(first_path),
+        concept_id="loc-tgm:tgm000001",
+        label="Forests",
+        category="subject",
+        provider_fingerprint="provider-a",
+        score=0.8,
+        rank=1,
+    )
+    result = ProposalBatchResult(
+        (
+            ProposalGenerationResult(
+                str(first_path),
+                ProposalGenerationStatus.COMPLETED,
+                proposals=(proposal,),
+            ),
+        ),
+        False,
+    )
+    controller._current_result_row = 1
+
+    # Act
+    controller._on_proposal_result(result, None)
+
+    # Assert
+    assert controller.pendingProposalsModel.rowCount() == 0
+
+
+def test_app_controller_refresh_selection_clears_ephemeral_proposals(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _search_model, _db_path, image_path = tagging_controller
+    proposal = TagProposal(
+        image_path=str(image_path),
+        concept_id="loc-tgm:tgm000001",
+        label="Forests",
+        category="subject",
+        provider_fingerprint="provider-a",
+        score=0.8,
+        rank=1,
+    )
+    controller._pending_proposals_model.set_rows([proposal])
+
+    # Act
+    controller.refreshSelectedTaggingState()
+
+    # Assert
     assert controller.pendingProposalsModel.rowCount() == 0
 
 

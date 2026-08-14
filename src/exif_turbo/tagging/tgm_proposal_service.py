@@ -71,9 +71,6 @@ class TgmProposalService:
                         continue
                     seen.add(proposal.concept_id)
                     filtered.append(replace(proposal, rank=len(filtered) + 1))
-                self._image_repository.replace_pending_proposals(
-                    image_path, provider_id, filtered
-                )
                 auto_candidates = tuple(
                     proposal
                     for proposal in filtered

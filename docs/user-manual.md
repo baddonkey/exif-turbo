@@ -826,7 +826,7 @@ postable subject (`TTCSubj`, MARC 150/650) and genre/form (`TTCForm`, MARC
 
 Accepted canonical labels, qualified IDs, categories, vocabulary identity, and
 known aliases are copied into the encrypted database's FTS5 cache. Search uses
-the normal EXIF query box and syntax; pending and rejected proposals are not
+the normal EXIF query box and syntax; undecided and rejected proposals are not
 searchable. A regular or full image scan synchronizes new, changed, or deleted
 sidecars even when the original image stamp did not change. Malformed sidecars
 are reported and left untouched.
@@ -842,44 +842,30 @@ From the **Search** or **Browse** tab, click the tag button at the upper right
 or press **Ctrl+T**. The non-modal drawer contains these controls:
 
 - **Add TGM term** searches canonical labels and aliases after a short delay.
-  Click a result or the **+** button to add it to the focused image; the
-  adjacent bulk button applies it to every marked image. **Enter** accepts the
-  highlighted result, and **Down** moves through results.
-- Choose **Current image** to tag only the focused image, or **Marked images**
-  to apply every action to the marked set. The workbench shows only the tag
-  list and commands for the chosen target.
-- In **Current image** mode, the tag list shows that image's canonical tags,
+  Select a result and click **Add** to apply it to the focused image. **Enter**
+  accepts the highlighted result, and **Down** moves through results.
+- **Tags on current image** shows the focused image's canonical tags,
   category, and provenance. The minus button removes a tag from that image.
-- In **Marked images** mode, the tag list shows whether each term occurs on
-  **all marked images** or on *N of M marked images*. The minus button removes
-  that concept from all marked images.
-- **Tag proposals** can generate suggestions for the selected image or all
-  marked images. Each row shows its score and provider and has accept and
-  reject buttons. Rejected proposals remain suppressed for the current TGM,
-  prompt, and model fingerprint.
-- **Auto-accept Marked** appears only when auto-accept is enabled. It asks for
-  confirmation, regenerates proposals, and accepts only scores at or above the
-  configured auto-accept threshold.
-- **Tagged derivatives → Choose Output Folder** shows how many marked images
-  have accepted tags and can be exported, then starts derivative generation
-  after confirmation. The result lists the exact destination for a single
-  created derivative and separately reports untagged images, existing files,
-  and failures.
+- **Tag proposals** generates suggestions automatically when the drawer opens
+  and whenever the focused image changes. Each row shows its score and provider
+  and has accept and reject buttons. **Generate for current image** refreshes
+  them manually. Undecided suggestions are kept only for the current selection
+  and are not restored after restart. Rejected proposals remain suppressed for
+  the current TGM, prompt, and model fingerprint.
 
-Long-running TGM, proposal, bulk-tag, and derivative operations show progress
-and a **Cancel** button. Cancellation stops before the next item; completed
-sidecar or derivative writes remain valid, and the final summary reports
-successes, skips, conflicts, failures, or cancellations.
+Long-running TGM and proposal operations show progress and a **Cancel** button.
+Marked-image tagging and derivative generation are not part of this drawer;
+they are reserved for a separate marked-image tool.
 
 ### Marks and bulk behavior
 
-The drawer reuses the same persistent marks described in [section
-9](#9-marking-images--bulk-actions); it does not maintain a second selection.
-Press **Space** to toggle the focused image's mark. Bulk add and remove process
-the enabled-folder marked set one image at a time. Existing tags are skipped,
-external sidecar edits are reported as conflicts, and malformed or read-only
-sidecars fail without replacing them. Auto-accept has an explicit confirmation;
-the current bulk add/remove buttons do not show a separate confirmation dialog.
+The separate marked-image tool reuses the persistent marks described in
+[section 9](#9-marking-images--bulk-actions); it does not maintain a second
+selection. Press **Space** to toggle the focused image's mark. Bulk add and
+remove process the enabled-folder marked set one image at a time. Existing tags
+are skipped, external sidecar edits are reported as conflicts, and malformed or
+read-only sidecars fail without replacing them. Auto-accept requires explicit
+confirmation.
 
 ### CLIP proposal prerequisites
 
@@ -905,8 +891,9 @@ before enabling automatic acceptance.
 
 ### Tagged derivatives
 
-Derivative generation copies only marked images that have accepted tags. The
-chosen output root must be outside every indexed source root. The exporter:
+Derivative generation belongs to the separate marked-image tool and copies
+only marked images that have accepted tags. The chosen output root must be
+outside every indexed source root. The exporter:
 
 - preserves each source format and relative source folder tree;
 - adds collision-safe top-level labels when marks span multiple indexed roots;
@@ -924,10 +911,11 @@ failures and the source remains unchanged.
 
 ### Lifecycle and reset
 
-Disabling tagging hides the workbench but does not delete sidecars, proposals,
-the installed TGM snapshot, or cached accepted tags. Already synchronized tags
-remain searchable. Closing the app requests cancellation of running tagging
-workers; completed item-level writes remain in place.
+Disabling tagging hides the workbench but does not delete sidecars, rejected
+proposal decisions, the installed TGM snapshot, or cached accepted tags.
+Already synchronized tags remain searchable. Closing the app requests
+cancellation of running tagging workers; completed item-level writes remain in
+place, while undecided suggestions are discarded.
 
 **Reset Database** clears image/tag/proposal rows, marks, indexed folders,
 thumbnail and preview caches, and the per-database TGM snapshot and vector

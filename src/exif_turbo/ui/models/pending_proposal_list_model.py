@@ -53,3 +53,17 @@ class PendingProposalListModel(QAbstractListModel):
         self.beginResetModel()
         self._rows = list(rows)
         self.endResetModel()
+
+    def find(self, concept_id: str, provider_fingerprint: str) -> TagProposal | None:
+        return next(
+            (
+                proposal
+                for proposal in self._rows
+                if proposal.concept_id == concept_id
+                and proposal.provider_fingerprint == provider_fingerprint
+            ),
+            None,
+        )
+
+    def remove(self, proposal: TagProposal) -> None:
+        self.set_rows(item for item in self._rows if item is not proposal)

@@ -401,7 +401,8 @@ For each selected image, the proposal service:
 4. Resolves aliases and deduplicates by canonical concept ID.
 5. Excludes concepts already accepted or explicitly rejected for the current
    TGM/model fingerprint.
-6. Persists ranked pending proposals in SQLite.
+6. Returns ranked proposals to the current-image workbench without persisting
+  undecided suggestions.
 
 Missing image vectors produce an actionable "AI scan required" state. Proposal
 generation does not implicitly load originals or build image vectors.
@@ -410,8 +411,11 @@ Review-first is the default. Optional auto-acceptance requires a separate,
 explicit setting and threshold. Every auto-accepted tag records its score, CLIP
 fingerprint, TGM checksum, and acceptance time in the sidecar.
 
-Rejected proposals are operational state and remain in SQLite. They are
-invalidated or reevaluated when the TGM, prompt, or CLIP fingerprint changes.
+Undecided proposals remain in memory only while their image is selected. The
+workbench generates them when it opens and whenever the focused image changes;
+**Generate for current image** remains available as a manual refresh. Rejected
+proposals are operational state and remain in SQLite. They are invalidated or
+reevaluated when the TGM, prompt, or CLIP fingerprint changes.
 
 ### 9.4 Future providers
 
@@ -422,7 +426,7 @@ directly.
 
 ## 10. Tagging User Experience
 
-### 10.1 Workbench
+### 10.1 Current-image workbench
 
 A docked tagging workbench is available from Search and Browse through a tag
 icon and keyboard shortcut. For the focused image it shows:
@@ -434,12 +438,13 @@ icon and keyboard shortcut. For the focused image it shows:
 - Accept, reject, and remove actions.
 - Sidecar synchronization or write errors.
 
-The workbench is an operational tool, not a separate landing page.
+The drawer is deliberately limited to the focused image. It does not expose
+marked-set state or bulk actions.
 
 ### 10.2 Bulk tagging
 
 The existing marked-image state is reused as the bulk working set. The
-workbench shows the marked count and aggregate tag state:
+dedicated **Marked Images** tab shows the marked count and aggregate tag state:
 
 - `all`: every marked image has the concept.
 - `some`: only part of the marked set has the concept.
@@ -447,14 +452,13 @@ workbench shows the marked count and aggregate tag state:
 
 Users can add or remove a concept across marks, apply a type-ahead result to all
 marks, or generate proposals for marks. Bulk auto-acceptance requires
-confirmation; bulk add/remove currently starts directly from its drawer
-button. Operations run in cancellable QThreads with per-image progress and a
-final summary of succeeded, skipped, conflicted, and failed items.
+confirmation. Operations run in cancellable QThreads with per-image progress
+and a final summary of succeeded, skipped, conflicted, and failed items.
 
-Space remains the mark toggle. `Ctrl+T` opens/closes the drawer; opening focuses
-TGM search. `Enter` applies the highlighted type-ahead result to the focused
-image and `Down` navigates type-ahead results. Proposal accept/reject and apply
-to marked are currently explicit drawer buttons.
+Space remains the mark toggle. `Ctrl+T` opens/closes the current-image drawer;
+opening focuses TGM search. `Enter` applies the highlighted type-ahead result
+to the focused image and `Down` navigates type-ahead results. Marked-set
+actions belong only to the dedicated tab.
 
 ### 10.3 Mutation boundary
 
@@ -582,8 +586,8 @@ protection. AI tests must never trigger a real CLIP download.
 2. SQLite tag cache, FTS migration, synchronization, and tests.
 3. TGM importer, normalized repository, managed update flow, and tests.
 4. TGM term vectors, image-vector lookup, proposal worker, and tests.
-5. Single-image and bulk tagging workbench.
-6. Derivative export service, ExifTool writer, dialog, and tests.
+5. Current-image tagging drawer and dedicated marked-images tool.
+6. Derivative export service, ExifTool writer, marked-images integration, and tests.
 7. Documentation, translations, manual UX verification, and rollout.
 
 ## 16. Acceptance Criteria
