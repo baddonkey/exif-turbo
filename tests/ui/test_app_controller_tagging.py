@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -117,6 +118,73 @@ def test_app_controller_unlock_initializes_tagging_services_and_status(
     assert controller.tgmSubjectCount == 1
 
 
+def test_app_controller_selection_exposes_deduplicated_embedded_tags_read_only(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, search_model, _db_path, image_path = tagging_controller
+    search_model.set_rows(
+        [
+            SearchResult(
+                path=str(image_path),
+                filename=image_path.name,
+                metadata_json=json.dumps(
+                    {
+                        "XMP-dc:Subject": "['Family', 'Summer']",
+                        "IPTC:Keywords": ["family", "Vacation"],
+                    }
+                ),
+                size=5,
+                mtime=1.0,
+                image_id=1,
+            )
+        ]
+    )
+
+    # Act
+    controller._select_source_row(0)
+
+    # Assert
+    model = controller.embeddedTagsModel
+    assert [model.data(model.index(row), model.LabelRole) for row in range(3)] == [
+        "Family",
+        "Summer",
+        "Vacation",
+    ]
+    derivative_model = controller.derivativeTagsModel
+    assert [
+        derivative_model.data(derivative_model.index(row), derivative_model.LabelRole)
+        for row in range(3)
+    ] == ["Family", "Summer", "Vacation"]
+    assert controller.freeTagsModel.rowCount() == 0
+
+
+def test_app_controller_clear_selection_clears_embedded_tags(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, search_model, _db_path, image_path = tagging_controller
+    search_model.set_rows(
+        [
+            SearchResult(
+                path=str(image_path),
+                filename=image_path.name,
+                metadata_json='{"IPTC:Keywords": ["Family"]}',
+                size=5,
+                mtime=1.0,
+                image_id=1,
+            )
+        ]
+    )
+    controller._select_source_row(0)
+
+    # Act
+    controller._clear_details()
+
+    # Assert
+    assert controller.embeddedTagsModel.rowCount() == 0
+
+
 def test_app_controller_restart_reuses_installed_tgm_snapshot(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -195,11 +263,17 @@ def test_app_controller_manual_add_and_remove_refreshes_accepted_model(
     # Act
     controller.addSelectedTgmConcept("Woods")
     added_count = controller.acceptedTagsModel.rowCount()
+    derivative_label = controller.derivativeTagsModel.data(
+        controller.derivativeTagsModel.index(0),
+        controller.derivativeTagsModel.LabelRole,
+    )
     controller.removeSelectedTgmConcept("loc-tgm:tgm000001")
 
     # Assert
     assert added_count == 1
+    assert derivative_label == "Forests"
     assert controller.acceptedTagsModel.rowCount() == 0
+    assert controller.derivativeTagsModel.rowCount() == 0
     assert Path(f"{image_path}.sidecar.json").exists()
 
 
@@ -577,6 +651,33 @@ def test_app_controller_derivative_result_reports_canceled_images(
     # Assert
     assert controller.derivativeResultSummary == (
         "No derivatives were created. 1 derivative(s) canceled."
+    )
+
+
+def test_app_controller_derivative_result_reports_first_failure_detail(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    controller, _model, _db_path, _image_path = tagging_controller
+    source = tmp_path / "broken.png"
+    result = DerivativeExportResult(
+        (
+            DerivativeExportItemResult(
+                source,
+                tmp_path / "output" / source.name,
+                DerivativeExportStatus.FAILED,
+                "ExifTool metadata write failed: unsupported metadata",
+            ),
+        )
+    )
+
+    # Act
+    controller._on_derivative_result(result)
+
+    # Assert
+    assert "First failure (broken.png): ExifTool metadata write failed" in (
+        controller.derivativeResultSummary
     )
 
 

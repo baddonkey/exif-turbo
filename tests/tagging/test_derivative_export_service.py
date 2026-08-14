@@ -126,6 +126,33 @@ def test_create_plan_includes_custom_free_tags(
     assert plan.items[0].labels == ("Deer", "Family")
 
 
+def test_create_plan_preserves_embedded_keywords_with_accepted_additions(
+    tmp_path: Path, repo: ImageIndexRepository
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    image_path = source_root / "photo.jpg"
+    source_root.mkdir()
+    image_path.write_bytes(b"original")
+    _index_image(repo, image_path, "Deer")
+    repo.upsert_image(
+        str(image_path),
+        image_path.name,
+        image_path.stat().st_mtime,
+        image_path.stat().st_size,
+        {"XMP-dc:Subject": "['Original', 'deer']"},
+        "",
+    )
+
+    # Act
+    plan = DerivativeExportService(repo, FakeMetadataWriter()).create_plan(
+        {source_root: "source"}, tmp_path / "output", image_paths=[image_path]
+    )
+
+    # Assert
+    assert plan.items[0].labels == ("Deer", "Original")
+
+
 def test_create_plan_single_used_nested_root_omits_redundant_root_folder(
     tmp_path: Path, repo: ImageIndexRepository
 ) -> None:

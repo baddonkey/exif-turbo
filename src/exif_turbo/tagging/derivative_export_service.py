@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import ast
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -12,6 +14,44 @@ from typing import Callable, Iterable, Mapping, Protocol, Sequence
 
 from ..data.image_index_repository import ImageIndexRepository
 from .exif_metadata_writer import ExifMetadataWriter
+
+
+_EMBEDDED_KEYWORD_KEYS = (
+    "XMP-dc:Subject",
+    "XMP:Subject",
+    "IPTC:Keywords",
+    "XMP-lr:HierarchicalSubject",
+    "XMP:HierarchicalSubject",
+)
+
+
+def merge_keyword_labels(*groups: Iterable[str]) -> tuple[str, ...]:
+    labels_by_key: dict[str, str] = {}
+    for group in groups:
+        for value in group:
+            label = value.strip()
+            if label:
+                labels_by_key.setdefault(label.casefold(), label)
+    return tuple(
+        sorted(labels_by_key.values(), key=lambda label: (label.casefold(), label))
+    )
+
+
+def extract_embedded_keyword_labels(
+    metadata: Mapping[str, object],
+) -> tuple[str, ...]:
+    labels: list[str] = []
+    for key in _EMBEDDED_KEYWORD_KEYS:
+        value = metadata.get(key)
+        values: object = value
+        if isinstance(value, str) and value.strip().startswith(("[", "(")):
+            try:
+                values = ast.literal_eval(value)
+            except (SyntaxError, ValueError):
+                values = value
+        candidates = values if isinstance(values, (list, tuple)) else (values,)
+        labels.extend(str(candidate) for candidate in candidates if candidate is not None)
+    return merge_keyword_labels(labels)
 
 
 class DerivativeExportError(ValueError):
@@ -259,17 +299,28 @@ class DerivativeExportService:
                 pass
 
     def _accepted_labels(self, source: Path) -> tuple[str, ...]:
-        labels = {
+        accepted_labels = [
             tag.label.strip()
             for tag in self._image_repository.get_accepted_tags(str(source))
             if tag.label.strip()
-        }
-        labels.update(
+        ]
+        accepted_labels.extend(
             label.strip()
             for label in self._image_repository.get_free_tags(str(source))
             if label.strip()
         )
-        return tuple(sorted(labels, key=lambda label: (label.casefold(), label)))
+        if not accepted_labels:
+            return ()
+        embedded_labels: tuple[str, ...] = ()
+        rows = self._image_repository.get_images_by_paths([str(source)])
+        if rows:
+            try:
+                metadata = json.loads(rows[0][3])
+                if isinstance(metadata, dict):
+                    embedded_labels = extract_embedded_keyword_labels(metadata)
+            except (TypeError, json.JSONDecodeError):
+                pass
+        return merge_keyword_labels(accepted_labels, embedded_labels)
 
     @classmethod
     def _normalize_roots(

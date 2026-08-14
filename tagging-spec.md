@@ -444,7 +444,12 @@ icon and keyboard shortcut. For the focused image it shows:
 - Sidecar synchronization or write errors.
 
 The drawer is deliberately limited to the focused image. It does not expose
-marked-set state or bulk actions.
+marked-set state or bulk actions. At the top it displays existing XMP Subject,
+IPTC Keywords, and hierarchical-subject values from the indexed metadata as a
+read-only list. These source-image values are not sidecar tags and cannot be
+changed from the drawer. A fixed footer displays the final derivative keyword
+preview: existing embedded keywords merged with accepted controlled and custom
+tags, case-insensitively deduplicated and deterministically sorted.
 
 ### 10.2 Bulk tagging
 
@@ -492,15 +497,18 @@ untagged derivative or output directory is created for those items.
 
 ### 11.2 Metadata mapping
 
-Accepted canonical TGM labels and custom free-tag labels replace these keyword
-fields on the derivative:
+Accepted canonical TGM labels and custom free-tag labels are merged with the
+existing values of these keyword fields on the derivative:
 
 - `XMP-dc:Subject`
 - `IPTC:Keywords`
 
 Other copied metadata is preserved. A narrow ExifTool writer adapter invokes
 ExifTool with no-backup/overwrite-original behavior against the derivative.
-The adapter must reject a target that resolves to an original source path.
+The adapter must reject a target that resolves to an original source path. It
+reads keywords from the copied file before writing, removes duplicates
+case-insensitively, gives accepted additions spelling precedence, and verifies
+the final sorted labels in both fields.
 
 If metadata writing or verification fails, EXIF Turbo removes the incomplete
 derivative where possible and reports the failure. The source hash and mtime

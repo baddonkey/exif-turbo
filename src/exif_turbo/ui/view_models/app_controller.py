@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import io
 import html as html_lib
+import io
 import json
 import logging
 import os
@@ -46,6 +46,10 @@ from ...indexing.image_utils import RAW_EXTENSIONS
 from ...models.indexed_folder import IndexedFolder
 from ...models.search_result import SearchResult
 from ...models.tgm import TgmCategory
+from ...tagging.derivative_export_service import (
+    extract_embedded_keyword_labels,
+    merge_keyword_labels,
+)
 from ...tagging.sidecar_repository import FilesystemSidecarRepository
 from ...tagging.tagging_service import TaggingService
 from ...tagging.tgm_snapshot_repository import TgmSnapshotRepository
@@ -357,6 +361,9 @@ class AppController(QObject):
         self._tgm_repository: TgmSnapshotRepository | None = None
         self._tagging_service: TaggingService | None = None
         self._accepted_tags_model = AcceptedTagListModel()
+        self._embedded_tags_model = FreeTagListModel()
+        self._derivative_tags_model = FreeTagListModel()
+        self._embedded_tags: tuple[str, ...] = ()
         self._free_tags_model = FreeTagListModel()
         self._free_tag_suggestions_model = FreeTagListModel()
         self._tgm_search_model = TgmSearchListModel()
@@ -547,6 +554,14 @@ class AppController(QObject):
     @Property(QObject, constant=True)
     def acceptedTagsModel(self) -> QObject:
         return self._accepted_tags_model
+
+    @Property(QObject, constant=True)
+    def embeddedTagsModel(self) -> QObject:
+        return self._embedded_tags_model
+
+    @Property(QObject, constant=True)
+    def derivativeTagsModel(self) -> QObject:
+        return self._derivative_tags_model
 
     @Property(QObject, constant=True)
     def freeTagsModel(self) -> QObject:
@@ -3636,6 +3651,7 @@ class AppController(QObject):
         if not path or self._tagging_service is None:
             self._accepted_tags_model.set_rows([])
             self._free_tags_model.set_rows([])
+            self._derivative_tags_model.set_rows(self._embedded_tags if path else ())
             if not preserve_proposals:
                 self._pending_proposals_model.set_rows([])
             return
@@ -3643,12 +3659,20 @@ class AppController(QObject):
             state = self._tagging_service.get_image_tagging_state(path)
             self._accepted_tags_model.set_rows(state.accepted_tags)
             self._free_tags_model.set_rows(state.free_tags)
+            self._derivative_tags_model.set_rows(
+                merge_keyword_labels(
+                    (tag.label for tag in state.accepted_tags),
+                    state.free_tags,
+                    self._embedded_tags,
+                )
+            )
             if not preserve_proposals:
                 self._pending_proposals_model.set_rows([])
             self._selected_tagging_error = ""
         except Exception as exc:  # noqa: BLE001
             self._accepted_tags_model.set_rows([])
             self._free_tags_model.set_rows([])
+            self._derivative_tags_model.set_rows(self._embedded_tags)
             if not preserve_proposals:
                 self._pending_proposals_model.set_rows([])
             self._selected_tagging_error = str(exc)
@@ -4065,6 +4089,21 @@ class AppController(QObject):
             )
         if failed_count:
             parts.append(_("{} derivative(s) failed.").format(failed_count))
+            failed_item = next(
+                (
+                    item
+                    for item in items
+                    if getattr(getattr(item, "status", None), "value", None)
+                    == "failed"
+                ),
+                None,
+            )
+            if failed_item is not None:
+                source_name = Path(str(getattr(failed_item, "source", ""))).name
+                detail = str(getattr(failed_item, "message", "") or "unknown error")
+                parts.append(
+                    _("First failure ({}): {}").format(source_name, detail)
+                )
         if canceled_count:
             parts.append(_("{} derivative(s) canceled.").format(canceled_count))
         self._derivative_summary = " ".join(parts)
@@ -4227,6 +4266,9 @@ class AppController(QObject):
             self._geo_wikipedia_url = ""
             self.geoWikipediaUrlChanged.emit()
         self._exif_model.set_rows([])
+        self._embedded_tags = ()
+        self._embedded_tags_model.set_rows([])
+        self._derivative_tags_model.set_rows([])
         self._selected_image_source = ""
         self._selected_thumb_source = ""
         self._current_result_row = -1
@@ -4264,6 +4306,9 @@ class AppController(QObject):
         try:
             parsed = json.loads(meta_json)
             if isinstance(parsed, dict):
+                self._embedded_tags = extract_embedded_keyword_labels(parsed)
+                self._embedded_tags_model.set_rows(self._embedded_tags)
+                self._derivative_tags_model.set_rows(self._embedded_tags)
                 rows = sorted(
                     [(str(k), str(v)) for k, v in parsed.items()],
                     key=lambda r: r[0].lower(),
@@ -4283,6 +4328,9 @@ class AppController(QObject):
         except Exception:
             pass
         self._exif_model.set_rows([])
+        self._embedded_tags = ()
+        self._embedded_tags_model.set_rows([])
+        self._derivative_tags_model.set_rows([])
         if self._geo_location_url:
             self._geo_location_url = ""
             self.geoLocationUrlChanged.emit()

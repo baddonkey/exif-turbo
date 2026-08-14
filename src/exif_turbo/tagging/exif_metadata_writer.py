@@ -31,12 +31,25 @@ class ExifMetadataWriter:
                 f"refusing to write metadata to source image: {target}"
             )
 
-        arguments = [
+        labels = self._merge_labels(labels, self._read_keywords(target))
+        clear_arguments = [
             find_exiftool(),
+            "-m",
             "-overwrite_original",
             "-XMP-dc:Subject=",
             "-IPTC:Keywords=",
+            str(target),
         ]
+        clear_result = self._run(clear_arguments)
+        if clear_result.returncode != 0:
+            detail = (
+                clear_result.stderr.strip()
+                or clear_result.stdout.strip()
+                or "unknown error"
+            )
+            raise ExifMetadataWriteError(f"ExifTool metadata clear failed: {detail}")
+
+        arguments = [find_exiftool(), "-m", "-overwrite_original"]
         for label in labels:
             arguments.extend(
                 (f"-XMP-dc:Subject+={label}", f"-IPTC:Keywords+={label}")
@@ -47,6 +60,31 @@ class ExifMetadataWriter:
             detail = result.stderr.strip() or result.stdout.strip() or "unknown error"
             raise ExifMetadataWriteError(f"ExifTool metadata write failed: {detail}")
         self._verify_keywords(target, labels)
+
+    def _read_keywords(self, target: Path) -> tuple[str, ...]:
+        result = self._run(
+            [
+                find_exiftool(),
+                "-json",
+                "-G1",
+                "-XMP-dc:Subject",
+                "-IPTC:Keywords",
+                str(target),
+            ]
+        )
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip() or "unknown error"
+            raise ExifMetadataWriteError(f"ExifTool metadata read failed: {detail}")
+        try:
+            record = json.loads(result.stdout)[0]
+            return self._merge_labels(
+                self._as_labels(record.get("XMP-dc:Subject")),
+                self._as_labels(record.get("IPTC:Keywords")),
+            )
+        except (IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ExifMetadataWriteError(
+                "ExifTool returned invalid metadata"
+            ) from exc
 
     def _verify_keywords(self, target: Path, labels: Sequence[str]) -> None:
         result = self._run(
@@ -104,3 +142,18 @@ class ExifMetadataWriter:
         if isinstance(value, list) and all(isinstance(item, str) for item in value):
             return tuple(value)
         return ()
+
+    @staticmethod
+    def _merge_labels(*groups: Sequence[str]) -> tuple[str, ...]:
+        labels_by_key: dict[str, str] = {}
+        for group in groups:
+            for value in group:
+                label = value.strip()
+                if label:
+                    labels_by_key.setdefault(label.casefold(), label)
+        return tuple(
+            sorted(
+                labels_by_key.values(),
+                key=lambda label: (label.casefold(), label),
+            )
+        )

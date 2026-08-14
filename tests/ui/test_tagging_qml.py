@@ -66,6 +66,15 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
     assert 'objectName: "addFreeTagButton"' in source
     assert 'objectName: "freeTagSuggestions"' in source
     assert 'objectName: "currentFreeTags"' in source
+    assert 'objectName: "embeddedTags"' in source
+    assert 'objectName: "derivativeTagsFooter"' in source
+    assert 'objectName: "finalDerivativeTags"' in source
+    assert source.index('objectName: "derivativeTagsFooter"') > source.index(
+        'objectName: "taggingScrollView"'
+    )
+    assert 'text: qsTr("Existing image tags")' in source
+    assert "appController.embeddedTagsModel" in source
+    assert "appController.derivativeTagsModel" in source
     assert 'text: qsTr("Custom tags")' in drawer_source
     assert 'text: qsTr("Tags on current image")' in drawer_source
     assert "Marked images" not in drawer_source

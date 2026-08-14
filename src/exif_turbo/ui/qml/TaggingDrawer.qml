@@ -147,6 +147,53 @@ Drawer {
                 spacing: 0
 
                 ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.margins: 14
+                    spacing: 6
+                    visible: drawer.hasSelection
+
+                    Label {
+                        text: qsTr("Existing image tags")
+                        font.pixelSize: 13
+                        font.weight: Font.DemiBold
+                    }
+                    Label {
+                        visible: embeddedTags.count === 0
+                        text: qsTr("No embedded tags found.")
+                        font.pixelSize: 11
+                        opacity: 0.55
+                    }
+                    ListView {
+                        id: embeddedTags
+                        objectName: "embeddedTags"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(contentHeight, 120)
+                        visible: count > 0
+                        clip: true
+                        interactive: contentHeight > height
+                        model: appController ? appController.embeddedTagsModel : null
+                        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                        delegate: Label {
+                            required property string label
+                            width: embeddedTags.width
+                            height: 28
+                            text: label
+                            elide: Text.ElideRight
+                            verticalAlignment: Text.AlignVCenter
+                            font.pixelSize: 12
+                            opacity: 0.75
+                        }
+                    }
+                }
+
+                Rectangle {
+                    visible: drawer.hasSelection
+                    Layout.fillWidth: true
+                    height: 1
+                    color: Material.dividerColor
+                }
+
+                ColumnLayout {
                     visible: appController && !appController.taggingEnabled
                     Layout.fillWidth: true
                     Layout.margins: 18
@@ -550,6 +597,68 @@ Drawer {
                     color: Material.color(Material.Red)
                     wrapMode: Text.WordWrap
                     font.pixelSize: 11
+                }
+            }
+        }
+
+        Rectangle {
+            objectName: "derivativeTagsFooter"
+            Layout.fillWidth: true
+            Layout.preferredHeight: 132
+            color: Qt.rgba(Material.accentColor.r, Material.accentColor.g,
+                           Material.accentColor.b, 0.07)
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 14
+                anchors.rightMargin: 14
+                anchors.topMargin: 9
+                anchors.bottomMargin: 9
+                spacing: 3
+
+                Label {
+                    text: qsTr("Final derivative tags")
+                    color: Material.accent
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                }
+                Label {
+                    text: qsTr("XMP Subject / IPTC Keywords")
+                    font.pixelSize: 9
+                    opacity: 0.55
+                }
+                Label {
+                    Layout.fillWidth: true
+                    visible: !drawer.hasSelection
+                    text: qsTr("No image selected")
+                    font.pixelSize: 11
+                    opacity: 0.55
+                }
+                Label {
+                    Layout.fillWidth: true
+                    visible: drawer.hasSelection && finalDerivativeTags.count === 0
+                    text: qsTr("No tags would be written to a derivative.")
+                    font.pixelSize: 11
+                    opacity: 0.55
+                }
+                ListView {
+                    id: finalDerivativeTags
+                    objectName: "finalDerivativeTags"
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    visible: drawer.hasSelection && count > 0
+                    clip: true
+                    model: appController ? appController.derivativeTagsModel : null
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                    delegate: Label {
+                        required property string label
+                        width: finalDerivativeTags.width
+                        height: 22
+                        text: label
+                        elide: Text.ElideRight
+                        verticalAlignment: Text.AlignVCenter
+                        font.pixelSize: 11
+                    }
                 }
             }
         }
