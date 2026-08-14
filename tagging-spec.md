@@ -17,14 +17,13 @@ The end-to-end feature is implemented:
   fallback. Canonical merged `TNR` values become `loc-tgm:tgmNNNNNN`; `UF` and
   non-descriptor `USE` terms resolve as aliases; postable subject and
   genre/form categories are selectable.
-- SQLCipher caches accepted tags, aliases, sidecar synchronization state, and
-  pending/rejected proposals. `images_fts.tags_text` contains accepted labels,
-  IDs, categories, vocabulary identity, and active aliases.
-- The Search/Browse tag button and `Ctrl+T` open the non-modal QML drawer. It
-  provides canonical/alias search, selected-image add/remove, marked-image
-  aggregation and bulk add/remove, proposal generation and review, confirmed
-  optional auto-accept, derivative output selection, progress, cancellation,
-  and summaries. Existing persistent marks and the `Space` toggle are reused.
+- SQLCipher caches accepted controlled tags, custom free tags, the reusable
+  custom-tag catalog, aliases, sidecar synchronization state, and rejected
+  proposal decisions. `images_fts.tags_text` contains controlled and custom
+  labels, IDs, categories, vocabulary identity, and active aliases.
+- The Search/Browse tag button and `Ctrl+T` open the non-modal current-image
+  drawer. It provides reusable custom tags, canonical/alias TGM search,
+  selected-image add/remove, and proposal generation and review.
 - Proposal generation requires AI enabled, an explicit image AI scan, and an
   independently built TGM term-vector index. Defaults are 0.24 for proposals
   and 0.32 for auto-accept; auto-accept is disabled by default and its threshold
@@ -164,7 +163,8 @@ fall back to hidden or central storage.
         "vocabulary_checksum": "sha256:example"
       }
     }
-  ]
+  ],
+  "free_tags": ["Family", "Summer 2026"]
 }
 ```
 
@@ -181,6 +181,7 @@ TGM record pair.
 | `source.mtime_ns` | Optional non-negative modification-time snapshot. |
 | `updated_at` | Required UTC RFC 3339 timestamp written after a successful mutation. |
 | `tags` | Required array, unique by `concept_id`. Order is deterministic by canonical label and then ID. |
+| `free_tags` | Optional array of NFC-normalized, trimmed strings. Values must be non-empty, contain no control characters, and be unique ignoring case. Order is deterministic by label. |
 | `concept_id` | Required qualified TGM identifier `loc-tgm:tgmNNNNNN`. |
 | `label` | Required canonical-label snapshot from the active TGM version when accepted. |
 | `vocabulary` | Required value `loc-tgm` in version 1. |
@@ -192,7 +193,8 @@ TGM record pair.
 | `provenance.vocabulary_checksum` | Required checksum of the normalized TGM snapshot used to accept the term. |
 
 In version 1, "manual" means that a user selected or accepted a TGM concept.
-Free-text tags are not supported.
+Custom free tags remain separate from controlled `tags`; they have no concept
+ID, category, vocabulary identity, proposal score, or provenance record.
 
 Readers preserve unknown object fields at the top level and within tag records
 when rewriting a supported schema version. Unknown fields do not become FTS
@@ -319,9 +321,10 @@ No arbitrary thesaurus file picker is exposed in version 1.
 
 The encrypted SQLite database stores normalized, rebuildable state:
 
-- Accepted tags linked to `images.id` with cascade deletion.
+- Accepted controlled and custom tags linked to `images.id` with cascade deletion.
+- A per-database custom-tag catalog retained after image-level removal for reuse.
 - Sidecar path, stamp, checksum, schema version, and synchronization status.
-- Pending and rejected proposal state.
+- Rejected proposal decisions. Undecided proposals remain in memory only.
 - Normalized TGM concepts, aliases, relationships, and installation metadata.
 
 Exact table names and columns are implementation details, but foreign keys and
@@ -349,8 +352,8 @@ logic is centralized so:
 - Removing a sidecar clears only its tag-derived search content.
 
 `tags_text` contains accepted canonical labels, qualified IDs, TGM identity,
-category, and known aliases from the active normalized TGM snapshot. Pending and
-rejected proposals are excluded.
+category, known aliases from the active normalized TGM snapshot, and custom
+free-tag labels. Undecided and rejected proposals are excluded.
 
 Existing FTS syntax remains unchanged. A user can search by a canonical label,
 an alternate term, or a qualified TGM ID.
@@ -432,6 +435,8 @@ A docked tagging workbench is available from Search and Browse through a tag
 icon and keyboard shortcut. For the focused image it shows:
 
 - Accepted canonical TGM tags.
+- Custom free tags assigned to the image.
+- Remembered custom-tag suggestions from the current database.
 - TGM type-ahead over canonical and alternate terms.
 - Ranked proposals with confidence and provider.
 - Subject or genre/format category.
@@ -455,14 +460,14 @@ marks, or generate proposals for marks. Bulk auto-acceptance requires
 confirmation. Operations run in cancellable QThreads with per-image progress
 and a final summary of succeeded, skipped, conflicted, and failed items.
 
-Space remains the mark toggle. `Ctrl+T` opens/closes the current-image drawer;
-opening focuses TGM search. `Enter` applies the highlighted type-ahead result
-to the focused image and `Down` navigates type-ahead results. Marked-set
-actions belong only to the dedicated tab.
+Space remains the mark toggle. `Ctrl+T` opens/closes the current-image drawer.
+Custom tags are available whenever tagging is enabled, without requiring TGM
+or AI. Enter adds the typed custom tag; clicking a remembered label reuses its
+stored spelling. Marked-set actions belong only to the dedicated tab.
 
 ### 10.3 Mutation boundary
 
-All manual, proposal, and bulk mutations use one application service. For each
+All controlled-tag, custom-tag, proposal, and bulk mutations use one application service. For each
 image it checks the sidecar revision, performs the atomic sidecar write, updates
 normalized SQLite rows and FTS, and emits model/controller updates. Neither QML
 nor a proposal provider writes a sidecar directly.
@@ -485,7 +490,8 @@ untagged derivative or output directory is created for those items.
 
 ### 11.2 Metadata mapping
 
-Accepted canonical TGM labels replace these keyword fields on the derivative:
+Accepted canonical TGM labels and custom free-tag labels replace these keyword
+fields on the derivative:
 
 - `XMP-dc:Subject`
 - `IPTC:Keywords`

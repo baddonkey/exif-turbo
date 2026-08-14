@@ -38,6 +38,9 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
         "searchTgm(",
         "addSelectedTgmConcept(",
         "removeSelectedTgmConcept(",
+        "addSelectedFreeTag(",
+        "removeSelectedFreeTag(",
+        "searchFreeTags(",
         "acceptSelectedProposal(",
         "rejectSelectedProposal(",
         "generateSelectedTagProposals(",
@@ -57,6 +60,10 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
     # Assert
     assert missing == []
     assert 'objectName: "addTgmTermButton"' in source
+    assert 'objectName: "addFreeTagButton"' in source
+    assert 'objectName: "freeTagSuggestions"' in source
+    assert 'objectName: "currentFreeTags"' in source
+    assert 'text: qsTr("Custom tags")' in drawer_source
     assert 'text: qsTr("Tags on current image")' in drawer_source
     assert "Marked images" not in drawer_source
     assert "markedMode" not in drawer_source
@@ -66,8 +73,9 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
     assert "autoAcceptMarkedTagProposals" not in drawer_source
     assert "generateDerivativesForMarked" not in drawer_source
     assert "function onCurrentResultRowChanged()" in drawer_source
-    assert "onOpened: proposalGenerationTimer.restart()" in drawer_source
+    assert "onOpened: {" in drawer_source
     assert "proposalGenerationTimer.restart()" in drawer_source
+    assert 'appController.searchFreeTags("")' in drawer_source
     assert "appController.generateSelectedTagProposals()" in drawer_source
     assert 'objectName: "tagProposalsScrollBar"' in drawer_source
     assert "active: proposalsList.contentHeight > proposalsList.height" in drawer_source
@@ -114,6 +122,10 @@ def test_main_qml_with_tagging_workbench_loads(
     assert root.findChild(QObject, "taggingDrawer") is not None
     assert root.findChild(QQuickItem, "taggingEnabledSwitch") is not None
     assert root.findChild(QQuickItem, "tagProposalsScrollBar") is not None
+    assert root.findChild(QQuickItem, "freeTagField") is not None
+    assert root.findChild(QQuickItem, "addFreeTagButton") is not None
+    assert root.findChild(QQuickItem, "freeTagSuggestions") is not None
+    assert root.findChild(QQuickItem, "currentFreeTags") is not None
 
     controller.close()
     engine.deleteLater()

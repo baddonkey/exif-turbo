@@ -816,16 +816,17 @@ store for accepted tags. They are plain text: SQLCipher database encryption
 does **not** encrypt them, so they inherit the source folder's permissions and
 backup policy. Tagging never changes the original image's bytes or timestamp.
 
-Each accepted term stores a canonical ID such as `loc-tgm:tgm000001`, its
+Each accepted controlled term stores a canonical ID such as `loc-tgm:tgm000001`, its
 canonical label, subject or genre/form category, and acceptance provenance.
 The importer supports the official TGM v1 XML and tagged-text structures.
 Canonical descriptors use merged TGM `TNR` numbers; `UF` and non-descriptor
 `USE` terms become aliases that resolve to the canonical concept. Only
 postable subject (`TTCSubj`, MARC 150/650) and genre/form (`TTCForm`, MARC
-155/655) concepts can be accepted.
+155/655) concepts can be accepted. Custom tags are stored separately in the
+same sidecar as normalized text labels.
 
-Accepted canonical labels, qualified IDs, categories, vocabulary identity, and
-known aliases are copied into the encrypted database's FTS5 cache. Search uses
+Accepted canonical labels, qualified IDs, categories, vocabulary identity,
+known aliases, and custom labels are copied into the encrypted database's FTS5 cache. Search uses
 the normal EXIF query box and syntax; undecided and rejected proposals are not
 searchable. A regular or full image scan synchronizes new, changed, or deleted
 sidecars even when the original image stamp did not change. Malformed sidecars
@@ -846,6 +847,11 @@ or press **Ctrl+T**. The non-modal drawer contains these controls:
   accepts the highlighted result, and **Down** moves through results.
 - **Tags on current image** shows the focused image's canonical tags,
   category, and provenance. The minus button removes a tag from that image.
+- **Custom tags** accepts a new label with **Enter** or **Add**. Previously used
+  labels are remembered for the current database and appear as suggestions;
+  click one to reuse the same spelling. Removing a custom tag from an image
+  does not remove it from the remembered list. Custom tags do not require TGM
+  installation or AI features.
 - **Tag proposals** generates suggestions automatically when the drawer opens
   and whenever the focused image changes. Each row shows its score and provider
   and has accept and reject buttons. **Generate for current image** refreshes
@@ -898,7 +904,7 @@ outside every indexed source root. The exporter:
 - preserves each source format and relative source folder tree;
 - adds collision-safe top-level labels when marks span multiple indexed roots;
 - skips untagged images and existing destination files without overwriting;
-- writes accepted canonical labels to **XMP Subject** and **IPTC Keywords** on
+- writes accepted controlled and custom labels to **XMP Subject** and **IPTC Keywords** on
   a temporary copy, verifies both fields with ExifTool, then publishes it;
 - removes an incomplete temporary copy after a write or verification failure;
 - never copies sidecars into the derivative tree.

@@ -134,6 +134,20 @@ class ImageIndexRepository:
             CREATE INDEX IF NOT EXISTS idx_accepted_image_tags_concept
                 ON accepted_image_tags(concept_id);
 
+            CREATE TABLE IF NOT EXISTS image_free_tags (
+                image_id INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE,
+                normalized_label TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                display_label TEXT NOT NULL,
+                PRIMARY KEY (image_id, normalized_label)
+            );
+
+            CREATE TABLE IF NOT EXISTS free_tag_catalog (
+                normalized_label TEXT PRIMARY KEY,
+                display_label TEXT NOT NULL,
+                last_used_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE TABLE IF NOT EXISTS image_tag_proposals (
                 image_id INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE,
                 concept_id TEXT NOT NULL,
@@ -311,6 +325,9 @@ class ImageIndexRepository:
             self.conn.execute(
                 "DELETE FROM accepted_image_tags WHERE image_id = ?", (image_id,)
             )
+            self.conn.execute(
+                "DELETE FROM image_free_tags WHERE image_id = ?", (image_id,)
+            )
             for position, tag in enumerate(sidecar.tags):
                 self.conn.execute(
                     """
@@ -349,6 +366,24 @@ class ImageIndexRepository:
                         for alias in aliases_by_concept.get(tag.concept_id, ())
                         if alias.strip()
                     ),
+                )
+            for position, label in enumerate(sidecar.free_tags):
+                normalized_label = label.casefold()
+                self.conn.execute(
+                    "INSERT INTO image_free_tags "
+                    "(image_id, normalized_label, position, display_label) "
+                    "VALUES (?, ?, ?, ?)",
+                    (image_id, normalized_label, position, label),
+                )
+                self.conn.execute(
+                    """
+                    INSERT INTO free_tag_catalog (
+                        normalized_label, display_label, last_used_at
+                    ) VALUES (?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(normalized_label) DO UPDATE SET
+                        last_used_at=CURRENT_TIMESTAMP
+                    """,
+                    (normalized_label, label),
                 )
             self.conn.executemany(
                 "DELETE FROM image_tag_proposals "
@@ -421,6 +456,52 @@ class ImageIndexRepository:
             for row in rows
         )
 
+    def get_free_tags(self, image_path: str) -> tuple[str, ...]:
+        rows = self.conn.execute(
+            """
+            SELECT display_label
+            FROM image_free_tags
+            WHERE image_id = (SELECT id FROM images WHERE path = ?)
+            ORDER BY position
+            """,
+            (image_path,),
+        ).fetchall()
+        return tuple(str(row[0]) for row in rows)
+
+    def search_free_tags(self, query: str, *, limit: int = 20) -> tuple[str, ...]:
+        normalized_query = query.strip().casefold()
+        rows = self.conn.execute(
+            """
+            SELECT display_label
+            FROM free_tag_catalog
+            WHERE instr(normalized_label, ?) > 0
+            ORDER BY
+                CASE
+                    WHEN normalized_label = ? THEN 0
+                    WHEN substr(normalized_label, 1, length(?)) = ? THEN 1
+                    ELSE 2
+                END,
+                last_used_at DESC,
+                display_label COLLATE NOCASE
+            LIMIT ?
+            """,
+            (
+                normalized_query,
+                normalized_query,
+                normalized_query,
+                normalized_query,
+                max(1, min(limit, 100)),
+            ),
+        ).fetchall()
+        return tuple(str(row[0]) for row in rows)
+
+    def resolve_free_tag(self, label: str) -> str | None:
+        row = self.conn.execute(
+            "SELECT display_label FROM free_tag_catalog WHERE normalized_label = ?",
+            (label.strip().casefold(),),
+        ).fetchone()
+        return None if row is None else str(row[0])
+
     def get_sidecar_sync_state(self, image_path: str) -> SidecarSyncState | None:
         row = self.conn.execute(
             """
@@ -488,6 +569,11 @@ class ImageIndexRepository:
         with self.conn:
             self.conn.execute(
                 "DELETE FROM accepted_image_tags "
+                "WHERE image_id = (SELECT id FROM images WHERE path = ?)",
+                (image_path,),
+            )
+            self.conn.execute(
+                "DELETE FROM image_free_tags "
                 "WHERE image_id = (SELECT id FROM images WHERE path = ?)",
                 (image_path,),
             )
@@ -929,6 +1015,7 @@ class ImageIndexRepository:
         # (images_fts_data, images_fts_idx, etc.).  A plain DELETE leaves
         # tombstone entries that keep the file large even after VACUUM.
         self.conn.execute("DELETE FROM image_folders")
+        self.conn.execute("DELETE FROM free_tag_catalog")
         self.conn.execute("DELETE FROM images")
         self.conn.execute("DROP TABLE IF EXISTS images_fts")
         self.conn.execute(
@@ -1871,7 +1958,9 @@ class ImageIndexRepository:
             SELECT category FROM accepted_image_tags WHERE image_id = ?
             UNION ALL
             SELECT alias FROM accepted_image_tag_aliases WHERE image_id = ?
+            UNION ALL
+            SELECT display_label FROM image_free_tags WHERE image_id = ?
             """,
-            (image_id, image_id, image_id, image_id, image_id),
+            (image_id, image_id, image_id, image_id, image_id, image_id),
         ).fetchall()
         return " ".join(str(row[0]) for row in rows)

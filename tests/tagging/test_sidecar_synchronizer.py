@@ -37,6 +37,7 @@ def _sidecar(filename: str) -> ImageSidecar:
                 ),
             ),
         ),
+        free_tags=("Family",),
     )
 
 
@@ -62,6 +63,8 @@ def test_synchronize_unchanged_sidecar_skips_second_parse(tmp_path: Path) -> Non
     )
     synchronizer = SidecarSynchronizer(image_repository, sidecar_repository)
     synchronizer.synchronize([str(image_path)])
+    synchronized_free_tags = image_repository.get_free_tags(str(image_path))
+    free_tag_search_count = image_repository.count_images("Family")
 
     # Act
     result = synchronizer.synchronize([str(image_path)])
@@ -69,4 +72,6 @@ def test_synchronize_unchanged_sidecar_skips_second_parse(tmp_path: Path) -> Non
     # Assert
     assert result.error_count == 0
     assert sidecar_repository.read_count == 1
+    assert synchronized_free_tags == ("Family",)
+    assert free_tag_search_count == 1
     image_repository.close()

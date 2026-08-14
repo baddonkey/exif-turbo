@@ -26,11 +26,12 @@ def _tag(
     )
 
 
-def _sidecar(*tags: ImageTag) -> ImageSidecar:
+def _sidecar(*tags: ImageTag, free_tags: tuple[str, ...] = ()) -> ImageSidecar:
     return ImageSidecar(
         source=SidecarSource(filename="photo.jpg", size=100, mtime_ns=1_000),
         updated_at="2026-08-09T12:30:00Z",
         tags=tags,
+        free_tags=free_tags,
     )
 
 
@@ -141,6 +142,76 @@ def test_replace_tags_preserves_exif_search_and_enables_tag_search(
     assert repo.count_images("tgm000001") == 1
     assert repo.count_images("loc-tgm") == 1
     assert repo.count_images("subject") == 1
+
+
+def test_replace_tags_free_tags_are_searchable_and_remembered(
+    repo: ImageIndexRepository,
+) -> None:
+    # Arrange
+    image_path = "/photos/photo.jpg"
+    repo.upsert_image(image_path, "photo.jpg", 1.0, 100, {}, "Make Hasselblad")
+
+    # Act
+    _replace_tags(
+        repo,
+        image_path,
+        _sidecar(free_tags=("Summer 2026", "Family")),
+    )
+
+    # Assert
+    assert repo.get_free_tags(image_path) == ("Summer 2026", "Family")
+    assert repo.count_images('"Summer 2026"') == 1
+    assert repo.search_free_tags("fam") == ("Family",)
+    assert repo.count_images("Hasselblad") == 1
+
+
+def test_remove_free_tag_from_image_keeps_catalog_suggestion(
+    repo: ImageIndexRepository,
+) -> None:
+    # Arrange
+    image_path = "/photos/photo.jpg"
+    repo.upsert_image(image_path, "photo.jpg", 1.0, 100, {}, "photo")
+    _replace_tags(repo, image_path, _sidecar(free_tags=("Family",)))
+
+    # Act
+    _replace_tags(repo, image_path, _sidecar())
+
+    # Assert
+    assert repo.get_free_tags(image_path) == ()
+    assert repo.count_images("Family") == 0
+    assert repo.search_free_tags("family") == ("Family",)
+
+
+def test_free_tag_catalog_preserves_first_remembered_spelling(
+    repo: ImageIndexRepository,
+) -> None:
+    # Arrange
+    first_path = "/photos/first.jpg"
+    second_path = "/photos/second.jpg"
+    for path in (first_path, second_path):
+        repo.upsert_image(path, Path(path).name, 1.0, 100, {}, Path(path).name)
+    _replace_tags(repo, first_path, _sidecar(free_tags=("Family",)))
+
+    # Act
+    _replace_tags(repo, second_path, _sidecar(free_tags=("family",)))
+
+    # Assert
+    assert repo.resolve_free_tag(" FAMILY ") == "Family"
+
+
+def test_clear_all_rows_clears_remembered_free_tag_catalog(
+    repo: ImageIndexRepository,
+) -> None:
+    # Arrange
+    image_path = "/photos/photo.jpg"
+    repo.upsert_image(image_path, "photo.jpg", 1.0, 100, {}, "photo")
+    _replace_tags(repo, image_path, _sidecar(free_tags=("Family",)))
+
+    # Act
+    repo.clear_all_rows()
+
+    # Assert
+    assert repo.search_free_tags("") == ()
 
 
 def test_replace_tags_aliases_are_searchable(repo: ImageIndexRepository) -> None:

@@ -203,6 +203,35 @@ def test_app_controller_manual_add_and_remove_refreshes_accepted_model(
     assert Path(f"{image_path}.sidecar.json").exists()
 
 
+def test_app_controller_free_tags_work_without_tgm_and_remain_suggestions(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _model, _db_path, image_path = tagging_controller
+    controller._tgm_metadata = {}
+
+    # Act
+    controller.addSelectedFreeTag(" Family ")
+    added_label = controller.freeTagsModel.data(
+        controller.freeTagsModel.index(0),
+        controller.freeTagsModel.LabelRole,
+    )
+    controller.removeSelectedFreeTag("family")
+    controller.searchFreeTags("fam")
+    suggestion = controller.freeTagSuggestionsModel.data(
+        controller.freeTagSuggestionsModel.index(0),
+        controller.freeTagSuggestionsModel.LabelRole,
+    )
+
+    # Assert
+    assert controller.taggingAvailable is False
+    assert controller.freeTaggingAvailable is True
+    assert added_label == "Family"
+    assert controller.freeTagsModel.rowCount() == 0
+    assert suggestion == "Family"
+    assert Path(f"{image_path}.sidecar.json").exists()
+
+
 def test_app_controller_proposal_accept_and_reject_refresh_state(
     tagging_controller: tuple[AppController, SearchListModel, Path, Path],
 ) -> None:

@@ -2,8 +2,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+import unicodedata
 
 from .image_tag import ImageTag, SidecarValidationError, require_string, validate_utc_timestamp
+
+
+def normalize_free_tag(value: str) -> str:
+    normalized = unicodedata.normalize("NFC", value).strip()
+    if not normalized:
+        raise SidecarValidationError("free tags must be non-empty strings")
+    if any(unicodedata.category(character) == "Cc" for character in normalized):
+        raise SidecarValidationError("free tags must not contain control characters")
+    return normalized
 
 
 @dataclass(frozen=True)
@@ -54,6 +64,7 @@ class ImageSidecar:
     source: SidecarSource
     updated_at: str
     tags: tuple[ImageTag, ...] = ()
+    free_tags: tuple[str, ...] = ()
     schema_version: int = 1
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -66,6 +77,11 @@ class ImageSidecar:
         concept_ids = [tag.concept_id for tag in self.tags]
         if len(concept_ids) != len(set(concept_ids)):
             raise SidecarValidationError("tags must be unique by concept_id")
+        normalized_free_tags = tuple(normalize_free_tag(tag) for tag in self.free_tags)
+        normalized_keys = [tag.casefold() for tag in normalized_free_tags]
+        if len(normalized_keys) != len(set(normalized_keys)):
+            raise SidecarValidationError("free tags must be unique ignoring case")
+        object.__setattr__(self, "free_tags", normalized_free_tags)
 
     @classmethod
     def from_dict(cls, data: object) -> ImageSidecar:
@@ -77,12 +93,18 @@ class ImageSidecar:
         raw_tags = data.get("tags")
         if not isinstance(raw_tags, list):
             raise SidecarValidationError("tags must be an array")
-        known = {"schema_version", "source", "updated_at", "tags"}
+        raw_free_tags = data.get("free_tags", [])
+        if not isinstance(raw_free_tags, list) or not all(
+            isinstance(tag, str) for tag in raw_free_tags
+        ):
+            raise SidecarValidationError("free_tags must be an array of strings")
+        known = {"schema_version", "source", "updated_at", "tags", "free_tags"}
         return cls(
             schema_version=schema_version,
             source=SidecarSource.from_dict(data.get("source")),
             updated_at=require_string(data, "updated_at", "updated_at"),
             tags=tuple(ImageTag.from_dict(tag) for tag in raw_tags),
+            free_tags=tuple(raw_free_tags),
             extra={key: value for key, value in data.items() if key not in known},
         )
 
@@ -91,10 +113,15 @@ class ImageSidecar:
             self.tags,
             key=lambda tag: (tag.label.casefold(), tag.concept_id),
         )
+        ordered_free_tags = sorted(
+            self.free_tags,
+            key=lambda tag: (tag.casefold(), tag),
+        )
         return {
             **self.extra,
             "schema_version": self.schema_version,
             "source": self.source.to_dict(),
             "updated_at": self.updated_at,
             "tags": [tag.to_dict() for tag in ordered_tags],
+            "free_tags": ordered_free_tags,
         }

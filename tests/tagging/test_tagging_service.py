@@ -24,6 +24,7 @@ from exif_turbo.tagging.tagging_service import (
     BulkTagStatus,
     TagMembership,
     TaggingConflictError,
+    TaggingFreeTagError,
     TaggingPartialFailure,
     TaggingService,
     TaggingSidecarError,
@@ -187,6 +188,69 @@ def test_tagging_service_add_and_remove_preserve_unknown_fields_and_other_tags(
     assert loaded.sidecar.tags == (existing_tag,)
     assert loaded.sidecar.extra == {"top_extension": {"enabled": True}}
     assert loaded.sidecar.source.extra == {"source_extension": 1}
+
+
+def test_tagging_service_add_and_remove_free_tag_preserves_tgm_and_catalog(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    service, image_repository, image_path = _service(tmp_path)
+    service.add_concept(str(image_path), "Deer")
+
+    # Act
+    added = service.add_free_tag(str(image_path), " Family ")
+    removed = service.remove_free_tag(str(image_path), "family")
+
+    # Assert
+    assert added.sidecar.free_tags == ("Family",)
+    assert removed.sidecar.free_tags == ()
+    assert len(removed.sidecar.tags) == 1
+    assert image_repository.get_free_tags(str(image_path)) == ()
+    assert image_repository.search_free_tags("fam") == ("Family",)
+    assert image_repository.count_images("Deer") == 1
+    assert image_repository.count_images("Family") == 0
+
+
+def test_tagging_service_add_duplicate_free_tag_ignoring_case_is_no_op(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    service, _, image_path = _service(tmp_path)
+    service.add_free_tag(str(image_path), "Family")
+
+    # Act
+    result = service.add_free_tag(str(image_path), " family ")
+
+    # Assert
+    assert result.changed is False
+    assert result.sidecar.free_tags == ("Family",)
+
+
+def test_tagging_service_reuses_remembered_free_tag_spelling(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    service, image_repository, image_path = _service(tmp_path)
+    service.add_free_tag(str(image_path), "Family")
+    service.remove_free_tag(str(image_path), "Family")
+
+    # Act
+    result = service.add_free_tag(str(image_path), "family")
+
+    # Assert
+    assert result.sidecar.free_tags == ("Family",)
+    assert image_repository.get_free_tags(str(image_path)) == ("Family",)
+
+
+def test_tagging_service_add_blank_free_tag_raises_typed_error(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    service, _, image_path = _service(tmp_path)
+
+    # Act / Assert
+    with pytest.raises(TaggingFreeTagError, match="non-empty"):
+        service.add_free_tag(str(image_path), "   ")
 
 
 def test_tagging_service_accept_proposal_uses_clip_provenance_without_pending_cache(

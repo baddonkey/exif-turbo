@@ -8,8 +8,8 @@ from pathlib import Path
 
 from ..data.image_index_repository import ImageIndexRepository
 from ..data.sidecar_sync_state import SidecarSyncState
-from ..models.image_sidecar import ImageSidecar, SidecarSource
-from ..models.image_tag import ImageTag, TagProvenance
+from ..models.image_sidecar import ImageSidecar, SidecarSource, normalize_free_tag
+from ..models.image_tag import ImageTag, SidecarValidationError, TagProvenance
 from ..models.tag_proposal import (
     ProposalBatchResult,
     ProposalGenerationResult,
@@ -33,6 +33,10 @@ class TaggingError(RuntimeError):
 
 class TaggingConceptError(TaggingError):
     """Raised when input does not resolve to a selectable canonical concept."""
+
+
+class TaggingFreeTagError(TaggingError):
+    """Raised when a custom free tag is invalid."""
 
 
 class TaggingPartialFailure(TaggingError):
@@ -87,6 +91,10 @@ class ImageTaggingState:
     @property
     def accepted_tags(self) -> tuple[ImageTag, ...]:
         return () if self.sidecar is None else self.sidecar.tags
+
+    @property
+    def free_tags(self) -> tuple[str, ...]:
+        return () if self.sidecar is None else self.sidecar.free_tags
 
 
 @dataclass(frozen=True)
@@ -169,6 +177,48 @@ class TaggingService:
 
     def remove_concept(self, image_path: str, concept_id: str) -> TagMutationResult:
         return self._apply_tag_changes(image_path, removals=(concept_id,))
+
+    def add_free_tag(self, image_path: str, label: str) -> TagMutationResult:
+        normalized_label = self._normalize_free_tag(label)
+        normalized_label = (
+            self._image_repository.resolve_free_tag(normalized_label)
+            or normalized_label
+        )
+        path = Path(image_path)
+        loaded = self._read_sidecar(path)
+        sidecar = self._load_or_create_sidecar(path, loaded)
+        existing_keys = {tag.casefold() for tag in sidecar.free_tags}
+        if normalized_label.casefold() in existing_keys:
+            return TagMutationResult(image_path, False, sidecar)
+        updated = replace(
+            sidecar,
+            updated_at=self._timestamp(),
+            free_tags=(*sidecar.free_tags, normalized_label),
+        )
+        revision = self._write_sidecar(path, updated, loaded)
+        self._update_cache(image_path, updated, revision)
+        return TagMutationResult(image_path, True, updated)
+
+    def remove_free_tag(self, image_path: str, label: str) -> TagMutationResult:
+        normalized_label = self._normalize_free_tag(label)
+        path = Path(image_path)
+        loaded = self._read_sidecar(path)
+        sidecar = self._load_or_create_sidecar(path, loaded)
+        retained = tuple(
+            tag
+            for tag in sidecar.free_tags
+            if tag.casefold() != normalized_label.casefold()
+        )
+        if len(retained) == len(sidecar.free_tags):
+            return TagMutationResult(image_path, False, sidecar)
+        updated = replace(
+            sidecar,
+            updated_at=self._timestamp(),
+            free_tags=retained,
+        )
+        revision = self._write_sidecar(path, updated, loaded)
+        self._update_cache(image_path, updated, revision)
+        return TagMutationResult(image_path, True, updated)
 
     def accept_proposal(self, proposal: TagProposal) -> TagMutationResult:
         concept = self._resolve_concept(proposal.concept_id)
@@ -429,6 +479,13 @@ class TaggingService:
                 f"TGM concept is not selectable: {concept.concept_id}"
             )
         return concept
+
+    @staticmethod
+    def _normalize_free_tag(label: str) -> str:
+        try:
+            return normalize_free_tag(label)
+        except SidecarValidationError as exc:
+            raise TaggingFreeTagError(str(exc)) from exc
 
     @staticmethod
     def _load_or_create_sidecar(

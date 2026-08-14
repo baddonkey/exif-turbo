@@ -63,6 +63,7 @@ from ..models.checked_filter_proxy_model import CheckedFilterProxyModel
 from ..models.accepted_tag_list_model import AcceptedTagListModel
 from ..models.exif_list_model import ExifListModel
 from ..models.folder_list_model import FolderListModel
+from ..models.free_tag_list_model import FreeTagListModel
 from ..models.marked_tag_list_model import MarkedTagListModel
 from ..models.pending_proposal_list_model import PendingProposalListModel
 from ..models.search_list_model import SearchListModel
@@ -356,6 +357,8 @@ class AppController(QObject):
         self._tgm_repository: TgmSnapshotRepository | None = None
         self._tagging_service: TaggingService | None = None
         self._accepted_tags_model = AcceptedTagListModel()
+        self._free_tags_model = FreeTagListModel()
+        self._free_tag_suggestions_model = FreeTagListModel()
         self._tgm_search_model = TgmSearchListModel()
         self._pending_proposals_model = PendingProposalListModel()
         self._marked_tags_model = MarkedTagListModel()
@@ -534,12 +537,24 @@ class AppController(QObject):
         return self.taggingEnabled and bool(self._tgm_metadata) and not self._is_locked
 
     @Property(bool, notify=taggingStateChanged)
+    def freeTaggingAvailable(self) -> bool:
+        return self.taggingEnabled and not self._is_locked
+
+    @Property(bool, notify=taggingStateChanged)
     def taggingProposalAvailable(self) -> bool:
         return self.taggingAvailable and self._ai_enabled and self._tgm_vectors_current
 
     @Property(QObject, constant=True)
     def acceptedTagsModel(self) -> QObject:
         return self._accepted_tags_model
+
+    @Property(QObject, constant=True)
+    def freeTagsModel(self) -> QObject:
+        return self._free_tags_model
+
+    @Property(QObject, constant=True)
+    def freeTagSuggestionsModel(self) -> QObject:
+        return self._free_tag_suggestions_model
 
     @Property(QObject, constant=True)
     def tgmSearchModel(self) -> QObject:
@@ -3525,6 +3540,8 @@ class AppController(QObject):
         self._tgm_metadata = {}
         self._tgm_vectors_current = False
         self._accepted_tags_model.set_rows([])
+        self._free_tags_model.set_rows([])
+        self._free_tag_suggestions_model.set_rows([])
         self._tgm_search_model.set_rows([])
         self._pending_proposals_model.set_rows([])
         self._marked_tags_model.set_rows([])
@@ -3588,6 +3605,28 @@ class AppController(QObject):
             self._selected_tagging_error = str(exc)
         self.taggingStateChanged.emit()
 
+    @Slot(str)
+    def searchFreeTags(self, query: str) -> None:
+        if self._repo is None or not self.freeTaggingAvailable:
+            self._free_tag_suggestions_model.set_rows([])
+            return
+        try:
+            path = self._search_model.get_path(self._current_result_row)
+            assigned = {
+                tag.casefold()
+                for tag in (() if path is None else self._repo.get_free_tags(path))
+            }
+            self._free_tag_suggestions_model.set_rows(
+                tag
+                for tag in self._repo.search_free_tags(query)
+                if tag.casefold() not in assigned
+            )
+            self._selected_tagging_error = ""
+        except Exception as exc:  # noqa: BLE001
+            self._free_tag_suggestions_model.set_rows([])
+            self._selected_tagging_error = str(exc)
+        self.taggingStateChanged.emit()
+
     @Slot()
     def refreshSelectedTaggingState(self) -> None:
         self._refresh_selected_tagging_state(preserve_proposals=False)
@@ -3596,17 +3635,20 @@ class AppController(QObject):
         path = self._search_model.get_path(self._current_result_row)
         if not path or self._tagging_service is None:
             self._accepted_tags_model.set_rows([])
+            self._free_tags_model.set_rows([])
             if not preserve_proposals:
                 self._pending_proposals_model.set_rows([])
             return
         try:
             state = self._tagging_service.get_image_tagging_state(path)
             self._accepted_tags_model.set_rows(state.accepted_tags)
+            self._free_tags_model.set_rows(state.free_tags)
             if not preserve_proposals:
                 self._pending_proposals_model.set_rows([])
             self._selected_tagging_error = ""
         except Exception as exc:  # noqa: BLE001
             self._accepted_tags_model.set_rows([])
+            self._free_tags_model.set_rows([])
             if not preserve_proposals:
                 self._pending_proposals_model.set_rows([])
             self._selected_tagging_error = str(exc)
@@ -3634,6 +3676,32 @@ class AppController(QObject):
     @Slot(str)
     def removeSelectedTgmConcept(self, concept_id: str) -> None:
         self._mutate_selected_tag(concept_id, remove=True)
+
+    @Slot(str)
+    def addSelectedFreeTag(self, label: str) -> None:
+        self._mutate_selected_free_tag(label, remove=False)
+
+    @Slot(str)
+    def removeSelectedFreeTag(self, label: str) -> None:
+        self._mutate_selected_free_tag(label, remove=True)
+
+    def _mutate_selected_free_tag(self, label: str, *, remove: bool) -> None:
+        if not self.freeTaggingAvailable:
+            return
+        path = self._search_model.get_path(self._current_result_row)
+        if path is None or self._tagging_service is None:
+            return
+        try:
+            if remove:
+                self._tagging_service.remove_free_tag(path, label)
+            else:
+                self._tagging_service.add_free_tag(path, label)
+            self._selected_tagging_error = ""
+            self._refresh_after_tag_mutation()
+            self.searchFreeTags("")
+        except Exception as exc:  # noqa: BLE001
+            self._selected_tagging_error = str(exc)
+            self.taggingStateChanged.emit()
 
     def _mutate_selected_tag(self, concept_reference: str, *, remove: bool) -> None:
         if not self.taggingAvailable:

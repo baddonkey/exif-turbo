@@ -93,6 +93,39 @@ def test_create_plan_preserves_relative_tree_and_sorts_unique_labels(
     assert plan.items[0].labels == ("deer", "Zebras")
 
 
+def test_create_plan_includes_custom_free_tags(
+    tmp_path: Path, repo: ImageIndexRepository
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    image_path = source_root / "photo.jpg"
+    source_root.mkdir()
+    image_path.write_bytes(b"original")
+    _index_image(repo, image_path, "Deer")
+    repo.replace_accepted_tags_and_sidecar_state(
+        str(image_path),
+        ImageSidecar(
+            source=SidecarSource(filename=image_path.name),
+            updated_at="2026-08-09T12:00:00Z",
+            tags=repo.get_accepted_tags(str(image_path)),
+            free_tags=("Family",),
+        ),
+        sidecar_path=f"{image_path}.sidecar.json",
+        sidecar_mtime_ns=2,
+        sidecar_size=2,
+        sidecar_checksum="sha256:free-tags",
+        sync_status="synced",
+    )
+
+    # Act
+    plan = DerivativeExportService(repo, FakeMetadataWriter()).create_plan(
+        {source_root: "source"}, tmp_path / "output", image_paths=[image_path]
+    )
+
+    # Assert
+    assert plan.items[0].labels == ("Deer", "Family")
+
+
 def test_create_plan_single_used_nested_root_omits_redundant_root_folder(
     tmp_path: Path, repo: ImageIndexRepository
 ) -> None:

@@ -264,6 +264,11 @@ class DerivativeExportService:
             for tag in self._image_repository.get_accepted_tags(str(source))
             if tag.label.strip()
         }
+        labels.update(
+            label.strip()
+            for label in self._image_repository.get_free_tags(str(source))
+            if label.strip()
+        )
         return tuple(sorted(labels, key=lambda label: (label.casefold(), label)))
 
     @classmethod

@@ -56,6 +56,43 @@ def test_sidecar_repository_write_and_read_round_trips_sidecar(
     assert repository.sidecar_path(image_path).name == "photo.jpg.sidecar.json"
 
 
+def test_sidecar_repository_free_tags_round_trip_normalized_and_sorted(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    image_path = tmp_path / "photo.jpg"
+    image_path.write_bytes(b"image")
+    repository = FilesystemSidecarRepository()
+    sidecar = ImageSidecar(
+        source=SidecarSource(filename="photo.jpg"),
+        updated_at="2026-08-09T12:30:00Z",
+        free_tags=(" Zürich ", "Family"),
+    )
+
+    # Act
+    repository.write(image_path, sidecar, expected_revision=None)
+    loaded = repository.read(image_path)
+    serialized = json.loads(
+        repository.sidecar_path(image_path).read_text(encoding="utf-8")
+    )
+
+    # Assert
+    assert loaded is not None
+    assert loaded.sidecar.free_tags == ("Family", "Zürich")
+    assert serialized["free_tags"] == ["Family", "Zürich"]
+
+
+def test_image_sidecar_duplicate_free_tags_ignoring_case_raises_validation_error(
+) -> None:
+    # Act / Assert
+    with pytest.raises(SidecarValidationError, match="unique ignoring case"):
+        ImageSidecar(
+            source=SidecarSource(filename="photo.jpg"),
+            updated_at="2026-08-09T12:30:00Z",
+            free_tags=("Family", " family "),
+        )
+
+
 def test_sidecar_repository_read_and_write_preserves_unknown_fields(
     tmp_path: Path,
 ) -> None:

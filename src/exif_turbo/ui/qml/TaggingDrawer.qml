@@ -24,17 +24,37 @@ Drawer {
 
     function openAndFocus() {
         open()
-        if (appController && appController.taggingAvailable)
-            Qt.callLater(function() { tgmSearchField.forceActiveFocus() })
+        if (appController && appController.freeTaggingAvailable)
+            Qt.callLater(function() {
+                if (appController.taggingAvailable)
+                    tgmSearchField.forceActiveFocus()
+                else
+                    freeTagField.forceActiveFocus()
+            })
     }
 
-    onOpened: proposalGenerationTimer.restart()
+    onOpened: {
+        proposalGenerationTimer.restart()
+        if (appController && appController.freeTaggingAvailable)
+            appController.searchFreeTags("")
+    }
+
+    function addFreeTag(label) {
+        var normalized = label.trim()
+        if (!normalized || !drawer.hasSelection)
+            return
+        appController.addSelectedFreeTag(normalized)
+        freeTagField.clear()
+        appController.searchFreeTags("")
+    }
 
     Connections {
         target: appController
         function onCurrentResultRowChanged() {
-            if (drawer.opened)
+            if (drawer.opened) {
                 proposalGenerationTimer.restart()
+                appController.searchFreeTags(freeTagField.text)
+            }
         }
     }
 
@@ -143,13 +163,121 @@ Drawer {
                     Layout.fillWidth: true
                     Layout.margins: 18
                     spacing: 10
-                    Label { text: qsTr("Install TGM to search and apply controlled terms."); wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                    Label { text: qsTr("Install TGM to search and apply controlled terms. Custom tags remain available below."); wrapMode: Text.WordWrap; Layout.fillWidth: true }
                     Button {
                         text: qsTr("Install TGM")
                         highlighted: true
                         enabled: !appController.isTgmUpdating
                         onClicked: appController.installOrUpdateTgm()
                     }
+                }
+
+                ColumnLayout {
+                    visible: appController && appController.freeTaggingAvailable
+                    Layout.fillWidth: true
+                    Layout.margins: 14
+                    spacing: 8
+
+                    Label {
+                        text: qsTr("Custom tags")
+                        font.pixelSize: 13
+                        font.weight: Font.DemiBold
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        TextField {
+                            id: freeTagField
+                            objectName: "freeTagField"
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("Add or find a custom tag")
+                            enabled: drawer.hasSelection
+                            onTextChanged: freeTagSearchTimer.restart()
+                            Keys.onReturnPressed: drawer.addFreeTag(text)
+                        }
+                        Button {
+                            objectName: "addFreeTagButton"
+                            text: qsTr("Add")
+                            enabled: drawer.hasSelection && freeTagField.text.trim().length > 0
+                            onClicked: drawer.addFreeTag(freeTagField.text)
+                        }
+                    }
+
+                    Timer {
+                        id: freeTagSearchTimer
+                        interval: 200
+                        repeat: false
+                        onTriggered: appController.searchFreeTags(freeTagField.text)
+                    }
+
+                    Label {
+                        visible: freeTagSuggestions.count > 0
+                        text: qsTr("Remembered tags")
+                        font.pixelSize: 10
+                        opacity: 0.6
+                    }
+                    ListView {
+                        id: freeTagSuggestions
+                        objectName: "freeTagSuggestions"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(contentHeight, 120)
+                        visible: count > 0
+                        clip: true
+                        model: appController ? appController.freeTagSuggestionsModel : null
+                        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                        delegate: ItemDelegate {
+                            required property string label
+                            width: freeTagSuggestions.width
+                            height: 34
+                            text: label
+                            onClicked: drawer.addFreeTag(label)
+                        }
+                    }
+
+                    Label {
+                        visible: drawer.hasSelection && currentFreeTags.count === 0
+                        text: qsTr("This image has no custom tags yet.")
+                        opacity: 0.55
+                        font.pixelSize: 11
+                    }
+                    ListView {
+                        id: currentFreeTags
+                        objectName: "currentFreeTags"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(contentHeight, 132)
+                        visible: drawer.hasSelection && count > 0
+                        clip: true
+                        model: appController ? appController.freeTagsModel : null
+                        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                        delegate: RowLayout {
+                            required property string label
+                            width: currentFreeTags.width
+                            height: 36
+                            spacing: 7
+                            Label {
+                                Layout.fillWidth: true
+                                text: label
+                                elide: Text.ElideRight
+                                font.pixelSize: 12
+                            }
+                            ToolButton {
+                                text: "\u2212"
+                                implicitWidth: 30
+                                implicitHeight: 30
+                                onClicked: appController.removeSelectedFreeTag(label)
+                                ToolTip.text: qsTr("Remove custom tag from selected image")
+                                ToolTip.visible: hovered
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    visible: appController && appController.freeTaggingAvailable
+                    Layout.fillWidth: true
+                    height: 1
+                    color: Material.dividerColor
                 }
 
                 ColumnLayout {
