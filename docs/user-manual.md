@@ -20,9 +20,10 @@ thumbnails and previews extracted from the embedded thumbnail or a frame at
 7. [Browsing by Folder](#7-browsing-by-folder)
 8. [Viewing Metadata and EXIF Tags](#8-viewing-metadata-and-exif-tags)
 9. [Marking Images & Bulk Actions](#9-marking-images--bulk-actions)
-10. [Settings](#10-settings)
-11. [Keyboard Shortcuts](#11-keyboard-shortcuts)
-12. [FAQ](#12-faq)
+10. [Tagging with TGM](#10-tagging-with-tgm)
+11. [Settings](#11-settings)
+12. [Keyboard Shortcuts](#12-keyboard-shortcuts)
+13. [FAQ](#13-faq)
 
 ---
 
@@ -264,7 +265,7 @@ The **Search** tab is the main way to find photos:
 
 ![Search — all images](screenshots/02_search_all.png)
 
-*Photos: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
+*Photo: [Wild Alpine Ibex](https://commons.wikimedia.org/wiki/File:002_Wild_Alpine_Ibex_Swiss_Alps_and_Creux_du_Van_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
 
 ### Running a search
 
@@ -295,6 +296,8 @@ When **AI Features** are enabled in **Settings**, the search bar shows an
 exact metadata terms.
 
 ![Search tab in AI mode](screenshots/09_ai_search_mode.png)
+
+*Photo: [Chateau de Chillon and Dents du Midi](https://commons.wikimedia.org/wiki/File:001_Chateau_de_Chillon_and_Dents_du_Midi_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
 
 In AI mode:
 
@@ -349,6 +352,8 @@ folder name shows its full path as a tooltip.
 
 ![Folder filter popup](screenshots/07_folder_filter.png)
 
+*Photo: [Chateau de Chillon and Dents du Midi](https://commons.wikimedia.org/wiki/File:001_Chateau_de_Chillon_and_Dents_du_Midi_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
+
 ### The selection chip
 
 Whenever at least one image is marked (or the marked-only filter is active), a
@@ -364,8 +369,6 @@ Click the chip to toggle the **marked-only filter** — the tooltip switches
 between *"Show only selected images"* and *"Show all results"*. While the
 filter is active the chip stays highlighted so you always know which view
 you are looking at.
-
-*Photos: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
 
 ### Sorting results
 
@@ -477,7 +480,7 @@ The **Browse** tab lets you navigate your library by folder hierarchy:
 
 ![Browse tab](screenshots/05_browse_tab.png)
 
-*Photos: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
+*Photos: [Wild Alpine Ibex](https://commons.wikimedia.org/wiki/File:002_Wild_Alpine_Ibex_Swiss_Alps_and_Creux_du_Van_Photo_by_Giles_Laurent.jpg) and [Wild Golden Eagle](https://commons.wikimedia.org/wiki/File:015_Wild_Golden_Eagle_in_flight_at_Pfyn-Finges_(Switzerland)_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
 
 The left panel shows all indexed folders as an indented list — sub-folders are
 indented under their parent. Each entry shows the folder name and a count of
@@ -561,7 +564,7 @@ Selecting any image in the result list populates three panels:
 
 ![Search results with detail panels](screenshots/04_search_milky_way.png)
 
-*Photo: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
+*Photo: [Vertical panorama of the Milky Way during Perseids](https://commons.wikimedia.org/wiki/File:035_Vertical_panorama_of_the_Milky_Way_during_Perseids_seen_from_Oeschinensee_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
 
 ### Preview
 
@@ -702,6 +705,8 @@ selected. Hovering over a link shows the full URL in a tooltip.
 
 ![GPS location bar](screenshots/08_gps_location_bar.png)
 
+*Photo: [Xenakis UPIC system computer unit](https://commons.wikimedia.org/wiki/File:Xenakis_UPIC_system_computer_unit_2.jpg) by 1904.CC (Manuel Schmalstieg), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), via Wikimedia Commons. Scaled/cropped in the UI; attribution is voluntary.*
+
 ### EXIF Tags panel (bottom-right)
 
 Displays the same metadata as a clean two-column list, sorted alphabetically.
@@ -750,12 +755,14 @@ database — not just the visible results.
 | Action | What it does |
 |--------|--------------|
 | **Export Metadata as JSON…** | Writes the EXIF metadata of every marked image to a JSON file you choose via a Save dialog. The export honours the current **Sort** order (date taken, filename, path, or size). When nothing is marked, the menu label changes to *"Export Metadata as JSON… (all results)"* and the action exports every image matching the current filters instead. The on-disk layout is controlled by **Settings → JSON Export Formatting** (see *Settings*). |
+| **Generate Tagged Derivatives for Current Results…** | Asks for a target folder, then generates derivatives for every image matching the current search and filters, including result pages that have not been loaded into the view. |
+| **Generate Tagged Derivatives for Marked Images…** | Asks for a target folder, then generates derivatives for all marked images in enabled indexed folders. Disabled when nothing is marked. |
 | **Delete Marked Images…** | Permanently deletes every marked image **from disk** and removes its row from the index. Cached thumbnails (`.png` / `.enc`), `.skip` sentinels, and any rendered preview (`.jpg` / `.jpg.enc`) for the deleted images are also cleaned up. Disabled when nothing is marked. The menu label includes the current count, e.g. *"Delete Marked Images… (12 selected)"*. |
 
-Both menu items report the live count in their label and run via the bulk-op
-progress overlay; clicking **Cancel** mid-run stops cleanly and any deletions
-already made stay on disk and in the index — the database is never out of
-sync with the file system.
+Long-running actions show progress and support cancellation. Any completed
+derivatives remain in the target folder, and any deletions already made stay
+on disk and in the index; the database is never out of sync with the file
+system.
 
 #### Confirming a delete
 
@@ -789,9 +796,180 @@ shown in full and never truncated.
 
 ---
 
-## 10. Settings
+## 10. Tagging with TGM
+
+Tagging assigns controlled Library of Congress Thesaurus for Graphic Materials
+(TGM) terms without writing metadata into the original image. It is disabled
+by default for each database. Enable it under **Settings → Tagging and TGM**,
+then click **Install TGM**. Installation downloads the official TGM v1 XML
+distribution over HTTPS and falls back to the official tagged-text distribution
+if XML cannot be downloaded or validated.
+
+The application stores the normalized TGM snapshot and its checksum in the
+current database's application-data directory. The source checksum records
+provenance and detects changes; it is not a publisher signature. TGM content is
+downloaded on demand rather than bundled while redistribution and attribution
+requirements remain under review. See the LOC [TGM download
+page](https://guides.loc.gov/tgm-i/download-tgm), [field
+definitions](https://www.loc.gov/pictures/collection/tgm/fields.html), and
+[application guidance](https://guides.loc.gov/tgm-i).
+
+### Sidecars and search
+
+The first accepted tag for `photo.jpg` creates `photo.jpg.sidecar.json` beside
+the image. Sidecars are deterministic UTF-8 JSON and are the authoritative
+store for accepted tags. They are plain text: SQLCipher database encryption
+does **not** encrypt them, so they inherit the source folder's permissions and
+backup policy. Tagging never changes the original image's bytes or timestamp.
+
+Each accepted controlled term stores a canonical ID such as `loc-tgm:tgm000001`, its
+canonical label, subject or genre/form category, and acceptance provenance.
+The importer supports the official TGM v1 XML and tagged-text structures.
+Canonical descriptors use merged TGM `TNR` numbers; `UF` and non-descriptor
+`USE` terms become aliases that resolve to the canonical concept. Only
+postable subject (`TTCSubj`, MARC 150/650) and genre/form (`TTCForm`, MARC
+155/655) concepts can be accepted. Custom tags are stored separately in the
+same sidecar as normalized text labels.
+
+Accepted canonical labels, qualified IDs, categories, vocabulary identity,
+known aliases, and custom labels are copied into the encrypted database's FTS5 cache. Search uses
+the normal EXIF query box and syntax; undecided and rejected proposals are not
+searchable. A regular or full image scan synchronizes new, changed, or deleted
+sidecars even when the original image stamp did not change. Malformed sidecars
+are reported and left untouched.
+
+Move or rename a sidecar together with its image. Version 1 does not infer an
+external rename. Removing an image or indexed folder clears only database
+cache rows; it does not delete a sidecar. Deleting a sidecar removes its
+accepted tags from FTS after the next synchronization.
+
+### Tagging drawer
+
+From the **Search** or **Browse** tab, click the tag button at the upper right
+or press **Ctrl+T**. The non-modal drawer contains these controls:
+
+![Current-image tagging drawer](screenshots/10_tagging_drawer.png)
+
+*Photo: [Xenakis UPIC system computer unit](https://commons.wikimedia.org/wiki/File:Xenakis_UPIC_system_computer_unit_2.jpg) by 1904.CC (Manuel Schmalstieg), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), via Wikimedia Commons. Scaled/cropped in the UI; attribution is voluntary.*
+
+- **Existing image tags** lists keywords already embedded in the original
+  image's XMP or IPTC metadata. This section is informational and read-only;
+  EXIF Turbo reads the indexed metadata snapshot and never changes the source
+  image.
+- **Add TGM term** searches canonical labels and aliases after a short delay.
+  Select a result and click **Add** to apply it to the focused image. **Enter**
+  accepts the highlighted result, and **Down** moves through results.
+- **Tags on current image** shows the focused image's canonical tags,
+  category, and provenance. The minus button removes a tag from that image.
+- **Custom tags** accepts a new label with **Enter** or **Add**. Previously used
+  labels are remembered for the current database and appear as suggestions;
+  click one to reuse the same spelling. Removing a custom tag from an image
+  does not remove it from the remembered list. Custom tags do not require TGM
+  installation or AI features.
+- **Tag proposals** generates suggestions automatically when the drawer opens
+  and whenever the focused image changes. Each row shows its score and provider
+  and has accept and reject buttons. **Generate for current image** refreshes
+  them manually. Undecided suggestions are kept only for the current selection
+  and are not restored after restart. Rejected proposals remain suppressed for
+  the current TGM, prompt, and model fingerprint.
+- **Final derivative tags** remains visible in the fixed footer. It previews
+  the sorted, deduplicated union of embedded keywords and accepted TGM/custom
+  additions that a derivative will receive.
+
+Long-running TGM and proposal operations show progress and a **Cancel** button.
+Derivative generation starts from the **Action** menu; the drawer footer is
+only a read-only preview.
+
+### Marks and derivative scope
+
+The tagging drawer always edits only the focused image; version 1 has no bulk
+tag-editing view. Marks remain useful as a derivative scope. Press **Space** to
+toggle the focused image's mark, then use **Action → Generate Tagged
+Derivatives for Marked Images…** to process that persistent marked set.
+
+### CLIP proposal prerequisites
+
+Manual TGM search and tagging do not require AI. Proposals do. They require:
+
+1. **AI Features** enabled in Settings. This is unavailable on macOS Intel.
+2. Image CLIP vectors built separately with **AI-Scan** or **AI Full Rescan**
+   for the relevant indexed folder.
+3. A separate TGM term-vector index built with **Build Vectors** under
+   **Tagging and TGM**.
+
+The image FAISS index remains image-only; TGM concepts are stored in a separate
+FAISS index. Installing a new TGM snapshot makes term vectors stale and requires
+**Rebuild Vectors**, but does not require rebuilding image vectors. Proposal
+generation never scans original images implicitly: a missing image vector is
+reported as requiring an AI scan.
+
+The proposal threshold defaults to **0.24**. Optional auto-accept is off by
+default and uses the stricter **0.32** threshold. The auto-accept threshold is
+always kept at least 0.01 above the proposal threshold. Scores are model- and
+dataset-dependent similarities, not calibrated probabilities; review results
+before enabling automatic acceptance.
+
+### Tagged derivatives
+
+Use **Action → Generate Tagged Derivatives for Current Results…** to process
+the complete current result set, including pages not yet loaded into the view,
+or **Action → Generate Tagged Derivatives for Marked Images…** to process the
+marked set. Only images with accepted tags produce copies. The chosen output
+root must be outside every indexed source root. The exporter:
+
+- preserves each source format and relative source folder tree;
+- adds collision-safe top-level labels when marks span multiple indexed roots;
+- skips untagged images and existing destination files without overwriting;
+- merges existing embedded keywords with accepted controlled and custom labels,
+  removes case-insensitive duplicates, and writes the result to **XMP Subject**
+  and **IPTC Keywords** on a temporary copy;
+- reads the copied file immediately before writing so keywords changed since
+  the last index scan are preserved, then verifies both fields with ExifTool;
+- removes an incomplete temporary copy after a write or verification failure;
+- never copies sidecars into the derivative tree.
+
+Originals are explicitly forbidden as metadata-write targets. Other copied
+metadata is preserved, but version 1 does not convert formats, provide custom
+metadata mappings, or overwrite existing derivatives. Some source formats may
+not support the requested writable metadata; those items are reported as
+failures and the source remains unchanged.
+
+### Lifecycle and reset
+
+Disabling tagging hides the workbench but does not delete sidecars, rejected
+proposal decisions, the installed TGM snapshot, or cached accepted tags.
+Already synchronized tags remain searchable. Closing the app requests
+cancellation of running tagging workers; completed item-level writes remain in
+place, while undecided suggestions are discarded.
+
+**Reset Database** clears image/tag/proposal rows, marks, indexed folders,
+thumbnail and preview caches, and the per-database TGM snapshot and vector
+index. It deliberately does not traverse source folders to delete adjacent
+sidecars. The separate image AI index files are not explicitly deleted by
+reset; use **AI Full Rescan** after rebuilding the image index when a clean
+semantic index is required. Re-add and scan folders to synchronize sidecars,
+then reinstall TGM before editing tags or generating proposals.
+
+---
+
+## 11. Settings
 
 Click the **Settings** tab to configure application behaviour.
+
+### Tagging and TGM
+
+![Tagging and TGM settings](screenshots/11_tagging_settings.png)
+
+**Enable tagging for this database** controls the drawer UI. The section also
+shows whether TGM is installed, subject and genre/form counts, source date,
+checksum, and importer diagnostics. **Install TGM** / **Update TGM** validates
+and atomically activates a new official snapshot; a failed update leaves the
+previous snapshot active. **Build Vectors** / **Rebuild Vectors** creates the
+separate CLIP TGM term index and is enabled only when AI is available and on.
+
+**Proposal threshold** defaults to 24%. **Auto-accept proposals** is off by
+default; when enabled, **Auto-accept threshold** defaults to 32% and must remain
+strictly above the proposal threshold.
 
 ### Worker Threads
 
@@ -909,7 +1087,8 @@ Click **OK** to confirm. This permanently:
 
 - Deletes all indexed images from the database
 - Removes all indexed folder records
-- Wipes the thumbnail cache on disk
+- Wipes the thumbnail and preview cache on disk
+- Removes the per-database TGM snapshot and TGM term-vector index
 
 The database is vacuumed and checkpointed immediately, so the database file
 shrinks to near-zero on disk straight away.
@@ -922,13 +1101,16 @@ The vacuum phase cannot be interrupted — the overlay hides its **Cancel**
 button and shows a *"This step cannot be canceled…"* notice until it finishes.
 
 > **This action cannot be undone.** After a reset you will need to re-add your
-> folders and run a full rescan to rebuild the index.
+> folders and run a full rescan to rebuild the index. Adjacent tagging sidecars
+> are not deleted; rescanning imports them again. Reinstall TGM before editing
+> tags or rebuilding proposal vectors. Existing image AI vector files are not
+> explicitly deleted; run **AI Full Rescan** when you need to rebuild them.
 
 The **Reset Database…** button is disabled while indexing is in progress.
 
 ---
 
-## 11. Keyboard Shortcuts
+## 12. Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
@@ -937,6 +1119,8 @@ The **Reset Database…** button is disabled while indexing is in progress.
 | `Escape` | Close the find-in-metadata bar |
 | `F3` | Jump to next match in metadata |
 | `Shift+F3` | Jump to previous match in metadata |
+| `Ctrl+T` | Open / close the tagging drawer in Search or Browse |
+| `Space` | Toggle the mark on the focused Search or Browse image |
 | `↓` | Select the next result (Search tab) / next image (Browse tab) |
 | `↑` | Select the previous result (Search tab) / previous image (Browse tab) |
 | `Page Down` | Jump one page forward in results (Search tab) / Browse image list |
@@ -945,7 +1129,7 @@ The **Reset Database…** button is disabled while indexing is in progress.
 
 ---
 
-## 12. FAQ
+## 13. FAQ
 
 **Q: Why does the status bar say "Indexing…" even after I switch tabs?**  
 A: The indexer runs in the background across all tabs. The pulsing blue dot in
@@ -990,12 +1174,17 @@ built and cached. They persist across sessions so subsequent launches are fast.
 
 ## Image Credits
 
-The screenshots in this manual use sample photographs by
+Six screenshot composites in this manual and the project README use sample photographs by
 **[Giles Laurent](https://commons.wikimedia.org/wiki/User:Giles_Laurent)**,
 published on Wikimedia Commons under the
 [Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/) license.
 
 Mandatory attribution: © Giles Laurent, gileslaurent.com, License CC BY-SA
+
+The photographs are scaled and/or cropped inside the exif-turbo interface.
+Those screenshot composites are distributed under CC BY-SA 4.0. Exact
+screenshot-to-source mappings and direct Wikimedia links are maintained in
+[the sample-data attribution manifest](../tests/sample-data/ATTRIBUTION.md).
 
 The GPS location bar screenshot uses a photograph by
 **1904.CC** (Manuel Schmalstieg),
@@ -1003,3 +1192,6 @@ published on [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Xenakis
 under the [Creative Commons CC0 1.0 Universal Public Domain Dedication](https://creativecommons.org/publicdomain/zero/1.0/).
 
 Attribution (voluntary): 1904.CC (Manuel Schmalstieg), CC0, via Wikimedia Commons
+
+The adjacent [screenshot licensing notice](screenshots/README.md) identifies
+which PNG files contain third-party photographs and which contain only project UI.

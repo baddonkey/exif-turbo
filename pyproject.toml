@@ -31,7 +31,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [project.optional-dependencies]
-build = ["pyinstaller", "babel"]
+build = ["pyinstaller", "babel", "packaging"]
 dev = ["exif-turbo[build]", "pytest", "pytest-qt", "pytest-timeout"]
 
 [tool.setuptools.package-data]

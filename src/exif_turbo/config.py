@@ -28,18 +28,31 @@ def db_path_for_name(name: str) -> Path:
     return Path.home() / ".exif-turbo" / "data" / stem / f"{stem}.db"
 
 
+def database_data_dir(db_path: Path) -> Path:
+    """Return the private artifact directory for a database file.
+
+    Canonical named databases already live in ``.../<name>/<name>.db`` and
+    keep that existing directory. Other database files use a hidden sibling
+    directory so equal filenames in different locations never share caches.
+    """
+    path = db_path.expanduser()
+    if path.parent.name == path.stem:
+        return path.parent
+    return path.parent / f".{path.stem}.exif-turbo"
+
+
 def thumb_cache_dir(db_path: Path) -> Path:
-    return Path.home() / ".exif-turbo" / "data" / db_path.stem / "thumbs"
+    return database_data_dir(db_path) / "thumbs"
 
 
 def ai_index_path(db_path: Path) -> Path:
     """Path to the FAISS vector index file for the given database."""
-    return Path.home() / ".exif-turbo" / "data" / db_path.stem / "ai_index.faiss"
+    return database_data_dir(db_path) / "ai_index.faiss"
 
 
 def ai_id_map_path(db_path: Path) -> Path:
     """Path to the JSON id-map (FAISS integer ID → image path) for the given database."""
-    return Path.home() / ".exif-turbo" / "data" / db_path.stem / "ai_id_map.json"
+    return database_data_dir(db_path) / "ai_id_map.json"
 
 
 def settings_path(db_path: Path) -> Path:
@@ -48,7 +61,32 @@ def settings_path(db_path: Path) -> Path:
     Stored at ``~/.exif-turbo/data/<db_stem>/settings.json`` so each database
     can have independent settings (worker count, blacklist, …).
     """
-    return Path.home() / ".exif-turbo" / "data" / db_path.stem / "settings.json"
+    return database_data_dir(db_path) / "settings.json"
+
+
+def tgm_snapshot_path(db_path: Path) -> Path:
+    """Active normalized TGM snapshot for the given database."""
+    return database_data_dir(db_path) / "tgm" / "tgm-snapshot.json.gz"
+
+
+def tgm_work_dir(db_path: Path) -> Path:
+    """Temporary managed-update workspace for the given database."""
+    return tgm_snapshot_path(db_path).parent / "work"
+
+
+def tgm_term_index_path(db_path: Path) -> Path:
+    """FAISS index containing TGM concept text vectors."""
+    return tgm_snapshot_path(db_path).parent / "tgm_terms.faiss"
+
+
+def tgm_concept_map_path(db_path: Path) -> Path:
+    """FAISS row-to-concept map for the TGM term index."""
+    return tgm_snapshot_path(db_path).parent / "tgm_concept_map.json"
+
+
+def tgm_vector_metadata_path(db_path: Path) -> Path:
+    """Fingerprint and integrity metadata for the TGM term index."""
+    return tgm_snapshot_path(db_path).parent / "tgm_vector_metadata.json"
 
 
 def _env_bool(name: str, default: bool) -> bool:

@@ -447,6 +447,34 @@ def test_ai_indexer_service_encode_text_downloads_bpe_vocab_into_repo_storage(
     assert fake_open_clip.SimpleTokenizer.call_args.kwargs["bpe_path"] == str(expected_bpe)
 
 
+def test_ai_indexer_service_encode_texts_batches_and_normalizes_float32(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    service = AiIndexerService(repo)
+    service._model = MagicMock()
+    service._tokenizer = MagicMock(side_effect=lambda texts: texts)
+    encoded_batches = [
+        np.full((2, 512), 2.0, dtype=np.float64),
+        np.full((1, 512), 3.0, dtype=np.float64),
+    ]
+    service._model.encode_text.side_effect = [
+        _FakeTensor(batch) for batch in encoded_batches
+    ]
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(no_grad=nullcontext))
+
+    # Act
+    vectors = service.encode_texts(["one", "two", "three"], batch_size=2)
+
+    # Assert
+    assert vectors.shape == (3, 512)
+    assert vectors.dtype == np.float32
+    assert np.allclose(np.linalg.norm(vectors, axis=1), np.ones(3))
+    assert service._tokenizer.call_count == 2
+
+
 def test_ai_indexer_service_model_load_uses_repo_storage_cache_dir(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

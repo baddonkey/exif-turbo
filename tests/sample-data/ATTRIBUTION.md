@@ -61,6 +61,29 @@ provided here for completeness:
 | File | Wikimedia Commons |
 |------|------------------|
 | `gps/Xenakis_UPIC_system_computer_unit_2.jpg` | [File:Xenakis UPIC system computer unit 2.jpg](https://commons.wikimedia.org/wiki/File:Xenakis_UPIC_system_computer_unit_2.jpg) |
+| `computer/Xenakis UPIC system computer unit 2.jpg` | [File:Xenakis UPIC system computer unit 2.jpg](https://commons.wikimedia.org/wiki/File:Xenakis_UPIC_system_computer_unit_2.jpg) |
+
+---
+
+## Documentation Screenshot Use
+
+The following screenshots scale and/or crop sample photographs inside the
+exif-turbo interface. Screenshot composites containing Giles Laurent photos
+are distributed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+
+| Screenshot | Visible sample photograph(s) |
+|------------|-------------------------------|
+| `docs/screenshots/02_search_all.png` | `schweiz/Wildlife/002 Wild Alpine Ibex Swiss Alps and Creux du Van Photo by Giles Laurent.jpg` |
+| `docs/screenshots/03_search_eagle.png` | `schweiz/Wildlife/Birds/015 Wild Golden Eagle in flight at Pfyn-Finges (Switzerland) Photo by Giles Laurent.jpg` |
+| `docs/screenshots/04_search_milky_way.png` | `schweiz/Sky/035 Vertical panorama of the Milky Way during Perseids seen from Oeschinensee Photo by Giles Laurent.jpg` |
+| `docs/screenshots/05_browse_tab.png` | `schweiz/Wildlife/002 Wild Alpine Ibex Swiss Alps and Creux du Van Photo by Giles Laurent.jpg`; `schweiz/Wildlife/Birds/015 Wild Golden Eagle in flight at Pfyn-Finges (Switzerland) Photo by Giles Laurent.jpg` |
+| `docs/screenshots/07_folder_filter.png` | `schweiz/Schlösser/001 Chateau de Chillon and Dents du Midi Photo by Giles Laurent.jpg` |
+| `docs/screenshots/09_ai_search_mode.png` | `schweiz/Schlösser/001 Chateau de Chillon and Dents du Midi Photo by Giles Laurent.jpg` |
+| `docs/screenshots/08_gps_location_bar.png` | `gps/Xenakis_UPIC_system_computer_unit_2.jpg` (CC0) |
+| `docs/screenshots/10_tagging_drawer.png` | `gps/Xenakis_UPIC_system_computer_unit_2.jpg` (CC0) |
+
+`01_lock_screen.png`, `06_indexed_folders.png`, and `11_tagging_settings.png`
+contain no third-party photographs.
 
 ---
 

@@ -41,7 +41,7 @@ def _bundled_exiftool() -> Path | None:
     return candidate if candidate.exists() else None
 
 
-def _find_exiftool() -> str:
+def find_exiftool() -> str:
     """Return the path to exiftool.
 
     Search order:
@@ -128,7 +128,7 @@ class ExifMetadataExtractor:
             )
             result = subprocess.run(
                 [
-                    _find_exiftool(),
+                    find_exiftool(),
                     "-json",
                     "-g1",
                     "-n",

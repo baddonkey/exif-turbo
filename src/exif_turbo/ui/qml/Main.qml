@@ -49,6 +49,14 @@ ApplicationWindow {
     function openFolderFilterPopup() { folderMultiCombo.popup.open() }
     // Automation helper: used by the screenshot script to close the folder filter popup
     function closeFolderFilterPopup() { folderMultiCombo.popup.close() }
+    // Automation helper: used by the tagging acceptance script.
+    function openTaggingSettingsForAutomation() {
+        taggingDrawer.close()
+        mainTabBar.currentIndex = 3
+        Qt.callLater(function() {
+            settingsScroll.contentItem.contentY = Math.max(0, taggingSettingsSection.y - 120)
+        })
+    }
     readonly property string _licenseBgColor: _toRgb(Material.background)
     readonly property string _licenseTextColor: _toRgb(Material.foreground)
     readonly property string _licenseBorderColor: _toRgb(Qt.darker(Material.background, 1.4))
@@ -163,6 +171,11 @@ ApplicationWindow {
         sequence: "Space"
         enabled: controller && (mainTabBar.currentIndex === 0 || mainTabBar.currentIndex === 1)
         onActivated: controller.toggleChecked(controller.currentResultRow)
+    }
+    Shortcut {
+        sequence: "Ctrl+T"
+        enabled: !_isLocked && (mainTabBar.currentIndex === 0 || mainTabBar.currentIndex === 1)
+        onActivated: taggingDrawer.opened ? taggingDrawer.close() : taggingDrawer.openAndFocus()
     }
 
     property bool findBarVisible: false
@@ -347,6 +360,11 @@ ApplicationWindow {
     readonly property string _searchFolderListJson:    controller ? controller.searchFolderListJson : "[]"
     readonly property int    _indexedFolderCount:      controller ? controller.indexedFolderCount  : 0
     readonly property int    _totalResults:       controller ? controller.totalResults        : 0
+    readonly property bool   _derivativeAvailable: controller ? controller.freeTaggingAvailable : false
+    readonly property bool   _isExportingDerivatives: controller ? controller.isExportingDerivatives : false
+    readonly property int    _derivativeCurrent: controller ? controller.derivativeCurrent : 0
+    readonly property int    _derivativeTotal: controller ? controller.derivativeTotal : 0
+    readonly property string _derivativeSummary: controller ? controller.derivativeResultSummary : ""
     readonly property string _searchError:        controller ? controller.searchError         : ""
     readonly property string _appVersion:         controller ? controller.appVersion          : ""
     readonly property bool   _isBusy:             controller ? controller.isBusy             : false
@@ -713,7 +731,11 @@ ApplicationWindow {
                 text: {
                     const a = exportJsonItem.text
                     const b = deleteMarkedItem.text
-                    return a.length > b.length ? a : b
+                    const c = derivativeResultsItem.text
+                    const d = derivativeMarkedItem.text
+                    const ab = a.length > b.length ? a : b
+                    const cd = c.length > d.length ? c : d
+                    return ab.length > cd.length ? ab : cd
                 }
             }
             implicitWidth: actionMenuMetrics.width + 64
@@ -726,6 +748,28 @@ ApplicationWindow {
                       : qsTr("Export Metadata as &JSON (all results)")
                 enabled: !_isLocked
                 onTriggered: if (!_isLocked) exportJsonDialog.open()
+            }
+            MenuSeparator {}
+            Action {
+                id: derivativeResultsItem
+                text: qsTr("Generate Tagged Derivatives for Current &Results...")
+                enabled: !_isLocked && _derivativeAvailable && _totalResults > 0
+                         && !_isExportingDerivatives
+                onTriggered: {
+                    derivativeTargetDialog.scope = "results"
+                    derivativeTargetDialog.open()
+                }
+            }
+            Action {
+                id: derivativeMarkedItem
+                readonly property int _cnt: controller ? controller.checkedCount : 0
+                text: qsTr("Generate Tagged Derivatives for &Marked Images (%1 selected)").arg(_cnt)
+                enabled: !_isLocked && _derivativeAvailable && _cnt > 0
+                         && !_isExportingDerivatives
+                onTriggered: {
+                    derivativeTargetDialog.scope = "marked"
+                    derivativeTargetDialog.open()
+                }
             }
             MenuSeparator {}
             Action {
@@ -762,6 +806,69 @@ ApplicationWindow {
         nameFilters: [qsTr("JSON files (*.json)"), qsTr("All files (*)")]
         defaultSuffix: "json"
         onAccepted: controller.exportMarkedMetadataJson(selectedFile)
+    }
+
+    FolderDialog {
+        id: derivativeTargetDialog
+        property string scope: "results"
+        title: qsTr("Choose Derivative Target Folder")
+        onAccepted: {
+            derivativeProgressDialog.open()
+            if (scope === "marked")
+                controller.generateDerivativesForMarked(selectedFolder.toString())
+            else
+                controller.generateDerivativesForCurrentResults(selectedFolder.toString())
+        }
+    }
+
+    Dialog {
+        id: derivativeProgressDialog
+        title: _isExportingDerivatives
+               ? qsTr("Generating Tagged Derivatives")
+               : qsTr("Derivative Generation Complete")
+        anchors.centerIn: Overlay.overlay
+        modal: true
+        closePolicy: Popup.NoAutoClose
+        width: 480
+
+        ColumnLayout {
+            width: parent.width
+            spacing: 12
+
+            ProgressBar {
+                Layout.fillWidth: true
+                visible: _isExportingDerivatives
+                indeterminate: _derivativeTotal === 0
+                from: 0
+                to: Math.max(1, _derivativeTotal)
+                value: _derivativeCurrent
+            }
+            Label {
+                Layout.fillWidth: true
+                visible: _isExportingDerivatives && _derivativeTotal > 0
+                text: qsTr("%1 / %2 images").arg(_derivativeCurrent).arg(_derivativeTotal)
+                horizontalAlignment: Text.AlignHCenter
+            }
+            Label {
+                Layout.fillWidth: true
+                visible: !_isExportingDerivatives
+                text: _derivativeSummary
+                wrapMode: Text.WordWrap
+            }
+        }
+
+        footer: DialogButtonBox {
+            Button {
+                text: _isExportingDerivatives ? qsTr("Cancel") : qsTr("Close")
+                DialogButtonBox.buttonRole: DialogButtonBox.ActionRole
+                onClicked: {
+                    if (_isExportingDerivatives)
+                        controller.cancelDerivativeExport()
+                    else
+                        derivativeProgressDialog.close()
+                }
+            }
+        }
     }
 
     // ── Save-preview file dialog ──────────────────────────────────────────
@@ -1158,6 +1265,29 @@ ApplicationWindow {
                 searchField.text = savedQuery
             }
         }
+    }
+
+    ToolButton {
+        id: taggingWorkbenchButton
+        objectName: "taggingWorkbenchButton"
+        anchors { top: parent.top; right: parent.right; rightMargin: 8 }
+        width: 40; height: 40
+        z: 11
+        visible: !_isLocked && (mainTabBar.currentIndex === 0 || mainTabBar.currentIndex === 1)
+        enabled: !_isLocked
+        text: "\uD83C\uDFF7\uFE0F"
+        font.pixelSize: 17
+        onClicked: taggingDrawer.opened ? taggingDrawer.close() : taggingDrawer.openAndFocus()
+        ToolTip.text: qsTr("Open tagging (Ctrl+T)")
+        ToolTip.visible: hovered
+        ToolTip.delay: 400
+    }
+
+    TaggingDrawer {
+        id: taggingDrawer
+        appController: controller
+        appSettings: settingsModel
+        selectedFilename: controller ? controller.selectedFilename : ""
     }
 
     // ── Search tab ───────────────────────────────────────────────────────
@@ -4012,6 +4142,8 @@ ApplicationWindow {
         visible: !_isLocked && mainTabBar.currentIndex === 3
 
         ScrollView {
+            id: settingsScroll
+            objectName: "settingsScrollView"
             anchors.fill: parent
             contentWidth: parent.width
             clip: true
@@ -4597,6 +4729,17 @@ ApplicationWindow {
 
                     // spacer below the section
                     Item { height: 28; Layout.fillWidth: true }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
+
+                    TaggingSettings {
+                        id: taggingSettingsSection
+                        appController: controller
+                        appSettings: settingsModel
+                        aiFeatureAvailable: root._aiFeatureAvailable
+                        aiEnabled: root._aiEnabled
+                        Layout.bottomMargin: 28
+                    }
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
 

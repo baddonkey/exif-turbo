@@ -16,6 +16,7 @@ progress.  The VACUUM step is explicitly flagged non-cancelable.
 from __future__ import annotations
 
 import os
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -24,6 +25,7 @@ from PySide6.QtCore import QThread, Signal
 
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
+from ...config import tgm_snapshot_path
 from ...i18n import _
 from ...utils.preview_cache import expected_preview_filenames, preview_dir
 from ._macos_activity import AppNapAssertion
@@ -145,6 +147,7 @@ class MaintenanceWorker(QThread):
             self._emit_progress(0, 0, _("Deleting index rows\u2026"), force=True)
             repo.clear_all_rows()
             folder_repo.clear_all()
+            shutil.rmtree(tgm_snapshot_path(self._db_path).parent, ignore_errors=True)
 
             # Phase 3 — reclaim disk space (cannot be canceled).
             self._emit_progress(0, 0, _("Vacuuming database\u2026"), force=True)

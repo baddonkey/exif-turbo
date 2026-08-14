@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import io
 import html as html_lib
+import io
 import json
 import logging
 import os
@@ -34,11 +34,26 @@ from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication, QImage
 
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
+from ...config import tgm_snapshot_path, tgm_vector_metadata_path
 from ...i18n import _
 from ...indexing.exif_metadata_extractor import get_exiftool_version
+from ...indexing.ai_indexer_service import (
+    CLIP_MODEL_NAME,
+    CLIP_PRETRAINED,
+    CLIP_VECTOR_DIMENSION,
+)
 from ...indexing.image_utils import RAW_EXTENSIONS
 from ...models.indexed_folder import IndexedFolder
 from ...models.search_result import SearchResult
+from ...models.tgm import TgmCategory
+from ...tagging.derivative_export_service import (
+    extract_embedded_keyword_labels,
+    merge_keyword_labels,
+)
+from ...tagging.sidecar_repository import FilesystemSidecarRepository
+from ...tagging.tagging_service import TaggingService
+from ...tagging.tgm_snapshot_repository import TgmSnapshotRepository
+from ...tagging.tgm_prompt_builder import TgmPromptBuilder
 from ...utils.preview_cache import (
     clear_cached_previews_for,
     count_cached_previews,
@@ -49,13 +64,20 @@ from ...utils.preview_cache import (
 from ...utils.json_export import JsonExportFormat
 from ...utils.thumb_cache import thumb_cache_name_from_stamp
 from ..models.checked_filter_proxy_model import CheckedFilterProxyModel
+from ..models.accepted_tag_list_model import AcceptedTagListModel
 from ..models.exif_list_model import ExifListModel
 from ..models.folder_list_model import FolderListModel
+from ..models.free_tag_list_model import FreeTagListModel
+from ..models.marked_tag_list_model import MarkedTagListModel
+from ..models.pending_proposal_list_model import PendingProposalListModel
 from ..models.search_list_model import SearchListModel
 from ..models.settings_model import SettingsModel
+from ..models.tgm_search_list_model import TgmSearchListModel
 from ..workers.ai_scan_worker import AiScanWorker
 from ..workers.ai_search_worker import AiSearchWorker
 from ..workers.bulk_op_worker import BulkOpWorker
+from ..workers.bulk_tag_worker import BulkTagWorker
+from ..workers.derivative_export_worker import DerivativeExportWorker
 from ..workers.folder_tree_worker import FolderTreeWorker
 from ..workers.index_worker import IndexWorker
 from ..workers.maintenance_worker import MaintenanceWorker
@@ -63,6 +85,9 @@ from ..workers.password_change_worker import PasswordChangeWorker
 from ..workers.preview_build_worker import PreviewBuildWorker
 from ..workers.search_worker import SearchPageWorker, SearchWorker
 from ..workers.thumb_worker import ThumbWorker
+from ..workers.tgm_proposal_worker import TgmProposalWorker
+from ..workers.tgm_update_worker import TgmUpdateWorker
+from ..workers.tgm_vector_build_worker import TgmVectorBuildWorker
 from ..workers.year_counts_worker import YearCountsWorker
 from ...utils.preview_render import MAX_PREVIEW_PX, render_preview
 
@@ -160,6 +185,11 @@ class AppController(QObject):
     clipboardCopyDone = Signal(str)  # message to show in toast
     dateFilterChanged = Signal()
     yearCountsChanged = Signal()
+    taggingStateChanged = Signal()
+    tgmOperationChanged = Signal()
+    proposalOperationChanged = Signal()
+    bulkTagOperationChanged = Signal()
+    derivativeOperationChanged = Signal()
 
     def __init__(
         self,
@@ -328,6 +358,40 @@ class AppController(QObject):
         self._password_change_worker: PasswordChangeWorker | None = None
         self._password_change_old: str = ""
         self._password_change_new: str = ""
+        self._tgm_repository: TgmSnapshotRepository | None = None
+        self._tagging_service: TaggingService | None = None
+        self._accepted_tags_model = AcceptedTagListModel()
+        self._embedded_tags_model = FreeTagListModel()
+        self._derivative_tags_model = FreeTagListModel()
+        self._embedded_tags: tuple[str, ...] = ()
+        self._free_tags_model = FreeTagListModel()
+        self._free_tag_suggestions_model = FreeTagListModel()
+        self._tgm_search_model = TgmSearchListModel()
+        self._pending_proposals_model = PendingProposalListModel()
+        self._marked_tags_model = MarkedTagListModel()
+        self._marked_tag_total = 0
+        self._marked_tagged_total = 0
+        self._selected_tagging_error = ""
+        self._tgm_metadata: dict[str, object] = {}
+        self._tgm_vectors_current = False
+        self._tgm_operation = False
+        self._tgm_progress = (0, 0)
+        self._tgm_error = ""
+        self._proposal_operation = False
+        self._proposal_progress = (0, 0)
+        self._proposal_error = ""
+        self._bulk_tag_operation = False
+        self._bulk_tag_progress = (0, 0)
+        self._bulk_tag_summary = ""
+        self._bulk_tag_action = ""
+        self._derivative_operation = False
+        self._derivative_progress = (0, 0)
+        self._derivative_summary = ""
+        self._tgm_update_worker: TgmUpdateWorker | None = None
+        self._tgm_vector_worker: TgmVectorBuildWorker | None = None
+        self._proposal_worker: TgmProposalWorker | None = None
+        self._bulk_tag_worker: BulkTagWorker | None = None
+        self._derivative_worker: DerivativeExportWorker | None = None
         # Timer: kick off a batch thumb build while indexing runs. Fires 5 s
         # after indexing begins so the DB has a first batch of rows to process.
         self._thumb_batch_timer = QTimer(self)
@@ -469,6 +533,162 @@ class AppController(QObject):
             self.isAiSearchModeChanged.emit()
         self.aiEnabledChanged.emit()
 
+    # ── Tagging ───────────────────────────────────────────────────────────────
+
+    @Property(bool, notify=taggingStateChanged)
+    def taggingEnabled(self) -> bool:
+        return self._settings.tagging_enabled if self._settings else False
+
+    @Property(bool, notify=taggingStateChanged)
+    def taggingAvailable(self) -> bool:
+        return self.taggingEnabled and bool(self._tgm_metadata) and not self._is_locked
+
+    @Property(bool, notify=taggingStateChanged)
+    def freeTaggingAvailable(self) -> bool:
+        return self.taggingEnabled and not self._is_locked
+
+    @Property(bool, notify=taggingStateChanged)
+    def taggingProposalAvailable(self) -> bool:
+        return self.taggingAvailable and self._ai_enabled and self._tgm_vectors_current
+
+    @Property(QObject, constant=True)
+    def acceptedTagsModel(self) -> QObject:
+        return self._accepted_tags_model
+
+    @Property(QObject, constant=True)
+    def embeddedTagsModel(self) -> QObject:
+        return self._embedded_tags_model
+
+    @Property(QObject, constant=True)
+    def derivativeTagsModel(self) -> QObject:
+        return self._derivative_tags_model
+
+    @Property(QObject, constant=True)
+    def freeTagsModel(self) -> QObject:
+        return self._free_tags_model
+
+    @Property(QObject, constant=True)
+    def freeTagSuggestionsModel(self) -> QObject:
+        return self._free_tag_suggestions_model
+
+    @Property(QObject, constant=True)
+    def tgmSearchModel(self) -> QObject:
+        return self._tgm_search_model
+
+    @Property(QObject, constant=True)
+    def pendingProposalsModel(self) -> QObject:
+        return self._pending_proposals_model
+
+    @Property(QObject, constant=True)
+    def markedTagsModel(self) -> QObject:
+        return self._marked_tags_model
+
+    @Property(int, notify=taggingStateChanged)
+    def markedTagImageCount(self) -> int:
+        return self._marked_tag_total
+
+    @Property(int, notify=taggingStateChanged)
+    def markedTaggedImageCount(self) -> int:
+        return self._marked_tagged_total
+
+    @Property(str, notify=taggingStateChanged)
+    def selectedTaggingError(self) -> str:
+        return self._selected_tagging_error
+
+    @Property(bool, notify=taggingStateChanged)
+    def tgmInstalled(self) -> bool:
+        return bool(self._tgm_metadata)
+
+    @Property(str, notify=taggingStateChanged)
+    def tgmStatus(self) -> str:
+        if not self._tgm_metadata:
+            return "not_installed"
+        return "ready" if self._tgm_vectors_current else "vectors_required"
+
+    @Property(str, notify=taggingStateChanged)
+    def tgmSourceDate(self) -> str:
+        return str(self._tgm_metadata.get("source_date", ""))
+
+    @Property(str, notify=taggingStateChanged)
+    def tgmChecksum(self) -> str:
+        return str(self._tgm_metadata.get("checksum", ""))
+
+    @Property(int, notify=taggingStateChanged)
+    def tgmSubjectCount(self) -> int:
+        return int(self._tgm_metadata.get("subject_count", 0))
+
+    @Property(int, notify=taggingStateChanged)
+    def tgmGenreFormatCount(self) -> int:
+        return int(self._tgm_metadata.get("genre_count", 0))
+
+    @Property(str, notify=taggingStateChanged)
+    def tgmDiagnosticsSummary(self) -> str:
+        return str(self._tgm_metadata.get("diagnostics", ""))
+
+    @Property(bool, notify=tgmOperationChanged)
+    def isTgmUpdating(self) -> bool:
+        return self._tgm_operation
+
+    @Property(int, notify=tgmOperationChanged)
+    def tgmUpdateCurrent(self) -> int:
+        return self._tgm_progress[0]
+
+    @Property(int, notify=tgmOperationChanged)
+    def tgmUpdateTotal(self) -> int:
+        return self._tgm_progress[1]
+
+    @Property(str, notify=tgmOperationChanged)
+    def tgmUpdateError(self) -> str:
+        return self._tgm_error
+
+    @Property(bool, notify=proposalOperationChanged)
+    def isGeneratingTagProposals(self) -> bool:
+        return self._proposal_operation
+
+    @Property(int, notify=proposalOperationChanged)
+    def proposalGenerationCurrent(self) -> int:
+        return self._proposal_progress[0]
+
+    @Property(int, notify=proposalOperationChanged)
+    def proposalGenerationTotal(self) -> int:
+        return self._proposal_progress[1]
+
+    @Property(str, notify=proposalOperationChanged)
+    def proposalGenerationError(self) -> str:
+        return self._proposal_error
+
+    @Property(bool, notify=bulkTagOperationChanged)
+    def isTaggingBulk(self) -> bool:
+        return self._bulk_tag_operation
+
+    @Property(int, notify=bulkTagOperationChanged)
+    def taggingBulkCurrent(self) -> int:
+        return self._bulk_tag_progress[0]
+
+    @Property(int, notify=bulkTagOperationChanged)
+    def taggingBulkTotal(self) -> int:
+        return self._bulk_tag_progress[1]
+
+    @Property(str, notify=bulkTagOperationChanged)
+    def taggingBulkSummary(self) -> str:
+        return self._bulk_tag_summary
+
+    @Property(bool, notify=derivativeOperationChanged)
+    def isExportingDerivatives(self) -> bool:
+        return self._derivative_operation
+
+    @Property(int, notify=derivativeOperationChanged)
+    def derivativeCurrent(self) -> int:
+        return self._derivative_progress[0]
+
+    @Property(int, notify=derivativeOperationChanged)
+    def derivativeTotal(self) -> int:
+        return self._derivative_progress[1]
+
+    @Property(str, notify=derivativeOperationChanged)
+    def derivativeResultSummary(self) -> str:
+        return self._derivative_summary
+
     @Property(bool, notify=isCancelingChanged)
     def isCanceling(self) -> bool:
         return self._is_canceling
@@ -516,6 +736,11 @@ class AppController(QObject):
     @Property(int, notify=currentResultRowChanged)
     def currentResultRow(self) -> int:
         return self._current_result_row
+
+    @Property(str, notify=currentResultRowChanged)
+    def selectedFilename(self) -> str:
+        path = self._search_model.get_path(self._current_result_row)
+        return Path(path).name if path else ""
 
     @Property(int, notify=totalResultsChanged)
     def totalResults(self) -> int:
@@ -754,6 +979,7 @@ class AppController(QObject):
             self._repo.mark_image(path, is_checked_now)
         self._recompute_checked_in_results()
         self.checkedCountChanged.emit()
+        self._refresh_marked_tagging_state()
 
     @Slot()
     def selectAll(self) -> None:
@@ -955,6 +1181,7 @@ class AppController(QObject):
                         count=worker.result_export_count, name=fp.name
                     )
                 )
+        self._refresh_marked_tagging_state()
 
     def _on_bulk_failed(self, msg: str) -> None:
         self._is_busy = False
@@ -1074,6 +1301,7 @@ class AppController(QObject):
             self._repo = repo
             self._folder_repo = folder_repo
             self._key = password
+            self._initialize_tagging_services()
             self._unlock_error = ""
             self._is_locked = False
             self._is_new_database = False
@@ -1120,6 +1348,7 @@ class AppController(QObject):
             self._folder_tree_dirty = True  # loaded on demand when Browse tab is opened
             self._load_indexed_folders()
             self._load_marks()
+            self._refresh_marked_tagging_state()
             self.search("")
             # Resume only folders whose scan was interrupted in a previous session
             # (status = 'queued' or 'scanning').  Do NOT re-queue folders that are
@@ -2317,6 +2546,7 @@ class AppController(QObject):
         self._current_result_row = row
         self.currentResultRowChanged.emit()
         self.currentProxyResultRowChanged.emit()
+        self.refreshSelectedTaggingState()
         # Show thumb placeholder immediately from local cache (instant, no disk I/O)
         thumb_uri = self._search_model.data(
             self._search_model.index(row, 0),
@@ -2766,6 +2996,7 @@ class AppController(QObject):
         on the next launch, then cancels any running workers.
         """
         self._app_closing = True
+        self._cancel_tagging_workers(wait=False)
         if self._folder_repo and self._scanning_folder_id is not None:
             self._folder_repo.update_status(self._scanning_folder_id, "queued")
         if self._index_worker and self._index_worker.isRunning():
@@ -3270,6 +3501,7 @@ class AppController(QObject):
             return
         if self._is_busy:
             return
+        self._cancel_tagging_workers(wait=True)
         # The heavy work — clearing the on-disk cache, deleting every index
         # row and vacuuming the database — runs on a MaintenanceWorker so the
         # GUI stays responsive and a progress overlay can be shown.  The
@@ -3294,12 +3526,615 @@ class AppController(QObject):
         self._search_model.set_rows([])
         self._exif_model.set_rows([])
         self._folder_model.set_rows([])
+        self._clear_tagging_services()
+        self._initialize_tagging_services()
         self._total_results = 0
         self.totalResultsChanged.emit()
         self._clear_details()
         self._folder_tree_dirty = True
         self.folderTreeChanged.emit()
         self._set_status(_("Database reset"))
+
+    # ── Tagging application adapter ──────────────────────────────────────────
+
+    def _initialize_tagging_services(self) -> None:
+        if self._repo is None:
+            return
+        self._tgm_repository = TgmSnapshotRepository(tgm_snapshot_path(self._db_path))
+        self._tagging_service = TaggingService(
+            self._repo,
+            FilesystemSidecarRepository(),
+            self._tgm_repository,
+        )
+        self._refresh_tgm_status()
+
+    def _clear_tagging_services(self) -> None:
+        self._cancel_tagging_workers(wait=True)
+        self._tgm_repository = None
+        self._tagging_service = None
+        self._tgm_metadata = {}
+        self._tgm_vectors_current = False
+        self._accepted_tags_model.set_rows([])
+        self._free_tags_model.set_rows([])
+        self._free_tag_suggestions_model.set_rows([])
+        self._tgm_search_model.set_rows([])
+        self._pending_proposals_model.set_rows([])
+        self._marked_tags_model.set_rows([])
+        self._marked_tag_total = 0
+        self._marked_tagged_total = 0
+        self.taggingStateChanged.emit()
+
+    def _refresh_tgm_status(self) -> None:
+        self._tgm_metadata = {}
+        self._tgm_vectors_current = False
+        repository = self._tgm_repository
+        if repository is None or not tgm_snapshot_path(self._db_path).exists():
+            self.taggingStateChanged.emit()
+            return
+        try:
+            snapshot = repository.load()
+            counts = repository.counts()
+            self._tgm_metadata = {
+                "source_date": snapshot.distribution_date
+                or snapshot.imported_at.date().isoformat(),
+                "checksum": snapshot.raw_sha256,
+                "subject_count": counts[TgmCategory.SUBJECT],
+                "genre_count": counts[TgmCategory.GENRE_FORMAT],
+                "diagnostics": (
+                    _("TGM source diagnostics: {}").format(len(snapshot.diagnostics))
+                    if snapshot.diagnostics
+                    else ""
+                ),
+            }
+            metadata_path = tgm_vector_metadata_path(self._db_path)
+            if metadata_path.exists():
+                vector_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                fingerprint = vector_metadata.get("fingerprint", {})
+                self._tgm_vectors_current = fingerprint == {
+                    "raw_tgm_sha256": snapshot.raw_sha256,
+                    "normalization_version": snapshot.normalization_version,
+                    "prompt_version": TgmPromptBuilder.VERSION,
+                    "model_name": CLIP_MODEL_NAME,
+                    "pretrained": CLIP_PRETRAINED,
+                    "dimension": CLIP_VECTOR_DIMENSION,
+                }
+        except Exception as exc:  # noqa: BLE001
+            self._tgm_metadata = {"diagnostics": str(exc)}
+        self.taggingStateChanged.emit()
+
+    @Slot(bool)
+    def setTaggingEnabled(self, enabled: bool) -> None:
+        if self._settings is not None:
+            self._settings.setTaggingEnabled(enabled)
+            self.taggingStateChanged.emit()
+
+    @Slot(str)
+    def searchTgm(self, query: str) -> None:
+        if self._tgm_repository is None or not self.tgmInstalled:
+            self._tgm_search_model.set_rows([])
+            return
+        try:
+            self._tgm_search_model.set_rows(self._tgm_repository.search(query))
+            self._selected_tagging_error = ""
+        except Exception as exc:  # noqa: BLE001
+            self._selected_tagging_error = str(exc)
+        self.taggingStateChanged.emit()
+
+    @Slot(str)
+    def searchFreeTags(self, query: str) -> None:
+        if self._repo is None or not self.freeTaggingAvailable:
+            self._free_tag_suggestions_model.set_rows([])
+            return
+        try:
+            path = self._search_model.get_path(self._current_result_row)
+            assigned = {
+                tag.casefold()
+                for tag in (() if path is None else self._repo.get_free_tags(path))
+            }
+            self._free_tag_suggestions_model.set_rows(
+                tag
+                for tag in self._repo.search_free_tags(query)
+                if tag.casefold() not in assigned
+            )
+            self._selected_tagging_error = ""
+        except Exception as exc:  # noqa: BLE001
+            self._free_tag_suggestions_model.set_rows([])
+            self._selected_tagging_error = str(exc)
+        self.taggingStateChanged.emit()
+
+    @Slot()
+    def refreshSelectedTaggingState(self) -> None:
+        self._refresh_selected_tagging_state(preserve_proposals=False)
+
+    def _refresh_selected_tagging_state(self, *, preserve_proposals: bool) -> None:
+        path = self._search_model.get_path(self._current_result_row)
+        if not path or self._tagging_service is None:
+            self._accepted_tags_model.set_rows([])
+            self._free_tags_model.set_rows([])
+            self._derivative_tags_model.set_rows(self._embedded_tags if path else ())
+            if not preserve_proposals:
+                self._pending_proposals_model.set_rows([])
+            return
+        try:
+            state = self._tagging_service.get_image_tagging_state(path)
+            self._accepted_tags_model.set_rows(state.accepted_tags)
+            self._free_tags_model.set_rows(state.free_tags)
+            self._derivative_tags_model.set_rows(
+                merge_keyword_labels(
+                    (tag.label for tag in state.accepted_tags),
+                    state.free_tags,
+                    self._embedded_tags,
+                )
+            )
+            if not preserve_proposals:
+                self._pending_proposals_model.set_rows([])
+            self._selected_tagging_error = ""
+        except Exception as exc:  # noqa: BLE001
+            self._accepted_tags_model.set_rows([])
+            self._free_tags_model.set_rows([])
+            self._derivative_tags_model.set_rows(self._embedded_tags)
+            if not preserve_proposals:
+                self._pending_proposals_model.set_rows([])
+            self._selected_tagging_error = str(exc)
+        self.taggingStateChanged.emit()
+
+    def _refresh_marked_tagging_state(self) -> None:
+        if self._tagging_service is None or not self.tgmInstalled:
+            self._marked_tags_model.set_rows([])
+            self._marked_tag_total = 0
+            self._marked_tagged_total = 0
+        else:
+            try:
+                state = self._tagging_service.get_marked_tagging_state()
+                self._marked_tags_model.set_rows(state.concepts)
+                self._marked_tag_total = state.total_marked
+                self._marked_tagged_total = state.tagged_marked
+            except Exception as exc:  # noqa: BLE001
+                self._selected_tagging_error = str(exc)
+        self.taggingStateChanged.emit()
+
+    @Slot(str)
+    def addSelectedTgmConcept(self, concept_reference: str) -> None:
+        self._mutate_selected_tag(concept_reference, remove=False)
+
+    @Slot(str)
+    def removeSelectedTgmConcept(self, concept_id: str) -> None:
+        self._mutate_selected_tag(concept_id, remove=True)
+
+    @Slot(str)
+    def addSelectedFreeTag(self, label: str) -> None:
+        self._mutate_selected_free_tag(label, remove=False)
+
+    @Slot(str)
+    def removeSelectedFreeTag(self, label: str) -> None:
+        self._mutate_selected_free_tag(label, remove=True)
+
+    def _mutate_selected_free_tag(self, label: str, *, remove: bool) -> None:
+        if not self.freeTaggingAvailable:
+            return
+        path = self._search_model.get_path(self._current_result_row)
+        if path is None or self._tagging_service is None:
+            return
+        try:
+            if remove:
+                self._tagging_service.remove_free_tag(path, label)
+            else:
+                self._tagging_service.add_free_tag(path, label)
+            self._selected_tagging_error = ""
+            self._refresh_after_tag_mutation()
+            self.searchFreeTags("")
+        except Exception as exc:  # noqa: BLE001
+            self._selected_tagging_error = str(exc)
+            self.taggingStateChanged.emit()
+
+    def _mutate_selected_tag(self, concept_reference: str, *, remove: bool) -> None:
+        if not self.taggingAvailable:
+            return
+        path = self._search_model.get_path(self._current_result_row)
+        if path is None or self._tagging_service is None:
+            return
+        try:
+            if remove:
+                self._tagging_service.remove_concept(path, concept_reference)
+            else:
+                self._tagging_service.add_concept(path, concept_reference)
+            self._selected_tagging_error = ""
+            self._refresh_after_tag_mutation()
+        except Exception as exc:  # noqa: BLE001
+            self._selected_tagging_error = str(exc)
+            self.taggingStateChanged.emit()
+
+    @Slot(str, str)
+    def acceptSelectedProposal(self, concept_id: str, fingerprint: str) -> None:
+        if not self.taggingAvailable:
+            return
+        path = self._search_model.get_path(self._current_result_row)
+        if path is None or self._tagging_service is None:
+            return
+        try:
+            proposal = self._pending_proposals_model.find(concept_id, fingerprint)
+            if proposal is None or proposal.image_path != path:
+                return
+            self._tagging_service.accept_proposal(proposal)
+            self._pending_proposals_model.remove(proposal)
+            self._refresh_after_tag_mutation()
+        except Exception as exc:  # noqa: BLE001
+            self._selected_tagging_error = str(exc)
+            self.taggingStateChanged.emit()
+
+    @Slot(str, str)
+    def rejectSelectedProposal(self, concept_id: str, fingerprint: str) -> None:
+        if not self.taggingAvailable:
+            return
+        path = self._search_model.get_path(self._current_result_row)
+        if path is None or self._tagging_service is None:
+            return
+        try:
+            proposal = self._pending_proposals_model.find(concept_id, fingerprint)
+            if proposal is None or proposal.image_path != path:
+                return
+            self._tagging_service.reject_proposal(proposal)
+            self._pending_proposals_model.remove(proposal)
+            self.taggingStateChanged.emit()
+        except Exception as exc:  # noqa: BLE001
+            self._selected_tagging_error = str(exc)
+            self.taggingStateChanged.emit()
+
+    def _refresh_after_tag_mutation(self) -> None:
+        self._refresh_selected_tagging_state(preserve_proposals=True)
+        self._refresh_marked_tagging_state()
+        if self._current_result_row >= 0:
+            index = self._search_model.index(self._current_result_row)
+            self._search_model.dataChanged.emit(index, index, [])
+
+    @Slot()
+    def installOrUpdateTgm(self) -> None:
+        if self._repo is None or self._tgm_update_worker is not None:
+            return
+        worker = TgmUpdateWorker(self._db_path, self._key)
+        self._tgm_update_worker = worker
+        worker.progress.connect(self._on_tgm_progress)
+        worker.result_ready.connect(self._on_tgm_update_result)
+        worker.failed.connect(self._on_tgm_failed)
+        worker.canceled.connect(self._on_tgm_canceled)
+        worker.finished.connect(lambda: self._release_worker("_tgm_update_worker", worker))
+        self._tgm_operation = True
+        self._tgm_error = ""
+        self.tgmOperationChanged.emit()
+        worker.start()
+
+    @Slot()
+    def rebuildTgmVectors(self) -> None:
+        if not self.tgmInstalled or not self._ai_enabled or self._tgm_vector_worker is not None:
+            return
+        worker = TgmVectorBuildWorker(self._db_path)
+        self._tgm_vector_worker = worker
+        worker.progress.connect(self._on_tgm_progress)
+        worker.result_ready.connect(self._on_tgm_vector_result)
+        worker.failed.connect(self._on_tgm_failed)
+        worker.canceled.connect(lambda _result: self._on_tgm_canceled())
+        worker.finished.connect(lambda: self._release_worker("_tgm_vector_worker", worker))
+        self._tgm_operation = True
+        self._tgm_error = ""
+        self.tgmOperationChanged.emit()
+        worker.start()
+
+    def _on_tgm_progress(self, done: int, total: int, _detail: str) -> None:
+        self._tgm_progress = (done, total)
+        self.tgmOperationChanged.emit()
+
+    def _on_tgm_update_result(self, _result: object) -> None:
+        self._tgm_operation = False
+        self._initialize_tagging_services()
+        self.refreshSelectedTaggingState()
+        self._refresh_marked_tagging_state()
+        self.tgmOperationChanged.emit()
+
+    def _on_tgm_vector_result(self, _result: object) -> None:
+        self._tgm_operation = False
+        self._refresh_tgm_status()
+        self.tgmOperationChanged.emit()
+
+    def _on_tgm_failed(self, error: str) -> None:
+        self._tgm_operation = False
+        self._tgm_error = error
+        self.tgmOperationChanged.emit()
+
+    def _on_tgm_canceled(self) -> None:
+        self._tgm_operation = False
+        self.tgmOperationChanged.emit()
+
+    @Slot()
+    def cancelTgmOperation(self) -> None:
+        worker = self._tgm_vector_worker or self._tgm_update_worker
+        if worker is not None:
+            worker.cancel()
+
+    @Slot()
+    def generateSelectedTagProposals(self) -> None:
+        path = self._search_model.get_path(self._current_result_row)
+        self._start_proposals([] if path is None else [path], auto_accept=False)
+
+    @Slot()
+    def generateMarkedTagProposals(self) -> None:
+        paths = self._repo.get_marked_paths() if self._repo is not None else []
+        self._start_proposals(paths, auto_accept=False)
+
+    @Slot()
+    def autoAcceptMarkedTagProposals(self) -> None:
+        paths = self._repo.get_marked_paths() if self._repo is not None else []
+        self._start_proposals(paths, auto_accept=True)
+
+    def _start_proposals(self, paths: list[str], *, auto_accept: bool) -> None:
+        if not paths or not self.taggingProposalAvailable or self._proposal_worker is not None:
+            return
+        assert self._settings is not None
+        worker = TgmProposalWorker(
+            self._db_path,
+            self._key,
+            paths,
+            threshold=self._settings.proposal_threshold,
+            auto_accept_threshold=self._settings.auto_accept_threshold if auto_accept else None,
+        )
+        self._proposal_worker = worker
+        worker.progress.connect(self._on_proposal_progress)
+        worker.result_ready.connect(self._on_proposal_result)
+        worker.failed.connect(self._on_proposal_failed)
+        worker.canceled.connect(lambda _result: self._on_proposal_canceled())
+        worker.finished.connect(lambda: self._release_worker("_proposal_worker", worker))
+        self._proposal_operation = True
+        self._proposal_error = ""
+        if not auto_accept:
+            self._pending_proposals_model.set_rows([])
+        self.proposalOperationChanged.emit()
+        worker.start()
+
+    def _on_proposal_progress(self, done: int, total: int, _detail: str) -> None:
+        self._proposal_progress = (done, total)
+        self.proposalOperationChanged.emit()
+
+    def _on_proposal_result(self, result: object, _bulk_result: object) -> None:
+        self._proposal_operation = False
+        selected_path = self._search_model.get_path(self._current_result_row)
+        matching_result = next(
+            (
+                item
+                for item in getattr(result, "results", ())
+                if getattr(item, "image_path", None) == selected_path
+            ),
+            None,
+        )
+        self._pending_proposals_model.set_rows(
+            () if matching_result is None else matching_result.proposals
+        )
+        self._refresh_selected_tagging_state(preserve_proposals=True)
+        self.proposalOperationChanged.emit()
+
+    def _on_proposal_failed(self, error: str) -> None:
+        self._proposal_operation = False
+        self._proposal_error = error
+        self.proposalOperationChanged.emit()
+
+    def _on_proposal_canceled(self) -> None:
+        self._proposal_operation = False
+        self.proposalOperationChanged.emit()
+
+    @Slot()
+    def cancelTagProposalGeneration(self) -> None:
+        if self._proposal_worker is not None:
+            self._proposal_worker.cancel()
+
+    @Slot(str)
+    def applyConceptToMarked(self, concept_reference: str) -> None:
+        self._start_bulk_tag("add", concept_reference)
+
+    @Slot(str)
+    def removeConceptFromMarked(self, concept_id: str) -> None:
+        self._start_bulk_tag("remove", concept_id)
+
+    def _start_bulk_tag(self, operation: str, concept_reference: str) -> None:
+        if (
+            not self.taggingAvailable
+            or self._repo is None
+            or self._bulk_tag_worker is not None
+        ):
+            return
+        worker = BulkTagWorker(self._db_path, self._key, operation, concept_reference)
+        self._bulk_tag_worker = worker
+        worker.progress.connect(self._on_bulk_tag_progress)
+        worker.result_ready.connect(self._on_bulk_tag_result)
+        worker.failed.connect(self._on_bulk_tag_failed)
+        worker.canceled.connect(self._on_bulk_tag_result)
+        worker.finished.connect(lambda: self._release_worker("_bulk_tag_worker", worker))
+        self._bulk_tag_operation = True
+        self._bulk_tag_summary = ""
+        self._bulk_tag_action = operation
+        self.bulkTagOperationChanged.emit()
+        worker.start()
+
+    def _on_bulk_tag_progress(self, done: int, total: int, _item: object) -> None:
+        self._bulk_tag_progress = (done, total)
+        self.bulkTagOperationChanged.emit()
+
+    def _on_bulk_tag_result(self, result: object) -> None:
+        self._bulk_tag_operation = False
+        changed_count = getattr(result, "succeeded_count", 0)
+        unchanged_count = getattr(result, "skipped_count", 0)
+        problem_count = (
+            getattr(result, "conflicted_count", 0)
+            + getattr(result, "failed_count", 0)
+        )
+        if self._bulk_tag_action == "remove":
+            summary = _("Removed from {} image(s). Already absent: {}. Problems: {}.").format(
+                changed_count, unchanged_count, problem_count
+            )
+        else:
+            summary = _("Added to {} image(s). Already tagged: {}. Problems: {}.").format(
+                changed_count, unchanged_count, problem_count
+            )
+        if getattr(result, "cancelled", False):
+            summary = _("Canceled. {}").format(summary)
+        self._bulk_tag_summary = summary.strip()
+        self._refresh_after_tag_mutation()
+        self.bulkTagOperationChanged.emit()
+
+    def _on_bulk_tag_failed(self, error: str) -> None:
+        self._bulk_tag_operation = False
+        self._bulk_tag_summary = error
+        self.bulkTagOperationChanged.emit()
+
+    @Slot()
+    def cancelBulkTagging(self) -> None:
+        if self._bulk_tag_worker is not None:
+            self._bulk_tag_worker.cancel()
+
+    @Slot(str)
+    def generateDerivativesForMarked(self, output_url: str) -> None:
+        self._start_derivative_export(output_url)
+
+    @Slot(str)
+    def generateDerivativesForCurrentResults(self, output_url: str) -> None:
+        if self._results_use_ai_pipeline():
+            self._start_derivative_export(
+                output_url,
+                image_paths=[result.path for result in self._ai_result_cache],
+            )
+            return
+        self._start_derivative_export(
+            output_url,
+            matching_results=True,
+            query=self._query_text,
+            ext_filter=self._ext_filter,
+            path_filter=self._current_path_filter(),
+            restrict_to_enabled_folders=self._folder_repo is not None,
+            marked_only=self._checked_only_filter_active,
+            date_from=self._date_from,
+            date_to=self._date_to,
+        )
+
+    def _start_derivative_export(
+        self,
+        output_url: str,
+        **worker_options: object,
+    ) -> None:
+        if (
+            not self.freeTaggingAvailable
+            or self._folder_repo is None
+            or self._derivative_worker is not None
+        ):
+            return
+        output_root = Path(QUrl(output_url).toLocalFile())
+        roots = {
+            Path(folder.path): folder.display_name
+            for folder in self._folder_repo.get_all()
+        }
+        worker = DerivativeExportWorker(
+            self._db_path,
+            self._key,
+            roots,
+            output_root,
+            **worker_options,
+        )
+        self._derivative_worker = worker
+        worker.progress.connect(self._on_derivative_progress)
+        worker.result_ready.connect(self._on_derivative_result)
+        worker.canceled.connect(self._on_derivative_result)
+        worker.failed.connect(self._on_derivative_failed)
+        worker.finished.connect(lambda: self._release_worker("_derivative_worker", worker))
+        self._derivative_operation = True
+        self._derivative_summary = ""
+        self.derivativeOperationChanged.emit()
+        worker.start()
+
+    def _on_derivative_progress(self, done: int, total: int, _item: object) -> None:
+        self._derivative_progress = (done, total)
+        self.derivativeOperationChanged.emit()
+
+    def _on_derivative_result(self, result: object) -> None:
+        self._derivative_operation = False
+        copied_count = getattr(result, "copied_count", 0)
+        untagged_count = getattr(result, "skipped_untagged_count", 0)
+        existing_count = getattr(result, "skipped_existing_count", 0)
+        failed_count = getattr(result, "failed_count", 0)
+        canceled_count = getattr(result, "canceled_count", 0)
+        items = getattr(result, "items", ())
+        copied_destinations = [
+            str(item.destination)
+            for item in items
+            if getattr(getattr(item, "status", None), "value", None) == "copied"
+        ]
+        parts = []
+        if copied_count == 1 and copied_destinations:
+            parts.append(_("Created derivative: {}").format(copied_destinations[0]))
+        elif copied_count == 1:
+            parts.append(_("Created 1 derivative."))
+        elif copied_count and copied_destinations:
+            common_destination = os.path.commonpath(copied_destinations)
+            parts.append(
+                _("Created {} derivatives in {}.").format(
+                    copied_count, common_destination
+                )
+            )
+        elif copied_count:
+            parts.append(_("Created {} derivatives.").format(copied_count))
+        else:
+            parts.append(_("No derivatives were created."))
+        if untagged_count:
+            parts.append(
+                _("{} image(s) had no accepted tags.").format(untagged_count)
+            )
+        if existing_count:
+            parts.append(
+                _("{} destination file(s) already existed.").format(existing_count)
+            )
+        if failed_count:
+            parts.append(_("{} derivative(s) failed.").format(failed_count))
+            failed_item = next(
+                (
+                    item
+                    for item in items
+                    if getattr(getattr(item, "status", None), "value", None)
+                    == "failed"
+                ),
+                None,
+            )
+            if failed_item is not None:
+                source_name = Path(str(getattr(failed_item, "source", ""))).name
+                detail = str(getattr(failed_item, "message", "") or "unknown error")
+                parts.append(
+                    _("First failure ({}): {}").format(source_name, detail)
+                )
+        if canceled_count:
+            parts.append(_("{} derivative(s) canceled.").format(canceled_count))
+        self._derivative_summary = " ".join(parts)
+        self.derivativeOperationChanged.emit()
+
+    def _on_derivative_failed(self, error: str) -> None:
+        self._derivative_operation = False
+        self._derivative_summary = error
+        self.derivativeOperationChanged.emit()
+
+    @Slot()
+    def cancelDerivativeExport(self) -> None:
+        if self._derivative_worker is not None:
+            self._derivative_worker.cancel()
+
+    def _release_worker(self, attribute: str, worker: QThread) -> None:
+        if getattr(self, attribute) is worker:
+            setattr(self, attribute, None)
+
+    def _cancel_tagging_workers(self, *, wait: bool) -> None:
+        for worker in (
+            self._tgm_update_worker,
+            self._tgm_vector_worker,
+            self._proposal_worker,
+            self._bulk_tag_worker,
+            self._derivative_worker,
+        ):
+            if worker is not None and worker.isRunning():
+                worker.cancel()
+                if wait:
+                    worker.wait(5000)
 
     @Slot(str)
     def openUrl(self, url: str) -> None:
@@ -3431,6 +4266,9 @@ class AppController(QObject):
             self._geo_wikipedia_url = ""
             self.geoWikipediaUrlChanged.emit()
         self._exif_model.set_rows([])
+        self._embedded_tags = ()
+        self._embedded_tags_model.set_rows([])
+        self._derivative_tags_model.set_rows([])
         self._selected_image_source = ""
         self._selected_thumb_source = ""
         self._current_result_row = -1
@@ -3468,6 +4306,9 @@ class AppController(QObject):
         try:
             parsed = json.loads(meta_json)
             if isinstance(parsed, dict):
+                self._embedded_tags = extract_embedded_keyword_labels(parsed)
+                self._embedded_tags_model.set_rows(self._embedded_tags)
+                self._derivative_tags_model.set_rows(self._embedded_tags)
                 rows = sorted(
                     [(str(k), str(v)) for k, v in parsed.items()],
                     key=lambda r: r[0].lower(),
@@ -3487,6 +4328,9 @@ class AppController(QObject):
         except Exception:
             pass
         self._exif_model.set_rows([])
+        self._embedded_tags = ()
+        self._embedded_tags_model.set_rows([])
+        self._derivative_tags_model.set_rows([])
         if self._geo_location_url:
             self._geo_location_url = ""
             self.geoLocationUrlChanged.emit()
@@ -3720,6 +4564,11 @@ class AppController(QObject):
             self._index_worker,
             self._password_change_worker,
             self._maint_worker,
+            self._tgm_update_worker,
+            self._tgm_vector_worker,
+            self._proposal_worker,
+            self._bulk_tag_worker,
+            self._derivative_worker,
         ):
             if worker is not None and worker.isRunning():
                 cancel = getattr(worker, "cancel", None)
@@ -3734,6 +4583,13 @@ class AppController(QObject):
         self._index_worker = None
         self._password_change_worker = None
         self._maint_worker = None
+        self._tgm_update_worker = None
+        self._tgm_vector_worker = None
+        self._proposal_worker = None
+        self._bulk_tag_worker = None
+        self._derivative_worker = None
+        self._tagging_service = None
+        self._tgm_repository = None
 
         if self._repo is not None:
             self._repo.close()

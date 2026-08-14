@@ -5,9 +5,15 @@ Fully generated using VS Code Copilot.
 
 ![exif-turbo search tab](docs/screenshots/03_search_eagle.png)
 
+*Photo: [Wild Golden Eagle](https://commons.wikimedia.org/wiki/File:015_Wild_Golden_Eagle_in_flight_at_Pfyn-Finges_(Switzerland)_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
+
 ![exif-turbo ai search mode](docs/screenshots/09_ai_search_mode.png)
 
-*Photo: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
+*Photo: [Chateau de Chillon and Dents du Midi](https://commons.wikimedia.org/wiki/File:001_Chateau_de_Chillon_and_Dents_du_Midi_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
+
+![exif-turbo tagging drawer](docs/screenshots/10_tagging_drawer.png)
+
+*Photo: [Xenakis UPIC system computer unit](https://commons.wikimedia.org/wiki/File:Xenakis_UPIC_system_computer_unit_2.jpg) by 1904.CC (Manuel Schmalstieg), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), via Wikimedia Commons. Scaled/cropped in the UI; attribution is voluntary.*
 
 📖 **[User Manual](docs/user-manual.md)** ([PDF](docs/user-manual.pdf)) — full feature reference, keyboard shortcuts, and screenshots.
 
@@ -16,6 +22,10 @@ Fully generated using VS Code Copilot.
 - **Video indexing** — MP4, MOV, AVI, MKV, WMV, M4V, MTS, M2TS, 3GP, WebM, FLV are indexed alongside still images; thumbnails and previews are decoded via PyAV/FFmpeg (embedded thumbnail when present, otherwise a frame at 1/3 of duration); rotation from the `tkhd` display matrix keeps portrait clips upright.
 - **AI semantic search (CLIP)** — switch the Search bar from **EXIF** to **AI** mode to search by natural-language intent (for example, "golden eagle over mountain lake") instead of exact metadata tokens. A precision picker controls match strictness: **Fine** (>= 0.22), **Normal** (>= 0.20), **Broad** (>= 0.18).
 - **AI-Scan and AI Full Rescan (per folder)** — in **Indexed Folders**, build missing CLIP embeddings for one folder with **AI-Scan**, or rebuild all vectors for that folder with **AI Full Rescan**. Vector data is persisted per database (`ai_index.faiss` + `ai_id_map.json`) for fast repeat AI searches.
+- **Non-destructive tagging** — enable tagging per database and open the right-side workbench from Search or Browse with the tag button or **Ctrl+T**. Accepted controlled TGM terms and custom free tags are stored as plain JSON in adjacent `<image-filename>.sidecar.json` files; originals are never changed, and both tag types participate in FTS5 search.
+- **Current-image tag review** — inspect keywords already embedded in the original, create custom tags or reuse remembered labels, search canonical TGM terms and aliases, and review CLIP proposals generated automatically when the drawer opens or the focused image changes. A fixed footer previews the exact merged, deduplicated keyword set for a derivative. Undecided suggestions are ephemeral; accepted tags and rejected decisions persist.
+- **TGM and proposal controls** — install or update the official TGM snapshot under **Settings → Tagging and TGM**, then build its separate term-vector index for proposals. Proposal and auto-accept defaults are **0.24** and **0.32**; auto-accept is disabled by default, and proposals also require AI features plus existing image vectors from **AI-Scan**.
+- **Tagged derivatives** — copy either every current search result (including unloaded pages) or all marked images to a user-selected folder outside indexed roots while preserving source formats and relative folder trees. Existing embedded keywords are merged with accepted controlled/custom labels, deduplicated case-insensitively, and verified in XMP Subject and IPTC Keywords on each copy. Existing destinations and images without accepted additions are skipped; originals and adjacent sidecars are not copied or modified.
 - **macOS Intel limitation** — AI features are automatically disabled on macOS Intel (x86_64) targets. The Settings switch is greyed out because PyTorch is not supported there for Python 3.13+.
 - **Recreate Thumbnail / Recreate Preview** — right-click the preview image to rebuild a single thumbnail or preview if it ever looks wrong (e.g. video frame extracted before the rotation fix); the left-grid thumbnail refreshes immediately via a cache-busting URL.
 - **Self-healing cache** — after every folder index run a fast garbage-collection pass deletes orphaned thumbnail and preview files (those whose source image no longer exists in the database). Status bar reports *“Cleaning up cache…”* during the sweep.
@@ -54,16 +64,18 @@ Fully generated using VS Code Copilot.
 
 ## Test suite
 
-220 automated tests across four layers:
+522 automated tests across six areas:
 
 | Suite | Count | What it covers |
 |-------|-------|----------------|
-| `tests/data/` | 64 | Repository: upsert, FTS5 search, delete_missing (scoped), clear_all, excluded paths, folder management, rekey, `captured_at` persistence, date-range filter, `get_year_counts` |
-| `tests/indexing/` | 33 | Image utils, metadata text, IndexerService e2e (real JPEG/PNG files), scoped rescan, `_resolve_captured_at` (EXIF parse, sub-second suffix, secondary-key allowlist, ICC_Profile exclusion, fallback chain) |
-| `tests/ui/` | 93 | Live QML window driven via pytest-qt — unlock, search, filter, folder add/remove/enable, controller state, ext filter, zoom, thumbnail loading, preview build worker, raw preview toggle, metadata panel scroll, sort combo, Browse-tab navigation & wheel scroll, search/browse tab-state isolation |
-| `tests/utils/` | 30 | Preview cache naming/clearing, thumb crypto (encrypt/decrypt, password change, legacy migration), friendly folder labels (drive roots), video frame extraction |
+| `tests/data/` | 124 | SQLCipher repositories, indexing/search state, marks, sidecar/tag caches, TGM snapshots, AI vectors, exclusions, and rekeying |
+| `tests/indexing/` | 54 | Image/video utilities, metadata extraction and text, AI indexing, scoped rescans, and capture-date resolution |
+| `tests/tagging/` | 69 | Sidecars, synchronization, TGM import/update/search, proposal ranking, custom tags, derivative planning, and verified ExifTool writes |
+| `tests/ui/` | 230 | Controller/workers/models plus live QML coverage for search, browse, settings, tagging, exports, previews, folders, and bulk operations |
+| `tests/utils/` | 43 | Preview/thumbnail cache, encryption, path labels, process helpers, rendering, and video frames |
+| `tests/test_app.py` | 2 | Application entry-point argument handling |
 
-**Total: 220**
+**Total: 522**
 
 ## Requirements
 
@@ -177,6 +189,11 @@ MIT — see [LICENSE](LICENSE).
 
 Third-party software credits: [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).
 
+The MIT license does not replace third-party image terms. Screenshot composites
+containing Giles Laurent photographs are distributed under CC BY-SA 4.0; see
+[docs/screenshots/README.md](docs/screenshots/README.md) and the canonical
+[sample-data attribution manifest](tests/sample-data/ATTRIBUTION.md).
+
 ## Building from source
 
 ### Windows MSI
@@ -238,14 +255,13 @@ The script enforces this flow:
 
 ## Sample Image Credits
 
-The sample images used in tests and screenshots are photographs by
-**[Giles Laurent](https://commons.wikimedia.org/wiki/User:Giles_Laurent)**,
-published on Wikimedia Commons under the
-[Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/) license.
-
-Mandatory attribution: © Giles Laurent, gileslaurent.com, License CC BY-SA
-
-See [tests/sample-data/ATTRIBUTION.md](tests/sample-data/ATTRIBUTION.md) for the full list of images and their Wikimedia Commons links.
+The sample set includes 13 photographs by **Giles Laurent** under
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), two fixture
+copies of a photograph by **1904.CC (Manuel Schmalstieg)** under
+[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), and a
+project-created PNG test fixture. See the canonical
+[tests/sample-data/ATTRIBUTION.md](tests/sample-data/ATTRIBUTION.md) for exact
+filenames, authors, licenses, direct Wikimedia sources, and screenshot use.
 
 ## Recent changes
 

@@ -60,6 +60,15 @@ _IS_MACOS_INTEL = sys.platform == "darwin" and platform.machine().lower() in {"x
 _AI_FEATURE_SUPPORTED = not _IS_MACOS_INTEL
 _AI_UNAVAILABLE_REASON = _("PyTorch is not available on macOS Intel for Python 3.13+.")
 
+# CLIP cosine-similarity policy.  0.24 is intentionally review-oriented;
+# automatic acceptance defaults to the materially stricter 0.32 threshold.
+_DEFAULT_PROPOSAL_THRESHOLD = 0.24
+_DEFAULT_AUTO_ACCEPT_THRESHOLD = 0.32
+_MIN_THRESHOLD = 0.0
+_MAX_PROPOSAL_THRESHOLD = 0.99
+_MAX_THRESHOLD = 1.0
+_MIN_THRESHOLD_GAP = 0.01
+
 
 class SettingsModel(QObject):
     """Persistent settings stored per-database as JSON.
@@ -79,6 +88,7 @@ class SettingsModel(QObject):
     libvipsExtensionsChanged = Signal()
     sortByChanged = Signal()
     aiEnabledChanged = Signal()
+    taggingSettingsChanged = Signal()
     jsonExportFormatChanged = Signal()
 
     def __init__(self, settings_path: Path, parent: QObject | None = None) -> None:
@@ -92,6 +102,10 @@ class SettingsModel(QObject):
         self._libvips_extensions: List[str] = list(DEFAULT_VIPS_ALLOWED_EXTENSIONS)
         self._sort_by: str = _DEFAULT_SORT
         self._ai_enabled: bool = False
+        self._tagging_enabled: bool = False
+        self._proposal_threshold: float = _DEFAULT_PROPOSAL_THRESHOLD
+        self._auto_accept_enabled: bool = False
+        self._auto_accept_threshold: float = _DEFAULT_AUTO_ACCEPT_THRESHOLD
         self._json_pretty: bool = _DEFAULT_JSON_PRETTY
         self._json_indent_style: str = _DEFAULT_JSON_INDENT_STYLE
         self._json_indent_size: int = _DEFAULT_JSON_INDENT_SIZE
@@ -152,6 +166,87 @@ class SettingsModel(QObject):
         self._ai_enabled = value
         self.aiEnabledChanged.emit()
         self._save()
+
+    # ── Tagging ───────────────────────────────────────────────────────────────
+
+    @Property(bool, notify=taggingSettingsChanged)
+    def taggingEnabled(self) -> bool:
+        return self._tagging_enabled
+
+    @property
+    def tagging_enabled(self) -> bool:
+        return self._tagging_enabled
+
+    @Slot(bool)
+    def setTaggingEnabled(self, value: bool) -> None:
+        if self._tagging_enabled == value:
+            return
+        self._tagging_enabled = value
+        self.taggingSettingsChanged.emit()
+        self._save()
+
+    @Property(float, notify=taggingSettingsChanged)
+    def proposalThreshold(self) -> float:
+        return self._proposal_threshold
+
+    @property
+    def proposal_threshold(self) -> float:
+        return self._proposal_threshold
+
+    @Slot(float)
+    def setProposalThreshold(self, value: float) -> None:
+        proposal = self._clamp(value, _MIN_THRESHOLD, _MAX_PROPOSAL_THRESHOLD)
+        auto_accept = max(
+            self._auto_accept_threshold,
+            min(_MAX_THRESHOLD, proposal + _MIN_THRESHOLD_GAP),
+        )
+        if (
+            self._proposal_threshold == proposal
+            and self._auto_accept_threshold == auto_accept
+        ):
+            return
+        self._proposal_threshold = proposal
+        self._auto_accept_threshold = auto_accept
+        self.taggingSettingsChanged.emit()
+        self._save()
+
+    @Property(bool, notify=taggingSettingsChanged)
+    def autoAcceptEnabled(self) -> bool:
+        return self._auto_accept_enabled
+
+    @property
+    def auto_accept_enabled(self) -> bool:
+        return self._auto_accept_enabled
+
+    @Slot(bool)
+    def setAutoAcceptEnabled(self, value: bool) -> None:
+        if self._auto_accept_enabled == value:
+            return
+        self._auto_accept_enabled = value
+        self.taggingSettingsChanged.emit()
+        self._save()
+
+    @Property(float, notify=taggingSettingsChanged)
+    def autoAcceptThreshold(self) -> float:
+        return self._auto_accept_threshold
+
+    @property
+    def auto_accept_threshold(self) -> float:
+        return self._auto_accept_threshold
+
+    @Slot(float)
+    def setAutoAcceptThreshold(self, value: float) -> None:
+        minimum = min(_MAX_THRESHOLD, self._proposal_threshold + _MIN_THRESHOLD_GAP)
+        threshold = self._clamp(value, minimum, _MAX_THRESHOLD)
+        if self._auto_accept_threshold == threshold:
+            return
+        self._auto_accept_threshold = threshold
+        self.taggingSettingsChanged.emit()
+        self._save()
+
+    @staticmethod
+    def _clamp(value: float, minimum: float, maximum: float) -> float:
+        return max(minimum, min(maximum, float(value)))
 
     @Property("QVariantList", notify=blacklistChanged)
     def blacklist(self) -> List[str]:
@@ -376,6 +471,29 @@ class SettingsModel(QObject):
                 apply_language(self._language)
             if isinstance(data.get("aiEnabled"), bool):
                 self._ai_enabled = data["aiEnabled"] and _AI_FEATURE_SUPPORTED
+            if isinstance(data.get("taggingEnabled"), bool):
+                self._tagging_enabled = data["taggingEnabled"]
+            if isinstance(data.get("proposalThreshold"), (int, float)):
+                self._proposal_threshold = self._clamp(
+                    data["proposalThreshold"],
+                    _MIN_THRESHOLD,
+                    _MAX_PROPOSAL_THRESHOLD,
+                )
+            if isinstance(data.get("autoAcceptEnabled"), bool):
+                self._auto_accept_enabled = data["autoAcceptEnabled"]
+            if isinstance(data.get("autoAcceptThreshold"), (int, float)):
+                self._auto_accept_threshold = self._clamp(
+                    data["autoAcceptThreshold"],
+                    _MIN_THRESHOLD,
+                    _MAX_THRESHOLD,
+                )
+            self._auto_accept_threshold = max(
+                self._auto_accept_threshold,
+                min(
+                    _MAX_THRESHOLD,
+                    self._proposal_threshold + _MIN_THRESHOLD_GAP,
+                ),
+            )
             if isinstance(data.get("jsonExportPretty"), bool):
                 self._json_pretty = data["jsonExportPretty"]
             if data.get("jsonExportIndentStyle") in _VALID_INDENT_STYLES:
@@ -401,6 +519,10 @@ class SettingsModel(QObject):
                         "sortBy": self._sort_by,
                         "language": self._language,
                         "aiEnabled": self._ai_enabled,
+                        "taggingEnabled": self._tagging_enabled,
+                        "proposalThreshold": self._proposal_threshold,
+                        "autoAcceptEnabled": self._auto_accept_enabled,
+                        "autoAcceptThreshold": self._auto_accept_threshold,
                         "jsonExportPretty": self._json_pretty,
                         "jsonExportIndentStyle": self._json_indent_style,
                         "jsonExportIndentSize": self._json_indent_size,
