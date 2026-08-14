@@ -5,11 +5,15 @@ Fully generated using VS Code Copilot.
 
 ![exif-turbo search tab](docs/screenshots/03_search_eagle.png)
 
+*Photo: [Wild Golden Eagle](https://commons.wikimedia.org/wiki/File:015_Wild_Golden_Eagle_in_flight_at_Pfyn-Finges_(Switzerland)_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
+
 ![exif-turbo ai search mode](docs/screenshots/09_ai_search_mode.png)
+
+*Photo: [Chateau de Chillon and Dents du Midi](https://commons.wikimedia.org/wiki/File:001_Chateau_de_Chillon_and_Dents_du_Midi_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
 
 ![exif-turbo tagging drawer](docs/screenshots/10_tagging_drawer.png)
 
-*Photo: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
+*Photo: [Xenakis UPIC system computer unit](https://commons.wikimedia.org/wiki/File:Xenakis_UPIC_system_computer_unit_2.jpg) by 1904.CC (Manuel Schmalstieg), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), via Wikimedia Commons. Scaled/cropped in the UI; attribution is voluntary.*
 
 📖 **[User Manual](docs/user-manual.md)** ([PDF](docs/user-manual.pdf)) — full feature reference, keyboard shortcuts, and screenshots.
 
@@ -185,6 +189,11 @@ MIT — see [LICENSE](LICENSE).
 
 Third-party software credits: [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).
 
+The MIT license does not replace third-party image terms. Screenshot composites
+containing Giles Laurent photographs are distributed under CC BY-SA 4.0; see
+[docs/screenshots/README.md](docs/screenshots/README.md) and the canonical
+[sample-data attribution manifest](tests/sample-data/ATTRIBUTION.md).
+
 ## Building from source
 
 ### Windows MSI
@@ -246,14 +255,13 @@ The script enforces this flow:
 
 ## Sample Image Credits
 
-The sample images used in tests and screenshots are photographs by
-**[Giles Laurent](https://commons.wikimedia.org/wiki/User:Giles_Laurent)**,
-published on Wikimedia Commons under the
-[Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/) license.
-
-Mandatory attribution: © Giles Laurent, gileslaurent.com, License CC BY-SA
-
-See [tests/sample-data/ATTRIBUTION.md](tests/sample-data/ATTRIBUTION.md) for the full list of images and their Wikimedia Commons links.
+The sample set includes 13 photographs by **Giles Laurent** under
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), two fixture
+copies of a photograph by **1904.CC (Manuel Schmalstieg)** under
+[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), and a
+project-created PNG test fixture. See the canonical
+[tests/sample-data/ATTRIBUTION.md](tests/sample-data/ATTRIBUTION.md) for exact
+filenames, authors, licenses, direct Wikimedia sources, and screenshot use.
 
 ## Recent changes
 

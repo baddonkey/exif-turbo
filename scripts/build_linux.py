@@ -7,7 +7,7 @@ Produces:
     dist/exif-turbo-<version>-linux-x86_64.rpm    — RPM package (Fedora/RHEL/openSUSE)
 
 Requirements:
-    pip install pyinstaller babel
+    pip install pyinstaller babel packaging
     dpkg-deb   (apt install dpkg)      — for DEB
     rpmbuild   (apt install rpm)       — for RPM
 
@@ -117,11 +117,23 @@ def create_package_staging(bundle_dir: Path, version: str, staging: Path) -> boo
     apps_dir = staging / "usr" / "share" / "applications"
     icon_dir = staging / "usr" / "share" / "icons" / "hicolor" / "256x256" / "apps"
     metainfo_dir = staging / "usr" / "share" / "metainfo"
+    doc_dir = staging / "usr" / "share" / "doc" / "exif-turbo"
 
-    for d in (lib_dir, bin_dir, apps_dir, icon_dir, metainfo_dir):
+    for d in (lib_dir, bin_dir, apps_dir, icon_dir, metainfo_dir, doc_dir):
         d.mkdir(parents=True, exist_ok=True)
 
     shutil.copytree(bundle_dir, lib_dir, dirs_exist_ok=True)
+
+    license_source = REPO_ROOT / "build" / "license-staged"
+    if not (license_source / "STAGING-COMPLETE").is_file():
+        fail(f"Generated license bundle not found: {license_source}")
+    shutil.copytree(license_source, doc_dir, dirs_exist_ok=True)
+    (doc_dir / "copyright").write_text(
+        (license_source / "PROJECT-LICENSE.txt").read_text(encoding="utf-8")
+        + "\n\nThird-party notices and exact license texts are installed in this directory.\n\n"
+        + (license_source / "THIRD-PARTY-LICENSES.md").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
 
     wrapper = bin_dir / "exif-turbo"
     wrapper.write_text('#!/bin/sh\nexec /usr/lib/exif-turbo/exif-turbo "$@"\n')
@@ -257,6 +269,7 @@ def build_rpm(bundle_dir: Path, version: str) -> Path:
             /usr/lib/exif-turbo
             /usr/share/applications/exif-turbo.desktop
             /usr/share/metainfo/com.exifturbo.app.metainfo.xml
+            %license /usr/share/doc/exif-turbo
             {icon_files_line}
 
             %changelog

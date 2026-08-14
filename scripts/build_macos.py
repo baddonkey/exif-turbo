@@ -5,7 +5,7 @@ Produces:
     dist/exif-turbo-<version>-macos.dmg       — distributable disk image
 
 Requirements:
-    pip install pyinstaller babel pillow
+    pip install pyinstaller babel packaging pillow
     Xcode Command Line Tools (for iconutil and hdiutil)
 
 Usage:
@@ -143,6 +143,11 @@ def build_dmg(app: Path, version: str, arch_suffix: str = "") -> Path:
         run(["cp", "-R", str(app), str(staging)])
         # Symlink to /Applications for drag-install
         (staging / "Applications").symlink_to("/Applications")
+
+        license_source = REPO_ROOT / "build" / "license-staged"
+        if not (license_source / "STAGING-COMPLETE").is_file():
+            fail(f"Generated license bundle not found: {license_source}")
+        shutil.copytree(license_source, staging / "Licenses")
 
         readme = staging / "README.txt"
         readme.write_text(

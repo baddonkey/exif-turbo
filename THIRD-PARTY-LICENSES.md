@@ -3,6 +3,10 @@
 This file lists all third-party software used in exif-turbo, along with their
 licenses and upstream URLs.
 
+Release bundles include the exact license files collected from the active build
+environment in the `licenses/` folder, together with the matching CPython and
+Qt open-source license texts.
+
 ---
 
 ## Python Runtime Dependencies
@@ -11,6 +15,7 @@ These packages are required at runtime by the application.
 
 | Package | Used for | License | URL |
 |---------|----------|---------|-----|
+| [CPython](https://www.python.org/) | Embedded Python interpreter and standard library used by the standalone application | Python-2.0 | https://docs.python.org/3/license.html |
 | [PySide6](https://pypi.org/project/PySide6/) | Qt bindings — QML engine, Qt Quick / Material UI, threading (`QThread`), file dialogs, and the application event loop | LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only | https://pyside.org |
 | [Pillow](https://pypi.org/project/Pillow/) | Thumbnail generation — opens JPEG / PNG / TIFF images, applies EXIF orientation correction via `ImageOps.exif_transpose`, resizes to cache-sized PNGs | HPND (Historical Permission Notice and Disclaimer) | https://pillow.readthedocs.io |
 | [rawpy](https://pypi.org/project/rawpy/) | RAW image decoding — wraps libraw to extract embedded JPEG previews or full-colour bitmaps from CR2, CR3, NEF, ARW, DNG, ORF, RW2, PEF, RAF, RWL, SRW files | MIT | https://github.com/letmaik/rawpy |
@@ -157,8 +162,8 @@ The Windows binary package is based on work by Oliver Betz and uses his
 launcher.  See https://oliverbetz.de/pages/Artikel/ExifTool-for-Windows.
 
 Redistribution of the ExifTool Windows executable in this installer is
-permitted by its license.  The full Perl license texts are available at
-https://dev.perl.org/licenses/.
+permitted by its license.  The unmodified Windows package includes the full
+Perl Artistic and GPL license texts in `Licenses_Strawberry_Perl.zip`.
 
 ---
 
@@ -177,11 +182,14 @@ Mandatory attribution per the license:
 
 | Used in | Description |
 |---------|-------------|
-| Documentation screenshots | Lock screen, Search (all / eagle / Milky Way), Browse, Indexed Folders, folder-filter, and AI-mode screenshots (`01_lock_screen.png` – `07_folder_filter.png` and `09_ai_search_mode.png`) |
+| Documentation screenshots | Search (all / eagle / Milky Way), Browse, folder-filter, and AI-mode screenshot composites (`02`, `03`, `04`, `05`, `07`, and `09`) contain scaled/cropped Giles Laurent photographs and are distributed under CC BY-SA 4.0 |
 | `tests/sample-data/schweiz/` | 13 wildlife, landscape, and astrophotography test images |
 
 Full per-file attribution is listed in
 [tests/sample-data/ATTRIBUTION.md](tests/sample-data/ATTRIBUTION.md).
+
+`01_lock_screen.png`, `06_indexed_folders.png`, and `11_tagging_settings.png`
+contain no third-party photographs.
 
 ---
 
@@ -196,3 +204,4 @@ under the [Creative Commons CC0 1.0 Universal Public Domain Dedication](https://
 
 - **Author:** 1904.CC (Manuel Schmalstieg)
 - **Attribution (voluntary):** 1904.CC (Manuel Schmalstieg), CC0, via Wikimedia Commons
+- **Sample files:** `tests/sample-data/gps/Xenakis_UPIC_system_computer_unit_2.jpg` and `tests/sample-data/computer/Xenakis UPIC system computer unit 2.jpg`

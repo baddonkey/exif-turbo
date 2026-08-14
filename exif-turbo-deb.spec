@@ -2,9 +2,15 @@
 # Debian PyInstaller spec — produces a GUI onedir bundle for DEB packaging.
 # Run via: python scripts/build_linux.py --deb-only
 import re
+import sys
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_all
 from PyInstaller.utils.hooks import collect_data_files
+
+sys.path.insert(0, str(Path('scripts').resolve()))
+from stage_runtime_licenses import stage_runtime_licenses  # noqa: E402
+
+_license_dir = stage_runtime_licenses()
 
 _version_match = re.search(
     r'^__version__\s*=\s*["\']([^"\']+)["\']',
@@ -17,6 +23,7 @@ _common_datas = [
     ('src/exif_turbo/ui/qml', 'exif_turbo/ui/qml'),
     ('src/exif_turbo/assets', 'exif_turbo/assets'),
     ('THIRD-PARTY-LICENSES.md', 'exif_turbo/assets'),
+    (str(_license_dir), 'licenses'),
     ('docs/user-manual.pdf', 'exif_turbo/assets'),
     ('src/exif_turbo/i18n/locales', 'exif_turbo/i18n/locales'),
     *collect_data_files('open_clip', includes=['model_configs/*.json']),

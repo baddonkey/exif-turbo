@@ -10,6 +10,9 @@ from PyInstaller.utils.hooks import collect_data_files
 # Make the shared version_info generator importable (cwd is the repo root).
 sys.path.insert(0, str(Path('scripts').resolve()))
 from gen_version_info import write_version_info  # noqa: E402
+from stage_runtime_licenses import stage_runtime_licenses  # noqa: E402
+
+_license_dir = stage_runtime_licenses()
 
 # Read version from the single source of truth
 _version_match = re.search(
@@ -29,6 +32,7 @@ _common_datas = [
     ('src\\exif_turbo\\ui\\qml', 'exif_turbo\\ui\\qml'),
     ('src\\exif_turbo\\assets', 'exif_turbo\\assets'),
     ('THIRD-PARTY-LICENSES.md', 'exif_turbo\\assets'),
+    (str(_license_dir), 'licenses'),
     ('docs\\user-manual.pdf', 'exif_turbo\\assets'),
     ('src\\exif_turbo\\i18n\\locales', 'exif_turbo\\i18n\\locales'),
     *collect_data_files('open_clip', includes=['model_configs/*.json']),

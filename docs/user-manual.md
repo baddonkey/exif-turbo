@@ -265,7 +265,7 @@ The **Search** tab is the main way to find photos:
 
 ![Search — all images](screenshots/02_search_all.png)
 
-*Photos: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
+*Photo: [Wild Alpine Ibex](https://commons.wikimedia.org/wiki/File:002_Wild_Alpine_Ibex_Swiss_Alps_and_Creux_du_Van_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
 
 ### Running a search
 
@@ -296,6 +296,8 @@ When **AI Features** are enabled in **Settings**, the search bar shows an
 exact metadata terms.
 
 ![Search tab in AI mode](screenshots/09_ai_search_mode.png)
+
+*Photo: [Chateau de Chillon and Dents du Midi](https://commons.wikimedia.org/wiki/File:001_Chateau_de_Chillon_and_Dents_du_Midi_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
 
 In AI mode:
 
@@ -350,6 +352,8 @@ folder name shows its full path as a tooltip.
 
 ![Folder filter popup](screenshots/07_folder_filter.png)
 
+*Photo: [Chateau de Chillon and Dents du Midi](https://commons.wikimedia.org/wiki/File:001_Chateau_de_Chillon_and_Dents_du_Midi_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
+
 ### The selection chip
 
 Whenever at least one image is marked (or the marked-only filter is active), a
@@ -365,8 +369,6 @@ Click the chip to toggle the **marked-only filter** — the tooltip switches
 between *"Show only selected images"* and *"Show all results"*. While the
 filter is active the chip stays highlighted so you always know which view
 you are looking at.
-
-*Photos: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
 
 ### Sorting results
 
@@ -478,7 +480,7 @@ The **Browse** tab lets you navigate your library by folder hierarchy:
 
 ![Browse tab](screenshots/05_browse_tab.png)
 
-*Photos: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
+*Photos: [Wild Alpine Ibex](https://commons.wikimedia.org/wiki/File:002_Wild_Alpine_Ibex_Swiss_Alps_and_Creux_du_Van_Photo_by_Giles_Laurent.jpg) and [Wild Golden Eagle](https://commons.wikimedia.org/wiki/File:015_Wild_Golden_Eagle_in_flight_at_Pfyn-Finges_(Switzerland)_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
 
 The left panel shows all indexed folders as an indented list — sub-folders are
 indented under their parent. Each entry shows the folder name and a count of
@@ -562,7 +564,7 @@ Selecting any image in the result list populates three panels:
 
 ![Search results with detail panels](screenshots/04_search_milky_way.png)
 
-*Photo: © [Giles Laurent](https://gileslaurent.com), [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)*
+*Photo: [Vertical panorama of the Milky Way during Perseids](https://commons.wikimedia.org/wiki/File:035_Vertical_panorama_of_the_Milky_Way_during_Perseids_seen_from_Oeschinensee_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
 
 ### Preview
 
@@ -702,6 +704,8 @@ The bar is hidden when the selected image has no GPS data, or when nothing is
 selected. Hovering over a link shows the full URL in a tooltip.
 
 ![GPS location bar](screenshots/08_gps_location_bar.png)
+
+*Photo: [Xenakis UPIC system computer unit](https://commons.wikimedia.org/wiki/File:Xenakis_UPIC_system_computer_unit_2.jpg) by 1904.CC (Manuel Schmalstieg), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), via Wikimedia Commons. Scaled/cropped in the UI; attribution is voluntary.*
 
 ### EXIF Tags panel (bottom-right)
 
@@ -845,6 +849,8 @@ From the **Search** or **Browse** tab, click the tag button at the upper right
 or press **Ctrl+T**. The non-modal drawer contains these controls:
 
 ![Current-image tagging drawer](screenshots/10_tagging_drawer.png)
+
+*Photo: [Xenakis UPIC system computer unit](https://commons.wikimedia.org/wiki/File:Xenakis_UPIC_system_computer_unit_2.jpg) by 1904.CC (Manuel Schmalstieg), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), via Wikimedia Commons. Scaled/cropped in the UI; attribution is voluntary.*
 
 - **Existing image tags** lists keywords already embedded in the original
   image's XMP or IPTC metadata. This section is informational and read-only;
@@ -1168,12 +1174,17 @@ built and cached. They persist across sessions so subsequent launches are fast.
 
 ## Image Credits
 
-The screenshots in this manual use sample photographs by
+Six screenshot composites in this manual and the project README use sample photographs by
 **[Giles Laurent](https://commons.wikimedia.org/wiki/User:Giles_Laurent)**,
 published on Wikimedia Commons under the
 [Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/) license.
 
 Mandatory attribution: © Giles Laurent, gileslaurent.com, License CC BY-SA
+
+The photographs are scaled and/or cropped inside the exif-turbo interface.
+Those screenshot composites are distributed under CC BY-SA 4.0. Exact
+screenshot-to-source mappings and direct Wikimedia links are maintained in
+[the sample-data attribution manifest](../tests/sample-data/ATTRIBUTION.md).
 
 The GPS location bar screenshot uses a photograph by
 **1904.CC** (Manuel Schmalstieg),
@@ -1181,3 +1192,6 @@ published on [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Xenakis
 under the [Creative Commons CC0 1.0 Universal Public Domain Dedication](https://creativecommons.org/publicdomain/zero/1.0/).
 
 Attribution (voluntary): 1904.CC (Manuel Schmalstieg), CC0, via Wikimedia Commons
+
+The adjacent [screenshot licensing notice](screenshots/README.md) identifies
+which PNG files contain third-party photographs and which contain only project UI.
