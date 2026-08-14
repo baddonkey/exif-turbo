@@ -244,7 +244,8 @@ def main() -> None:
     generate_icns()
     compile_translations()
 
-    run(["pyinstaller", "--noconfirm", "--clean", spec_file])
+    pyinstaller = find_tool("pyinstaller", venv_subpath=".venv/bin/pyinstaller")
+    run([pyinstaller, "--noconfirm", "--clean", spec_file])
     print("  PyInstaller build complete.")
 
     app = REPO_ROOT / "dist" / "exif-turbo.app"

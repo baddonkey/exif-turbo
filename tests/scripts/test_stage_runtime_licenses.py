@@ -56,6 +56,30 @@ def _write_project_notices(project_root: Path) -> None:
     )
 
 
+def test_python_license_file_homebrew_framework_returns_formula_license(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    formula_root = tmp_path / "python@3.14"
+    installed_base = (
+        formula_root / "Frameworks" / "Python.framework" / "Versions" / "3.14"
+    )
+    installed_base.mkdir(parents=True)
+    license_file = formula_root / "LICENSE"
+    license_file.write_text("Python terms", encoding="utf-8")
+    monkeypatch.setattr(
+        stage_runtime_licenses.sysconfig,
+        "get_config_var",
+        lambda _name: str(installed_base),
+    )
+
+    # Act
+    result = stage_runtime_licenses._python_license_file()
+
+    # Assert
+    assert result == license_file
+
+
 def test_runtime_distributions_transitive_and_inactive_marker_resolves_active_closure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -173,6 +197,60 @@ def test_stage_runtime_licenses_package_without_license_raises_error(
     assert (output_dir / "STAGING-COMPLETE").read_text(encoding="ascii") == (
         "previous\n"
     )
+
+
+def test_stage_runtime_licenses_qt_wheels_without_licenses_use_upstream_texts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    _write_project_notices(project_root)
+    packages = {
+        "PySide6": FakeDistribution(
+            tmp_path,
+            "PySide6",
+            "6.11.1",
+            requires=("PySide6-Essentials", "PySide6-Addons", "shiboken6"),
+        ),
+        "PySide6-Essentials": FakeDistribution(
+            tmp_path, "PySide6-Essentials", "6.11.1"
+        ),
+        "PySide6-Addons": FakeDistribution(tmp_path, "PySide6-Addons", "6.11.1"),
+        "shiboken6": FakeDistribution(tmp_path, "shiboken6", "6.11.1"),
+    }
+    python_license = tmp_path / "PYTHON-LICENSE.txt"
+    python_license.write_text("Python terms", encoding="utf-8")
+    qt_license = tmp_path / "LGPL-3.0-only.txt"
+    qt_license.write_text("Qt terms", encoding="utf-8")
+    monkeypatch.setattr(stage_runtime_licenses, "REPO_ROOT", project_root)
+    monkeypatch.setattr(
+        stage_runtime_licenses, "_python_license_file", lambda: python_license
+    )
+    monkeypatch.setattr(
+        stage_runtime_licenses, "_qt_license_files", lambda _version: (qt_license,)
+    )
+    monkeypatch.setattr(
+        stage_runtime_licenses,
+        "distribution",
+        lambda name: _as_distribution(packages[name]),
+    )
+    output_dir = tmp_path / "staged"
+
+    # Act
+    stage_runtime_licenses.stage_runtime_licenses(
+        output_dir, requirements=("PySide6",)
+    )
+
+    # Assert
+    assert (output_dir / "qt" / "6.11.1" / "LGPL-3.0-only.txt").read_text(
+        encoding="utf-8"
+    ) == "Qt terms"
+    manifest = (output_dir / "PYTHON-RUNTIME-LICENSES.txt").read_text(
+        encoding="utf-8"
+    )
+    assert all(f"{name} 6.11.1" in manifest for name in packages)
+    assert "qt/6.11.1/LGPL-3.0-only.txt" in manifest
 
 
 def test_stage_runtime_licenses_pyvips_binary_adds_native_compliance_files(
