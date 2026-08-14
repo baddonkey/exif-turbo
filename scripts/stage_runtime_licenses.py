@@ -19,6 +19,12 @@ from packaging.utils import canonicalize_name
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "build" / "license-staged"
 _LICENSE_PREFIXES = ("LICENSE", "COPYING", "NOTICE")
+_QT_DISTRIBUTIONS = {
+    "pyside6",
+    "pyside6-addons",
+    "pyside6-essentials",
+    "shiboken6",
+}
 _QT_LICENSES = {
     "GPL-2.0-only.txt": ("GNU GENERAL PUBLIC LICENSE", 17_000, "END OF TERMS AND CONDITIONS"),
     "GPL-3.0-only.txt": ("GNU GENERAL PUBLIC LICENSE", 34_000, "END OF TERMS AND CONDITIONS"),
@@ -37,7 +43,8 @@ _LIBVIPS_FILES = {
         "END OF TERMS AND CONDITIONS",
     ),
     "LGPL-3.0-only.txt": (
-        "https://www.gnu.org/licenses/lgpl-3.0.txt",
+        "https://raw.githubusercontent.com/spdx/license-list-data/"
+        "main/text/LGPL-3.0-only.txt",
         "GNU LESSER GENERAL PUBLIC LICENSE",
         7_000,
         "permanent authorization for you to choose that version",
@@ -149,7 +156,20 @@ def _safe_filename(path: Path, used: set[str]) -> str:
 
 def _python_license_file() -> Path:
     installed_base = Path(str(sysconfig.get_config_var("installed_base")))
-    for candidate in (installed_base / "LICENSE.txt", installed_base / "LICENSE"):
+    candidates = [installed_base / "LICENSE.txt", installed_base / "LICENSE"]
+    framework_dir = next(
+        (parent for parent in installed_base.parents if parent.name == "Python.framework"),
+        None,
+    )
+    if framework_dir is not None:
+        candidates.extend(
+            (
+                framework_dir / "Resources" / "English.lproj" / "License.rtf",
+                framework_dir.parent.parent / "LICENSE.txt",
+                framework_dir.parent.parent / "LICENSE",
+            )
+        )
+    for candidate in candidates:
         if candidate.is_file():
             return candidate
     raise LicenseStagingError(
@@ -293,7 +313,9 @@ def stage_runtime_licenses(
     package_licenses: list[tuple[Distribution, tuple[Path, ...]]] = []
     for package in packages:
         files = _license_files(package)
-        if not files:
+        if not files and canonicalize_name(package.metadata["Name"]) not in (
+            _QT_DISTRIBUTIONS
+        ):
             raise LicenseStagingError(
                 "runtime distribution has no packaged license file: "
                 f"{package.metadata['Name']} {package.version}"
@@ -317,17 +339,20 @@ def stage_runtime_licenses(
             "",
             "Generated from the active build environment. Each directory below",
             "contains the unmodified license/notice files shipped by that distribution.",
+            "Qt for Python wheels that omit these files reference validated upstream",
+            "Qt license texts in the shared qt/<version> directory.",
             "",
         ]
         python_dir = staged / "python"
         for package, license_files in package_licenses:
             name = package.metadata["Name"]
             version = package.version
-            package_dir = python_dir / f"{canonicalize_name(name)}-{version}"
-            package_dir.mkdir(parents=True)
+            canonical_name = canonicalize_name(name)
+            package_dir = python_dir / f"{canonical_name}-{version}"
             used_names: set[str] = set()
             copied_names: list[str] = []
             for source in license_files:
+                package_dir.mkdir(parents=True, exist_ok=True)
                 filename = _safe_filename(source, used_names)
                 shutil.copy2(source, package_dir / filename)
                 copied_names.append(filename)
@@ -341,15 +366,23 @@ def stage_runtime_licenses(
             manifest.extend(
                 f"  python/{package_dir.name}/{item}" for item in copied_names
             )
+
+            if canonical_name in _QT_DISTRIBUTIONS:
+                qt_dir = staged / "qt" / version
+                if not qt_dir.exists():
+                    qt_dir.mkdir(parents=True)
+                    for source in _qt_license_files(version):
+                        shutil.copy2(source, qt_dir / source.name)
+                if not license_files:
+                    manifest.extend(
+                        f"  qt/{version}/{source.name}"
+                        for source in sorted(qt_dir.iterdir())
+                        if source.is_file()
+                    )
+
             manifest.append("")
 
-            if canonicalize_name(name) == "pyside6":
-                qt_dir = staged / "qt" / version
-                qt_dir.mkdir(parents=True)
-                for source in _qt_license_files(version):
-                    shutil.copy2(source, qt_dir / source.name)
-
-            if canonicalize_name(name) == "pyvips-binary":
+            if canonical_name == "pyvips-binary":
                 libvips_dir = staged / "libvips" / version
                 libvips_dir.mkdir(parents=True)
                 for source in _libvips_license_files(version):
