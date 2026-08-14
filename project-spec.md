@@ -435,7 +435,7 @@ image vectors return an AI-scan-required result rather than reading originals.
 ### Tagged derivatives
 
 ```
-Marked enabled-folder images + user output root
+Current matching images (all pages) or marked enabled-folder images + user output root
   → validate output outside indexed roots and plan collision-safe tree
   → skip untagged/existing destinations
   → copy2 source to same-format temporary destination
@@ -443,8 +443,9 @@ Marked enabled-folder images + user output root
   → verify exact labels → os.replace final destination
 ```
 
-The writer rejects source paths, cleans incomplete temporaries, does not copy
-sidecars, and never overwrites an existing derivative.
+The Action menu asks for the output root. The writer rejects source paths,
+cleans incomplete temporaries, does not copy sidecars, and never overwrites an
+existing derivative.
 
 ### Thumbnail generation
 

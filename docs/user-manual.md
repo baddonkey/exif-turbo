@@ -751,12 +751,14 @@ database — not just the visible results.
 | Action | What it does |
 |--------|--------------|
 | **Export Metadata as JSON…** | Writes the EXIF metadata of every marked image to a JSON file you choose via a Save dialog. The export honours the current **Sort** order (date taken, filename, path, or size). When nothing is marked, the menu label changes to *"Export Metadata as JSON… (all results)"* and the action exports every image matching the current filters instead. The on-disk layout is controlled by **Settings → JSON Export Formatting** (see *Settings*). |
+| **Generate Tagged Derivatives for Current Results…** | Asks for a target folder, then generates derivatives for every image matching the current search and filters, including result pages that have not been loaded into the view. |
+| **Generate Tagged Derivatives for Marked Images…** | Asks for a target folder, then generates derivatives for all marked images in enabled indexed folders. Disabled when nothing is marked. |
 | **Delete Marked Images…** | Permanently deletes every marked image **from disk** and removes its row from the index. Cached thumbnails (`.png` / `.enc`), `.skip` sentinels, and any rendered preview (`.jpg` / `.jpg.enc`) for the deleted images are also cleaned up. Disabled when nothing is marked. The menu label includes the current count, e.g. *"Delete Marked Images… (12 selected)"*. |
 
-Both menu items report the live count in their label and run via the bulk-op
-progress overlay; clicking **Cancel** mid-run stops cleanly and any deletions
-already made stay on disk and in the index — the database is never out of
-sync with the file system.
+Long-running actions show progress and support cancellation. Any completed
+derivatives remain in the target folder, and any deletions already made stay
+on disk and in the index; the database is never out of sync with the file
+system.
 
 #### Confirming a delete
 
@@ -897,9 +899,11 @@ before enabling automatic acceptance.
 
 ### Tagged derivatives
 
-Derivative generation belongs to the separate marked-image tool and copies
-only marked images that have accepted tags. The chosen output root must be
-outside every indexed source root. The exporter:
+Use **Action → Generate Tagged Derivatives for Current Results…** to process
+the complete current result set, including pages not yet loaded into the view,
+or **Action → Generate Tagged Derivatives for Marked Images…** to process the
+marked set. Only images with accepted tags produce copies. The chosen output
+root must be outside every indexed source root. The exporter:
 
 - preserves each source format and relative source folder tree;
 - adds collision-safe top-level labels when marks span multiple indexed roots;

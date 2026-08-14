@@ -20,6 +20,34 @@ class FakeMetadataWriter:
         target.write_bytes(target.read_bytes() + b"-tagged")
 
 
+def _index_tagged_image(
+    repository: ImageIndexRepository,
+    image_path: Path,
+    label: str,
+) -> None:
+    repository.upsert_image(
+        str(image_path),
+        image_path.name,
+        image_path.stat().st_mtime,
+        image_path.stat().st_size,
+        {},
+        f"{image_path.name} {label}",
+    )
+    repository.replace_accepted_tags_and_sidecar_state(
+        str(image_path),
+        ImageSidecar(
+            source=SidecarSource(filename=image_path.name),
+            updated_at="2026-08-09T12:00:00Z",
+            free_tags=(label,),
+        ),
+        sidecar_path=f"{image_path}.sidecar.json",
+        sidecar_mtime_ns=1,
+        sidecar_size=1,
+        sidecar_checksum="sha256:test",
+        sync_status="synced",
+    )
+
+
 def test_derivative_export_worker_emits_result_and_progress(tmp_path: Path) -> None:
     # Arrange
     db_path = tmp_path / "images.db"
@@ -81,3 +109,36 @@ def test_derivative_export_worker_emits_result_and_progress(tmp_path: Path) -> N
     assert worker.result is not None
     assert worker.result.copied_count == 1
     assert (tmp_path / "output" / "photo.jpg").read_bytes() == b"original-tagged"
+
+
+def test_derivative_export_worker_matching_results_exports_all_database_rows(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    db_path = tmp_path / "images.db"
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    repository = ImageIndexRepository(db_path)
+    for name in ("first.jpg", "second.jpg"):
+        image_path = source_root / name
+        image_path.write_bytes(name.encode())
+        _index_tagged_image(repository, image_path, "Family")
+    repository.close()
+    worker = DerivativeExportWorker(
+        db_path,
+        "",
+        {source_root: "source"},
+        tmp_path / "output",
+        matching_results=True,
+        query="Family",
+        metadata_writer=FakeMetadataWriter(),
+    )
+
+    # Act
+    worker.run()
+
+    # Assert
+    assert worker.result is not None
+    assert worker.result.copied_count == 2
+    assert (tmp_path / "output" / "first.jpg").exists()
+    assert (tmp_path / "output" / "second.jpg").exists()

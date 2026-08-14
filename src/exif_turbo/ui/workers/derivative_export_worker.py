@@ -29,6 +29,14 @@ class DerivativeExportWorker(QThread):
         output_root: Path,
         *,
         image_paths: Iterable[Path | str] | None = None,
+        matching_results: bool = False,
+        query: str = "",
+        ext_filter: str = "",
+        path_filter: Iterable[str] | None = None,
+        restrict_to_enabled_folders: bool = False,
+        marked_only: bool = False,
+        date_from: int | None = None,
+        date_to: int | None = None,
         metadata_writer: MetadataWriter | None = None,
     ) -> None:
         super().__init__()
@@ -37,6 +45,14 @@ class DerivativeExportWorker(QThread):
         self._indexed_roots = dict(indexed_roots)
         self._output_root = output_root
         self._image_paths = None if image_paths is None else tuple(image_paths)
+        self._matching_results = matching_results
+        self._query = query
+        self._ext_filter = ext_filter
+        self._path_filter = None if path_filter is None else list(path_filter)
+        self._restrict_to_enabled_folders = restrict_to_enabled_folders
+        self._marked_only = marked_only
+        self._date_from = date_from
+        self._date_to = date_to
         self._metadata_writer = metadata_writer
         self._cancel_event = threading.Event()
         self.result: DerivativeExportResult | None = None
@@ -49,10 +65,21 @@ class DerivativeExportWorker(QThread):
         try:
             repository = ImageIndexRepository(self._db_path, key=self._key)
             service = DerivativeExportService(repository, self._metadata_writer)
+            image_paths = self._image_paths
+            if image_paths is None and self._matching_results:
+                image_paths = repository.get_matching_paths(
+                    self._query,
+                    ext_filter=self._ext_filter,
+                    path_filter=self._path_filter,
+                    restrict_to_enabled_folders=self._restrict_to_enabled_folders,
+                    marked_only=self._marked_only,
+                    date_from=self._date_from,
+                    date_to=self._date_to,
+                )
             plan = service.create_plan(
                 self._indexed_roots,
                 self._output_root,
-                image_paths=self._image_paths,
+                image_paths=image_paths,
             )
             self.result = service.export(
                 plan,

@@ -52,6 +52,9 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
         "setProposalThreshold(",
         "setAutoAcceptEnabled(",
         "setAutoAcceptThreshold(",
+        "generateDerivativesForCurrentResults(",
+        "generateDerivativesForMarked(",
+        "cancelDerivativeExport(",
     }
 
     # Act
@@ -83,6 +86,10 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
     assert "visible: drawer.showFreeTagSuggestions && count > 0" in drawer_source
     assert "onPressed: drawer.addFreeTag(label)" in drawer_source
     assert "appController.generateSelectedTagProposals()" in drawer_source
+    assert "Generate Tagged Derivatives for Current &Results..." in source
+    assert "Generate Tagged Derivatives for &Marked Images" in source
+    assert "FolderDialog {" in source
+    assert 'property string scope: "results"' in source
     assert 'objectName: "tagProposalsScrollBar"' in drawer_source
     assert "active: proposalsList.contentHeight > proposalsList.height" in drawer_source
 

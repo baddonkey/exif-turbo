@@ -476,10 +476,12 @@ nor a proposal provider writes a sidecar directly.
 
 ### 11.1 Input and layout
 
-Derivative generation operates on marked images. The user chooses an output
-root that must not be inside an indexed source root. Paths are reproduced
-relative to each indexed root. Multiple roots receive deterministic,
-collision-safe root labels.
+Derivative generation operates on either all current search results or all
+marked images in enabled indexed folders. Current-results scope includes
+matches beyond the pages loaded into the UI. The user chooses an output root
+that must not be inside any indexed source root, including a disabled root.
+Paths are reproduced relative to each indexed root. Multiple roots receive
+deterministic, collision-safe root labels.
 
 Version 1 preserves the source format and uses `shutil.copy2` before metadata
 writing. Existing output files are skipped and reported; they are never

@@ -3966,8 +3966,35 @@ class AppController(QObject):
 
     @Slot(str)
     def generateDerivativesForMarked(self, output_url: str) -> None:
+        self._start_derivative_export(output_url)
+
+    @Slot(str)
+    def generateDerivativesForCurrentResults(self, output_url: str) -> None:
+        if self._results_use_ai_pipeline():
+            self._start_derivative_export(
+                output_url,
+                image_paths=[result.path for result in self._ai_result_cache],
+            )
+            return
+        self._start_derivative_export(
+            output_url,
+            matching_results=True,
+            query=self._query_text,
+            ext_filter=self._ext_filter,
+            path_filter=self._current_path_filter(),
+            restrict_to_enabled_folders=self._folder_repo is not None,
+            marked_only=self._checked_only_filter_active,
+            date_from=self._date_from,
+            date_to=self._date_to,
+        )
+
+    def _start_derivative_export(
+        self,
+        output_url: str,
+        **worker_options: object,
+    ) -> None:
         if (
-            not self.taggingAvailable
+            not self.freeTaggingAvailable
             or self._folder_repo is None
             or self._derivative_worker is not None
         ):
@@ -3975,9 +4002,15 @@ class AppController(QObject):
         output_root = Path(QUrl(output_url).toLocalFile())
         roots = {
             Path(folder.path): folder.display_name
-            for folder in self._folder_repo.get_enabled_folders()
+            for folder in self._folder_repo.get_all()
         }
-        worker = DerivativeExportWorker(self._db_path, self._key, roots, output_root)
+        worker = DerivativeExportWorker(
+            self._db_path,
+            self._key,
+            roots,
+            output_root,
+            **worker_options,
+        )
         self._derivative_worker = worker
         worker.progress.connect(self._on_derivative_progress)
         worker.result_ready.connect(self._on_derivative_result)
@@ -3999,6 +4032,7 @@ class AppController(QObject):
         untagged_count = getattr(result, "skipped_untagged_count", 0)
         existing_count = getattr(result, "skipped_existing_count", 0)
         failed_count = getattr(result, "failed_count", 0)
+        canceled_count = getattr(result, "canceled_count", 0)
         items = getattr(result, "items", ())
         copied_destinations = [
             str(item.destination)
@@ -4023,7 +4057,7 @@ class AppController(QObject):
             parts.append(_("No derivatives were created."))
         if untagged_count:
             parts.append(
-                _("{} marked image(s) had no accepted tags.").format(untagged_count)
+                _("{} image(s) had no accepted tags.").format(untagged_count)
             )
         if existing_count:
             parts.append(
@@ -4031,6 +4065,8 @@ class AppController(QObject):
             )
         if failed_count:
             parts.append(_("{} derivative(s) failed.").format(failed_count))
+        if canceled_count:
+            parts.append(_("{} derivative(s) canceled.").format(canceled_count))
         self._derivative_summary = " ".join(parts)
         self.derivativeOperationChanged.emit()
 

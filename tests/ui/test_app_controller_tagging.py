@@ -352,12 +352,14 @@ class FakeDerivativeWorker(QObject):
         key: str,
         indexed_roots: dict[Path, str],
         output_root: Path,
+        **options: object,
     ) -> None:
         super().__init__()
         self.db_path = db_path
         self.key = key
         self.indexed_roots = indexed_roots
         self.output_root = output_root
+        self.options = options
         self.started = False
         self.instances.append(self)
 
@@ -371,7 +373,7 @@ class FakeDerivativeWorker(QObject):
         return False
 
 
-def test_app_controller_derivative_slot_converts_url_and_enabled_roots(
+def test_app_controller_derivative_slot_converts_url_and_all_indexed_roots(
     tagging_controller: tuple[AppController, SearchListModel, Path, Path],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -382,6 +384,10 @@ def test_app_controller_derivative_slot_converts_url_and_enabled_roots(
     source_root.mkdir()
     assert controller._folder_repo is not None
     controller._folder_repo.add(str(source_root))
+    disabled_root = tmp_path / "disabled"
+    disabled_root.mkdir()
+    disabled = controller._folder_repo.add(str(disabled_root))
+    controller._folder_repo.set_enabled(disabled.id, False)
     FakeDerivativeWorker.instances.clear()
     monkeypatch.setattr(app_controller_module, "DerivativeExportWorker", FakeDerivativeWorker)
     output_root = tmp_path / "output"
@@ -392,8 +398,91 @@ def test_app_controller_derivative_slot_converts_url_and_enabled_roots(
     # Assert
     worker = FakeDerivativeWorker.instances[0]
     assert worker.output_root == output_root
-    assert worker.indexed_roots == {source_root: "source"}
+    assert worker.indexed_roots == {
+        disabled_root: "disabled",
+        source_root: "source",
+    }
     assert worker.started is True
+
+
+def test_app_controller_current_results_forwards_complete_search_scope(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    controller, _model, _db_path, _image_path = tagging_controller
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    assert controller._folder_repo is not None
+    controller._folder_repo.add(str(source_root))
+    controller._query_text = "family"
+    controller._ext_filter = ".jpg"
+    controller._folder_filter = str(source_root)
+    controller._checked_only_filter_active = True
+    controller._date_from = 100
+    controller._date_to = 200
+    FakeDerivativeWorker.instances.clear()
+    monkeypatch.setattr(app_controller_module, "DerivativeExportWorker", FakeDerivativeWorker)
+
+    # Act
+    controller.generateDerivativesForCurrentResults(
+        QUrl.fromLocalFile(str(tmp_path / "output")).toString()
+    )
+
+    # Assert
+    assert FakeDerivativeWorker.instances[0].options == {
+        "matching_results": True,
+        "query": "family",
+        "ext_filter": ".jpg",
+        "path_filter": [str(source_root)],
+        "restrict_to_enabled_folders": True,
+        "marked_only": True,
+        "date_from": 100,
+        "date_to": 200,
+    }
+
+
+def test_app_controller_current_ai_results_passes_complete_cached_paths(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    controller, _model, _db_path, image_path = tagging_controller
+    second_path = tmp_path / "second.jpg"
+    controller._is_ai_search_mode = True
+    controller._last_ai_query = "family"
+    controller._ai_result_cache = [
+        SearchResult(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+            size=1,
+            mtime=1.0,
+            image_id=1,
+        ),
+        SearchResult(
+            path=str(second_path),
+            filename=second_path.name,
+            metadata_json="{}",
+            size=1,
+            mtime=1.0,
+            image_id=2,
+        ),
+    ]
+    FakeDerivativeWorker.instances.clear()
+    monkeypatch.setattr(app_controller_module, "DerivativeExportWorker", FakeDerivativeWorker)
+
+    # Act
+    controller.generateDerivativesForCurrentResults(
+        QUrl.fromLocalFile(str(tmp_path / "output")).toString()
+    )
+
+    # Assert
+    assert FakeDerivativeWorker.instances[0].options == {
+        "image_paths": [str(image_path), str(second_path)]
+    }
 
 
 def test_app_controller_derivative_result_explains_destinations_and_skip_reasons(
@@ -430,7 +519,7 @@ def test_app_controller_derivative_result_explains_destinations_and_skip_reasons
 
     # Assert
     assert str(destination) in controller.derivativeResultSummary
-    assert "1 marked image(s) had no accepted tags" in controller.derivativeResultSummary
+    assert "1 image(s) had no accepted tags" in controller.derivativeResultSummary
     assert "1 destination file(s) already existed" in controller.derivativeResultSummary
 
 
@@ -462,6 +551,32 @@ def test_app_controller_derivative_result_for_multiple_files_names_output_folder
     # Assert
     assert controller.derivativeResultSummary == (
         f"Created 2 derivatives in {output_dir}."
+    )
+
+
+def test_app_controller_derivative_result_reports_canceled_images(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    controller, _model, _db_path, image_path = tagging_controller
+    result = DerivativeExportResult(
+        (
+            DerivativeExportItemResult(
+                image_path,
+                tmp_path / "output" / image_path.name,
+                DerivativeExportStatus.CANCELED,
+                "export canceled",
+            ),
+        )
+    )
+
+    # Act
+    controller._on_derivative_result(result)
+
+    # Assert
+    assert controller.derivativeResultSummary == (
+        "No derivatives were created. 1 derivative(s) canceled."
     )
 
 
