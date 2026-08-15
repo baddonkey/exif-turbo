@@ -263,6 +263,58 @@ def test_app_controller_tgm_search_resolves_alias(
     assert model.data(model.index(0), model.LabelRole) == "Forests"
 
 
+def test_tagging_drawer_leaving_search_or_browse_closes_drawer(
+    qtbot: QtBot,
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, search_model, _db_path, _image_path = tagging_controller
+    settings_model = SettingsModel(search_model.cache_dir.parent / "qml-settings.json")
+    filter_proxy = CheckedFilterProxyModel()
+    filter_proxy.setSourceModel(search_model)
+    controller.set_filter_proxy(filter_proxy)
+
+    engine = QQmlApplicationEngine()
+    engine.addImageProvider("preview", PreviewImageProvider())
+    engine.addImageProvider("raw", RawImageProvider())
+    context = engine.rootContext()
+    context.setContextProperty("controller", controller)
+    context.setContextProperty("searchModel", search_model)
+    context.setContextProperty("filteredSearchModel", filter_proxy)
+    context.setContextProperty("exifModel", ExifListModel())
+    context.setContextProperty("folderListModel", FolderListModel())
+    context.setContextProperty("settingsModel", settings_model)
+    context.setContextProperty("thirdPartyLicensesHtml", "")
+    context.setContextProperty("userManualUrl", "")
+    engine.load(QUrl.fromLocalFile(str(_QML_DIR / "Main.qml")))
+    qtbot.waitUntil(lambda: bool(engine.rootObjects()), timeout=5_000)
+    root: QQuickWindow = engine.rootObjects()[0]  # type: ignore[assignment]
+    root.setWidth(1200)
+    root.setHeight(800)
+    root.show()
+    qtbot.waitExposed(root, timeout=3_000)
+
+    drawer = root.findChild(QObject, "taggingDrawer")
+    tab_bar = root.findChild(QQuickItem, "mainTabBar")
+    assert drawer is not None
+    assert tab_bar is not None
+    QMetaObject.invokeMethod(drawer, "openAndFocus", Qt.ConnectionType.DirectConnection)
+    qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=3_000)
+
+    # Act / Assert: leave Search.
+    tab_bar.setProperty("currentIndex", 1)
+    qtbot.waitUntil(lambda: not bool(drawer.property("opened")), timeout=3_000)
+
+    # Act / Assert: leave Browse.
+    QMetaObject.invokeMethod(drawer, "openAndFocus", Qt.ConnectionType.DirectConnection)
+    qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=3_000)
+    tab_bar.setProperty("currentIndex", 0)
+    qtbot.waitUntil(lambda: not bool(drawer.property("opened")), timeout=3_000)
+
+    engine.deleteLater()
+    qtbot.wait(100)
+
+
 def test_tagging_drawer_clicking_tgm_result_populates_search_field(
     qtbot: QtBot,
     tagging_controller: tuple[AppController, SearchListModel, Path, Path],

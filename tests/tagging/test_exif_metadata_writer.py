@@ -85,6 +85,78 @@ def test_write_keywords_builds_exact_arguments_with_target_last_and_verifies(
     ]
 
 
+def test_write_keywords_mp4_writes_and_verifies_xmp_and_windows_tags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    target = tmp_path / "derivative.mp4"
+    target.write_bytes(b"video")
+    calls: list[list[str]] = []
+
+    def fake_run(
+        arguments: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(arguments)
+        stdout = (
+            json.dumps(
+                [
+                    {
+                        "XMP-dc:Subject": "Katzenpfote",
+                        "Microsoft:Category": "Katzenpfote",
+                    }
+                ]
+            )
+            if "-json" in arguments
+            else "1 image files updated"
+        )
+        return subprocess.CompletedProcess(arguments, 0, stdout, "")
+
+    monkeypatch.setattr(
+        "exif_turbo.tagging.exif_metadata_writer.find_exiftool",
+        lambda: "C:/tools/exiftool.exe",
+    )
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    # Act
+    ExifMetadataWriter().write_keywords(target, ("Katzenpfote",))
+
+    # Assert
+    assert calls == [
+        [
+            "C:/tools/exiftool.exe",
+            "-json",
+            "-G1",
+            "-XMP-dc:Subject",
+            "-Microsoft:Category",
+            str(target),
+        ],
+        [
+            "C:/tools/exiftool.exe",
+            "-m",
+            "-overwrite_original",
+            "-XMP-dc:Subject=",
+            "-Microsoft:Category=",
+            str(target),
+        ],
+        [
+            "C:/tools/exiftool.exe",
+            "-m",
+            "-overwrite_original",
+            "-XMP-dc:Subject+=Katzenpfote",
+            "-Microsoft:Category+=Katzenpfote",
+            str(target),
+        ],
+        [
+            "C:/tools/exiftool.exe",
+            "-json",
+            "-G1",
+            "-XMP-dc:Subject",
+            "-Microsoft:Category",
+            str(target),
+        ],
+    ]
+
+
 def test_write_keywords_merges_live_existing_keywords_case_insensitively(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

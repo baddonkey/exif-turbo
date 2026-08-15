@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from ..indexing.exif_metadata_extractor import find_exiftool
+from ..indexing.image_utils import VIDEO_EXTENSIONS
 
 
 class ExifMetadataWriteError(RuntimeError):
@@ -31,15 +32,15 @@ class ExifMetadataWriter:
                 f"refusing to write metadata to source image: {target}"
             )
 
-        labels = self._merge_labels(labels, self._read_keywords(target))
+        fields = self._keyword_fields(target)
+        labels = self._merge_labels(labels, self._read_keywords(target, fields))
         clear_arguments = [
             find_exiftool(),
             "-m",
             "-overwrite_original",
-            "-XMP-dc:Subject=",
-            "-IPTC:Keywords=",
-            str(target),
         ]
+        clear_arguments.extend(f"-{field}=" for field in fields)
+        clear_arguments.append(str(target))
         clear_result = self._run(clear_arguments)
         if clear_result.returncode != 0:
             detail = (
@@ -51,24 +52,23 @@ class ExifMetadataWriter:
 
         arguments = [find_exiftool(), "-m", "-overwrite_original"]
         for label in labels:
-            arguments.extend(
-                (f"-XMP-dc:Subject+={label}", f"-IPTC:Keywords+={label}")
-            )
+            arguments.extend(f"-{field}+={label}" for field in fields)
         arguments.append(str(target))
         result = self._run(arguments)
         if result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip() or "unknown error"
             raise ExifMetadataWriteError(f"ExifTool metadata write failed: {detail}")
-        self._verify_keywords(target, labels)
+        self._verify_keywords(target, labels, fields)
 
-    def _read_keywords(self, target: Path) -> tuple[str, ...]:
+    def _read_keywords(
+        self, target: Path, fields: tuple[str, ...]
+    ) -> tuple[str, ...]:
         result = self._run(
             [
                 find_exiftool(),
                 "-json",
                 "-G1",
-                "-XMP-dc:Subject",
-                "-IPTC:Keywords",
+                *(f"-{field}" for field in fields),
                 str(target),
             ]
         )
@@ -78,22 +78,22 @@ class ExifMetadataWriter:
         try:
             record = json.loads(result.stdout)[0]
             return self._merge_labels(
-                self._as_labels(record.get("XMP-dc:Subject")),
-                self._as_labels(record.get("IPTC:Keywords")),
+                *(self._as_labels(record.get(field)) for field in fields)
             )
         except (IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise ExifMetadataWriteError(
                 "ExifTool returned invalid metadata"
             ) from exc
 
-    def _verify_keywords(self, target: Path, labels: Sequence[str]) -> None:
+    def _verify_keywords(
+        self, target: Path, labels: Sequence[str], fields: tuple[str, ...]
+    ) -> None:
         result = self._run(
             [
                 find_exiftool(),
                 "-json",
                 "-G1",
-                "-XMP-dc:Subject",
-                "-IPTC:Keywords",
+                *(f"-{field}" for field in fields),
                 str(target),
             ]
         )
@@ -103,17 +103,22 @@ class ExifMetadataWriter:
         try:
             records = json.loads(result.stdout)
             record = records[0]
-            subject = self._as_labels(record.get("XMP-dc:Subject"))
-            keywords = self._as_labels(record.get("IPTC:Keywords"))
+            actual = tuple(self._as_labels(record.get(field)) for field in fields)
         except (IndexError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise ExifMetadataWriteError(
                 "ExifTool returned invalid metadata readback"
             ) from exc
         expected = tuple(labels)
-        if subject != expected or keywords != expected:
+        if any(values != expected for values in actual):
             raise ExifMetadataWriteError(
                 "ExifTool metadata readback did not match requested labels"
             )
+
+    @staticmethod
+    def _keyword_fields(target: Path) -> tuple[str, ...]:
+        if target.suffix.lower() in VIDEO_EXTENSIONS:
+            return ("XMP-dc:Subject", "Microsoft:Category")
+        return ("XMP-dc:Subject", "IPTC:Keywords")
 
     def _run(self, arguments: list[str]) -> subprocess.CompletedProcess[str]:
         platform_arguments: dict[str, Any] = (

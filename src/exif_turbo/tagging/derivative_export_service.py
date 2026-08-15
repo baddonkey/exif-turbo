@@ -14,6 +14,7 @@ from typing import Callable, Iterable, Mapping, Protocol, Sequence
 
 from ..data.image_index_repository import ImageIndexRepository
 from .exif_metadata_writer import ExifMetadataWriter
+from .sidecar_repository import FilesystemSidecarRepository
 
 
 _EMBEDDED_KEYWORD_KEYS = (
@@ -141,9 +142,11 @@ class DerivativeExportService:
         self,
         image_repository: ImageIndexRepository,
         metadata_writer: MetadataWriter | None = None,
+        sidecar_repository: FilesystemSidecarRepository | None = None,
     ) -> None:
         self._image_repository = image_repository
         self._metadata_writer = metadata_writer or ExifMetadataWriter()
+        self._sidecar_repository = sidecar_repository or FilesystemSidecarRepository()
 
     def create_plan(
         self,
@@ -299,14 +302,17 @@ class DerivativeExportService:
                 pass
 
     def _accepted_labels(self, source: Path) -> tuple[str, ...]:
+        loaded_sidecar = self._sidecar_repository.read(source)
+        if loaded_sidecar is None:
+            return ()
         accepted_labels = [
             tag.label.strip()
-            for tag in self._image_repository.get_accepted_tags(str(source))
+            for tag in loaded_sidecar.sidecar.tags
             if tag.label.strip()
         ]
         accepted_labels.extend(
             label.strip()
-            for label in self._image_repository.get_free_tags(str(source))
+            for label in loaded_sidecar.sidecar.free_tags
             if label.strip()
         )
         if not accepted_labels:

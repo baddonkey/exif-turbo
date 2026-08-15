@@ -1247,6 +1247,8 @@ ApplicationWindow {
         }
 
         onCurrentIndexChanged: {
+            if (taggingDrawer.opened)
+                taggingDrawer.close()
             if (currentIndex === 1) {
                 // Entering Browse: snapshot Search filters (incl. searchField
                 // text) and clear them so Browse shows un-filtered folder
