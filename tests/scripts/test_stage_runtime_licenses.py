@@ -80,6 +80,62 @@ def test_python_license_file_homebrew_framework_returns_formula_license(
     assert result == license_file
 
 
+def test_python_license_file_ubuntu_returns_versioned_package_copyright(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    installed_base = tmp_path / "usr"
+    license_file = installed_base / "share" / "doc" / "python3.12" / "copyright"
+    license_file.parent.mkdir(parents=True)
+    license_file.write_text("Python terms", encoding="utf-8")
+    config_vars = {
+        "installed_base": str(installed_base),
+        "py_version_short": "3.12",
+    }
+    monkeypatch.setattr(
+        stage_runtime_licenses.sysconfig,
+        "get_config_var",
+        config_vars.get,
+    )
+
+    # Act
+    result = stage_runtime_licenses._python_license_file()
+
+    # Assert
+    assert result == license_file
+
+
+def test_python_license_file_almalinux_returns_stdlib_license(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    installed_base = tmp_path / "usr"
+    stdlib = installed_base / "lib64" / "python3.11"
+    license_file = stdlib / "LICENSE.txt"
+    license_file.parent.mkdir(parents=True)
+    license_file.write_text("Python terms", encoding="utf-8")
+    config_vars = {
+        "installed_base": str(installed_base),
+        "py_version_short": "3.11",
+    }
+    monkeypatch.setattr(
+        stage_runtime_licenses.sysconfig,
+        "get_config_var",
+        config_vars.get,
+    )
+    monkeypatch.setattr(
+        stage_runtime_licenses.sysconfig,
+        "get_path",
+        lambda _name: str(stdlib),
+    )
+
+    # Act
+    result = stage_runtime_licenses._python_license_file()
+
+    # Assert
+    assert result == license_file
+
+
 def test_runtime_distributions_transitive_and_inactive_marker_resolves_active_closure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

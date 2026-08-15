@@ -157,6 +157,15 @@ def _safe_filename(path: Path, used: set[str]) -> str:
 def _python_license_file() -> Path:
     installed_base = Path(str(sysconfig.get_config_var("installed_base")))
     candidates = [installed_base / "LICENSE.txt", installed_base / "LICENSE"]
+    stdlib = sysconfig.get_path("stdlib")
+    if stdlib:
+        candidates.extend((Path(stdlib) / "LICENSE.txt", Path(stdlib) / "LICENSE"))
+    version = sysconfig.get_config_var("py_version_short")
+    if version:
+        candidates.append(
+            installed_base / "share" / "doc" / f"python{version}" / "copyright"
+        )
+    candidates.append(installed_base / "share" / "doc" / "python3" / "copyright")
     framework_dir = next(
         (parent for parent in installed_base.parents if parent.name == "Python.framework"),
         None,
