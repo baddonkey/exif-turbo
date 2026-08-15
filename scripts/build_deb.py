@@ -39,8 +39,11 @@ apt-get install -y -q \
     libminizip1t64
 python3 -m venv /build-venv
 . /build-venv/bin/activate
-pip install --quiet --index-url https://download.pytorch.org/whl/cpu torch torchvision
-pip install --quiet -e '.[build]'
+pip install --quiet \
+    --index-url https://download.pytorch.org/whl/cpu \
+    --extra-index-url https://pypi.org/simple \
+    torch torchvision
+pip install --quiet --index-url https://pypi.org/simple -e '.[build]'
 python scripts/build_linux.py --deb-only --deb-arch "${TARGET_DEB_ARCH}"
 """
 

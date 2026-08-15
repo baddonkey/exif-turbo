@@ -4,6 +4,7 @@
 import re
 import sys
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_all
 from PyInstaller.utils.hooks import collect_data_files
 
 sys.path.insert(0, str(Path('scripts').resolve()))
@@ -45,12 +46,15 @@ _common_hiddenimports = [
     'av',
 ]
 
+_wec_datas, _wec_bins, _wec_hidden = collect_all('PySide6.QtWebEngineCore')
+_weq_datas, _weq_bins, _weq_hidden = collect_all('PySide6.QtWebEngineQuick')
+
 a_gui = Analysis(
     ['src/exif_turbo/app.py'],
     pathex=['src'],
-    binaries=[],
-    datas=_common_datas,
-    hiddenimports=_common_hiddenimports,
+    binaries=_wec_bins + _weq_bins,
+    datas=_common_datas + _wec_datas + _weq_datas,
+    hiddenimports=_common_hiddenimports + _wec_hidden + _weq_hidden,
     hookspath=['hooks'],
     hooksconfig={},
     runtime_hooks=[],
