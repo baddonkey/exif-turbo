@@ -15,6 +15,7 @@ from exif_turbo.tagging.derivative_export_service import (
     DerivativeExportService,
     DerivativeExportStatus,
 )
+from exif_turbo.tagging.sidecar_repository import FilesystemSidecarRepository
 
 
 class FakeMetadataWriter:
@@ -57,17 +58,21 @@ def _index_image(
         for index, label in enumerate(labels, start=1)
     )
     if tags:
+        sidecar = ImageSidecar(
+            source=SidecarSource(filename=image_path.name),
+            updated_at="2026-08-09T12:00:00Z",
+            tags=tags,
+        )
+        revision = FilesystemSidecarRepository().write(
+            image_path, sidecar, expected_revision=None
+        )
         repository.replace_accepted_tags_and_sidecar_state(
             str(image_path),
-            ImageSidecar(
-                source=SidecarSource(filename=image_path.name),
-                updated_at="2026-08-09T12:00:00Z",
-                tags=tags,
-            ),
+            sidecar,
             sidecar_path=f"{image_path}.sidecar.json",
-            sidecar_mtime_ns=1,
-            sidecar_size=1,
-            sidecar_checksum="sha256:test",
+            sidecar_mtime_ns=revision.mtime_ns,
+            sidecar_size=revision.size,
+            sidecar_checksum=revision.sha256,
             sync_status="synced",
         )
 
@@ -102,18 +107,27 @@ def test_create_plan_includes_custom_free_tags(
     source_root.mkdir()
     image_path.write_bytes(b"original")
     _index_image(repo, image_path, "Deer")
+    sidecar_repository = FilesystemSidecarRepository()
+    loaded_sidecar = sidecar_repository.read(image_path)
+    assert loaded_sidecar is not None
+    updated_sidecar = ImageSidecar(
+        source=SidecarSource(filename=image_path.name),
+        updated_at="2026-08-09T12:00:00Z",
+        tags=repo.get_accepted_tags(str(image_path)),
+        free_tags=("Family",),
+    )
+    revision = sidecar_repository.write(
+        image_path,
+        updated_sidecar,
+        expected_revision=loaded_sidecar.revision,
+    )
     repo.replace_accepted_tags_and_sidecar_state(
         str(image_path),
-        ImageSidecar(
-            source=SidecarSource(filename=image_path.name),
-            updated_at="2026-08-09T12:00:00Z",
-            tags=repo.get_accepted_tags(str(image_path)),
-            free_tags=("Family",),
-        ),
+        updated_sidecar,
         sidecar_path=f"{image_path}.sidecar.json",
-        sidecar_mtime_ns=2,
-        sidecar_size=2,
-        sidecar_checksum="sha256:free-tags",
+        sidecar_mtime_ns=revision.mtime_ns,
+        sidecar_size=revision.size,
+        sidecar_checksum=revision.sha256,
         sync_status="synced",
     )
 
@@ -124,6 +138,87 @@ def test_create_plan_includes_custom_free_tags(
 
     # Assert
     assert plan.items[0].labels == ("Deer", "Family")
+
+
+def test_create_plan_sidecar_tags_missing_from_cache_includes_tags(
+    tmp_path: Path, repo: ImageIndexRepository
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    video_path = source_root / "clip.mp4"
+    source_root.mkdir()
+    video_path.write_bytes(b"original")
+    _index_image(repo, video_path)
+    FilesystemSidecarRepository().write(
+        video_path,
+        ImageSidecar(
+            source=SidecarSource(filename=video_path.name),
+            updated_at="2026-08-15T07:16:50Z",
+            free_tags=("Katzenpfote",),
+        ),
+        expected_revision=None,
+    )
+
+    # Act
+    plan = DerivativeExportService(repo, FakeMetadataWriter()).create_plan(
+        {source_root: "source"}, tmp_path / "output", image_paths=[video_path]
+    )
+
+    # Assert
+    assert plan.items[0].labels == ("Katzenpfote",)
+    assert plan.items[0].planned_status is None
+
+
+def test_create_plan_sidecar_tags_differ_from_cache_uses_sidecar_tags(
+    tmp_path: Path, repo: ImageIndexRepository
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    image_path = source_root / "photo.jpg"
+    source_root.mkdir()
+    image_path.write_bytes(b"original")
+    _index_image(repo, image_path, "Stale cache tag")
+    sidecar_repository = FilesystemSidecarRepository()
+    loaded_sidecar = sidecar_repository.read(image_path)
+    assert loaded_sidecar is not None
+    sidecar_repository.write(
+        image_path,
+        ImageSidecar(
+            source=SidecarSource(filename=image_path.name),
+            updated_at="2026-08-15T07:16:50Z",
+            free_tags=("Authoritative sidecar tag",),
+        ),
+        expected_revision=loaded_sidecar.revision,
+    )
+
+    # Act
+    plan = DerivativeExportService(repo, FakeMetadataWriter()).create_plan(
+        {source_root: "source"}, tmp_path / "output", image_paths=[image_path]
+    )
+
+    # Assert
+    assert plan.items[0].labels == ("Authoritative sidecar tag",)
+
+
+def test_create_plan_cache_tags_without_sidecar_skips_source(
+    tmp_path: Path, repo: ImageIndexRepository
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    image_path = source_root / "photo.jpg"
+    source_root.mkdir()
+    image_path.write_bytes(b"original")
+    _index_image(repo, image_path, "Cache-only tag")
+    FilesystemSidecarRepository.sidecar_path(image_path).unlink()
+
+    # Act
+    plan = DerivativeExportService(repo, FakeMetadataWriter()).create_plan(
+        {source_root: "source"}, tmp_path / "output", image_paths=[image_path]
+    )
+
+    # Assert
+    assert plan.items[0].labels == ()
+    assert plan.items[0].planned_status is DerivativeExportStatus.SKIPPED_UNTAGGED
 
 
 def test_create_plan_preserves_embedded_keywords_with_accepted_additions(
