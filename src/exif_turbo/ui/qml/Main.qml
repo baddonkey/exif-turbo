@@ -1277,8 +1277,9 @@ ApplicationWindow {
         z: 11
         visible: !_isLocked && (mainTabBar.currentIndex === 0 || mainTabBar.currentIndex === 1)
         enabled: !_isLocked
-        text: "\uD83C\uDFF7\uFE0F"
-        font.pixelSize: 17
+        icon.source: "../../assets/tag_icon.svg"
+        icon.width: 20
+        icon.height: 20
         onClicked: taggingDrawer.opened ? taggingDrawer.close() : taggingDrawer.openAndFocus()
         ToolTip.text: qsTr("Open tagging (Ctrl+T)")
         ToolTip.visible: hovered
