@@ -349,6 +349,39 @@ def test_app_controller_ai_full_rescan_starts_force_scan(tmp_path: Path) -> None
     controller.close()
 
 
+def test_refresh_sidecars_for_folder_starts_folder_maintenance(
+    bare_controller: AppController,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    bare_controller._folder_repo = SimpleNamespace(
+        get_by_id=lambda folder_id: SimpleNamespace(id=folder_id),
+        close=lambda: None,
+    )
+    calls: list[tuple[str, int | None]] = []
+
+    def record_operation(
+        operation: str,
+        _label: str,
+        *,
+        folder_id: int | None = None,
+        **_kwargs: object,
+    ) -> None:
+        calls.append((operation, folder_id))
+
+    monkeypatch.setattr(
+        bare_controller,
+        "_start_maintenance_op",
+        record_operation,
+    )
+
+    # Act
+    bare_controller.refreshSidecarsForFolder(7)
+
+    # Assert
+    assert calls == [("refresh_sidecars", 7)]
+
+
 def test_ai_search_empty_without_filters_uses_normal_search_pipeline(
     bare_controller: AppController,
     monkeypatch,

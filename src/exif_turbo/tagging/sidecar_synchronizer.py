@@ -36,22 +36,28 @@ class SidecarSynchronizer:
         self,
         image_paths: Iterable[str],
         cancel_check: Callable[[], bool] | None = None,
+        on_progress: Callable[[int, int, str], None] | None = None,
+        *,
+        force: bool = False,
     ) -> SidecarSyncResult:
+        paths = tuple(image_paths)
         error_count = 0
-        for image_path_value in image_paths:
+        for index, image_path_value in enumerate(paths):
             if cancel_check and cancel_check():
                 return SidecarSyncResult(error_count=error_count, canceled=True)
             image_path = Path(image_path_value)
             try:
-                synchronized = self._synchronize_image(image_path)
+                synchronized = self._synchronize_image(image_path, force=force)
             except Exception as exc:  # noqa: BLE001
                 _log.warning("Unable to synchronize %s: %s", image_path, exc)
                 synchronized = False
             if not synchronized:
                 error_count += 1
+            if on_progress is not None:
+                on_progress(index + 1, len(paths), image_path_value)
         return SidecarSyncResult(error_count=error_count, canceled=False)
 
-    def _synchronize_image(self, image_path: Path) -> bool:
+    def _synchronize_image(self, image_path: Path, *, force: bool = False) -> bool:
         sidecar_path = self._sidecar_repository.sidecar_path(image_path)
         cached = self._image_repository.get_sidecar_sync_state(str(image_path))
         observed = self._sidecar_repository.stat(image_path)
@@ -64,7 +70,8 @@ class SidecarSynchronizer:
             return True
 
         if (
-            cached is not None
+            not force
+            and cached is not None
             and cached.sidecar_path == str(sidecar_path)
             and cached.mtime_ns == observed.mtime_ns
             and cached.size == observed.size

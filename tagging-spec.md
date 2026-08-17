@@ -6,7 +6,7 @@ This document is the product and technical contract for non-destructive image
 tagging in EXIF Turbo. Sections 1-16 describe the implemented version 1
 contract; sections 17-18 record remaining release questions and decisions.
 
-### Implementation status (2026-08-14)
+### Implementation status (2026-08-17)
 
 The end-to-end feature is implemented:
 
@@ -25,6 +25,12 @@ The end-to-end feature is implemented:
   drawer. It provides reusable custom tags, canonical/alias TGM search,
   selected-image add/remove, proposal generation and review, a read-only view
   of embedded source keywords, and a fixed final-derivative keyword preview.
+- The drawer copies accepted controlled and custom tags from the focused image
+  to marked images, the complete current result set, or the current Browse
+  folder. Add mode preserves target tags; replace mode requires confirmation;
+  both exclude the source image and run in a cancellable worker.
+- Each Indexed Folders row can force-refresh sidecar-derived tags for its
+  indexed images without re-extracting EXIF or rebuilding previews.
 - Proposal generation requires AI enabled, an explicit image AI scan, and an
   independently built TGM term-vector index. Defaults are 0.24 for proposals
   and 0.32 for auto-accept; auto-accept is disabled by default and its threshold
@@ -39,8 +45,9 @@ Known version 1 limitations include no sidecar encryption/relocation/cloud
 sync, no generic or additional vocabulary import, no hierarchical tag browser,
 no OCR provider, no derivative format conversion/custom mapping/overwrite,
 and no automatic image-vector creation during proposal generation. Version 1
-does not expose bulk tag add/remove or bulk proposal review in the GUI; marks
-are available as a derivative-export scope.
+does not expose aggregate bulk tag add/remove or bulk proposal review in the
+GUI. Copy Tags is the supported focused-source bulk mutation; marks are also
+available as a derivative-export scope.
 
 ## 1. Summary
 
@@ -372,6 +379,15 @@ If a sidecar write succeeds but the SQLite update fails, the sidecar remains
 authoritative. The image is marked cache-stale and resynchronized from that
 sidecar. Valid user sidecar data is never deleted to roll back a cache failure.
 
+The per-folder **Refresh Tags** action runs this synchronization explicitly for
+every indexed image associated with one folder and bypasses the unchanged-stamp
+optimization. It therefore detects externally added or modified sidecars even
+when their observed stamp and size match cached values. Deleted sidecars clear
+sidecar-managed tags and FTS content. Malformed or unreadable sidecars remain
+untouched, retain their last cached tags as stale, and increment the reported
+error count. The worker reports determinate progress, supports cancellation,
+and performs no EXIF extraction, thumbnail generation, or preview generation.
+
 ## 9. CLIP Proposal System
 
 ### 9.1 Separate vector indexes
@@ -446,20 +462,33 @@ icon and keyboard shortcut. For the focused image it shows:
 - Accept, reject, and remove actions.
 - Sidecar synchronization or write errors.
 
-The drawer is deliberately limited to the focused image. It does not expose
-marked-set state or bulk actions. At the top it displays existing XMP Subject,
+Direct add, remove, and proposal-review controls are deliberately limited to
+the focused image. The drawer also exposes Copy Tags, a focused-source bulk
+action described in section 10.2. At the top it displays existing XMP Subject,
 IPTC Keywords, and hierarchical-subject values from the indexed metadata as a
 read-only list. These source-image values are not sidecar tags and cannot be
 changed from the drawer. A fixed footer displays the final derivative keyword
 preview: existing embedded keywords merged with accepted controlled and custom
 tags, case-insensitively deduplicated and deterministically sorted.
 
-### 10.2 Marks and derivative scope
+### 10.2 Copy Tags, marks, and derivative scope
 
-The tagging drawer deliberately operates only on the focused image. Version 1
-does not expose bulk tag add/remove, aggregate tag state, or marked-image
-proposal review in QML. Existing internal marked-tag models and worker services
-are reserved for a future bulk-tagging interface.
+The tagging drawer copies accepted controlled and custom tags from its focused
+source image to one of three target sets:
+
+- All marked images.
+- The complete current search result set, including unloaded pages.
+- All indexed images in the current Browse folder.
+
+The source image is excluded from every target set. Add mode keeps existing
+target tags and adds missing source tags. Replace mode removes target accepted
+controlled and custom tags before copying the source set, so QML requires an
+explicit confirmation. Each target write uses the revision-checked mutation
+boundary from section 10.3. The cancellable worker reports changed, unchanged,
+conflicted, and failed items and refreshes search and tagging state when done.
+
+Version 1 still does not expose arbitrary aggregate bulk tag add/remove,
+aggregate tag state, or marked-image proposal review in QML.
 
 Marks remain persistent across Search and Browse and are exposed to tagging as
 the **Generate Tagged Derivatives for Marked Images** scope. The other export
@@ -470,7 +499,7 @@ canceled, and failed items.
 Space remains the mark toggle. `Ctrl+T` opens/closes the current-image drawer.
 Custom tags are available whenever tagging is enabled, without requiring TGM
 or AI. Enter adds the typed custom tag; clicking a remembered label reuses its
-stored spelling. Marked-set actions belong only to the dedicated tab.
+stored spelling.
 
 ### 10.3 Mutation boundary
 
@@ -586,9 +615,10 @@ tags can be edited or proposals rebuilt.
 - TGM, prompt, normalization, and CLIP fingerprint invalidation.
 - Missing image vectors produce an actionable state.
 
-### 14.5 Internal bulk services and derivatives
+### 14.5 Bulk copy and derivatives
 
-- Mixed aggregate tag states, partial completion, cancellation, and conflicts.
+- Add/replace Copy Tags across marked, current-results, and Browse-folder
+  scopes; source exclusion, partial completion, cancellation, and conflicts.
 - Preserved folder trees, multiple source roots, and destination collisions.
 - Exact ExifTool target and XMP/IPTC arguments through a fake process boundary.
 - Cleanup after metadata failure and byte-for-byte unchanged originals.
@@ -604,7 +634,7 @@ protection. AI tests must never trigger a real CLIP download.
 2. SQLite tag cache, FTS migration, synchronization, and tests.
 3. TGM importer, normalized repository, managed update flow, and tests.
 4. TGM term vectors, image-vector lookup, proposal worker, and tests.
-5. Current-image tagging drawer; retain marked-image tagging services for a future UI.
+5. Current-image tagging drawer and focused-source Copy Tags bulk action.
 6. Derivative export service, ExifTool writer, marked-images integration, and tests.
 7. Documentation, translations, manual UX verification, and rollout.
 
@@ -627,7 +657,13 @@ Version 1 is complete when:
    Subject and IPTC Keywords while original hashes and mtimes remain unchanged.
 8. Existing databases migrate without losing images, metadata, marks, or search
    behavior.
-9. Focused automated coverage passes without downloading CLIP; release
+9. A user can copy accepted controlled and custom tags from the focused image
+  to marked images, current results, or the current Browse folder in add or
+  confirmed replace mode without mutating the source image.
+10. A user can force-refresh one indexed folder's sidecars so added, changed,
+   deleted, and malformed files update or report their cache state without an
+   EXIF or preview rebuild.
+11. Focused automated coverage passes without downloading CLIP; release
   validation must separately record any full-suite result.
 
 ## 17. Open Decisions
@@ -659,3 +695,5 @@ Version 1 is complete when:
 | 2026-08-09 | Reset per-database TGM term-vector/cache state but preserve adjacent source sidecars and separately managed image AI files. |
 | 2026-08-14 | Keep version 1 tagging focused-image only; retain bulk-tagging services without exposing a marked-image tagging UI. |
 | 2026-08-14 | Merge live embedded keywords with accepted labels and deduplicate them before verified derivative writes. |
+| 2026-08-17 | Add focused-source Copy Tags for marked images, current results, and the current Browse folder, with additive and confirmed replacement modes. |
+| 2026-08-17 | Add per-folder forced sidecar refresh without EXIF extraction or preview rebuilding. |

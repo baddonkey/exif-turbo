@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
@@ -74,4 +75,53 @@ def test_synchronize_unchanged_sidecar_skips_second_parse(tmp_path: Path) -> Non
     assert sidecar_repository.read_count == 1
     assert synchronized_free_tags == ("Family",)
     assert free_tag_search_count == 1
+    image_repository.close()
+
+
+def test_synchronize_force_rereads_same_stamp_external_edit(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    image_path = tmp_path / "photo.jpg"
+    image_path.write_bytes(b"original image")
+    image_stat = image_path.stat()
+    image_repository = ImageIndexRepository(tmp_path / "index.db", key="")
+    image_repository.upsert_image(
+        str(image_path),
+        image_path.name,
+        image_stat.st_mtime,
+        image_stat.st_size,
+        {},
+        "",
+    )
+    sidecar_repository = _TrackingSidecarRepository()
+    sidecar_repository.write(image_path, _sidecar(image_path.name), None)
+    synchronizer = SidecarSynchronizer(image_repository, sidecar_repository)
+    synchronizer.synchronize([str(image_path)])
+    sidecar_path = sidecar_repository.sidecar_path(image_path)
+    original_stat = sidecar_path.stat()
+    original_bytes = sidecar_path.read_bytes()
+    changed_bytes = original_bytes.replace(b"Family", b"Travel")
+    assert len(changed_bytes) == len(original_bytes)
+    sidecar_path.write_bytes(changed_bytes)
+    os.utime(
+        sidecar_path,
+        ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns),
+    )
+    progress: list[tuple[int, int, str]] = []
+
+    # Act
+    result = synchronizer.synchronize(
+        [str(image_path)],
+        on_progress=lambda done, total, path: progress.append((done, total, path)),
+        force=True,
+    )
+
+    # Assert
+    assert result.error_count == 0
+    assert sidecar_repository.read_count == 2
+    assert image_repository.get_free_tags(str(image_path)) == ("Travel",)
+    assert image_repository.count_images("Family") == 0
+    assert image_repository.count_images("Travel") == 1
+    assert progress == [(1, 1, str(image_path))]
     image_repository.close()

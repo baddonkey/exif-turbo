@@ -1,4 +1,4 @@
-"""Unit tests for MaintenanceWorker (remove folder / reset database).
+"""Unit tests for MaintenanceWorker.
 
 The worker's ``run()`` method is invoked directly (synchronously) so the
 operation and its progress/cancelable/finished signals can be asserted
@@ -16,6 +16,9 @@ from pytestqt.qtbot import QtBot
 from exif_turbo.config import tgm_snapshot_path
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.data.indexed_folder_repository import IndexedFolderRepository
+from exif_turbo.models.image_sidecar import ImageSidecar, SidecarSource
+from exif_turbo.models.image_tag import ImageTag, TagProvenance
+from exif_turbo.tagging.sidecar_repository import FilesystemSidecarRepository
 from exif_turbo.ui.workers.maintenance_worker import MaintenanceWorker
 from exif_turbo.utils.preview_cache import preview_cache_name_from_stamp, preview_dir
 
@@ -197,6 +200,87 @@ def test_reset_database_same_stem_preserves_other_database_tgm(
     # Assert
     assert application_snapshot.read_bytes() == b"persistent TGM"
     assert not temporary_snapshot.exists()
+
+
+def test_refresh_sidecars_indexed_folder_updates_search_tags(
+    qtbot: QtBot,
+    folder_db: tuple[Path, Path, int, str],
+) -> None:
+    # Arrange
+    db_path, image_dir, folder_id, _folder_path = folder_db
+    image_path = image_dir / "a.jpg"
+    sidecar = ImageSidecar(
+        source=SidecarSource(filename=image_path.name),
+        updated_at="2026-08-09T12:30:00Z",
+        tags=(
+            ImageTag(
+                concept_id="loc-tgm:tgm000001",
+                label="Mountain landscapes",
+                category="subject",
+                provenance=TagProvenance(
+                    method="manual",
+                    accepted_at="2026-08-09T12:30:00Z",
+                    vocabulary_checksum="sha256:abc123",
+                ),
+            ),
+        ),
+        free_tags=("Travel",),
+    )
+    FilesystemSidecarRepository().write(
+        image_path,
+        sidecar,
+        expected_revision=None,
+    )
+    worker = MaintenanceWorker(
+        db_path,
+        "",
+        "refresh_sidecars",
+        folder_id=folder_id,
+    )
+    finished: list[bool] = []
+    progress: list[tuple[int, int]] = []
+    worker.finished.connect(lambda: finished.append(True))
+    worker.progress.connect(
+        lambda done, total, _message: progress.append((done, total))
+    )
+
+    # Act
+    worker.run()
+
+    # Assert
+    repo = ImageIndexRepository(db_path, key="")
+    search_count = repo.count_images("Travel")
+    repo.close()
+    assert finished == [True]
+    assert worker.sidecar_error_count == 0
+    assert search_count == 1
+    assert progress[0] == (0, 2)
+    assert progress[-1] == (2, 2)
+
+
+def test_refresh_sidecars_malformed_file_reports_error_and_finishes(
+    qtbot: QtBot,
+    folder_db: tuple[Path, Path, int, str],
+) -> None:
+    # Arrange
+    db_path, image_dir, folder_id, _folder_path = folder_db
+    sidecar_path = FilesystemSidecarRepository.sidecar_path(image_dir / "a.jpg")
+    sidecar_path.write_text("{invalid JSON", encoding="utf-8")
+    worker = MaintenanceWorker(
+        db_path,
+        "",
+        "refresh_sidecars",
+        folder_id=folder_id,
+    )
+    finished: list[bool] = []
+    worker.finished.connect(lambda: finished.append(True))
+
+    # Act
+    worker.run()
+
+    # Assert
+    assert finished == [True]
+    assert worker.sidecar_error_count == 1
 
 
 def test_unknown_operation_emits_failed(qtbot: QtBot, tmp_path: Path) -> None:

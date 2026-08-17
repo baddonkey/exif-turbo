@@ -310,6 +310,22 @@ Item {
                         onClicked: { if (controller) controller.fullRescanFolder(model.folderId) }
                     }
 
+                    Button {
+                        flat: true
+                        text: qsTr("Refresh Tags")
+                        font.pixelSize: 11
+                        implicitHeight: 30
+                        enabled: model.enabled && model.imageCount > 0 &&
+                                 model.status !== "scanning" &&
+                                 (!controller || !controller.isBusy)
+                        ToolTip.text: qsTr("Re-read sidecar tag files for indexed images in this folder")
+                        ToolTip.visible: hovered
+                        onClicked: {
+                            if (controller)
+                                controller.refreshSidecarsForFolder(model.folderId)
+                        }
+                    }
+
                     // Build Previews button (folder-scoped preview-cache build)
                     Button {
                         flat: true
