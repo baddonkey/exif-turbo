@@ -22,6 +22,7 @@ from exif_turbo.tagging.sidecar_repository import (
 )
 from exif_turbo.tagging.tagging_service import (
     BulkTagStatus,
+    CopyTagsMode,
     TagMembership,
     TaggingConflictError,
     TaggingFreeTagError,
@@ -88,6 +89,25 @@ def _service(
         image_repository,
         image_path,
     )
+
+
+def _add_indexed_image(
+    image_repository: ImageIndexRepository,
+    tmp_path: Path,
+    filename: str,
+) -> Path:
+    image_path = tmp_path / filename
+    image_path.write_bytes(f"image bytes for {filename}".encode())
+    image_stat = image_path.stat()
+    image_repository.upsert_image(
+        str(image_path),
+        image_path.name,
+        image_stat.st_mtime,
+        image_stat.st_size,
+        {},
+        "",
+    )
+    return image_path
 
 
 def test_tagging_service_add_alias_creates_canonical_sidecar_and_cache(
@@ -224,6 +244,90 @@ def test_tagging_service_add_duplicate_free_tag_ignoring_case_is_no_op(
     # Assert
     assert result.changed is False
     assert result.sidecar.free_tags == ("Family",)
+
+
+def test_tagging_service_copy_tags_add_merges_deduplicates_and_excludes_source(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    service, image_repository, source_path = _service(tmp_path)
+    target_path = _add_indexed_image(image_repository, tmp_path, "target.jpg")
+    service.add_concept(str(source_path), "Deer")
+    service.add_free_tag(str(source_path), "Family")
+    service.add_concept(str(target_path), "Photographs")
+    service.add_free_tag(str(target_path), "family")
+    service.add_free_tag(str(target_path), "Archive")
+
+    # Act
+    result = service.copy_tags_to_paths(
+        str(source_path),
+        [str(source_path), str(target_path), str(target_path)],
+        CopyTagsMode.ADD,
+    )
+
+    # Assert
+    target = service.get_image_tagging_state(str(target_path)).sidecar
+    assert result.succeeded_count == 1
+    assert len(result.items) == 1
+    assert target is not None
+    assert {tag.label for tag in target.tags} == {"Deer", "Photographs"}
+    assert set(target.free_tags) == {"Family", "Archive"}
+    assert service.get_image_tagging_state(str(source_path)).sidecar is not None
+
+
+def test_tagging_service_copy_tags_replace_preserves_target_sidecar_metadata(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    service, image_repository, source_path = _service(tmp_path)
+    target_path = _add_indexed_image(image_repository, tmp_path, "target.jpg")
+    service.add_concept(str(source_path), "Deer")
+    service.add_free_tag(str(source_path), "Family")
+    target_tag = ImageTag(
+        concept_id="loc-tgm:tgm000002",
+        label="Photographs",
+        category="genre_format",
+        provenance=TagProvenance(
+            method="manual",
+            accepted_at="2026-08-01T00:00:00Z",
+            vocabulary_checksum="sha256:old",
+        ),
+    )
+    target_stat = target_path.stat()
+    FilesystemSidecarRepository().write(
+        target_path,
+        ImageSidecar(
+            source=SidecarSource(
+                filename=target_path.name,
+                size=target_stat.st_size,
+                mtime_ns=target_stat.st_mtime_ns,
+                extra={"source_extension": "keep"},
+            ),
+            updated_at="2026-08-01T00:00:00Z",
+            tags=(target_tag,),
+            free_tags=("Archive",),
+            extra={"top_extension": "keep"},
+        ),
+        expected_revision=None,
+    )
+
+    # Act
+    result = service.copy_tags_to_paths(
+        str(source_path),
+        [str(target_path)],
+        CopyTagsMode.REPLACE,
+    )
+
+    # Assert
+    target = result.items[0]
+    loaded = FilesystemSidecarRepository().read(target_path)
+    assert target.status is BulkTagStatus.SUCCEEDED
+    assert loaded is not None
+    assert [tag.label for tag in loaded.sidecar.tags] == ["Deer"]
+    assert loaded.sidecar.free_tags == ("Family",)
+    assert loaded.sidecar.source.filename == "target.jpg"
+    assert loaded.sidecar.source.extra == {"source_extension": "keep"}
+    assert loaded.sidecar.extra == {"top_extension": "keep"}
 
 
 def test_tagging_service_reuses_remembered_free_tag_spelling(

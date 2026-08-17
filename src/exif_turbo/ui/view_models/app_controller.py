@@ -77,6 +77,7 @@ from ..workers.ai_scan_worker import AiScanWorker
 from ..workers.ai_search_worker import AiSearchWorker
 from ..workers.bulk_op_worker import BulkOpWorker
 from ..workers.bulk_tag_worker import BulkTagWorker
+from ..workers.copy_tags_worker import CopyTagsWorker
 from ..workers.derivative_export_worker import DerivativeExportWorker
 from ..workers.folder_tree_worker import FolderTreeWorker
 from ..workers.index_worker import IndexWorker
@@ -391,6 +392,7 @@ class AppController(QObject):
         self._tgm_vector_worker: TgmVectorBuildWorker | None = None
         self._proposal_worker: TgmProposalWorker | None = None
         self._bulk_tag_worker: BulkTagWorker | None = None
+        self._copy_tags_worker: CopyTagsWorker | None = None
         self._derivative_worker: DerivativeExportWorker | None = None
         # Timer: kick off a batch thumb build while indexing runs. Fires 5 s
         # after indexing begins so the DB has a first batch of rows to process.
@@ -3932,6 +3934,69 @@ class AppController(QObject):
     def removeConceptFromMarked(self, concept_id: str) -> None:
         self._start_bulk_tag("remove", concept_id)
 
+    @Slot(str, str)
+    def copySelectedTags(self, target_scope: str, mode: str) -> None:
+        source_path = self._search_model.get_path(self._current_result_row)
+        if (
+            source_path is None
+            or not self.freeTaggingAvailable
+            or self._repo is None
+            or self._copy_tags_worker is not None
+            or self._bulk_tag_worker is not None
+        ):
+            return
+        if mode not in {"add", "replace"}:
+            self._bulk_tag_summary = _("Choose whether to add or replace tags.")
+            self.bulkTagOperationChanged.emit()
+            return
+        worker_kwargs: dict[str, object] = {}
+        if target_scope == "marked":
+            worker_kwargs = {
+                "marked_only": True,
+                "restrict_to_enabled_folders": self._folder_repo is not None,
+            }
+        elif target_scope in {"results", "folder"}:
+            if target_scope == "folder" and not self._folder_filter:
+                self._bulk_tag_summary = _("Choose a folder in Browse first.")
+                self.bulkTagOperationChanged.emit()
+                return
+            if self._results_use_ai_pipeline():
+                worker_kwargs = {
+                    "image_paths": [result.path for result in self._ai_result_cache]
+                }
+            else:
+                worker_kwargs = {
+                    "query": self._query_text,
+                    "ext_filter": self._ext_filter,
+                    "path_filter": self._current_path_filter(),
+                    "restrict_to_enabled_folders": self._folder_repo is not None,
+                    "date_from": self._date_from,
+                    "date_to": self._date_to,
+                }
+        else:
+            self._bulk_tag_summary = _("Choose a valid copy target.")
+            self.bulkTagOperationChanged.emit()
+            return
+        worker = CopyTagsWorker(
+            self._db_path,
+            self._key,
+            source_path,
+            mode,
+            **worker_kwargs,
+        )
+        self._copy_tags_worker = worker
+        worker.progress.connect(self._on_bulk_tag_progress)
+        worker.result_ready.connect(self._on_bulk_tag_result)
+        worker.failed.connect(self._on_bulk_tag_failed)
+        worker.canceled.connect(self._on_bulk_tag_result)
+        worker.finished.connect(lambda: self._release_worker("_copy_tags_worker", worker))
+        self._bulk_tag_operation = True
+        self._bulk_tag_progress = (0, 0)
+        self._bulk_tag_summary = ""
+        self._bulk_tag_action = f"copy_{mode}"
+        self.bulkTagOperationChanged.emit()
+        worker.start()
+
     def _start_bulk_tag(self, operation: str, concept_reference: str) -> None:
         if (
             not self.taggingAvailable
@@ -3968,6 +4033,10 @@ class AppController(QObject):
             summary = _("Removed from {} image(s). Already absent: {}. Problems: {}.").format(
                 changed_count, unchanged_count, problem_count
             )
+        elif self._bulk_tag_action.startswith("copy_"):
+            summary = _("Copied tags to {} image(s). Unchanged: {}. Problems: {}.").format(
+                changed_count, unchanged_count, problem_count
+            )
         else:
             summary = _("Added to {} image(s). Already tagged: {}. Problems: {}.").format(
                 changed_count, unchanged_count, problem_count
@@ -3985,8 +4054,9 @@ class AppController(QObject):
 
     @Slot()
     def cancelBulkTagging(self) -> None:
-        if self._bulk_tag_worker is not None:
-            self._bulk_tag_worker.cancel()
+        worker = self._copy_tags_worker or self._bulk_tag_worker
+        if worker is not None:
+            worker.cancel()
 
     @Slot(str)
     def generateDerivativesForMarked(self, output_url: str) -> None:
@@ -4129,6 +4199,7 @@ class AppController(QObject):
             self._tgm_vector_worker,
             self._proposal_worker,
             self._bulk_tag_worker,
+            self._copy_tags_worker,
             self._derivative_worker,
         ):
             if worker is not None and worker.isRunning():
@@ -4587,6 +4658,7 @@ class AppController(QObject):
         self._tgm_vector_worker = None
         self._proposal_worker = None
         self._bulk_tag_worker = None
+        self._copy_tags_worker = None
         self._derivative_worker = None
         self._tagging_service = None
         self._tgm_repository = None
