@@ -639,6 +639,103 @@ class FakeDerivativeWorker(QObject):
         return False
 
 
+class FakeCopyTagsWorker(QObject):
+    progress = Signal(int, int, object)
+    result_ready = Signal(object)
+    canceled = Signal(object)
+    failed = Signal(str)
+    finished = Signal()
+    instances: list[FakeCopyTagsWorker] = []
+
+    def __init__(
+        self,
+        db_path: Path,
+        key: str,
+        source_image_path: str,
+        mode: str,
+        **options: object,
+    ) -> None:
+        super().__init__()
+        self.db_path = db_path
+        self.key = key
+        self.source_image_path = source_image_path
+        self.mode = mode
+        self.options = options
+        self.started = False
+        self.instances.append(self)
+
+    def start(self) -> None:
+        self.started = True
+
+    def cancel(self) -> None:
+        pass
+
+    def isRunning(self) -> bool:
+        return False
+
+
+def test_app_controller_copy_tags_folder_forwards_current_browse_scope(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    controller, _model, _db_path, image_path = tagging_controller
+    folder = tmp_path / "browse"
+    controller._folder_filter = str(folder)
+    controller._query_text = ""
+    controller._ext_filter = ".jpg"
+    controller._date_from = 100
+    controller._date_to = 200
+    FakeCopyTagsWorker.instances.clear()
+    monkeypatch.setattr(app_controller_module, "CopyTagsWorker", FakeCopyTagsWorker)
+
+    # Act
+    controller.copySelectedTags("folder", "replace")
+
+    # Assert
+    worker = FakeCopyTagsWorker.instances[0]
+    assert worker.source_image_path == str(image_path)
+    assert worker.mode == "replace"
+    assert worker.options == {
+        "query": "",
+        "ext_filter": ".jpg",
+        "path_filter": [str(folder)],
+        "restrict_to_enabled_folders": True,
+        "date_from": 100,
+        "date_to": 200,
+    }
+    assert worker.started is True
+
+
+def test_app_controller_copy_tags_results_uses_complete_ai_cache(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    controller, _model, _db_path, image_path = tagging_controller
+    second_path = tmp_path / "second.jpg"
+    controller._is_ai_search_mode = True
+    controller._last_ai_query = "forest"
+    controller._ai_result_cache = [
+        SearchResult(str(image_path), image_path.name, "{}", 5, 1.0, 1),
+        SearchResult(str(second_path), second_path.name, "{}", 5, 1.0, 2),
+    ]
+    FakeCopyTagsWorker.instances.clear()
+    monkeypatch.setattr(app_controller_module, "CopyTagsWorker", FakeCopyTagsWorker)
+
+    # Act
+    controller.copySelectedTags("results", "add")
+
+    # Assert
+    worker = FakeCopyTagsWorker.instances[0]
+    assert worker.options == {
+        "image_paths": [str(image_path), str(second_path)]
+    }
+    assert worker.started is True
+
+
 def test_app_controller_derivative_slot_converts_url_and_all_indexed_roots(
     tagging_controller: tuple[AppController, SearchListModel, Path, Path],
     tmp_path: Path,

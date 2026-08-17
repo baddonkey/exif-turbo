@@ -1291,6 +1291,7 @@ ApplicationWindow {
         appController: controller
         appSettings: settingsModel
         selectedFilename: controller ? controller.selectedFilename : ""
+        browseMode: mainTabBar.currentIndex === 1
     }
 
     // ── Search tab ───────────────────────────────────────────────────────

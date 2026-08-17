@@ -17,11 +17,32 @@ Drawer {
     required property var appController
     required property var appSettings
     property string selectedFilename: ""
+    property bool browseMode: false
     property bool showFreeTagSuggestions: false
     readonly property bool hasSelection: appController && appController.currentResultRow >= 0
     readonly property bool locallyBusy: appController && (
         appController.isTgmUpdating
-        || appController.isGeneratingTagProposals)
+        || appController.isGeneratingTagProposals
+        || appController.isTaggingBulk)
+
+    onBrowseModeChanged: copyTarget.currentIndex = 0
+
+    Dialog {
+        id: replaceTagsDialog
+        objectName: "replaceTagsDialog"
+        property string targetScope: ""
+        title: qsTr("Replace tags on target images?")
+        modal: true
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        anchors.centerIn: parent
+        onAccepted: appController.copySelectedTags(targetScope, "replace")
+
+        Label {
+            width: Math.min(340, replaceTagsDialog.availableWidth)
+            text: qsTr("All accepted and custom tags on each target image will be replaced. This cannot be undone.")
+            wrapMode: Text.WordWrap
+        }
+    }
 
     function openAndFocus() {
         open()
@@ -434,8 +455,6 @@ Drawer {
                         }
                     }
 
-                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor }
-
                     ColumnLayout {
                         Layout.fillWidth: true
                         Layout.margins: 14
@@ -565,6 +584,90 @@ Drawer {
                             }
                         }
                     }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.margins: 14
+                        spacing: 8
+
+                        Label {
+                            text: qsTr("Copy tags to other images")
+                            font.pixelSize: 13
+                            font.weight: Font.DemiBold
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            text: qsTr("Copies accepted and custom tags. The current image is excluded.")
+                            wrapMode: Text.WordWrap
+                            font.pixelSize: 10
+                            opacity: 0.55
+                        }
+                        ComboBox {
+                            id: copyTarget
+                            objectName: "copyTagsTarget"
+                            Layout.fillWidth: true
+                            currentIndex: 0
+                            textRole: "text"
+                            valueRole: "value"
+                            model: drawer.browseMode
+                                ? [
+                                    { text: qsTr("Marked images (%1)").arg(appController.checkedCount), value: "marked" },
+                                    { text: qsTr("Current folder (%1)").arg(appController.totalResults), value: "folder" }
+                                ]
+                                : [
+                                    { text: qsTr("Marked images (%1)").arg(appController.checkedCount), value: "marked" },
+                                    { text: qsTr("Current search results (%1)").arg(appController.totalResults), value: "results" }
+                                ]
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 14
+                            ButtonGroup { id: copyModeGroup }
+                            RadioButton {
+                                id: copyAddMode
+                                objectName: "copyTagsAddMode"
+                                text: qsTr("Add")
+                                checked: true
+                                ButtonGroup.group: copyModeGroup
+                                ToolTip.text: qsTr("Keep target tags and add missing source tags")
+                                ToolTip.visible: hovered
+                            }
+                            RadioButton {
+                                id: copyReplaceMode
+                                objectName: "copyTagsReplaceMode"
+                                text: qsTr("Replace")
+                                ButtonGroup.group: copyModeGroup
+                                ToolTip.text: qsTr("Remove target tags before copying source tags")
+                                ToolTip.visible: hovered
+                            }
+                            Item { Layout.fillWidth: true }
+                        }
+                        Button {
+                            objectName: "copyTagsButton"
+                            Layout.fillWidth: true
+                            text: qsTr("Copy Tags")
+                            highlighted: true
+                            enabled: drawer.hasSelection && !drawer.locallyBusy
+                            onClicked: {
+                                if (copyReplaceMode.checked) {
+                                    replaceTagsDialog.targetScope = copyTarget.currentValue
+                                    replaceTagsDialog.open()
+                                } else {
+                                    appController.copySelectedTags(copyTarget.currentValue, "add")
+                                }
+                            }
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            visible: appController.taggingBulkSummary !== ""
+                            text: appController.taggingBulkSummary
+                            wrapMode: Text.WordWrap
+                            font.pixelSize: 10
+                            opacity: 0.7
+                        }
+                    }
                 }
 
                 ColumnLayout {
@@ -576,8 +679,10 @@ Drawer {
                         Layout.fillWidth: true
                         from: 0
                         to: Math.max(1, appController.isTgmUpdating ? appController.tgmUpdateTotal
+                            : appController.isTaggingBulk ? appController.taggingBulkTotal
                             : appController.proposalGenerationTotal)
                         value: appController.isTgmUpdating ? appController.tgmUpdateCurrent
+                            : appController.isTaggingBulk ? appController.taggingBulkCurrent
                             : appController.proposalGenerationCurrent
                         indeterminate: to <= 1
                     }
@@ -586,6 +691,7 @@ Drawer {
                         Label {
                             Layout.fillWidth: true
                             text: appController.isTgmUpdating ? qsTr("Updating TGM")
+                                : appController.isTaggingBulk ? qsTr("Copying tags")
                                 : qsTr("Generating proposals")
                             font.pixelSize: 11
                         }
@@ -593,6 +699,7 @@ Drawer {
                             text: qsTr("Cancel")
                             onClicked: {
                                 if (appController.isTgmUpdating) appController.cancelTgmOperation()
+                                else if (appController.isTaggingBulk) appController.cancelBulkTagging()
                                 else appController.cancelTagProposalGeneration()
                             }
                         }

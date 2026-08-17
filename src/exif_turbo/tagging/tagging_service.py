@@ -67,6 +67,11 @@ class TagMembership(StrEnum):
     SOME = "some"
 
 
+class CopyTagsMode(StrEnum):
+    ADD = "add"
+    REPLACE = "replace"
+
+
 @dataclass(frozen=True)
 class TagMutationResult:
     image_path: str
@@ -302,6 +307,36 @@ class TaggingService:
             cancel_check=cancel_check,
         )
 
+    def copy_tags_to_paths(
+        self,
+        source_image_path: str,
+        target_image_paths: Iterable[str],
+        mode: CopyTagsMode,
+        *,
+        on_progress: BulkProgress | None = None,
+        cancel_check: Callable[[], bool] | None = None,
+    ) -> BulkTagResult:
+        source_state = self.get_image_tagging_state(source_image_path)
+        source_sidecar = source_state.sidecar
+        source_tags = () if source_sidecar is None else source_sidecar.tags
+        source_free_tags = () if source_sidecar is None else source_sidecar.free_tags
+        targets = (
+            path
+            for path in target_image_paths
+            if path != source_image_path
+        )
+        return self._bulk_apply(
+            targets,
+            lambda path: self._copy_tags_to_path(
+                path,
+                source_tags,
+                source_free_tags,
+                mode,
+            ),
+            on_progress=on_progress,
+            cancel_check=cancel_check,
+        )
+
     def accept_auto_candidates(
         self,
         batch: ProposalBatchResult,
@@ -388,6 +423,42 @@ class TaggingService:
             revision,
             accepted_proposals=accepted_proposals,
         )
+        return TagMutationResult(image_path, True, updated)
+
+    def _copy_tags_to_path(
+        self,
+        image_path: str,
+        source_tags: tuple[ImageTag, ...],
+        source_free_tags: tuple[str, ...],
+        mode: CopyTagsMode,
+    ) -> TagMutationResult:
+        path = Path(image_path)
+        loaded = self._read_sidecar(path)
+        sidecar = self._load_or_create_sidecar(path, loaded)
+        if mode is CopyTagsMode.REPLACE:
+            tags = self._ordered_tags(source_tags)
+            free_tags = source_free_tags
+        elif mode is CopyTagsMode.ADD:
+            tags_by_id = {tag.concept_id: tag for tag in sidecar.tags}
+            for tag in source_tags:
+                tags_by_id.setdefault(tag.concept_id, tag)
+            tags = self._ordered_tags(tuple(tags_by_id.values()))
+            free_tags_by_key = {tag.casefold(): tag for tag in sidecar.free_tags}
+            for tag in source_free_tags:
+                free_tags_by_key.setdefault(tag.casefold(), tag)
+            free_tags = tuple(free_tags_by_key.values())
+        else:
+            raise ValueError(f"unknown copy tags mode: {mode}")
+        if tags == sidecar.tags and free_tags == sidecar.free_tags:
+            return TagMutationResult(image_path, False, sidecar)
+        updated = replace(
+            sidecar,
+            updated_at=self._timestamp(),
+            tags=tags,
+            free_tags=free_tags,
+        )
+        revision = self._write_sidecar(path, updated, loaded)
+        self._update_cache(image_path, updated, revision)
         return TagMutationResult(image_path, True, updated)
 
     def _apply_auto_generation(

@@ -55,6 +55,8 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
         "generateDerivativesForCurrentResults(",
         "generateDerivativesForMarked(",
         "cancelDerivativeExport(",
+        "copySelectedTags(",
+        "cancelBulkTagging(",
     }
 
     # Act
@@ -77,7 +79,20 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
     assert "appController.derivativeTagsModel" in source
     assert 'text: qsTr("Custom tags")' in drawer_source
     assert 'text: qsTr("Tags on current image")' in drawer_source
-    assert "Marked images" not in drawer_source
+    assert 'objectName: "copyTagsTarget"' in drawer_source
+    assert "onBrowseModeChanged: copyTarget.currentIndex = 0" in drawer_source
+    assert 'objectName: "copyTagsAddMode"' in drawer_source
+    assert 'objectName: "copyTagsReplaceMode"' in drawer_source
+    assert drawer_source.count("RadioButton {") >= 2
+    assert 'objectName: "copyTagsButton"' in drawer_source
+    assert 'objectName: "replaceTagsDialog"' in drawer_source
+    assert 'value: "results"' in drawer_source
+    assert 'value: "folder"' in drawer_source
+    assert 'value: "marked"' in drawer_source
+    assert "Marked images" in drawer_source
+    assert drawer_source.index('objectName: "copyTagsTarget"') > drawer_source.index(
+        'objectName: "pendingProposalsList"'
+    )
     assert "markedMode" not in drawer_source
     assert "applyConceptToMarked" not in drawer_source
     assert "removeConceptFromMarked" not in drawer_source
@@ -153,6 +168,9 @@ def test_main_qml_with_tagging_workbench_loads(
     assert root.findChild(QQuickItem, "addFreeTagButton") is not None
     assert root.findChild(QQuickItem, "freeTagSuggestions") is not None
     assert root.findChild(QQuickItem, "currentFreeTags") is not None
+    copy_target = root.findChild(QQuickItem, "copyTagsTarget")
+    assert copy_target is not None
+    assert copy_target.property("currentValue") == "marked"
 
     controller.close()
     engine.deleteLater()
