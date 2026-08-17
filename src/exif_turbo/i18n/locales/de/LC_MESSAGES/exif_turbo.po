@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-08-17 21:30+0200\n"
+"POT-Creation-Date: 2026-08-17 21:43+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: de\n"
@@ -327,15 +327,15 @@ msgstr "TGM-Quelldiagnosen: {}"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:3987
 msgid "Choose whether to add or replace tags."
-msgstr ""
+msgstr "Wählen Sie, ob Tags hinzugefügt oder ersetzt werden sollen."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:3998
 msgid "Choose a folder in Browse first."
-msgstr ""
+msgstr "Wählen Sie zuerst einen Ordner unter Durchsuchen aus."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:4015
 msgid "Choose a valid copy target."
-msgstr ""
+msgstr "Wählen Sie ein gültiges Kopierziel aus."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:4071
 #, python-brace-format
@@ -345,7 +345,7 @@ msgstr "Von {} Bild(ern) entfernt. Bereits nicht vorhanden: {}. Probleme: {}."
 #: src/exif_turbo/ui/view_models/app_controller.py:4075
 #, python-brace-format
 msgid "Copied tags to {} image(s). Unchanged: {}. Problems: {}."
-msgstr ""
+msgstr "Tags auf {} Bild(er) kopiert. Unverändert: {}. Probleme: {}."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:4079
 #, python-brace-format
@@ -383,7 +383,7 @@ msgstr "Keine Derivate wurden erstellt."
 #: src/exif_turbo/ui/view_models/app_controller.py:4192
 #, python-brace-format
 msgid "{} image(s) had no accepted tags."
-msgstr ""
+msgstr "{} Bild(er) hatte(n) keine akzeptierten Tags."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:4196
 #, python-brace-format
@@ -403,7 +403,7 @@ msgstr "Erster Fehler ({}): {}"
 #: src/exif_turbo/ui/view_models/app_controller.py:4216
 #, python-brace-format
 msgid "{} derivative(s) canceled."
-msgstr ""
+msgstr "{} Derivat(e) abgebrochen."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:4349
 #, python-brace-format
@@ -467,7 +467,7 @@ msgstr " Bilder"
 
 #: QML
 msgid "%1 / %2 images"
-msgstr ""
+msgstr "%1 / %2 Bilder"
 
 #: QML
 msgid "%1 folders"
@@ -527,7 +527,7 @@ msgstr ""
 
 #: QML
 msgid "AI features are unavailable on this platform"
-msgstr ""
+msgstr "KI-Funktionen sind auf dieser Plattform nicht verfügbar"
 
 #: QML
 msgid "AI-Scan"
@@ -578,6 +578,8 @@ msgid ""
 "All accepted and custom tags on each target image will be replaced. This "
 "cannot be undone."
 msgstr ""
+"Alle akzeptierten und benutzerdefinierten Tags auf jedem Zielbild werden "
+"ersetzt. Dies kann nicht rückgängig gemacht werden."
 
 #: QML
 msgid "All files (*)"
@@ -589,11 +591,11 @@ msgstr "Alle Ordner"
 
 #: QML
 msgid "Auto-accept proposals"
-msgstr ""
+msgstr "Vorschläge automatisch akzeptieren"
 
 #: QML
 msgid "Auto-accept threshold"
-msgstr ""
+msgstr "Schwellenwert für automatisches Akzeptieren"
 
 #: QML
 msgid "Balanced — score ≥ 0.20"
@@ -629,7 +631,7 @@ msgstr "Erstellen Sie TGM-Vektoren, um Vorschläge zu erzeugen."
 
 #: QML
 msgid "Build Vectors"
-msgstr ""
+msgstr "Vektoren erstellen"
 
 #: QML
 msgid "Build missing CLIP vector embeddings for this folder (enables AI search)"
@@ -681,7 +683,7 @@ msgstr "Prüfen"
 
 #: QML
 msgid "Choose Derivative Target Folder"
-msgstr ""
+msgstr "Zielordner für Derivate auswählen"
 
 #: QML
 msgid "Clear Preview Cache"
@@ -701,7 +703,7 @@ msgstr ""
 
 #: QML
 msgid "Close"
-msgstr ""
+msgstr "Schließen"
 
 #: QML
 msgid "Close tagging"
@@ -725,6 +727,8 @@ msgstr ""
 #: QML
 msgid "Copies accepted and custom tags. The current image is excluded."
 msgstr ""
+"Kopiert akzeptierte und benutzerdefinierte Tags. Das aktuelle Bild ist "
+"ausgeschlossen."
 
 #: QML
 msgid "Copy"
@@ -736,7 +740,7 @@ msgstr "Bild in Zwischenablage kopieren"
 
 #: QML
 msgid "Copy Tags"
-msgstr ""
+msgstr "Tags kopieren"
 
 #: QML
 msgid "Copy preview image to clipboard"
@@ -744,11 +748,11 @@ msgstr "Vorschaubild in Zwischenablage kopieren"
 
 #: QML
 msgid "Copy tags to other images"
-msgstr ""
+msgstr "Tags auf andere Bilder kopieren"
 
 #: QML
 msgid "Copying tags"
-msgstr ""
+msgstr "Tags werden kopiert"
 
 #: QML
 msgid "Create Database"
@@ -768,7 +772,7 @@ msgstr ""
 
 #: QML
 msgid "Current folder (%1)"
-msgstr ""
+msgstr "Aktueller Ordner (%1)"
 
 #: QML
 msgid "Current password"
@@ -776,7 +780,7 @@ msgstr "Aktuelles Passwort"
 
 #: QML
 msgid "Current search results (%1)"
-msgstr ""
+msgstr "Aktuelle Suchergebnisse (%1)"
 
 #: QML
 msgid "Custom tags"
@@ -812,7 +816,7 @@ msgstr "Alle zwischengespeicherten Vorschaubilder für diesen Ordner löschen"
 
 #: QML
 msgid "Derivative Generation Complete"
-msgstr ""
+msgstr "Derivaterstellung abgeschlossen"
 
 #: QML
 msgid "Describe what you’re looking for…"
@@ -848,7 +852,7 @@ msgstr "EXIF-TAGS"
 
 #: QML
 msgid "Enable AI features first"
-msgstr ""
+msgstr "Aktivieren Sie zuerst die KI-Funktionen"
 
 #: QML
 msgid "Enable AI features to generate proposals."
@@ -867,7 +871,7 @@ msgstr "Verschlagwortung aktivieren"
 
 #: QML
 msgid "Enable tagging for this database"
-msgstr ""
+msgstr "Verschlagwortung für diese Datenbank aktivieren"
 
 #: QML
 msgid "Enabled"
@@ -1021,11 +1025,11 @@ msgstr "GPS-Standort —"
 
 #: QML
 msgid "Generate Tagged Derivatives for &Marked Images (%1 selected)"
-msgstr ""
+msgstr "Verschlagwortete Derivate für &markierte Bilder erzeugen (%1 ausgewählt)"
 
 #: QML
 msgid "Generate Tagged Derivatives for Current &Results..."
-msgstr ""
+msgstr "Verschlagwortete Derivate für aktuelle &Ergebnisse erzeugen..."
 
 #: QML
 msgid "Generate for current image"
@@ -1033,7 +1037,7 @@ msgstr "Für aktuelles Bild erzeugen"
 
 #: QML
 msgid "Generating Tagged Derivatives"
-msgstr ""
+msgstr "Verschlagwortete Derivate werden erzeugt"
 
 #: QML
 msgid "Generating proposals"
@@ -1113,7 +1117,7 @@ msgstr ""
 
 #: QML
 msgid "Keep target tags and add missing source tags"
-msgstr ""
+msgstr "Tags der Zielbilder beibehalten und fehlende Quell-Tags hinzufügen"
 
 #: QML
 msgid "Language"
@@ -1243,7 +1247,7 @@ msgstr ""
 
 #: QML
 msgid "Open tagging (Ctrl+T)"
-msgstr ""
+msgstr "Verschlagwortung öffnen (Ctrl+T)"
 
 #: QML
 msgid "OpenStreetMap"
@@ -1328,7 +1332,7 @@ msgstr "Vorherige Übereinstimmung"
 
 #: QML
 msgid "Proposal threshold"
-msgstr ""
+msgstr "Vorschlagsschwellenwert"
 
 #: QML
 msgid "RESULTS"
@@ -1352,7 +1356,7 @@ msgstr "Sidecar-Tag-Dateien für indizierte Bilder in diesem Ordner neu einlesen
 
 #: QML
 msgid "Rebuild Vectors"
-msgstr ""
+msgstr "Vektoren neu erstellen"
 
 #: QML
 msgid "Rebuild every CLIP vector embedding for this folder from scratch"
@@ -1404,7 +1408,7 @@ msgstr "Vom ausgewählten Bild entfernen"
 
 #: QML
 msgid "Remove target tags before copying source tags"
-msgstr ""
+msgstr "Tags der Zielbilder vor dem Kopieren der Quell-Tags entfernen"
 
 #: QML
 msgid "Remove this folder and delete its indexed images"
@@ -1425,11 +1429,11 @@ msgstr "Vorschau-Cache-JPEGs für diesen Ordner rendern"
 
 #: QML
 msgid "Replace"
-msgstr ""
+msgstr "Ersetzen"
 
 #: QML
 msgid "Replace tags on target images?"
-msgstr ""
+msgstr "Tags auf Zielbildern ersetzen?"
 
 #: QML
 msgid "Rescan"
@@ -1567,7 +1571,7 @@ msgstr "Sortieren"
 
 #: QML
 msgid "Source date: %1"
-msgstr ""
+msgstr "Quelldatum: %1"
 
 #: QML
 msgid "Spaces"
@@ -1579,19 +1583,19 @@ msgstr "VERSCHLAGWORTUNG"
 
 #: QML
 msgid "TGM is not installed"
-msgstr ""
+msgstr "TGM ist nicht installiert"
 
 #: QML
 msgid "TGM ready: %1 subjects, %2 genre/form terms"
-msgstr ""
+msgstr "TGM bereit: %1 Sachbegriffe, %2 Genre-/Formbegriffe"
 
 #: QML
 msgid "TGM vectors are current"
-msgstr ""
+msgstr "TGM-Vektoren sind aktuell"
 
 #: QML
 msgid "TGM vectors are required"
-msgstr ""
+msgstr "TGM-Vektoren sind erforderlich"
 
 #: QML
 msgid "Tabs"
@@ -1603,7 +1607,7 @@ msgstr "Tag-Vorschläge"
 
 #: QML
 msgid "Tagging and TGM"
-msgstr ""
+msgstr "Verschlagwortung und TGM"
 
 #: QML
 msgid "Tagging is disabled for this database."
@@ -1690,7 +1694,7 @@ msgstr "Wird entsperrt…"
 
 #: QML
 msgid "Update TGM"
-msgstr ""
+msgstr "TGM aktualisieren"
 
 #: QML
 msgid "Updating TGM"
@@ -1762,7 +1766,7 @@ msgstr "Threads"
 
 #: QML
 msgid "unknown"
-msgstr ""
+msgstr "unbekannt"
 
 #: QML
 msgid ""

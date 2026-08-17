@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-08-17 21:30+0200\n"
+"POT-Creation-Date: 2026-08-17 21:43+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: rm\n"
@@ -324,15 +324,15 @@ msgstr "Diagnostica da la funtauna TGM: {}"
 
 #: src/exif_turbo/ui/view_models/app_controller.py:3987
 msgid "Choose whether to add or replace tags."
-msgstr ""
+msgstr "Tscherna sche tags duain vegnir agiuntads u remplazzads."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:3998
 msgid "Choose a folder in Browse first."
-msgstr ""
+msgstr "Tscherna l’emprim ina cartella en Sfegliar."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:4015
 msgid "Choose a valid copy target."
-msgstr ""
+msgstr "Tscherna ina destinaziun valida per copiar."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:4071
 #, python-brace-format
@@ -342,7 +342,7 @@ msgstr "Allontanà da {} maletg(s). Gia absent: {}. Problems: {}."
 #: src/exif_turbo/ui/view_models/app_controller.py:4075
 #, python-brace-format
 msgid "Copied tags to {} image(s). Unchanged: {}. Problems: {}."
-msgstr ""
+msgstr "Tags copiads sin {} maletg(s). Betg midà: {}. Problems: {}."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:4079
 #, python-brace-format
@@ -380,7 +380,7 @@ msgstr "Nagins derivats èn vegnids creads."
 #: src/exif_turbo/ui/view_models/app_controller.py:4192
 #, python-brace-format
 msgid "{} image(s) had no accepted tags."
-msgstr ""
+msgstr "{} maletg(s) n’aveva(n) nagins tags acceptads."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:4196
 #, python-brace-format
@@ -400,7 +400,7 @@ msgstr "Emprim sbagl ({}): {}"
 #: src/exif_turbo/ui/view_models/app_controller.py:4216
 #, python-brace-format
 msgid "{} derivative(s) canceled."
-msgstr ""
+msgstr "{} derivat(s) interrut(s)."
 
 #: src/exif_turbo/ui/view_models/app_controller.py:4349
 #, python-brace-format
@@ -464,7 +464,7 @@ msgstr " maletgs"
 
 #: QML
 msgid "%1 / %2 images"
-msgstr ""
+msgstr "%1 / %2 maletgs"
 
 #: QML
 msgid "%1 folders"
@@ -524,7 +524,7 @@ msgstr ""
 
 #: QML
 msgid "AI features are unavailable on this platform"
-msgstr ""
+msgstr "Funcziuns dad IA n’èn betg disponiblas sin questa plattafurma"
 
 #: QML
 msgid "AI-Scan"
@@ -575,6 +575,8 @@ msgid ""
 "All accepted and custom tags on each target image will be replaced. This "
 "cannot be undone."
 msgstr ""
+"Tut ils tags acceptads e persunalisads sin mintga maletg da destinaziun "
+"vegnan remplazzads. Quai na po betg vegnir revocà."
 
 #: QML
 msgid "All files (*)"
@@ -586,11 +588,11 @@ msgstr "Tut las cartellas"
 
 #: QML
 msgid "Auto-accept proposals"
-msgstr ""
+msgstr "Acceptar propostas automaticamain"
 
 #: QML
 msgid "Auto-accept threshold"
-msgstr ""
+msgstr "Limita per acceptar automaticamain"
 
 #: QML
 msgid "Balanced — score ≥ 0.20"
@@ -626,7 +628,7 @@ msgstr "Crear vectors TGM per generar propostas."
 
 #: QML
 msgid "Build Vectors"
-msgstr ""
+msgstr "Crear vectors"
 
 #: QML
 msgid "Build missing CLIP vector embeddings for this folder (enables AI search)"
@@ -678,7 +680,7 @@ msgstr "Controlliar"
 
 #: QML
 msgid "Choose Derivative Target Folder"
-msgstr ""
+msgstr "Tscherner la cartella da destinaziun per derivats"
 
 #: QML
 msgid "Clear Preview Cache"
@@ -698,7 +700,7 @@ msgstr ""
 
 #: QML
 msgid "Close"
-msgstr ""
+msgstr "Serrar"
 
 #: QML
 msgid "Close tagging"
@@ -721,7 +723,7 @@ msgstr ""
 
 #: QML
 msgid "Copies accepted and custom tags. The current image is excluded."
-msgstr ""
+msgstr "Copia tags acceptads e persunalisads. Il maletg actual è exclus."
 
 #: QML
 msgid "Copy"
@@ -733,7 +735,7 @@ msgstr "Copiar maletg en tavla d’interscambi"
 
 #: QML
 msgid "Copy Tags"
-msgstr ""
+msgstr "Copiar tags"
 
 #: QML
 msgid "Copy preview image to clipboard"
@@ -741,11 +743,11 @@ msgstr "Copiar prevista en tavla d’interscambi"
 
 #: QML
 msgid "Copy tags to other images"
-msgstr ""
+msgstr "Copiar tags sin auters maletgs"
 
 #: QML
 msgid "Copying tags"
-msgstr ""
+msgstr "Tags vegnan copiads"
 
 #: QML
 msgid "Create Database"
@@ -765,7 +767,7 @@ msgstr ""
 
 #: QML
 msgid "Current folder (%1)"
-msgstr ""
+msgstr "Cartella actuala (%1)"
 
 #: QML
 msgid "Current password"
@@ -773,7 +775,7 @@ msgstr "Pled-clav actuala"
 
 #: QML
 msgid "Current search results (%1)"
-msgstr ""
+msgstr "Resultats da tschertga actuals (%1)"
 
 #: QML
 msgid "Custom tags"
@@ -809,7 +811,7 @@ msgstr "Stizzar tut las previstas en cache per questa cartella"
 
 #: QML
 msgid "Derivative Generation Complete"
-msgstr ""
+msgstr "Generaziun dals derivats terminada"
 
 #: QML
 msgid "Describe what you’re looking for…"
@@ -845,7 +847,7 @@ msgstr "TAGS EXIF"
 
 #: QML
 msgid "Enable AI features first"
-msgstr ""
+msgstr "Activescha l’emprim las funcziuns dad IA"
 
 #: QML
 msgid "Enable AI features to generate proposals."
@@ -864,7 +866,7 @@ msgstr "Activar la chavazzinaziun"
 
 #: QML
 msgid "Enable tagging for this database"
-msgstr ""
+msgstr "Activar tags per questa banca da datas"
 
 #: QML
 msgid "Enabled"
@@ -1020,11 +1022,11 @@ msgstr "Posiziun GPS —"
 
 #: QML
 msgid "Generate Tagged Derivatives for &Marked Images (%1 selected)"
-msgstr ""
+msgstr "Generar derivats cun tags per maletgs &marcads (%1 selecziunads)"
 
 #: QML
 msgid "Generate Tagged Derivatives for Current &Results..."
-msgstr ""
+msgstr "Generar derivats cun tags per ils &resultats actuals..."
 
 #: QML
 msgid "Generate for current image"
@@ -1032,7 +1034,7 @@ msgstr "Generar per il maletg actual"
 
 #: QML
 msgid "Generating Tagged Derivatives"
-msgstr ""
+msgstr "Derivats cun tags vegnan generads"
 
 #: QML
 msgid "Generating proposals"
@@ -1112,7 +1114,7 @@ msgstr ""
 
 #: QML
 msgid "Keep target tags and add missing source tags"
-msgstr ""
+msgstr "Mantegna ils tags da destinaziun ed agiunta tags da funtauna mancants"
 
 #: QML
 msgid "Language"
@@ -1241,7 +1243,7 @@ msgstr ""
 
 #: QML
 msgid "Open tagging (Ctrl+T)"
-msgstr ""
+msgstr "Avrir la chavazzinaziun (Ctrl+T)"
 
 #: QML
 msgid "OpenStreetMap"
@@ -1326,7 +1328,7 @@ msgstr "Resultaten precedent"
 
 #: QML
 msgid "Proposal threshold"
-msgstr ""
+msgstr "Limita da propostas"
 
 #: QML
 msgid "RESULTS"
@@ -1352,7 +1354,7 @@ msgstr ""
 
 #: QML
 msgid "Rebuild Vectors"
-msgstr ""
+msgstr "Crear vectors danovamain"
 
 #: QML
 msgid "Rebuild every CLIP vector embedding for this folder from scratch"
@@ -1404,7 +1406,7 @@ msgstr "Allontanar dal maletg selecziunà"
 
 #: QML
 msgid "Remove target tags before copying source tags"
-msgstr ""
+msgstr "Allontanar ils tags da destinaziun avant che copiar ils tags da funtauna"
 
 #: QML
 msgid "Remove this folder and delete its indexed images"
@@ -1425,11 +1427,11 @@ msgstr "Render JPEGs dal cache da previstas per questa cartella"
 
 #: QML
 msgid "Replace"
-msgstr ""
+msgstr "Remplazzar"
 
 #: QML
 msgid "Replace tags on target images?"
-msgstr ""
+msgstr "Remplazzar ils tags sin ils maletgs da destinaziun?"
 
 #: QML
 msgid "Rescan"
@@ -1565,7 +1567,7 @@ msgstr "Sortir"
 
 #: QML
 msgid "Source date: %1"
-msgstr ""
+msgstr "Data da funtauna: %1"
 
 #: QML
 msgid "Spaces"
@@ -1577,19 +1579,19 @@ msgstr "CHAVAZZINAZIUN"
 
 #: QML
 msgid "TGM is not installed"
-msgstr ""
+msgstr "TGM n’è betg installà"
 
 #: QML
 msgid "TGM ready: %1 subjects, %2 genre/form terms"
-msgstr ""
+msgstr "TGM pront: %1 subjects, %2 terms da gener/furma"
 
 #: QML
 msgid "TGM vectors are current"
-msgstr ""
+msgstr "Ils vectors TGM èn actuals"
 
 #: QML
 msgid "TGM vectors are required"
-msgstr ""
+msgstr "Ils vectors TGM èn necessaris"
 
 #: QML
 msgid "Tabs"
@@ -1601,7 +1603,7 @@ msgstr "Propostas da tags"
 
 #: QML
 msgid "Tagging and TGM"
-msgstr ""
+msgstr "Chavazzinaziun e TGM"
 
 #: QML
 msgid "Tagging is disabled for this database."
@@ -1687,7 +1689,7 @@ msgstr "Avrir…"
 
 #: QML
 msgid "Update TGM"
-msgstr ""
+msgstr "Actualisar TGM"
 
 #: QML
 msgid "Updating TGM"
@@ -1759,7 +1761,7 @@ msgstr "threads"
 
 #: QML
 msgid "unknown"
-msgstr ""
+msgstr "nunencunaschent"
 
 #: QML
 msgid ""
