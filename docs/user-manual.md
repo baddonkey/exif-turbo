@@ -196,6 +196,7 @@ Each row exposes the following buttons on the right:
 |--------|--------|
 | **Rescan** | Incrementally re-index this folder (only files whose modification time changed). |
 | **Full Rescan** | Force re-extract EXIF for every file in this folder. |
+| **Refresh Tags** | Force re-read sidecar tag files for this folder's indexed images without re-extracting EXIF or rebuilding previews. Newly added and changed sidecars update the tag/search cache; deleted sidecars remove their sidecar-managed tags from the cache. Malformed sidecars are left untouched and reported as errors. The operation shows progress and can be canceled. |
 | **Build Previews** | Render preview-cache JPEGs for every image in this folder. While the build is running on this folder the same button reads **Cancel Previews**. Disabled while another folder's preview build is in progress. |
 | **AI-Scan** | Build missing CLIP vector embeddings for this folder only (incremental semantic-index build). While running, the same button reads **Cancel AI-Scan**. Visible only when AI features are enabled in Settings. |
 | **AI Full Rescan** | Rebuild every CLIP vector embedding for this folder from scratch. While running, the same button reads **Cancel AI Full Rescan**. Visible only when AI features are enabled. |
@@ -875,17 +876,26 @@ or press **Ctrl+T**. The non-modal drawer contains these controls:
 - **Final derivative tags** remains visible in the fixed footer. It previews
   the sorted, deduplicated union of embedded keywords and accepted TGM/custom
   additions that a derivative will receive.
+- **Copy tags to other images** copies the focused image's accepted controlled
+  and custom tags to a selected target set. Choose **Marked images**, **Current
+  search results** (the complete result set, including unloaded pages), or
+  **Current folder** while browsing. **Add** keeps each target's existing tags
+  and adds missing source tags. **Replace** removes the target's controlled and
+  custom tags before copying and requires confirmation. The focused source
+  image is always excluded. Progress, cancellation, and a completion summary
+  are shown in the drawer.
 
 Long-running TGM and proposal operations show progress and a **Cancel** button.
 Derivative generation starts from the **Action** menu; the drawer footer is
 only a read-only preview.
 
-### Marks and derivative scope
+### Marks and bulk scopes
 
-The tagging drawer always edits only the focused image; version 1 has no bulk
-tag-editing view. Marks remain useful as a derivative scope. Press **Space** to
-toggle the focused image's mark, then use **Action → Generate Tagged
-Derivatives for Marked Images…** to process that persistent marked set.
+Direct add, remove, and proposal-review controls edit only the focused image.
+The drawer's **Copy Tags** action can use the persistent marked set as a bulk
+target, while marks also remain available as a derivative scope. Press
+**Space** to toggle the focused image's mark, then choose **Marked images** in
+Copy Tags or use **Action → Generate Tagged Derivatives for Marked Images…**.
 
 ### CLIP proposal prerequisites
 
