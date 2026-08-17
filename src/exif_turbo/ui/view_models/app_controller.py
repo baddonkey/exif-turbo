@@ -1260,12 +1260,18 @@ class AppController(QObject):
 
     def _on_maint_finished(self) -> None:
         operation = self._maint_operation
+        worker = self._maint_worker
         self._maint_operation = ""
         self._clear_maint_busy()
         if operation == "remove_folder":
             self._finish_remove_folder()
         elif operation == "reset_database":
             self._finish_reset_database()
+        elif operation == "refresh_sidecars" and worker is not None:
+            self._finish_refresh_sidecars(
+                worker.sidecar_image_count,
+                worker.sidecar_error_count,
+            )
 
     def _on_maint_failed(self, msg: str) -> None:
         self._maint_operation = ""
@@ -2708,6 +2714,38 @@ class AppController(QObject):
         if folder is None:
             return
         self._start_managed_folder_indexing(folder, force=True)
+
+    @Slot(int)
+    def refreshSidecarsForFolder(self, folder_id: int) -> None:
+        if self._folder_repo is None:
+            return
+        folder = self._folder_repo.get_by_id(folder_id)
+        if folder is None:
+            return
+        self._start_maintenance_op(
+            "refresh_sidecars",
+            _("Refreshing sidecar tags\u2026"),
+            folder_id=folder_id,
+        )
+
+    def _finish_refresh_sidecars(self, image_count: int, error_count: int) -> None:
+        self._refresh_selected_tagging_state(preserve_proposals=False)
+        self._refresh_marked_tagging_state()
+        self._run_search()
+        if error_count:
+            self._set_status(
+                _("Refreshed tags for {count} images; {errors} sidecars had errors.").format(
+                    count=image_count,
+                    errors=error_count,
+                ),
+                error=True,
+            )
+        else:
+            self._set_status(
+                _("Refreshed sidecar tags for {count} images.").format(
+                    count=image_count,
+                )
+            )
 
     @Slot()
     def rescanAllFolders(self) -> None:

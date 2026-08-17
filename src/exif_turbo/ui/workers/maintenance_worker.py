@@ -27,12 +27,13 @@ from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
 from ...config import tgm_snapshot_path
 from ...i18n import _
+from ...tagging.sidecar_synchronizer import SidecarSynchronizer
 from ...utils.preview_cache import expected_preview_filenames, preview_dir
 from ._macos_activity import AppNapAssertion
 
 
 class MaintenanceWorker(QThread):
-    """Run *remove_folder* or *reset_database* off the GUI thread.
+    """Run database maintenance operations off the GUI thread.
 
     Emits:
         progress(done, total, message): ``total == 0`` requests an
@@ -68,6 +69,8 @@ class MaintenanceWorker(QThread):
         self._cache_dir = cache_dir
         self._cancel_event = threading.Event()
         self._last_emit = 0.0
+        self.sidecar_image_count = 0
+        self.sidecar_error_count = 0
 
     # ------------------------------------------------------------------
     def cancel(self) -> None:
@@ -93,6 +96,8 @@ class MaintenanceWorker(QThread):
                 self._run_remove_folder()
             elif self._operation == "reset_database":
                 self._run_reset_database()
+            elif self._operation == "refresh_sidecars":
+                self._run_refresh_sidecars()
             else:
                 self.failed.emit(f"Unknown operation: {self._operation!r}")
         except Exception as exc:  # noqa: BLE001
@@ -157,6 +162,37 @@ class MaintenanceWorker(QThread):
         finally:
             repo.close()
             folder_repo.close()
+
+    def _run_refresh_sidecars(self) -> None:
+        if self._folder_id is None:
+            self.failed.emit("folder_id is required")
+            return
+        repo = ImageIndexRepository(self._db_path, key=self._key)
+        try:
+            image_paths = tuple(repo.get_folder_stamps(self._folder_id))
+            total = len(image_paths)
+            self.sidecar_image_count = total
+            message = _("Re-reading sidecar tags\u2026")
+            self.cancelable.emit(True)
+            self._emit_progress(0, total, message, force=True)
+
+            def on_progress(done: int, count: int, _path: str) -> None:
+                self._emit_progress(done, count, message)
+
+            result = SidecarSynchronizer(repo).synchronize(
+                image_paths,
+                cancel_check=self._is_canceled,
+                on_progress=on_progress,
+                force=True,
+            )
+            self.sidecar_error_count = result.error_count
+            if result.canceled:
+                self.canceled.emit()
+            else:
+                self._emit_progress(total, total, message, force=True)
+                self.finished.emit()
+        finally:
+            repo.close()
 
     # ------------------------------------------------------------------
     def _clear_previews(self, stamps: dict[str, tuple[float, int]]) -> bool:

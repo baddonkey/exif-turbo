@@ -150,6 +150,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Full Rescan": "Vollst\u00e4ndig neu indizieren",
         "Force re-extract EXIF for every file in this folder":
             "EXIF f\u00fcr alle Dateien in diesem Ordner neu extrahieren",
+        "Refresh Tags": "Tags aktualisieren",
+        "Re-read sidecar tag files for indexed images in this folder":
+            "Sidecar-Tag-Dateien f\u00fcr indizierte Bilder in diesem Ordner neu einlesen",
+        "Re-reading sidecar tags\u2026": "Sidecar-Tags werden neu eingelesen\u2026",
+        "Refreshing sidecar tags\u2026": "Sidecar-Tags werden aktualisiert\u2026",
+        "Refreshed sidecar tags for {count} images.":
+            "Sidecar-Tags f\u00fcr {count} Bilder aktualisiert.",
+        "Refreshed tags for {count} images; {errors} sidecars had errors.":
+            "Tags f\u00fcr {count} Bilder aktualisiert; {errors} Sidecar-Dateien enthielten Fehler.",
         "Remove this folder and delete its indexed images":
             "Diesen Ordner entfernen und seine indizierten Bilder l\u00f6schen",
         "Remove Folder": "Ordner entfernen",
@@ -456,6 +465,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Full Rescan": "R\u00e9indexation compl\u00e8te",
         "Force re-extract EXIF for every file in this folder":
             "Forcer la r\u00e9extraction EXIF pour chaque fichier de ce dossier",
+        "Refresh Tags": "Actualiser les tags",
+        "Re-read sidecar tag files for indexed images in this folder":
+            "Relire les fichiers de tags sidecar des images index\u00e9es dans ce dossier",
+        "Re-reading sidecar tags\u2026": "Relecture des tags sidecar\u2026",
+        "Refreshing sidecar tags\u2026": "Actualisation des tags sidecar\u2026",
+        "Refreshed sidecar tags for {count} images.":
+            "Tags sidecar actualis\u00e9s pour {count} images.",
+        "Refreshed tags for {count} images; {errors} sidecars had errors.":
+            "Tags actualis\u00e9s pour {count} images ; {errors} fichiers sidecar contenaient des erreurs.",
         "Remove this folder and delete its indexed images":
             "Supprimer ce dossier et ses images index\u00e9es",
         "Remove Folder": "Supprimer le dossier",
@@ -770,6 +788,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Full Rescan": "Reindicizzazione completa",
         "Force re-extract EXIF for every file in this folder":
             "Forza la rieestrazione EXIF per ogni file in questa cartella",
+        "Refresh Tags": "Aggiorna tag",
+        "Re-read sidecar tag files for indexed images in this folder":
+            "Rileggi i file di tag sidecar per le immagini indicizzate in questa cartella",
+        "Re-reading sidecar tags\u2026": "Rilettura dei tag sidecar\u2026",
+        "Refreshing sidecar tags\u2026": "Aggiornamento dei tag sidecar\u2026",
+        "Refreshed sidecar tags for {count} images.":
+            "Tag sidecar aggiornati per {count} immagini.",
+        "Refreshed tags for {count} images; {errors} sidecars had errors.":
+            "Tag aggiornati per {count} immagini; {errors} file sidecar contenevano errori.",
         "Remove this folder and delete its indexed images":
             "Rimuovi questa cartella ed elimina le sue immagini indicizzate",
         "Remove Folder": "Rimuovi cartella",
@@ -1081,6 +1108,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Full Rescan": "Re-indexaziun cumplaina",
         "Force re-extract EXIF for every file in this folder":
             "Forczar l\u2019extracziun EXIF per mintga datoteca en questa cartella",
+        "Refresh Tags": "Actualisar tags",
+        "Re-read sidecar tag files for indexed images in this folder":
+            "Releger ils fichiers da tags sidecar per ils maletgs indexads en questa cartella",
+        "Re-reading sidecar tags\u2026": "Releger ils tags sidecar\u2026",
+        "Refreshing sidecar tags\u2026": "Actualisar ils tags sidecar\u2026",
+        "Refreshed sidecar tags for {count} images.":
+            "Tags sidecar actualisads per {count} maletgs.",
+        "Refreshed tags for {count} images; {errors} sidecars had errors.":
+            "Tags actualisads per {count} maletgs; {errors} fichiers sidecar avevan errors.",
         "Remove this folder and delete its indexed images":
             "Stizzar questa cartella e ses maletgs indexads",
         "Remove Folder": "Stizzar cartella",
