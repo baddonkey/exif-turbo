@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEvent, QObject
+from PySide6.QtCore import QEvent, QObject, QPointF
 from PySide6.QtQuick import QQuickItem
 
 
@@ -64,8 +64,8 @@ class ListScrollFix(QObject):
         self._overlay: QQuickItem | None = None
 
     # ------------------------------------------------------------------
-    def _overlay_has_open_popup(self) -> bool:
-        """Return ``True`` while a Popup/Dialog/Menu is shown in the overlay.
+    def _overlay_contains(self, scene_position: QPointF) -> bool:
+        """Return ``True`` when visible overlay content covers the position.
 
         Foreground popups (their ``QQuickPopupItem``) are parented to the
         ``ApplicationWindow`` overlay only while open.  ``ApplicationWindow``'s
@@ -73,9 +73,9 @@ class ListScrollFix(QObject):
         ``property("overlay")``, so the ``QQuickOverlay`` item is located once
         by class name and cached.
 
-        While a popup is open the background lists must not steal the wheel
-        event, otherwise scrolling over e.g. the Third-Party Licenses dialog
-        moves the search results behind it instead of the dialog content.
+        Background lists must not steal wheel events from overlay content.
+        Checking the position is important for non-modal drawers, which leave
+        the rest of the window interactive while their popup item is open.
         """
         overlay = self._overlay
         if overlay is None:
@@ -86,16 +86,19 @@ class ListScrollFix(QObject):
                     break
         if overlay is None:
             return False
-        return any(child.isVisible() for child in overlay.childItems())
+        return any(
+            child.isVisible()
+            and child.boundingRect().contains(child.mapFromScene(scene_position))
+            for child in overlay.childItems()
+        )
 
     # ------------------------------------------------------------------
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # noqa: N802
         if event.type() != QEvent.Type.Wheel:
             return False
 
-        # A foreground popup/dialog owns the wheel event — let it through so
-        # the popup (not the background list) scrolls.
-        if self._overlay_has_open_popup():
+        # Foreground overlay content under the pointer owns the wheel event.
+        if self._overlay_contains(event.position()):  # type: ignore[attr-defined]
             return False
 
         lst: QQuickItem | None = self._window.findChild(QQuickItem, self._name)

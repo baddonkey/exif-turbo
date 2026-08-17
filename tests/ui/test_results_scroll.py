@@ -27,6 +27,8 @@ import pytest
 from PIL import Image
 from PySide6.QtCore import (
     QCoreApplication,
+    QMetaObject,
+    QObject,
     QPoint,
     QPointF,
     Qt,
@@ -206,6 +208,32 @@ class TestResultsListWheelScroll:
         assert content_y == pytest.approx(_ROW_HEIGHT, abs=1.0), (
             f"Expected contentY={_ROW_HEIGHT} after one notch, got {content_y:.1f}. "
             "pixelDelta branch may still be taken on Linux."
+        )
+
+    def test_single_notch_with_tagging_drawer_open_scrolls_one_row(
+        self,
+        qtbot: QtBot,
+        scroll_window: tuple[AppController, QQuickItem, QQuickWindow],
+    ) -> None:
+        """An open non-modal tagging drawer must not disable result scrolling."""
+        # Arrange
+        _controller, results_list, qml_window = scroll_window
+        drawer = qml_window.findChild(QObject, "taggingDrawer")
+        assert drawer is not None
+        results_list.setProperty("contentY", 0.0)
+        QMetaObject.invokeMethod(drawer, "open")
+        qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=2000)
+        QCoreApplication.processEvents()
+
+        # Act
+        _send_wheel(results_list, qml_window, angle_delta_y=-120, pixel_delta_y=-3)
+        qtbot.wait(50)
+
+        # Assert
+        content_y = float(results_list.property("contentY"))
+        assert content_y == pytest.approx(_ROW_HEIGHT, abs=1.0), (
+            f"Expected contentY={_ROW_HEIGHT} with tagging drawer open, "
+            f"got {content_y:.1f}."
         )
 
     def test_subnotch_events_accumulate_to_one_row(
