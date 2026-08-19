@@ -7,6 +7,8 @@ import re
 from babel.messages.pofile import read_po  # type: ignore[import-untyped]
 import pytest
 
+from scripts.populate_translations import TRANSLATIONS
+
 
 _ROOT = Path(__file__).resolve().parents[1]
 _QML_DIR = _ROOT / "src" / "exif_turbo" / "ui" / "qml"
@@ -76,6 +78,23 @@ def test_tagging_catalog_supported_locale_has_no_missing_translations(
         for message_id in _TAGGING_MESSAGES
         if (message := catalog.get(message_id)) is None or not message.string
     )
+
+    # Assert
+    assert missing == []
+
+
+@pytest.mark.parametrize("language", ("de", "fr", "it", "rm"))
+def test_tagging_population_source_supported_locale_has_all_qml_messages(
+    language: str,
+) -> None:
+    # Arrange
+    translations = TRANSLATIONS[language]
+    qml_messages = _qml_messages("TaggingDrawer.qml") | _qml_messages(
+        "TaggingSettings.qml"
+    )
+
+    # Act
+    missing = sorted(message for message in qml_messages if not translations.get(message))
 
     # Assert
     assert missing == []

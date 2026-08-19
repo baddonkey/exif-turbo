@@ -23,12 +23,15 @@ The end-to-end feature is implemented:
   labels, IDs, categories, vocabulary identity, and active aliases.
 - The Search/Browse tag button and `Ctrl+T` open the non-modal current-image
   drawer. It provides reusable custom tags, canonical/alias TGM search,
-  selected-image add/remove, proposal generation and review, a read-only view
-  of embedded source keywords, and a fixed final-derivative keyword preview.
-- The drawer copies accepted controlled and custom tags from the focused image
-  to marked images, the complete current result set, or the current Browse
-  folder. Add mode preserves target tags; replace mode requires confirmation;
-  both exclude the source image and run in a cancellable worker.
+  selected-image add/remove, proposal generation and review, per-keyword or
+  ignore-all derivative exclusions for embedded source keywords, and a fixed
+  final-derivative keyword preview. Exclusions persist in schema-v1 sidecars.
+- The drawer copies accepted controlled/custom tags and embedded-keyword ignore
+  settings from the focused image to marked images, the complete current result
+  set, or the current Browse folder. Individual exclusions transfer only when
+  the target contains that embedded keyword. Add mode merges target state;
+  replace mode requires confirmation and substitutes it. Both exclude the
+  source image and run in a cancellable worker.
 - Each Indexed Folders row can force-refresh sidecar-derived tags for its
   indexed images without re-extracting EXIF or rebuilding previews.
 - Proposal generation requires AI enabled, an explicit image AI scan, and an
@@ -37,9 +40,9 @@ The end-to-end feature is implemented:
   is kept at least 0.01 above the proposal threshold.
 - Derivatives preserve source format and relative trees, require an output root
   outside indexed sources, skip untagged/existing destinations, write and
-  verify the deduplicated union of live embedded keywords and accepted labels
-  in XMP Subject plus IPTC Keywords on temporary copies, and never copy sidecars
-  or overwrite originals.
+  verify the deduplicated union of non-excluded live embedded keywords and
+  accepted labels in XMP Subject plus IPTC Keywords on temporary copies, and
+  never copy sidecars or overwrite originals.
 
 Known version 1 limitations include no sidecar encryption/relocation/cloud
 sync, no generic or additional vocabulary import, no hierarchical tag browser,
@@ -123,7 +126,9 @@ may write accepted tags into the derivative's metadata.
    never write an original image.
 2. A sidecar is the source of truth for accepted tags. SQLite and FAISS data
    are rebuildable indexes and caches.
-3. Only accepted tags are included in full-text search and derivative metadata.
+3. Only accepted tags enter full-text search. Derivative metadata also includes
+  embedded keywords not excluded by the sidecar; ignore-all suppresses every
+  embedded keyword.
 4. A pending or rejected proposal never changes a sidecar.
 5. TGM aliases always resolve to one canonical postable concept before a tag is
    stored.
@@ -174,7 +179,9 @@ fall back to hidden or central storage.
       }
     }
   ],
-  "free_tags": ["Family", "Summer 2026"]
+  "free_tags": ["Family", "Summer 2026"],
+  "excluded_embedded_tags": ["Private"],
+  "exclude_all_embedded_tags": false
 }
 ```
 
@@ -192,6 +199,8 @@ TGM record pair.
 | `updated_at` | Required UTC RFC 3339 timestamp written after a successful mutation. |
 | `tags` | Required array, unique by `concept_id`. Order is deterministic by canonical label and then ID. |
 | `free_tags` | Optional array of NFC-normalized, trimmed strings. Values must be non-empty, contain no control characters, and be unique ignoring case. Order is deterministic by label. |
+| `excluded_embedded_tags` | Optional array of NFC-normalized, trimmed embedded labels, unique ignoring case. Matching against embedded metadata is case-insensitive. |
+| `exclude_all_embedded_tags` | Optional boolean, default `false`. When true, no embedded keyword is included in derivative output. |
 | `concept_id` | Required qualified TGM identifier `loc-tgm:tgmNNNNNN`. |
 | `label` | Required canonical-label snapshot from the active TGM version when accepted. |
 | `vocabulary` | Required value `loc-tgm` in version 1. |
@@ -466,26 +475,31 @@ Direct add, remove, and proposal-review controls are deliberately limited to
 the focused image. The drawer also exposes Copy Tags, a focused-source bulk
 action described in section 10.2. At the top it displays existing XMP Subject,
 IPTC Keywords, and hierarchical-subject values from the indexed metadata as a
-read-only list. These source-image values are not sidecar tags and cannot be
-changed from the drawer. A fixed footer displays the final derivative keyword
-preview: existing embedded keywords merged with accepted controlled and custom
-tags, case-insensitively deduplicated and deterministically sorted.
+read-only list. These source-image values are not sidecar tags and are never
+changed by the drawer, but users can exclude individual values or ignore all
+embedded values for derivative output. A fixed footer displays the final
+derivative keyword preview: included embedded keywords merged with accepted
+controlled and custom tags, case-insensitively deduplicated and deterministically
+sorted.
 
 ### 10.2 Copy Tags, marks, and derivative scope
 
-The tagging drawer copies accepted controlled and custom tags from its focused
-source image to one of three target sets:
+The tagging drawer copies accepted controlled/custom tags and embedded-keyword
+ignore settings from its focused source image to one of three target sets:
 
 - All marked images.
 - The complete current search result set, including unloaded pages.
 - All indexed images in the current Browse folder.
 
-The source image is excluded from every target set. Add mode keeps existing
-target tags and adds missing source tags. Replace mode removes target accepted
-controlled and custom tags before copying the source set, so QML requires an
-explicit confirmation. Each target write uses the revision-checked mutation
-boundary from section 10.3. The cancellable worker reports changed, unchanged,
-conflicted, and failed items and refreshes search and tagging state when done.
+The source image is excluded from every target set. Individual exclusions are
+copied only when the same embedded label exists on the target. Add mode keeps
+existing target tags/exclusions, adds missing source values, and keeps
+ignore-all enabled when either image enables it. Replace mode substitutes the
+target's accepted tags, applicable exclusions, and ignore-all value, so QML
+requires explicit confirmation. Each target write uses the revision-checked
+mutation boundary from section 10.3. The cancellable worker reports changed,
+unchanged, conflicted, and failed items and refreshes search and tagging state
+when done.
 
 Version 1 still does not expose arbitrary aggregate bulk tag add/remove,
 aggregate tag state, or marked-image proposal review in QML.
@@ -529,7 +543,7 @@ untagged derivative or output directory is created for those items.
 ### 11.2 Metadata mapping
 
 Accepted canonical TGM labels and custom free-tag labels are merged with the
-existing values of these keyword fields on the derivative:
+non-excluded values of these keyword fields on the derivative:
 
 - `XMP-dc:Subject`
 - `IPTC:Keywords`
@@ -537,9 +551,11 @@ existing values of these keyword fields on the derivative:
 Other copied metadata is preserved. A narrow ExifTool writer adapter invokes
 ExifTool with no-backup/overwrite-original behavior against the derivative.
 The adapter must reject a target that resolves to an original source path. It
-reads keywords from the copied file before writing, removes duplicates
-case-insensitively, gives accepted additions spelling precedence, and verifies
-the final sorted labels in both fields.
+reads keywords from the copied file before writing, filters labels matching
+`excluded_embedded_tags` case-insensitively or removes all embedded labels when
+`exclude_all_embedded_tags` is true, removes duplicates case-insensitively,
+gives accepted additions spelling precedence, and verifies the final sorted
+labels in both fields.
 
 If metadata writing or verification fails, EXIF Turbo removes the incomplete
 derivative where possible and reports the failure. The source hash and mtime
@@ -618,7 +634,10 @@ tags can be edited or proposals rebuilt.
 ### 14.5 Bulk copy and derivatives
 
 - Add/replace Copy Tags across marked, current-results, and Browse-folder
-  scopes; source exclusion, partial completion, cancellation, and conflicts.
+  scopes; target-aware individual exclusions, ignore-all semantics, source
+  exclusion, partial completion, cancellation, and conflicts.
+- Sidecar round-trip, case-insensitive exclusion, ignore-all, and live
+  derivative enforcement after the copied file is reread.
 - Preserved folder trees, multiple source roots, and destination collisions.
 - Exact ExifTool target and XMP/IPTC arguments through a fake process boundary.
 - Cleanup after metadata failure and byte-for-byte unchanged originals.
@@ -651,15 +670,17 @@ Version 1 is complete when:
 4. CLIP can propose ranked canonical TGM tags from existing image vectors.
 5. Review-first and explicitly enabled threshold auto-acceptance both retain
    complete provenance.
-6. A user can review embedded source keywords and preview the exact merged,
-   deduplicated keyword set that will be written to a derivative.
+6. A user can exclude individual embedded source keywords or ignore them all,
+   persist that choice, and preview the exact merged, deduplicated keyword set
+   that will be written to a derivative.
 7. A user can generate derivatives that contain canonical TGM labels in XMP
    Subject and IPTC Keywords while original hashes and mtimes remain unchanged.
 8. Existing databases migrate without losing images, metadata, marks, or search
    behavior.
-9. A user can copy accepted controlled and custom tags from the focused image
-  to marked images, current results, or the current Browse folder in add or
-  confirmed replace mode without mutating the source image.
+9. A user can copy accepted controlled/custom tags and target-applicable ignore
+  settings from the focused image to marked images, current results, or the
+  current Browse folder in add or confirmed replace mode without mutating the
+  source image.
 10. A user can force-refresh one indexed folder's sidecars so added, changed,
    deleted, and malformed files update or report their cache state without an
    EXIF or preview rebuild.
@@ -697,3 +718,4 @@ Version 1 is complete when:
 | 2026-08-14 | Merge live embedded keywords with accepted labels and deduplicate them before verified derivative writes. |
 | 2026-08-17 | Add focused-source Copy Tags for marked images, current results, and the current Browse folder, with additive and confirmed replacement modes. |
 | 2026-08-17 | Add per-folder forced sidecar refresh without EXIF extraction or preview rebuilding. |
+| 2026-08-20 | Persist per-original embedded-tag exclusions and ignore-all in schema-v1 sidecars; enforce them during derivative export and copy only target-applicable exclusions. |

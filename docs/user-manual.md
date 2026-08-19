@@ -817,9 +817,10 @@ definitions](https://www.loc.gov/pictures/collection/tgm/fields.html), and
 
 ### Sidecars and search
 
-The first accepted tag for `photo.jpg` creates `photo.jpg.sidecar.json` beside
-the image. Sidecars are deterministic UTF-8 JSON and are the authoritative
-store for accepted tags. They are plain text: SQLCipher database encryption
+The first tagging change for `photo.jpg`, including an embedded-tag exclusion,
+creates `photo.jpg.sidecar.json` beside the image. Sidecars are deterministic
+UTF-8 JSON and are the authoritative store for accepted tags and derivative
+exclusions. They are plain text: SQLCipher database encryption
 does **not** encrypt them, so they inherit the source folder's permissions and
 backup policy. Tagging never changes the original image's bytes or timestamp.
 
