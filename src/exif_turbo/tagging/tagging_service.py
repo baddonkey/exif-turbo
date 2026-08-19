@@ -4,6 +4,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
+import json
 from pathlib import Path
 
 from ..data.image_index_repository import ImageIndexRepository
@@ -17,6 +18,7 @@ from ..models.tag_proposal import (
     TagProposalStatus,
 )
 from ..models.tgm import TgmCategory, TgmConcept, TgmSnapshot
+from .derivative_export_service import extract_embedded_keyword_labels
 from .sidecar_repository import (
     FilesystemSidecarRepository,
     LoadedSidecar,
@@ -225,6 +227,54 @@ class TaggingService:
         self._update_cache(image_path, updated, revision)
         return TagMutationResult(image_path, True, updated)
 
+    def set_embedded_tag_excluded(
+        self,
+        image_path: str,
+        label: str,
+        excluded: bool,
+    ) -> TagMutationResult:
+        normalized_label = self._normalize_free_tag(label)
+        path = Path(image_path)
+        loaded = self._read_sidecar(path)
+        sidecar = self._load_or_create_sidecar(path, loaded)
+        exclusions_by_key = {
+            value.casefold(): value for value in sidecar.excluded_embedded_tags
+        }
+        if excluded:
+            exclusions_by_key.setdefault(normalized_label.casefold(), normalized_label)
+        else:
+            exclusions_by_key.pop(normalized_label.casefold(), None)
+        exclusions = tuple(exclusions_by_key.values())
+        if exclusions == sidecar.excluded_embedded_tags:
+            return TagMutationResult(image_path, False, sidecar)
+        updated = replace(
+            sidecar,
+            updated_at=self._timestamp(),
+            excluded_embedded_tags=exclusions,
+        )
+        revision = self._write_sidecar(path, updated, loaded)
+        self._update_cache(image_path, updated, revision)
+        return TagMutationResult(image_path, True, updated)
+
+    def set_all_embedded_tags_excluded(
+        self,
+        image_path: str,
+        excluded: bool,
+    ) -> TagMutationResult:
+        path = Path(image_path)
+        loaded = self._read_sidecar(path)
+        sidecar = self._load_or_create_sidecar(path, loaded)
+        if sidecar.exclude_all_embedded_tags == excluded:
+            return TagMutationResult(image_path, False, sidecar)
+        updated = replace(
+            sidecar,
+            updated_at=self._timestamp(),
+            exclude_all_embedded_tags=excluded,
+        )
+        revision = self._write_sidecar(path, updated, loaded)
+        self._update_cache(image_path, updated, revision)
+        return TagMutationResult(image_path, True, updated)
+
     def accept_proposal(self, proposal: TagProposal) -> TagMutationResult:
         concept = self._resolve_concept(proposal.concept_id)
         tag = self._build_clip_tag(
@@ -320,6 +370,12 @@ class TaggingService:
         source_sidecar = source_state.sidecar
         source_tags = () if source_sidecar is None else source_sidecar.tags
         source_free_tags = () if source_sidecar is None else source_sidecar.free_tags
+        source_excluded_embedded_tags = (
+            () if source_sidecar is None else source_sidecar.excluded_embedded_tags
+        )
+        source_exclude_all_embedded_tags = (
+            False if source_sidecar is None else source_sidecar.exclude_all_embedded_tags
+        )
         targets = (
             path
             for path in target_image_paths
@@ -331,6 +387,8 @@ class TaggingService:
                 path,
                 source_tags,
                 source_free_tags,
+                source_excluded_embedded_tags,
+                source_exclude_all_embedded_tags,
                 mode,
             ),
             on_progress=on_progress,
@@ -430,14 +488,26 @@ class TaggingService:
         image_path: str,
         source_tags: tuple[ImageTag, ...],
         source_free_tags: tuple[str, ...],
+        source_excluded_embedded_tags: tuple[str, ...],
+        source_exclude_all_embedded_tags: bool,
         mode: CopyTagsMode,
     ) -> TagMutationResult:
         path = Path(image_path)
         loaded = self._read_sidecar(path)
         sidecar = self._load_or_create_sidecar(path, loaded)
+        embedded_keys = {
+            label.casefold() for label in self._embedded_tags_for_path(image_path)
+        }
+        applicable_exclusions = tuple(
+            label
+            for label in source_excluded_embedded_tags
+            if label.casefold() in embedded_keys
+        )
         if mode is CopyTagsMode.REPLACE:
             tags = self._ordered_tags(source_tags)
             free_tags = source_free_tags
+            excluded_embedded_tags = applicable_exclusions
+            exclude_all_embedded_tags = source_exclude_all_embedded_tags
         elif mode is CopyTagsMode.ADD:
             tags_by_id = {tag.concept_id: tag for tag in sidecar.tags}
             for tag in source_tags:
@@ -447,19 +517,48 @@ class TaggingService:
             for tag in source_free_tags:
                 free_tags_by_key.setdefault(tag.casefold(), tag)
             free_tags = tuple(free_tags_by_key.values())
+            exclusions_by_key = {
+                tag.casefold(): tag for tag in sidecar.excluded_embedded_tags
+            }
+            for tag in applicable_exclusions:
+                exclusions_by_key.setdefault(tag.casefold(), tag)
+            excluded_embedded_tags = tuple(exclusions_by_key.values())
+            exclude_all_embedded_tags = (
+                sidecar.exclude_all_embedded_tags
+                or source_exclude_all_embedded_tags
+            )
         else:
             raise ValueError(f"unknown copy tags mode: {mode}")
-        if tags == sidecar.tags and free_tags == sidecar.free_tags:
+        if (
+            tags == sidecar.tags
+            and free_tags == sidecar.free_tags
+            and excluded_embedded_tags == sidecar.excluded_embedded_tags
+            and exclude_all_embedded_tags == sidecar.exclude_all_embedded_tags
+        ):
             return TagMutationResult(image_path, False, sidecar)
         updated = replace(
             sidecar,
             updated_at=self._timestamp(),
             tags=tags,
             free_tags=free_tags,
+            excluded_embedded_tags=excluded_embedded_tags,
+            exclude_all_embedded_tags=exclude_all_embedded_tags,
         )
         revision = self._write_sidecar(path, updated, loaded)
         self._update_cache(image_path, updated, revision)
         return TagMutationResult(image_path, True, updated)
+
+    def _embedded_tags_for_path(self, image_path: str) -> tuple[str, ...]:
+        rows = self._image_repository.get_images_by_paths([image_path])
+        if not rows:
+            return ()
+        try:
+            metadata = json.loads(rows[0][3])
+        except (TypeError, json.JSONDecodeError):
+            return ()
+        if not isinstance(metadata, dict):
+            return ()
+        return extract_embedded_keyword_labels(metadata)
 
     def _apply_auto_generation(
         self,

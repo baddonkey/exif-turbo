@@ -36,6 +36,11 @@ from .view_models.app_controller import AppController
 
 _qt_log = logging.getLogger("qt")
 
+_IGNORED_QT_INFO_MESSAGES = {
+    "libpng warning: iCCP: profile 'ICC Profile': 'CMYK': "
+    "invalid ICC profile color space",
+}
+
 _QT_MSG_LEVEL = {
     QtMsgType.QtDebugMsg: logging.DEBUG,
     QtMsgType.QtInfoMsg: logging.INFO,
@@ -46,7 +51,14 @@ _QT_MSG_LEVEL = {
 
 
 def _qt_message_handler(msg_type: QtMsgType, _context: object, message: str) -> None:
+    if message in _IGNORED_QT_INFO_MESSAGES:
+        _qt_log.debug(message)
+        return
     _qt_log.log(_QT_MSG_LEVEL.get(msg_type, logging.WARNING), message)
+
+
+def _configure_third_party_logging() -> None:
+    logging.getLogger("faiss.loader").setLevel(logging.WARNING)
 
 
 def _ensure_pyside6_dll_search_path() -> None:
@@ -173,6 +185,7 @@ def _force_macos_menu_language() -> None:
 def main() -> None:
     args = parse_args()
     logging.basicConfig(level=logging.INFO)
+    _configure_third_party_logging()
     qInstallMessageHandler(_qt_message_handler)
     _ensure_pyside6_dll_search_path()
     if os.name == "nt":

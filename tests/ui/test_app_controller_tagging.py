@@ -27,6 +27,7 @@ from exif_turbo.tagging.derivative_export_service import (
     DerivativeExportResult,
     DerivativeExportStatus,
 )
+from exif_turbo.tagging.sidecar_repository import FilesystemSidecarRepository
 from exif_turbo.ui.models.checked_filter_proxy_model import CheckedFilterProxyModel
 from exif_turbo.ui.models.exif_list_model import ExifListModel
 from exif_turbo.ui.models.folder_list_model import FolderListModel
@@ -166,6 +167,41 @@ def test_app_controller_selection_exposes_deduplicated_embedded_tags_read_only(
         for row in range(3)
     ] == ["Family", "Summer", "Vacation"]
     assert controller.freeTagsModel.rowCount() == 0
+
+
+def test_app_controller_embedded_exclusion_updates_preview_and_sidecar(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, search_model, _db_path, image_path = tagging_controller
+    search_model.set_rows(
+        [
+            SearchResult(
+                path=str(image_path),
+                filename=image_path.name,
+                metadata_json='{"IPTC:Keywords": ["Family", "Private"]}',
+                size=5,
+                mtime=1.0,
+                image_id=1,
+            )
+        ]
+    )
+    controller._select_source_row(0)
+
+    # Act
+    controller.setSelectedEmbeddedTagExcluded("private", True)
+
+    # Assert
+    model = controller.embeddedTagsModel
+    loaded = FilesystemSidecarRepository().read(image_path)
+    assert model.data(model.index(1), model.ExcludedRole) is True
+    assert controller.derivativeTagsModel.rowCount() == 1
+    assert controller.derivativeTagsModel.data(
+        controller.derivativeTagsModel.index(0),
+        controller.derivativeTagsModel.LabelRole,
+    ) == "Family"
+    assert loaded is not None
+    assert loaded.sidecar.excluded_embedded_tags == ("private",)
 
 
 def test_app_controller_clear_selection_clears_embedded_tags(

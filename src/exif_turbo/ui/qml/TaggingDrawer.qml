@@ -178,6 +178,14 @@ Drawer {
                         font.pixelSize: 13
                         font.weight: Font.DemiBold
                     }
+                    Switch {
+                        objectName: "excludeAllEmbeddedTagsSwitch"
+                        Layout.fillWidth: true
+                        visible: embeddedTags.count > 0
+                        text: qsTr("Ignore all existing tags")
+                        checked: appController ? appController.excludeAllEmbeddedTags : false
+                        onToggled: appController.setExcludeAllSelectedEmbeddedTags(checked)
+                    }
                     Label {
                         visible: embeddedTags.count === 0
                         text: qsTr("No embedded tags found.")
@@ -194,15 +202,26 @@ Drawer {
                         interactive: contentHeight > height
                         model: appController ? appController.embeddedTagsModel : null
                         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-                        delegate: Label {
+                        delegate: ItemDelegate {
                             required property string label
+                            required property bool excluded
+                            readonly property bool effectivelyExcluded: excluded
+                                || appController.excludeAllEmbeddedTags
                             width: embeddedTags.width
-                            height: 28
-                            text: label
-                            elide: Text.ElideRight
-                            verticalAlignment: Text.AlignVCenter
-                            font.pixelSize: 12
-                            opacity: 0.75
+                            height: 34
+                            highlighted: effectivelyExcluded
+                            enabled: !appController.excludeAllEmbeddedTags
+                            onClicked: appController.setSelectedEmbeddedTagExcluded(
+                                label, !excluded
+                            )
+                            contentItem: Label {
+                                text: label
+                                elide: Text.ElideRight
+                                verticalAlignment: Text.AlignVCenter
+                                font.pixelSize: 12
+                                font.strikeout: effectivelyExcluded
+                                opacity: effectivelyExcluded ? 0.55 : 0.85
+                            }
                         }
                     }
                 }

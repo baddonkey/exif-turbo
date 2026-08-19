@@ -72,6 +72,8 @@ class DerivativeExportPlanItem:
     source: Path
     destination: Path
     labels: tuple[str, ...]
+    excluded_embedded_tags: tuple[str, ...] = ()
+    exclude_all_embedded_tags: bool = False
     planned_status: DerivativeExportStatus | None = None
     message: str | None = None
 
@@ -134,6 +136,8 @@ class MetadataWriter(Protocol):
         labels: Sequence[str],
         *,
         forbidden_sources: Iterable[Path] = (),
+        excluded_labels: Iterable[str] = (),
+        preserve_existing_keywords: bool = True,
     ) -> None: ...
 
 
@@ -208,7 +212,7 @@ class DerivativeExportService:
                     f"multiple sources resolve to destination: {destination}"
                 )
             destination_keys.add(destination_key)
-            labels = self._accepted_labels(source)
+            labels, excluded_labels, exclude_all = self._derivative_labels(source)
             status: DerivativeExportStatus | None = None
             message: str | None = None
             if destination.exists():
@@ -222,6 +226,8 @@ class DerivativeExportService:
                     source=source,
                     destination=destination,
                     labels=labels,
+                    excluded_embedded_tags=excluded_labels,
+                    exclude_all_embedded_tags=exclude_all,
                     planned_status=status,
                     message=message,
                 )
@@ -280,6 +286,8 @@ class DerivativeExportService:
                 temporary,
                 item.labels,
                 forbidden_sources=sources,
+                excluded_labels=item.excluded_embedded_tags,
+                preserve_existing_keywords=not item.exclude_all_embedded_tags,
             )
             if cancel_check is not None and cancel_check():
                 return self._result(
@@ -301,10 +309,13 @@ class DerivativeExportService:
             except OSError:
                 pass
 
-    def _accepted_labels(self, source: Path) -> tuple[str, ...]:
+    def _derivative_labels(
+        self,
+        source: Path,
+    ) -> tuple[tuple[str, ...], tuple[str, ...], bool]:
         loaded_sidecar = self._sidecar_repository.read(source)
         if loaded_sidecar is None:
-            return ()
+            return (), (), False
         accepted_labels = [
             tag.label.strip()
             for tag in loaded_sidecar.sidecar.tags
@@ -316,9 +327,12 @@ class DerivativeExportService:
             if label.strip()
         )
         if not accepted_labels:
-            return ()
+            return (), (), loaded_sidecar.sidecar.exclude_all_embedded_tags
         embedded_labels: tuple[str, ...] = ()
-        rows = self._image_repository.get_images_by_paths([str(source)])
+        if not loaded_sidecar.sidecar.exclude_all_embedded_tags:
+            rows = self._image_repository.get_images_by_paths([str(source)])
+        else:
+            rows = []
         if rows:
             try:
                 metadata = json.loads(rows[0][3])
@@ -326,7 +340,18 @@ class DerivativeExportService:
                     embedded_labels = extract_embedded_keyword_labels(metadata)
             except (TypeError, json.JSONDecodeError):
                 pass
-        return merge_keyword_labels(accepted_labels, embedded_labels)
+        excluded_keys = {
+            label.casefold()
+            for label in loaded_sidecar.sidecar.excluded_embedded_tags
+        }
+        embedded_labels = tuple(
+            label for label in embedded_labels if label.casefold() not in excluded_keys
+        )
+        return (
+            merge_keyword_labels(accepted_labels, embedded_labels),
+            loaded_sidecar.sidecar.excluded_embedded_tags,
+            loaded_sidecar.sidecar.exclude_all_embedded_tags,
+        )
 
     @classmethod
     def _normalize_roots(

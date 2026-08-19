@@ -922,6 +922,10 @@ msgid "Existing image tags"
 msgstr "Vorhandene Bild-Tags"
 
 #: QML
+msgid "Ignore all existing tags"
+msgstr "Alle vorhandenen Tags ignorieren"
+
+#: QML
 msgid "Export Metadata as &JSON (%1 selected)"
 msgstr "Metadaten als &JSON exportieren (%1 ausgewählt)"
 
