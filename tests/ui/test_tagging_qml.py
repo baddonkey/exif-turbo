@@ -69,6 +69,11 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
     assert 'objectName: "freeTagSuggestions"' in source
     assert 'objectName: "currentFreeTags"' in source
     assert 'objectName: "embeddedTags"' in source
+    assert 'objectName: "excludeAllEmbeddedTagsSwitch"' in drawer_source
+    assert "setExcludeAllSelectedEmbeddedTags(checked)" in drawer_source
+    assert "setSelectedEmbeddedTagExcluded(" in drawer_source
+    assert "label, !excluded" in drawer_source
+    assert "font.strikeout: effectivelyExcluded" in drawer_source
     assert 'objectName: "derivativeTagsFooter"' in source
     assert 'objectName: "finalDerivativeTags"' in source
     assert source.index('objectName: "derivativeTagsFooter"') > source.index(

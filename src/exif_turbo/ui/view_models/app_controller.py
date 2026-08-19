@@ -66,6 +66,7 @@ from ...utils.thumb_cache import thumb_cache_name_from_stamp
 from ..models.checked_filter_proxy_model import CheckedFilterProxyModel
 from ..models.accepted_tag_list_model import AcceptedTagListModel
 from ..models.exif_list_model import ExifListModel
+from ..models.embedded_tag_list_model import EmbeddedTagListModel
 from ..models.folder_list_model import FolderListModel
 from ..models.free_tag_list_model import FreeTagListModel
 from ..models.marked_tag_list_model import MarkedTagListModel
@@ -362,9 +363,11 @@ class AppController(QObject):
         self._tgm_repository: TgmSnapshotRepository | None = None
         self._tagging_service: TaggingService | None = None
         self._accepted_tags_model = AcceptedTagListModel()
-        self._embedded_tags_model = FreeTagListModel()
+        self._embedded_tags_model = EmbeddedTagListModel()
         self._derivative_tags_model = FreeTagListModel()
         self._embedded_tags: tuple[str, ...] = ()
+        self._excluded_embedded_tags: tuple[str, ...] = ()
+        self._exclude_all_embedded_tags = False
         self._free_tags_model = FreeTagListModel()
         self._free_tag_suggestions_model = FreeTagListModel()
         self._tgm_search_model = TgmSearchListModel()
@@ -560,6 +563,10 @@ class AppController(QObject):
     @Property(QObject, constant=True)
     def embeddedTagsModel(self) -> QObject:
         return self._embedded_tags_model
+
+    @Property(bool, notify=taggingStateChanged)
+    def excludeAllEmbeddedTags(self) -> bool:
+        return self._exclude_all_embedded_tags
 
     @Property(QObject, constant=True)
     def derivativeTagsModel(self) -> QObject:
@@ -3691,6 +3698,9 @@ class AppController(QObject):
         if not path or self._tagging_service is None:
             self._accepted_tags_model.set_rows([])
             self._free_tags_model.set_rows([])
+            self._excluded_embedded_tags = ()
+            self._exclude_all_embedded_tags = False
+            self._refresh_embedded_tag_rows()
             self._derivative_tags_model.set_rows(self._embedded_tags if path else ())
             if not preserve_proposals:
                 self._pending_proposals_model.set_rows([])
@@ -3699,11 +3709,19 @@ class AppController(QObject):
             state = self._tagging_service.get_image_tagging_state(path)
             self._accepted_tags_model.set_rows(state.accepted_tags)
             self._free_tags_model.set_rows(state.free_tags)
+            sidecar = state.sidecar
+            self._excluded_embedded_tags = (
+                () if sidecar is None else sidecar.excluded_embedded_tags
+            )
+            self._exclude_all_embedded_tags = (
+                False if sidecar is None else sidecar.exclude_all_embedded_tags
+            )
+            self._refresh_embedded_tag_rows()
             self._derivative_tags_model.set_rows(
                 merge_keyword_labels(
                     (tag.label for tag in state.accepted_tags),
                     state.free_tags,
-                    self._embedded_tags,
+                    self._included_embedded_tags(),
                 )
             )
             if not preserve_proposals:
@@ -3712,11 +3730,25 @@ class AppController(QObject):
         except Exception as exc:  # noqa: BLE001
             self._accepted_tags_model.set_rows([])
             self._free_tags_model.set_rows([])
-            self._derivative_tags_model.set_rows(self._embedded_tags)
+            self._derivative_tags_model.set_rows(self._included_embedded_tags())
             if not preserve_proposals:
                 self._pending_proposals_model.set_rows([])
             self._selected_tagging_error = str(exc)
         self.taggingStateChanged.emit()
+
+    def _included_embedded_tags(self) -> tuple[str, ...]:
+        if self._exclude_all_embedded_tags:
+            return ()
+        excluded_keys = {label.casefold() for label in self._excluded_embedded_tags}
+        return tuple(
+            label for label in self._embedded_tags if label.casefold() not in excluded_keys
+        )
+
+    def _refresh_embedded_tag_rows(self) -> None:
+        excluded_keys = {label.casefold() for label in self._excluded_embedded_tags}
+        self._embedded_tags_model.set_rows(
+            (label, label.casefold() in excluded_keys) for label in self._embedded_tags
+        )
 
     def _refresh_marked_tagging_state(self) -> None:
         if self._tagging_service is None or not self.tgmInstalled:
@@ -3748,6 +3780,32 @@ class AppController(QObject):
     @Slot(str)
     def removeSelectedFreeTag(self, label: str) -> None:
         self._mutate_selected_free_tag(label, remove=True)
+
+    @Slot(str, bool)
+    def setSelectedEmbeddedTagExcluded(self, label: str, excluded: bool) -> None:
+        path = self._search_model.get_path(self._current_result_row)
+        if path is None or self._tagging_service is None or not self.freeTaggingAvailable:
+            return
+        try:
+            self._tagging_service.set_embedded_tag_excluded(path, label, excluded)
+            self._selected_tagging_error = ""
+            self._refresh_selected_tagging_state(preserve_proposals=True)
+        except Exception as exc:  # noqa: BLE001
+            self._selected_tagging_error = str(exc)
+            self.taggingStateChanged.emit()
+
+    @Slot(bool)
+    def setExcludeAllSelectedEmbeddedTags(self, excluded: bool) -> None:
+        path = self._search_model.get_path(self._current_result_row)
+        if path is None or self._tagging_service is None or not self.freeTaggingAvailable:
+            return
+        try:
+            self._tagging_service.set_all_embedded_tags_excluded(path, excluded)
+            self._selected_tagging_error = ""
+            self._refresh_selected_tagging_state(preserve_proposals=True)
+        except Exception as exc:  # noqa: BLE001
+            self._selected_tagging_error = str(exc)
+            self.taggingStateChanged.emit()
 
     def _mutate_selected_free_tag(self, label: str, *, remove: bool) -> None:
         if not self.freeTaggingAvailable:
@@ -4376,6 +4434,8 @@ class AppController(QObject):
             self.geoWikipediaUrlChanged.emit()
         self._exif_model.set_rows([])
         self._embedded_tags = ()
+        self._excluded_embedded_tags = ()
+        self._exclude_all_embedded_tags = False
         self._embedded_tags_model.set_rows([])
         self._derivative_tags_model.set_rows([])
         self._selected_image_source = ""
@@ -4416,7 +4476,7 @@ class AppController(QObject):
             parsed = json.loads(meta_json)
             if isinstance(parsed, dict):
                 self._embedded_tags = extract_embedded_keyword_labels(parsed)
-                self._embedded_tags_model.set_rows(self._embedded_tags)
+                self._refresh_embedded_tag_rows()
                 self._derivative_tags_model.set_rows(self._embedded_tags)
                 rows = sorted(
                     [(str(k), str(v)) for k, v in parsed.items()],
@@ -4438,6 +4498,8 @@ class AppController(QObject):
             pass
         self._exif_model.set_rows([])
         self._embedded_tags = ()
+        self._excluded_embedded_tags = ()
+        self._exclude_all_embedded_tags = False
         self._embedded_tags_model.set_rows([])
         self._derivative_tags_model.set_rows([])
         if self._geo_location_url:

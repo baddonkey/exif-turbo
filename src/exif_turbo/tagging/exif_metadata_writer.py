@@ -24,6 +24,8 @@ class ExifMetadataWriter:
         labels: Sequence[str],
         *,
         forbidden_sources: Iterable[Path] = (),
+        excluded_labels: Iterable[str] = (),
+        preserve_existing_keywords: bool = True,
     ) -> None:
         resolved_target = target.resolve()
         forbidden = {source.resolve() for source in forbidden_sources}
@@ -33,7 +35,14 @@ class ExifMetadataWriter:
             )
 
         fields = self._keyword_fields(target)
-        labels = self._merge_labels(labels, self._read_keywords(target, fields))
+        current_labels = (
+            self._read_keywords(target, fields) if preserve_existing_keywords else ()
+        )
+        excluded_keys = {label.casefold() for label in excluded_labels}
+        current_labels = tuple(
+            label for label in current_labels if label.casefold() not in excluded_keys
+        )
+        labels = self._merge_labels(labels, current_labels)
         clear_arguments = [
             find_exiftool(),
             "-m",

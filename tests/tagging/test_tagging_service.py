@@ -110,6 +110,23 @@ def _add_indexed_image(
     return image_path
 
 
+def test_tagging_service_embedded_exclusions_persist_in_sidecar(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    service, _image_repository, image_path = _service(tmp_path)
+
+    # Act
+    service.set_embedded_tag_excluded(str(image_path), "Private", True)
+    service.set_all_embedded_tags_excluded(str(image_path), True)
+
+    # Assert
+    loaded = FilesystemSidecarRepository().read(image_path)
+    assert loaded is not None
+    assert loaded.sidecar.excluded_embedded_tags == ("Private",)
+    assert loaded.sidecar.exclude_all_embedded_tags is True
+
+
 def test_tagging_service_add_alias_creates_canonical_sidecar_and_cache(
     tmp_path: Path,
 ) -> None:
@@ -275,6 +292,40 @@ def test_tagging_service_copy_tags_add_merges_deduplicates_and_excludes_source(
     assert service.get_image_tagging_state(str(source_path)).sidecar is not None
 
 
+def test_tagging_service_copy_tags_add_copies_only_applicable_exclusions(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    service, image_repository, source_path = _service(tmp_path)
+    target_path = _add_indexed_image(image_repository, tmp_path, "target.jpg")
+    target_stat = target_path.stat()
+    image_repository.upsert_image(
+        str(target_path),
+        target_path.name,
+        target_stat.st_mtime,
+        target_stat.st_size,
+        {"IPTC:Keywords": ["Private", "Target only"]},
+        "",
+    )
+    service.set_embedded_tag_excluded(str(source_path), "Private", True)
+    service.set_embedded_tag_excluded(str(source_path), "Source only", True)
+    service.set_all_embedded_tags_excluded(str(source_path), True)
+
+    # Act
+    result = service.copy_tags_to_paths(
+        str(source_path),
+        [str(target_path)],
+        CopyTagsMode.ADD,
+    )
+
+    # Assert
+    target = service.get_image_tagging_state(str(target_path)).sidecar
+    assert result.succeeded_count == 1
+    assert target is not None
+    assert target.excluded_embedded_tags == ("Private",)
+    assert target.exclude_all_embedded_tags is True
+
+
 def test_tagging_service_copy_tags_replace_preserves_target_sidecar_metadata(
     tmp_path: Path,
 ) -> None:
@@ -283,6 +334,8 @@ def test_tagging_service_copy_tags_replace_preserves_target_sidecar_metadata(
     target_path = _add_indexed_image(image_repository, tmp_path, "target.jpg")
     service.add_concept(str(source_path), "Deer")
     service.add_free_tag(str(source_path), "Family")
+    service.set_embedded_tag_excluded(str(source_path), "Private", True)
+    service.set_embedded_tag_excluded(str(source_path), "Source only", True)
     target_tag = ImageTag(
         concept_id="loc-tgm:tgm000002",
         label="Photographs",
@@ -294,6 +347,14 @@ def test_tagging_service_copy_tags_replace_preserves_target_sidecar_metadata(
         ),
     )
     target_stat = target_path.stat()
+    image_repository.upsert_image(
+        str(target_path),
+        target_path.name,
+        target_stat.st_mtime,
+        target_stat.st_size,
+        {"IPTC:Keywords": ["Private", "Target only"]},
+        "",
+    )
     FilesystemSidecarRepository().write(
         target_path,
         ImageSidecar(
@@ -306,6 +367,8 @@ def test_tagging_service_copy_tags_replace_preserves_target_sidecar_metadata(
             updated_at="2026-08-01T00:00:00Z",
             tags=(target_tag,),
             free_tags=("Archive",),
+            excluded_embedded_tags=("Target only",),
+            exclude_all_embedded_tags=True,
             extra={"top_extension": "keep"},
         ),
         expected_revision=None,
@@ -325,6 +388,8 @@ def test_tagging_service_copy_tags_replace_preserves_target_sidecar_metadata(
     assert loaded is not None
     assert [tag.label for tag in loaded.sidecar.tags] == ["Deer"]
     assert loaded.sidecar.free_tags == ("Family",)
+    assert loaded.sidecar.excluded_embedded_tags == ("Private",)
+    assert loaded.sidecar.exclude_all_embedded_tags is False
     assert loaded.sidecar.source.filename == "target.jpg"
     assert loaded.sidecar.source.extra == {"source_extension": "keep"}
     assert loaded.sidecar.extra == {"top_extension": "keep"}

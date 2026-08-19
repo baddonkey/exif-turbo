@@ -21,7 +21,9 @@ from exif_turbo.tagging.sidecar_repository import FilesystemSidecarRepository
 class FakeMetadataWriter:
     def __init__(self, *, error: Exception | None = None) -> None:
         self.error = error
-        self.calls: list[tuple[Path, tuple[str, ...], tuple[Path, ...]]] = []
+        self.calls: list[
+            tuple[Path, tuple[str, ...], tuple[Path, ...], tuple[str, ...], bool]
+        ] = []
 
     def write_keywords(
         self,
@@ -29,8 +31,18 @@ class FakeMetadataWriter:
         labels: Sequence[str],
         *,
         forbidden_sources: Iterable[Path] = (),
+        excluded_labels: Iterable[str] = (),
+        preserve_existing_keywords: bool = True,
     ) -> None:
-        self.calls.append((target, tuple(labels), tuple(forbidden_sources)))
+        self.calls.append(
+            (
+                target,
+                tuple(labels),
+                tuple(forbidden_sources),
+                tuple(excluded_labels),
+                preserve_existing_keywords,
+            )
+        )
         if self.error is not None:
             raise self.error
         target.write_bytes(target.read_bytes() + b"-tagged")
@@ -138,6 +150,80 @@ def test_create_plan_includes_custom_free_tags(
 
     # Assert
     assert plan.items[0].labels == ("Deer", "Family")
+
+
+def test_create_plan_excluded_embedded_tag_omits_matching_label(
+    tmp_path: Path, repo: ImageIndexRepository
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    image_path = source_root / "photo.jpg"
+    source_root.mkdir()
+    image_path.write_bytes(b"original")
+    repo.upsert_image(
+        str(image_path),
+        image_path.name,
+        image_path.stat().st_mtime,
+        image_path.stat().st_size,
+        {"IPTC:Keywords": ["Keep", "Private"]},
+        "",
+    )
+    FilesystemSidecarRepository().write(
+        image_path,
+        ImageSidecar(
+            source=SidecarSource(filename=image_path.name),
+            updated_at="2026-08-19T12:00:00Z",
+            free_tags=("Added",),
+            excluded_embedded_tags=("private",),
+        ),
+        expected_revision=None,
+    )
+
+    # Act
+    plan = DerivativeExportService(repo, FakeMetadataWriter()).create_plan(
+        {source_root: "source"}, tmp_path / "output", image_paths=[image_path]
+    )
+
+    # Assert
+    assert plan.items[0].labels == ("Added", "Keep")
+    assert plan.items[0].excluded_embedded_tags == ("private",)
+
+
+def test_create_plan_exclude_all_embedded_tags_omits_every_embedded_label(
+    tmp_path: Path, repo: ImageIndexRepository
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    image_path = source_root / "photo.jpg"
+    source_root.mkdir()
+    image_path.write_bytes(b"original")
+    repo.upsert_image(
+        str(image_path),
+        image_path.name,
+        image_path.stat().st_mtime,
+        image_path.stat().st_size,
+        {"IPTC:Keywords": ["Keep", "Private"]},
+        "",
+    )
+    FilesystemSidecarRepository().write(
+        image_path,
+        ImageSidecar(
+            source=SidecarSource(filename=image_path.name),
+            updated_at="2026-08-19T12:00:00Z",
+            free_tags=("Added",),
+            exclude_all_embedded_tags=True,
+        ),
+        expected_revision=None,
+    )
+
+    # Act
+    plan = DerivativeExportService(repo, FakeMetadataWriter()).create_plan(
+        {source_root: "source"}, tmp_path / "output", image_paths=[image_path]
+    )
+
+    # Assert
+    assert plan.items[0].labels == ("Added",)
+    assert plan.items[0].exclude_all_embedded_tags is True
 
 
 def test_create_plan_sidecar_tags_missing_from_cache_includes_tags(

@@ -854,9 +854,9 @@ or press **Ctrl+T**. The non-modal drawer contains these controls:
 *Photo: [Xenakis UPIC system computer unit](https://commons.wikimedia.org/wiki/File:Xenakis_UPIC_system_computer_unit_2.jpg) by 1904.CC (Manuel Schmalstieg), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), via Wikimedia Commons. Scaled/cropped in the UI; attribution is voluntary.*
 
 - **Existing image tags** lists keywords already embedded in the original
-  image's XMP or IPTC metadata. This section is informational and read-only;
-  EXIF Turbo reads the indexed metadata snapshot and never changes the source
-  image.
+  image's XMP or IPTC metadata. Select individual tags to exclude them from
+  derivatives, or select **Ignore all existing tags**. These choices are saved
+  in the image sidecar. They never change the source image.
 - **Add TGM term** searches canonical labels and aliases after a short delay.
   Select a result and click **Add** to apply it to the focused image. **Enter**
   accepts the highlighted result, and **Down** moves through results.
@@ -874,16 +874,18 @@ or press **Ctrl+T**. The non-modal drawer contains these controls:
   and are not restored after restart. Rejected proposals remain suppressed for
   the current TGM, prompt, and model fingerprint.
 - **Final derivative tags** remains visible in the fixed footer. It previews
-  the sorted, deduplicated union of embedded keywords and accepted TGM/custom
-  additions that a derivative will receive.
+  the sorted, deduplicated union of included embedded keywords and accepted
+  TGM/custom additions that a derivative will receive.
 - **Copy tags to other images** copies the focused image's accepted controlled
-  and custom tags to a selected target set. Choose **Marked images**, **Current
-  search results** (the complete result set, including unloaded pages), or
-  **Current folder** while browsing. **Add** keeps each target's existing tags
-  and adds missing source tags. **Replace** removes the target's controlled and
-  custom tags before copying and requires confirmation. The focused source
-  image is always excluded. Progress, cancellation, and a completion summary
-  are shown in the drawer.
+  and custom tags and its embedded-tag ignore settings to a selected target
+  set. Individual ignore entries are copied only when that embedded tag exists
+  on the target. Choose **Marked images**, **Current search results** (the
+  complete result set, including unloaded pages), or **Current folder** while
+  browsing. **Add** keeps each target's existing tags and ignore settings and
+  adds the source values. **Replace** substitutes the target's controlled tags,
+  custom tags, and ignore settings and requires confirmation. The focused
+  source image is always excluded. Progress, cancellation, and a completion
+  summary are shown in the drawer.
 
 Long-running TGM and proposal operations show progress and a **Cancel** button.
 Derivative generation starts from the **Action** menu; the drawer footer is
@@ -933,8 +935,9 @@ root must be outside every indexed source root. The exporter:
 - merges existing embedded keywords with accepted controlled and custom labels,
   removes case-insensitive duplicates, and writes the result to **XMP Subject**
   and **IPTC Keywords** on a temporary copy;
-- reads the copied file immediately before writing so keywords changed since
-  the last index scan are preserved, then verifies both fields with ExifTool;
+- reads the copied file immediately before writing so non-excluded keywords
+  changed since the last index scan are preserved, then verifies both fields
+  with ExifTool;
 - removes an incomplete temporary copy after a write or verification failure;
 - never copies sidecars into the derivative tree.
 

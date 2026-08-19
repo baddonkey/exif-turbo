@@ -65,6 +65,8 @@ class ImageSidecar:
     updated_at: str
     tags: tuple[ImageTag, ...] = ()
     free_tags: tuple[str, ...] = ()
+    excluded_embedded_tags: tuple[str, ...] = ()
+    exclude_all_embedded_tags: bool = False
     schema_version: int = 1
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -82,6 +84,15 @@ class ImageSidecar:
         if len(normalized_keys) != len(set(normalized_keys)):
             raise SidecarValidationError("free tags must be unique ignoring case")
         object.__setattr__(self, "free_tags", normalized_free_tags)
+        normalized_exclusions = tuple(
+            normalize_free_tag(tag) for tag in self.excluded_embedded_tags
+        )
+        exclusion_keys = [tag.casefold() for tag in normalized_exclusions]
+        if len(exclusion_keys) != len(set(exclusion_keys)):
+            raise SidecarValidationError(
+                "excluded embedded tags must be unique ignoring case"
+            )
+        object.__setattr__(self, "excluded_embedded_tags", normalized_exclusions)
 
     @classmethod
     def from_dict(cls, data: object) -> ImageSidecar:
@@ -98,13 +109,35 @@ class ImageSidecar:
             isinstance(tag, str) for tag in raw_free_tags
         ):
             raise SidecarValidationError("free_tags must be an array of strings")
-        known = {"schema_version", "source", "updated_at", "tags", "free_tags"}
+        raw_excluded_embedded_tags = data.get("excluded_embedded_tags", [])
+        if not isinstance(raw_excluded_embedded_tags, list) or not all(
+            isinstance(tag, str) for tag in raw_excluded_embedded_tags
+        ):
+            raise SidecarValidationError(
+                "excluded_embedded_tags must be an array of strings"
+            )
+        exclude_all_embedded_tags = data.get("exclude_all_embedded_tags", False)
+        if not isinstance(exclude_all_embedded_tags, bool):
+            raise SidecarValidationError(
+                "exclude_all_embedded_tags must be a boolean"
+            )
+        known = {
+            "schema_version",
+            "source",
+            "updated_at",
+            "tags",
+            "free_tags",
+            "excluded_embedded_tags",
+            "exclude_all_embedded_tags",
+        }
         return cls(
             schema_version=schema_version,
             source=SidecarSource.from_dict(data.get("source")),
             updated_at=require_string(data, "updated_at", "updated_at"),
             tags=tuple(ImageTag.from_dict(tag) for tag in raw_tags),
             free_tags=tuple(raw_free_tags),
+            excluded_embedded_tags=tuple(raw_excluded_embedded_tags),
+            exclude_all_embedded_tags=exclude_all_embedded_tags,
             extra={key: value for key, value in data.items() if key not in known},
         )
 
@@ -117,6 +150,10 @@ class ImageSidecar:
             self.free_tags,
             key=lambda tag: (tag.casefold(), tag),
         )
+        ordered_excluded_embedded_tags = sorted(
+            self.excluded_embedded_tags,
+            key=lambda tag: (tag.casefold(), tag),
+        )
         return {
             **self.extra,
             "schema_version": self.schema_version,
@@ -124,4 +161,6 @@ class ImageSidecar:
             "updated_at": self.updated_at,
             "tags": [tag.to_dict() for tag in ordered_tags],
             "free_tags": ordered_free_tags,
+            "excluded_embedded_tags": ordered_excluded_embedded_tags,
+            "exclude_all_embedded_tags": self.exclude_all_embedded_tags,
         }

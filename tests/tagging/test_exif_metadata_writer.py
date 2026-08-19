@@ -85,6 +85,49 @@ def test_write_keywords_builds_exact_arguments_with_target_last_and_verifies(
     ]
 
 
+def test_write_keywords_excluded_existing_labels_are_not_merged_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    target = tmp_path / "derivative.jpg"
+    target.write_bytes(b"image")
+    written_arguments: list[str] = []
+    read_count = 0
+
+    def fake_run(
+        arguments: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        nonlocal read_count, written_arguments
+        if "-json" in arguments:
+            read_count += 1
+            labels = ["Added", "Keep", "Private"] if read_count == 1 else ["Added", "Keep"]
+            stdout = json.dumps(
+                [{"XMP-dc:Subject": labels, "IPTC:Keywords": labels}]
+            )
+        else:
+            if any(argument.startswith("-XMP-dc:Subject+=") for argument in arguments):
+                written_arguments = arguments
+            stdout = "1 image files updated"
+        return subprocess.CompletedProcess(arguments, 0, stdout, "")
+
+    monkeypatch.setattr(
+        "exif_turbo.tagging.exif_metadata_writer.find_exiftool",
+        lambda: "C:/tools/exiftool.exe",
+    )
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    # Act
+    ExifMetadataWriter().write_keywords(
+        target,
+        ("Added",),
+        excluded_labels=("private",),
+    )
+
+    # Assert
+    assert "-XMP-dc:Subject+=Keep" in written_arguments
+    assert "-XMP-dc:Subject+=Private" not in written_arguments
+
+
 def test_write_keywords_mp4_writes_and_verifies_xmp_and_windows_tags(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
