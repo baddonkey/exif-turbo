@@ -117,6 +117,7 @@ def audit_release_payload(
         for path in files
         if not path.is_relative_to(license_root) and path.stat().st_size > 0
     ]
+    _require_file(runtime_files, "open_clip/bpe_simple_vocab_16e6.txt.gz")
 
     runtime_by_name = {path.name.casefold(): path for path in runtime_files}
     native_hash_entries = (libvips_license_dir / "NATIVE-FILES.sha256").read_text(
