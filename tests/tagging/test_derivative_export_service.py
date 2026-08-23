@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -10,12 +11,21 @@ import pytest
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.models.image_sidecar import ImageSidecar, SidecarSource
 from exif_turbo.models.image_tag import ImageTag, TagProvenance
+from exif_turbo.models.vocabulary import (
+    LocalizedVocabularyTerms,
+    VocabularyCategory,
+    VocabularyConcept,
+    VocabularySnapshot,
+)
 from exif_turbo.tagging.derivative_export_service import (
     DerivativeExportError,
     DerivativeExportService,
     DerivativeExportStatus,
 )
 from exif_turbo.tagging.sidecar_repository import FilesystemSidecarRepository
+from exif_turbo.tagging.vocabulary_snapshot_repository import (
+    VocabularySnapshotRepository,
+)
 
 
 class FakeMetadataWriter:
@@ -46,6 +56,32 @@ class FakeMetadataWriter:
         if self.error is not None:
             raise self.error
         target.write_bytes(target.read_bytes() + b"-tagged")
+
+
+class FakeLocalizationService:
+    def export_labels(
+        self,
+        concept_id: str,
+        canonical_label: str,
+        *,
+        mode: str,
+        interface_locale: str,
+        selected_locales: tuple[str, ...] = (),
+    ) -> tuple[str, ...]:
+        localized = {
+            "de": "Hirsche",
+            "fr": "Cerfs",
+        }
+        if mode == "interface":
+            return (localized.get(interface_locale, canonical_label),)
+        if mode == "selected":
+            labels = tuple(
+                canonical_label if locale == "en" else localized[locale]
+                for locale in selected_locales
+                if locale == "en" or locale in localized
+            )
+            return labels or (canonical_label,)
+        return (canonical_label,)
 
 
 def _index_image(
@@ -87,6 +123,62 @@ def _index_image(
             sidecar_checksum=revision.sha256,
             sync_status="synced",
         )
+
+
+def _vocabulary_repository(tmp_path: Path) -> VocabularySnapshotRepository:
+    repository = VocabularySnapshotRepository(tmp_path / "wikidata.json.gz")
+    repository.activate(
+        VocabularySnapshot(
+            concepts=(
+                VocabularyConcept(
+                    concept_id="wikidata:Q42",
+                    category=VocabularyCategory.SUBJECT,
+                    canonical_label="English author",
+                    localized_terms=(
+                        LocalizedVocabularyTerms("en", "English author"),
+                        LocalizedVocabularyTerms("de", "Englischer Autor"),
+                        LocalizedVocabularyTerms("fr", "International author"),
+                        LocalizedVocabularyTerms("it", "International author"),
+                    ),
+                    source_uri="https://www.wikidata.org/entity/Q42",
+                    license_id="CC0-1.0",
+                ),
+            ),
+            version=1,
+            created_at=datetime(2026, 8, 23, tzinfo=UTC),
+            source_name="Wikidata",
+            source_dump_uri="file:///offline/wikidata.json",
+            source_dump_sha256="a" * 64,
+            manifest_sha256="b" * 64,
+            license_id="CC0-1.0",
+        )
+    )
+    return repository
+
+
+def _write_wikidata_sidecar(image_path: Path) -> None:
+    FilesystemSidecarRepository().write(
+        image_path,
+        ImageSidecar(
+            source=SidecarSource(filename=image_path.name),
+            updated_at="2026-08-23T12:00:00Z",
+            schema_version=2,
+            tags=(
+                ImageTag(
+                    concept_id="wikidata:Q42",
+                    label="Stale sidecar label",
+                    vocabulary="wikidata",
+                    category="subject",
+                    provenance=TagProvenance(
+                        method="manual",
+                        accepted_at="2026-08-23T12:00:00Z",
+                        vocabulary_checksum=f"sha256:{'b' * 64}",
+                    ),
+                ),
+            ),
+        ),
+        expected_revision=None,
+    )
 
 
 def test_create_plan_preserves_relative_tree_and_sorts_unique_labels(
@@ -150,6 +242,101 @@ def test_create_plan_includes_custom_free_tags(
 
     # Assert
     assert plan.items[0].labels == ("Deer", "Family")
+
+
+def test_create_plan_interface_language_localizes_controlled_tags(
+    tmp_path: Path, repo: ImageIndexRepository
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    image_path = source_root / "photo.jpg"
+    source_root.mkdir()
+    image_path.write_bytes(b"original")
+    _index_image(repo, image_path, "Deer")
+    service = DerivativeExportService(
+        repo,
+        FakeMetadataWriter(),
+        localization_service=FakeLocalizationService(),  # type: ignore[arg-type]
+        tag_export_mode="interface",
+        interface_locale="de",
+    )
+
+    # Act
+    plan = service.create_plan(
+        {source_root: "source"}, tmp_path / "output", image_paths=[image_path]
+    )
+
+    # Assert
+    assert plan.items[0].labels == ("Hirsche",)
+
+
+def test_create_plan_selected_languages_exports_each_available_label(
+    tmp_path: Path, repo: ImageIndexRepository
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    image_path = source_root / "photo.jpg"
+    source_root.mkdir()
+    image_path.write_bytes(b"original")
+    _index_image(repo, image_path, "Deer")
+    service = DerivativeExportService(
+        repo,
+        FakeMetadataWriter(),
+        localization_service=FakeLocalizationService(),  # type: ignore[arg-type]
+        tag_export_mode="selected",
+        selected_locales=("en", "fr"),
+    )
+
+    # Act
+    plan = service.create_plan(
+        {source_root: "source"}, tmp_path / "output", image_paths=[image_path]
+    )
+
+    # Assert
+    assert plan.items[0].labels == ("Cerfs", "Deer")
+
+
+def test_create_plan_wikidata_modes_use_intrinsic_snapshot_labels(
+    tmp_path: Path, repo: ImageIndexRepository
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    image_path = source_root / "photo.jpg"
+    source_root.mkdir()
+    image_path.write_bytes(b"original")
+    repo.upsert_image(str(image_path), image_path.name, 1.0, 8, {}, "")
+    _write_wikidata_sidecar(image_path)
+    vocabulary = _vocabulary_repository(tmp_path)
+
+    # Act
+    canonical = DerivativeExportService(
+        repo,
+        FakeMetadataWriter(),
+        vocabulary_repository=vocabulary,
+        tag_export_mode="canonical",
+    ).create_plan({source_root: "source"}, tmp_path / "canonical", image_paths=[image_path])
+    interface = DerivativeExportService(
+        repo,
+        FakeMetadataWriter(),
+        vocabulary_repository=vocabulary,
+        tag_export_mode="interface",
+        interface_locale="de",
+    ).create_plan({source_root: "source"}, tmp_path / "interface", image_paths=[image_path])
+    selected = DerivativeExportService(
+        repo,
+        FakeMetadataWriter(),
+        vocabulary_repository=vocabulary,
+        tag_export_mode="selected",
+        selected_locales=("en", "fr", "it"),
+    ).create_plan({source_root: "source"}, tmp_path / "selected", image_paths=[image_path])
+
+    # Assert
+    assert canonical.items[0].labels == ("English author",)
+    assert interface.items[0].labels == ("Englischer Autor",)
+    assert selected.items[0].labels == (
+        "English author",
+        "International author",
+    )
 
 
 def test_create_plan_excluded_embedded_tag_omits_matching_label(

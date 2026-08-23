@@ -56,6 +56,101 @@ def test_sidecar_repository_write_and_read_round_trips_sidecar(
     assert repository.sidecar_path(image_path).name == "photo.jpg.sidecar.json"
 
 
+def test_image_sidecar_schema_v1_tgm_round_trips_without_promotion() -> None:
+    # Arrange
+    data = _sidecar().to_dict()
+
+    # Act
+    round_tripped = ImageSidecar.from_dict(data).to_dict()
+
+    # Assert
+    assert round_tripped == data
+    assert round_tripped["schema_version"] == 1
+
+
+def test_image_sidecar_schema_v2_wikidata_and_tgm_round_trip() -> None:
+    # Arrange
+    provenance = TagProvenance(
+        method="manual",
+        accepted_at="2026-08-09T12:30:00Z",
+        vocabulary_checksum="sha256:wikidata-snapshot",
+    )
+    sidecar = ImageSidecar(
+        source=SidecarSource(filename="photo.jpg"),
+        updated_at="2026-08-09T12:30:00Z",
+        schema_version=2,
+        tags=(
+            _sidecar().tags[0],
+            ImageTag(
+                concept_id="wikidata:Q42",
+                label="Douglas Adams",
+                vocabulary="wikidata",
+                category="subject",
+                provenance=provenance,
+            ),
+        ),
+    )
+
+    # Act
+    round_tripped = ImageSidecar.from_dict(sidecar.to_dict())
+
+    # Assert
+    assert round_tripped.to_dict() == sidecar.to_dict()
+
+
+@pytest.mark.parametrize(
+    ("concept_id", "vocabulary"),
+    (
+        ("wikidata:Q42", "loc-tgm"),
+        ("loc-tgm:tgm000001", "wikidata"),
+        ("wikidata:Q0", "wikidata"),
+    ),
+)
+def test_image_tag_invalid_vocabulary_identifier_pair_raises_validation_error(
+    concept_id: str,
+    vocabulary: str,
+) -> None:
+    # Arrange
+    provenance = TagProvenance(
+        method="manual",
+        accepted_at="2026-08-09T12:30:00Z",
+        vocabulary_checksum="sha256:snapshot",
+    )
+
+    # Act / Assert
+    with pytest.raises(SidecarValidationError, match="vocabulary and concept_id"):
+        ImageTag(
+            concept_id=concept_id,
+            label="Example",
+            vocabulary=vocabulary,
+            category="subject",
+            provenance=provenance,
+        )
+
+
+def test_image_sidecar_schema_v1_wikidata_tag_raises_validation_error() -> None:
+    # Arrange
+    tag = ImageTag(
+        concept_id="wikidata:Q42",
+        label="Douglas Adams",
+        vocabulary="wikidata",
+        category="subject",
+        provenance=TagProvenance(
+            method="manual",
+            accepted_at="2026-08-09T12:30:00Z",
+            vocabulary_checksum="sha256:wikidata-snapshot",
+        ),
+    )
+
+    # Act / Assert
+    with pytest.raises(SidecarValidationError, match="schema version 2"):
+        ImageSidecar(
+            source=SidecarSource(filename="photo.jpg"),
+            updated_at="2026-08-09T12:30:00Z",
+            tags=(tag,),
+        )
+
+
 def test_sidecar_repository_free_tags_round_trip_normalized_and_sorted(
     tmp_path: Path,
 ) -> None:

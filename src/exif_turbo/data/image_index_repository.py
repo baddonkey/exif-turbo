@@ -131,6 +131,12 @@ class ImageIndexRepository:
                     ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS tgm_concept_search_labels (
+                concept_id TEXT NOT NULL,
+                label TEXT NOT NULL,
+                PRIMARY KEY (concept_id, label)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_accepted_image_tags_concept
                 ON accepted_image_tags(concept_id);
 
@@ -628,6 +634,38 @@ class ImageIndexRepository:
                         tags_text=self._build_tags_text(image_id),
                     )
         return len(accepted_rows)
+
+    def refresh_tgm_concept_search_labels(
+        self,
+        labels: Mapping[str, Iterable[str]],
+    ) -> int:
+        """Replace global localized concept labels and refresh accepted-tag FTS."""
+        affected_rows = self.conn.execute(
+            "SELECT DISTINCT image_id FROM accepted_image_tags"
+        ).fetchall()
+        with self.conn:
+            self.conn.execute("DELETE FROM tgm_concept_search_labels")
+            self.conn.executemany(
+                "INSERT INTO tgm_concept_search_labels (concept_id, label) "
+                "VALUES (?, ?)",
+                (
+                    (concept_id, label.strip())
+                    for concept_id, values in labels.items()
+                    for label in values
+                    if label.strip()
+                ),
+            )
+            for (image_id_value,) in affected_rows:
+                image_id = int(image_id_value)
+                path_row = self.conn.execute(
+                    "SELECT path FROM images WHERE id = ?", (image_id,)
+                ).fetchone()
+                if path_row is not None:
+                    self._refresh_fts_row(
+                        str(path_row[0]),
+                        tags_text=self._build_tags_text(image_id),
+                    )
+        return len(affected_rows)
 
     def record_rejected_proposal(self, proposal: TagProposal) -> None:
         """Persist a rejected proposal as a user decision."""
@@ -1959,8 +1997,14 @@ class ImageIndexRepository:
             UNION ALL
             SELECT alias FROM accepted_image_tag_aliases WHERE image_id = ?
             UNION ALL
+                        SELECT search_labels.label
+                        FROM accepted_image_tags AS tags
+                        JOIN tgm_concept_search_labels AS search_labels
+                            ON search_labels.concept_id = tags.concept_id
+                        WHERE tags.image_id = ?
+                        UNION ALL
             SELECT display_label FROM image_free_tags WHERE image_id = ?
             """,
-            (image_id, image_id, image_id, image_id, image_id, image_id),
+                        (image_id, image_id, image_id, image_id, image_id, image_id, image_id),
         ).fetchall()
         return " ".join(str(row[0]) for row in rows)

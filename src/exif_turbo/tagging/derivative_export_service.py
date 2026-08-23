@@ -13,8 +13,10 @@ from pathlib import Path
 from typing import Callable, Iterable, Mapping, Protocol, Sequence
 
 from ..data.image_index_repository import ImageIndexRepository
+from .controlled_vocabulary_repository import ControlledVocabularyRepository
 from .exif_metadata_writer import ExifMetadataWriter
 from .sidecar_repository import FilesystemSidecarRepository
+from .tgm_localization_service import TgmLocalizationService
 
 
 _EMBEDDED_KEYWORD_KEYS = (
@@ -147,10 +149,20 @@ class DerivativeExportService:
         image_repository: ImageIndexRepository,
         metadata_writer: MetadataWriter | None = None,
         sidecar_repository: FilesystemSidecarRepository | None = None,
+        localization_service: TgmLocalizationService | None = None,
+        vocabulary_repository: ControlledVocabularyRepository | None = None,
+        tag_export_mode: str = "canonical",
+        interface_locale: str = "en",
+        selected_locales: tuple[str, ...] = (),
     ) -> None:
         self._image_repository = image_repository
         self._metadata_writer = metadata_writer or ExifMetadataWriter()
         self._sidecar_repository = sidecar_repository or FilesystemSidecarRepository()
+        self._localization_service = localization_service
+        self._vocabulary_repository = vocabulary_repository
+        self._tag_export_mode = tag_export_mode
+        self._interface_locale = interface_locale
+        self._selected_locales = selected_locales
 
     def create_plan(
         self,
@@ -316,11 +328,11 @@ class DerivativeExportService:
         loaded_sidecar = self._sidecar_repository.read(source)
         if loaded_sidecar is None:
             return (), (), False
-        accepted_labels = [
-            tag.label.strip()
-            for tag in loaded_sidecar.sidecar.tags
-            if tag.label.strip()
-        ]
+        accepted_labels: list[str] = []
+        for tag in loaded_sidecar.sidecar.tags:
+            if not tag.label.strip():
+                continue
+            accepted_labels.extend(self._export_labels(tag.concept_id, tag.label.strip()))
         accepted_labels.extend(
             label.strip()
             for label in loaded_sidecar.sidecar.free_tags
@@ -352,6 +364,37 @@ class DerivativeExportService:
             loaded_sidecar.sidecar.excluded_embedded_tags,
             loaded_sidecar.sidecar.exclude_all_embedded_tags,
         )
+
+    def _export_labels(
+        self,
+        concept_id: str,
+        canonical_label: str,
+    ) -> tuple[str, ...]:
+        if concept_id.startswith("wikidata:") and self._vocabulary_repository is not None:
+            concept = self._vocabulary_repository.get(concept_id)
+            if concept is not None:
+                if self._tag_export_mode == "canonical":
+                    return (concept.canonical_label,)
+                if self._tag_export_mode == "interface":
+                    return (concept.preferred_label(self._interface_locale),)
+                if self._tag_export_mode != "selected":
+                    raise ValueError(
+                        f"unsupported tag export mode: {self._tag_export_mode}"
+                    )
+                labels = tuple(
+                    concept.preferred_label(locale)
+                    for locale in self._selected_locales
+                )
+                return labels or (concept.canonical_label,)
+        if self._localization_service is not None:
+            return self._localization_service.export_labels(
+                concept_id,
+                canonical_label,
+                mode=self._tag_export_mode,
+                interface_locale=self._interface_locale,
+                selected_locales=self._selected_locales,
+            )
+        return (canonical_label,)
 
     @classmethod
     def _normalize_roots(

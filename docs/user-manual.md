@@ -20,7 +20,7 @@ thumbnails and previews extracted from the embedded thumbnail or a frame at
 7. [Browsing by Folder](#7-browsing-by-folder)
 8. [Viewing Metadata and EXIF Tags](#8-viewing-metadata-and-exif-tags)
 9. [Marking Images & Bulk Actions](#9-marking-images--bulk-actions)
-10. [Tagging with TGM](#10-tagging-with-tgm)
+10. [Tagging with Wikidata](#10-tagging-with-wikidata)
 11. [Settings](#11-settings)
 12. [Keyboard Shortcuts](#12-keyboard-shortcuts)
 13. [FAQ](#13-faq)
@@ -54,21 +54,23 @@ If you already have ExifTool installed system-wide, that version takes priority.
 
 ### macOS installer
 
-Download `exif-turbo-<version>-macos.dmg` from the same Releases page,
-open it, and drag **exif-turbo.app** into your **Applications** folder.
+Download `exif-turbo-<version>-macos-arm64.dmg` for Apple silicon or
+`exif-turbo-<version>-macos-intel.dmg` for an Intel Mac from the same Releases
+page, open it, and drag **exif-turbo.app** into your **Applications** folder.
 
 ### Linux package
 
-Download either `exif-turbo_<version>_amd64.deb` (Debian/Ubuntu) or
-`exif-turbo-<version>-1.x86_64.rpm` (Fedora/openSUSE) from the Releases page
+Download `exif-turbo-<version>-linux-amd64.deb` or
+`exif-turbo-<version>-linux-arm64.deb` (Debian/Ubuntu), or
+`exif-turbo-<version>-linux-x86_64.rpm` (Fedora/openSUSE), from the Releases page
 and install it with your package manager:
 
 ```bash
 # Debian / Ubuntu
-sudo apt install ./exif-turbo_<version>_amd64.deb
+sudo apt install ./exif-turbo-<version>-linux-amd64.deb
 
 # Fedora / openSUSE
-sudo dnf install ./exif-turbo-<version>-1.x86_64.rpm
+sudo dnf install ./exif-turbo-<version>-linux-x86_64.rpm
 ```
 
 The package installs the application to `/opt/exif-turbo/`, registers a
@@ -312,6 +314,10 @@ In AI mode:
 AI search requires CLIP vectors to exist for the target images.
 Build them with **AI-Scan** (or **AI Full Rescan**) in the
 **Indexed Folders** tab.
+
+AI vector indexes are tied to the model that created them. If the application
+reports missing or incompatible AI index metadata after an upgrade, run
+**AI Full Rescan** before using AI search or tag proposals.
 
 Note for macOS Intel users: AI features are unavailable on macOS Intel (x86_64)
 targets and are shown disabled in **Settings**. This is due to PyTorch support
@@ -797,23 +803,23 @@ shown in full and never truncated.
 
 ---
 
-## 10. Tagging with TGM
+## 10. Tagging with Wikidata
 
-Tagging assigns controlled Library of Congress Thesaurus for Graphic Materials
-(TGM) terms without writing metadata into the original image. It is disabled
-by default for each database. Enable it under **Settings → Tagging and TGM**,
-then click **Install TGM**. Installation downloads the official TGM v1 XML
-distribution over HTTPS and falls back to the official tagged-text distribution
-if XML cannot be downloaded or validated.
+Tagging uses a bundled, curated 8,313-concept visual vocabulary from Wikidata
+without writing metadata into the original image. Its reviewed 8,200-concept
+base is extended with qualified concepts linked to the Library of Congress
+TGM. It is disabled by default for each database; enable it under **Settings → Tagging and Controlled Vocabulary**.
+The snapshot is available fully offline and requires no vocabulary or
+translation-pack installation. It is a controlled visual vocabulary, not an
+exhaustive copy of Wikidata.
 
-The application stores the normalized TGM snapshot and its checksum in the
-current database's application-data directory. The source checksum records
-provenance and detects changes; it is not a publisher signature. TGM content is
-downloaded on demand rather than bundled while redistribution and attribution
-requirements remain under review. See the LOC [TGM download
-page](https://guides.loc.gov/tgm-i/download-tgm), [field
-definitions](https://www.loc.gov/pictures/collection/tgm/fields.html), and
-[application guidance](https://guides.loc.gov/tgm-i).
+Every bundled concept has intrinsic preferred labels and aliases for exactly
+English, German, French, and Italian. The snapshot records its source dump and
+manifest checksums and is distributed under Wikidata's CC0 terms. New accepted
+QIDs are written in sidecar schema v2. Existing schema-v1 `loc-tgm` tags remain
+readable and retain their canonical-label and old localization-overlay fallback
+for display and export; the legacy TGM importer and parsers remain maintenance
+tooling, not a user-facing download workflow.
 
 ### Sidecars and search
 
@@ -824,21 +830,19 @@ exclusions. They are plain text: SQLCipher database encryption
 does **not** encrypt them, so they inherit the source folder's permissions and
 backup policy. Tagging never changes the original image's bytes or timestamp.
 
-Each accepted controlled term stores a canonical ID such as `loc-tgm:tgm000001`, its
-canonical label, subject or genre/form category, and acceptance provenance.
-The importer supports the official TGM v1 XML and tagged-text structures.
-Canonical descriptors use merged TGM `TNR` numbers; `UF` and non-descriptor
-`USE` terms become aliases that resolve to the canonical concept. Only
-postable subject (`TTCSubj`, MARC 150/650) and genre/form (`TTCForm`, MARC
-155/655) concepts can be accepted. Custom tags are stored separately in the
-same sidecar as normalized text labels.
+Each accepted Wikidata term stores a qualified ID such as `wikidata:Q4421`, its
+canonical English label, subject or genre/form category, and acceptance
+provenance in schema v2. Custom tags are stored separately in the same sidecar
+as normalized text labels. Legacy `loc-tgm:tgmNNNNNN` records are preserved.
 
 Accepted canonical labels, qualified IDs, categories, vocabulary identity,
-known aliases, and custom labels are copied into the encrypted database's FTS5 cache. Search uses
-the normal EXIF query box and syntax; undecided and rejected proposals are not
-searchable. A regular or full image scan synchronizes new, changed, or deleted
-sidecars even when the original image stamp did not change. Malformed sidecars
-are reported and left untouched.
+all bundled localized preferred labels/aliases, legacy aliases when available,
+and custom labels are copied
+into the encrypted database's FTS5 cache. Search uses the normal EXIF query box
+and syntax; undecided and rejected proposals are not searchable. A regular or
+full image scan synchronizes new, changed, or deleted sidecars even when the
+original image stamp did not change. Malformed sidecars are reported and left
+untouched.
 
 Move or rename a sidecar together with its image. Version 1 does not infer an
 external rename. Removing an image or indexed folder clears only database
@@ -858,7 +862,8 @@ or press **Ctrl+T**. The non-modal drawer contains these controls:
   image's XMP or IPTC metadata. Select individual tags to exclude them from
   derivatives, or select **Ignore all existing tags**. These choices are saved
   in the image sidecar. They never change the source image.
-- **Add TGM term** searches canonical labels and aliases after a short delay.
+- **Add a Wikidata term** searches preferred labels and aliases in the selected
+  metadata language after a short delay.
   Select a result and click **Add** to apply it to the focused image. **Enter**
   accepts the highlighted result, and **Down** moves through results.
 - **Tags on current image** shows the focused image's canonical tags,
@@ -866,17 +871,16 @@ or press **Ctrl+T**. The non-modal drawer contains these controls:
 - **Custom tags** accepts a new label with **Enter** or **Add**. Previously used
   labels are remembered for the current database and appear as suggestions;
   click one to reuse the same spelling. Removing a custom tag from an image
-  does not remove it from the remembered list. Custom tags do not require TGM
-  installation or AI features.
+  does not remove it from the remembered list. Custom tags do not require AI.
 - **Tag proposals** generates suggestions automatically when the drawer opens
   and whenever the focused image changes. Each row shows its score and provider
   and has accept and reject buttons. **Generate for current image** refreshes
   them manually. Undecided suggestions are kept only for the current selection
   and are not restored after restart. Rejected proposals remain suppressed for
-  the current TGM, prompt, and model fingerprint.
+  the current Wikidata snapshot, prompt, and model fingerprint.
 - **Final derivative tags** remains visible in the fixed footer. It previews
   the sorted, deduplicated union of included embedded keywords and accepted
-  TGM/custom additions that a derivative will receive.
+  controlled/custom additions that a derivative will receive.
 - **Copy tags to other images** copies the focused image's accepted controlled
   and custom tags and its embedded-tag ignore settings to a selected target
   set. Individual ignore entries are copied only when that embedded tag exists
@@ -888,7 +892,7 @@ or press **Ctrl+T**. The non-modal drawer contains these controls:
   source image is always excluded. Progress, cancellation, and a completion
   summary are shown in the drawer.
 
-Long-running TGM and proposal operations show progress and a **Cancel** button.
+Long-running vector and proposal operations show progress and a **Cancel** button.
 Derivative generation starts from the **Action** menu; the drawer footer is
 only a read-only preview.
 
@@ -902,22 +906,32 @@ Copy Tags or use **Action → Generate Tagged Derivatives for Marked Images…**
 
 ### CLIP proposal prerequisites
 
-Manual TGM search and tagging do not require AI. Proposals do. They require:
+Manual Wikidata search and tagging do not require AI or network access. CLIP
+model assets require network access on first AI use unless they are already
+cached; proposal generation then works offline. Proposals require:
 
 1. **AI Features** enabled in Settings. This is unavailable on macOS Intel.
 2. Image CLIP vectors built separately with **AI-Scan** or **AI Full Rescan**
    for the relevant indexed folder.
-3. A separate TGM term-vector index built with **Build Vectors** under
-   **Tagging and TGM**.
+3. A separate Wikidata term-vector index built with **Build Vectors** under
+  **Tagging and Controlled Vocabulary**.
 
-The image FAISS index remains image-only; TGM concepts are stored in a separate
-FAISS index. Installing a new TGM snapshot makes term vectors stale and requires
-**Rebuild Vectors**, but does not require rebuilding image vectors. Proposal
-generation never scans original images implicitly: a missing image vector is
-reported as requiring an AI scan.
+The image FAISS index remains image-only; Wikidata concepts are stored in a
+separate FAISS index. Image-vector schema v2 stores five views per image: the
+full image and four overlapping corner crops. Existing image indexes require
+**AI Full Rescan** because incremental AI-Scan cannot reconstruct missing crop
+vectors. Term-vector schema v3 stores separate English, German, French, and
+Italian prompt rows for every QID. A bundled snapshot or prompt change makes
+term vectors stale and requires **Rebuild Vectors**, but does not require
+rebuilding image vectors.
 
-The proposal threshold defaults to **0.24**. Optional auto-accept is off by
-default and uses the stricter **0.32** threshold. The auto-accept threshold is
+The displayed score is the maximum cosine similarity across the image's five
+views and the QID's four locale prompts. Proposal generation never scans
+original images implicitly: a missing image vector is reported as requiring
+an AI scan.
+
+The proposal threshold defaults to **0.20**. Optional auto-accept is off by
+default and uses the stricter **0.28** threshold. The auto-accept threshold is
 always kept at least 0.01 above the proposal threshold. Scores are model- and
 dataset-dependent similarities, not calibrated probabilities; review results
 before enabling automatic acceptance.
@@ -929,6 +943,15 @@ the complete current result set, including pages not yet loaded into the view,
 or **Action → Generate Tagged Derivatives for Marked Images…** to process the
 marked set. Only images with accepted tags produce copies. The chosen output
 root must be outside every indexed source root. The exporter:
+
+Under **Settings → Tagging and Controlled Vocabulary**, choose a **Metadata
+language** independently from the interface language. It controls Wikidata
+lookup, display, and interface-mode export. Canonical mode emits canonical
+English; metadata-language mode emits that locale's intrinsic preferred label;
+selected mode emits deduplicated preferred labels for selected `en`, `de`,
+`fr`, and `it` locales. Custom tags and preserved embedded keywords are never
+translated. Legacy `loc-tgm` tags retain canonical fallback and old overlay
+behavior.
 
 - preserves each source format and relative source folder tree;
 - adds collision-safe top-level labels when marks span multiple indexed roots;
@@ -951,18 +974,18 @@ failures and the source remains unchanged.
 ### Lifecycle and reset
 
 Disabling tagging hides the workbench but does not delete sidecars, rejected
-proposal decisions, the installed TGM snapshot, or cached accepted tags.
+proposal decisions, legacy TGM data, or cached accepted tags.
 Already synchronized tags remain searchable. Closing the app requests
 cancellation of running tagging workers; completed item-level writes remain in
 place, while undecided suggestions are discarded.
 
 **Reset Database** clears image/tag/proposal rows, marks, indexed folders,
-thumbnail and preview caches, and the per-database TGM snapshot and vector
+thumbnail and preview caches, and the per-database controlled-term vector
 index. It deliberately does not traverse source folders to delete adjacent
 sidecars. The separate image AI index files are not explicitly deleted by
 reset; use **AI Full Rescan** after rebuilding the image index when a clean
 semantic index is required. Re-add and scan folders to synchronize sidecars,
-then reinstall TGM before editing tags or generating proposals.
+then rebuild Wikidata vectors before generating proposals.
 
 ---
 
@@ -970,20 +993,22 @@ then reinstall TGM before editing tags or generating proposals.
 
 Click the **Settings** tab to configure application behaviour.
 
-### Tagging and TGM
+### Tagging and Controlled Vocabulary
 
-![Tagging and TGM settings](screenshots/11_tagging_settings.png)
+![Tagging and Controlled Vocabulary settings](screenshots/11_tagging_settings.png)
 
-**Enable tagging for this database** controls the drawer UI. The section also
-shows whether TGM is installed, subject and genre/form counts, source date,
-checksum, and importer diagnostics. **Install TGM** / **Update TGM** validates
-and atomically activates a new official snapshot; a failed update leaves the
-previous snapshot active. **Build Vectors** / **Rebuild Vectors** creates the
-separate CLIP TGM term index and is enabled only when AI is available and on.
+**Enable tagging for this database** controls the drawer UI. The section shows
+the bundled Wikidata snapshot's subject and genre/form counts, date, and
+checksum. There is no vocabulary or translation-pack installer. **Build
+Vectors** / **Rebuild Vectors** creates the separate CLIP Wikidata term index
+and is enabled only when AI is available and on.
 
-**Proposal threshold** defaults to 24%. **Auto-accept proposals** is off by
-default; when enabled, **Auto-accept threshold** defaults to 32% and must remain
-strictly above the proposal threshold.
+**Proposal threshold** defaults to 20%. **Auto-accept proposals** is off by
+default; when enabled, **Auto-accept threshold** defaults to 28% and must remain
+strictly above the proposal threshold. **Developer diagnostics: show raw top
+20 candidates** bypasses the proposal threshold only for manual proposal
+generation. It displays the winning image view and prompt locale alongside
+each decimal cosine-similarity score; auto-accept remains thresholded.
 
 ### Worker Threads
 
@@ -1043,8 +1068,10 @@ The theme changes immediately.
 
 ### Language
 
-Select the display language from the dropdown. A restart is required for the
-language change to take full effect.
+Select the application display language from the dropdown. A restart is
+required for that change to take full effect. This does not change controlled
+vocabulary lookup or metadata export language; configure those separately
+under **Tagging and Controlled Vocabulary**.
 
 ### ExifTool
 
@@ -1102,7 +1129,8 @@ Click **OK** to confirm. This permanently:
 - Deletes all indexed images from the database
 - Removes all indexed folder records
 - Wipes the thumbnail and preview cache on disk
-- Removes the per-database TGM snapshot and TGM term-vector index
+- Removes the per-database controlled-vocabulary term-vector index and legacy
+  TGM compatibility snapshot
 
 The database is vacuumed and checkpointed immediately, so the database file
 shrinks to near-zero on disk straight away.
@@ -1116,8 +1144,8 @@ button and shows a *"This step cannot be canceled…"* notice until it finishes.
 
 > **This action cannot be undone.** After a reset you will need to re-add your
 > folders and run a full rescan to rebuild the index. Adjacent tagging sidecars
-> are not deleted; rescanning imports them again. Reinstall TGM before editing
-> tags or rebuilding proposal vectors. Existing image AI vector files are not
+> are not deleted; rescanning imports them again. Rebuild Wikidata proposal
+> vectors when needed. Existing image AI vector files are not
 > explicitly deleted; run **AI Full Rescan** when you need to rebuild them.
 
 The **Reset Database…** button is disabled while indexing is in progress.
@@ -1159,7 +1187,9 @@ A: The files must be indexed first. Go to the **Indexed Folders** tab, add the
 folder, and click **Rescan**.
 
 **Q: Does exif-turbo modify my image files?**  
-A: Never. exif-turbo only *reads* metadata — it never writes to your images.
+A: Tagging, indexing, and derivative generation never modify originals.
+**Delete Marked Images** is an explicit destructive action that permanently
+deletes the selected original files after confirmation.
 
 **Q: What image formats are supported?**  
 A: JPEG, PNG, TIFF, HEIC, BMP, GIF, and RAW formats: CR2, CR3, NEF, ARW, DNG,

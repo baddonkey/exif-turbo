@@ -16,6 +16,11 @@ import pytest
 
 from exif_turbo.data.ai_vector_repository import AiVectorRepository
 from exif_turbo.indexing.ai_indexer_service import AiIndexerService
+from exif_turbo.models.ai_model_profile import (
+    AiModelProfile,
+    DEFAULT_AI_MODEL_PROFILE,
+    LEGACY_OPENAI_CLIP_PROFILE,
+)
 from exif_turbo.utils.preview_cache import preview_cache_name_from_stamp, preview_cache_path, preview_dir
 from exif_turbo.utils.thumb_crypto import ThumbCrypto
 
@@ -27,10 +32,22 @@ def _fake_vec() -> np.ndarray:
     return v / np.linalg.norm(v)
 
 
-def _make_repo(tmp_path: Path) -> AiVectorRepository:
+def _fake_image_vectors(batch):  # type: ignore[no-untyped-def]
+    import torch
+
+    return torch.from_numpy(
+        np.stack([_fake_vec() for _ in range(int(batch.shape[0]))])
+    ).float()
+
+
+def _make_repo(
+    tmp_path: Path,
+    profile: AiModelProfile = DEFAULT_AI_MODEL_PROFILE,
+) -> AiVectorRepository:
     repo = AiVectorRepository(
         tmp_path / "ai_index.faiss",
         tmp_path / "ai_id_map.json",
+        profile=profile,
     )
     repo.load()
     return repo
@@ -105,9 +122,7 @@ def test_ai_indexer_service_build_index_vectorises_images(
     import torch
 
     fake_model = MagicMock()
-    fake_model.encode_image.return_value = torch.from_numpy(
-        np.stack([_fake_vec() for _ in image_files])
-    ).float()
+    fake_model.encode_image.side_effect = _fake_image_vectors
     fake_preprocess = MagicMock(return_value=torch.zeros(3, 224, 224))
     monkeypatch.setattr(
         "exif_turbo.indexing.ai_indexer_service._cached_model",
@@ -125,6 +140,7 @@ def test_ai_indexer_service_build_index_vectorises_images(
     assert indexed == len(image_files)
     assert errors == 0
     assert repo.get_indexed_paths() == {str(p) for p in image_files}
+    assert all(len(repo.get_view_vectors(str(path))) == 5 for path in image_files)
 
 
 def test_ai_indexer_service_build_index_skips_already_indexed(
@@ -202,9 +218,7 @@ def test_ai_indexer_service_build_index_prefers_cached_preview_when_available(
         return torch.zeros(3, 224, 224)
 
     fake_model = MagicMock()
-    fake_model.encode_image.return_value = torch.from_numpy(
-        np.stack([_fake_vec()])
-    ).float()
+    fake_model.encode_image.side_effect = _fake_image_vectors
 
     monkeypatch.setattr(
         "exif_turbo.indexing.ai_indexer_service._cached_model",
@@ -225,7 +239,8 @@ def test_ai_indexer_service_build_index_prefers_cached_preview_when_available(
     indexed, errors = service.build_index([str(source_path)])
 
     # Assert
-    assert (indexed, errors, seen_sizes) == (1, 0, [(9, 5)])
+    assert (indexed, errors) == (1, 0)
+    assert seen_sizes == [(9, 5), (6, 4), (6, 4), (6, 4), (6, 4)]
 
 
 def test_ai_indexer_service_build_index_uses_db_stamp_to_load_cached_preview(
@@ -254,9 +269,7 @@ def test_ai_indexer_service_build_index_uses_db_stamp_to_load_cached_preview(
         return torch.zeros(3, 224, 224)
 
     fake_model = MagicMock()
-    fake_model.encode_image.return_value = torch.from_numpy(
-        np.stack([_fake_vec()])
-    ).float()
+    fake_model.encode_image.side_effect = _fake_image_vectors
 
     monkeypatch.setattr(
         "exif_turbo.indexing.ai_indexer_service._cached_model",
@@ -273,7 +286,8 @@ def test_ai_indexer_service_build_index_uses_db_stamp_to_load_cached_preview(
     indexed, errors = service.build_index([str(source_path)], stamps={str(source_path): stamp})
 
     # Assert
-    assert (indexed, errors, seen_sizes) == (1, 0, [(9, 5)])
+    assert (indexed, errors) == (1, 0)
+    assert seen_sizes == [(9, 5), (6, 4), (6, 4), (6, 4), (6, 4)]
 
 
 def test_ai_indexer_service_build_index_falls_back_to_original_when_preview_is_invalid(
@@ -299,9 +313,7 @@ def test_ai_indexer_service_build_index_falls_back_to_original_when_preview_is_i
         return torch.zeros(3, 224, 224)
 
     fake_model = MagicMock()
-    fake_model.encode_image.return_value = torch.from_numpy(
-        np.stack([_fake_vec()])
-    ).float()
+    fake_model.encode_image.side_effect = _fake_image_vectors
 
     monkeypatch.setattr(
         "exif_turbo.indexing.ai_indexer_service._cached_model",
@@ -318,7 +330,8 @@ def test_ai_indexer_service_build_index_falls_back_to_original_when_preview_is_i
     indexed, errors = service.build_index([str(source_path)])
 
     # Assert
-    assert (indexed, errors, seen_sizes) == (1, 0, [(40, 25)])
+    assert (indexed, errors) == (1, 0)
+    assert seen_sizes == [(40, 25), (28, 18), (28, 18), (28, 18), (28, 18)]
 
 
 # ── cancel ────────────────────────────────────────────────────────────────────
@@ -375,7 +388,7 @@ def test_ai_indexer_service_build_index_calls_progress(
     service = AiIndexerService(repo)
     fake_model = MagicMock()
     fake_model.encode_image.return_value = torch.from_numpy(
-        np.stack([_fake_vec() for _ in range(32)])
+        np.stack([_fake_vec() for _ in range(5)])
     ).float()
     service._model = fake_model
     service._preprocess = MagicMock(return_value=torch.zeros(3, 224, 224))
@@ -400,12 +413,12 @@ def test_ai_indexer_service_encode_text_downloads_bpe_vocab_into_repo_storage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Arrange
-    repo = _make_repo(tmp_path)
-    service = AiIndexerService(repo)
+    repo = _make_repo(tmp_path, LEGACY_OPENAI_CLIP_PROFILE)
+    service = AiIndexerService(repo, profile=LEGACY_OPENAI_CLIP_PROFILE)
 
     fake_tokenizer = MagicMock(return_value="TOKENS")
     fake_open_clip = SimpleNamespace(
-        SimpleTokenizer=MagicMock(return_value=fake_tokenizer),
+        get_tokenizer=MagicMock(return_value=fake_tokenizer),
     )
     fake_torch = SimpleNamespace(no_grad=nullcontext)
     fake_model = MagicMock()
@@ -441,10 +454,11 @@ def test_ai_indexer_service_encode_text_downloads_bpe_vocab_into_repo_storage(
     vector = service.encode_text("forest trail")
 
     # Assert
-    expected_bpe = tmp_path / "open_clip" / "bpe_simple_vocab_16e6.txt.gz"
-    assert expected_bpe.exists()
     assert np.allclose(vector, _fake_vec())
-    assert fake_open_clip.SimpleTokenizer.call_args.kwargs["bpe_path"] == str(expected_bpe)
+    fake_open_clip.get_tokenizer.assert_called_once_with(
+        "ViT-B-32",
+        cache_dir=str(tmp_path / "open_clip"),
+    )
 
 
 def test_ai_indexer_service_encode_texts_batches_and_normalizes_float32(
@@ -521,8 +535,8 @@ def test_ai_indexer_service_model_load_imports_open_clip_with_user_bpe_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Arrange
-    repo = _make_repo(tmp_path)
-    service = AiIndexerService(repo)
+    repo = _make_repo(tmp_path, LEGACY_OPENAI_CLIP_PROFILE)
+    service = AiIndexerService(repo, profile=LEGACY_OPENAI_CLIP_PROFILE)
 
     fake_model = MagicMock()
     fake_model.eval = MagicMock()

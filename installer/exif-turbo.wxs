@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  exif-turbo.wxs - WiX v4 installer descriptor
+  exif-turbo.wxs - WiX v6 installer descriptor
 
   Build with:
     wix build installer\exif-turbo.wxs
@@ -48,7 +48,7 @@
 
     <!-- ============================================================
          Directory layout - no <Files> here.
-         In WiX v4, <Files> placed inside <Feature> with a Directory
+         In WiX v6, <Files> placed inside <Feature> with a Directory
          attribute auto-assigns generated components to that feature,
          avoiding WIX0267 "orphaned component" errors.
          ============================================================ -->
@@ -96,7 +96,7 @@
     <!-- ============================================================
          Feature tree
 
-         In WiX v4, <Files> placed directly inside <Feature> (with a
+         In WiX v6, <Files> placed directly inside <Feature> (with a
          Directory attribute) auto-generates components and assigns
          them to that feature, avoiding WIX0267 "orphaned component"
          errors.

@@ -247,20 +247,6 @@ Drawer {
                 }
 
                 ColumnLayout {
-                    visible: appController && appController.taggingEnabled && !appController.tgmInstalled
-                    Layout.fillWidth: true
-                    Layout.margins: 18
-                    spacing: 10
-                    Label { text: qsTr("Install TGM to search and apply controlled terms. Custom tags remain available below."); wrapMode: Text.WordWrap; Layout.fillWidth: true }
-                    Button {
-                        text: qsTr("Install TGM")
-                        highlighted: true
-                        enabled: !appController.isTgmUpdating
-                        onClicked: appController.installOrUpdateTgm()
-                    }
-                }
-
-                ColumnLayout {
                     visible: appController && appController.freeTaggingAvailable
                     Layout.fillWidth: true
                     Layout.margins: 14
@@ -386,7 +372,7 @@ Drawer {
                         Layout.margins: 14
                         spacing: 8
 
-                        Label { text: qsTr("Add a TGM term"); font.pixelSize: 13; font.weight: Font.DemiBold }
+                        Label { text: qsTr("Add a Wikidata term"); font.pixelSize: 13; font.weight: Font.DemiBold }
 
                         RowLayout {
                             Layout.fillWidth: true
@@ -441,6 +427,7 @@ Drawer {
                                 required property int index
                                 required property string conceptId
                                 required property string label
+                                required property string canonicalLabel
                                 required property var categories
                                 required property var aliases
                                 property string conceptReference: conceptId
@@ -464,7 +451,7 @@ Drawer {
                                     Label { Layout.fillWidth: true; text: label; elide: Text.ElideRight; font.pixelSize: 12 }
                                     Label {
                                         Layout.fillWidth: true
-                                        text: [categories.join(" / "), aliases.length ? aliases.join(", ") : ""].filter(Boolean).join("  |  ")
+                                        text: [canonicalLabel !== label ? canonicalLabel : "", categories.join(" / "), aliases.length ? aliases.join(", ") : ""].filter(Boolean).join("  |  ")
                                         elide: Text.ElideRight
                                         font.pixelSize: 10
                                         opacity: 0.55
@@ -505,13 +492,19 @@ Drawer {
                             delegate: RowLayout {
                                 required property string conceptId
                                 required property string label
+                                required property string canonicalLabel
                                 required property string category
                                 required property string method
                                 required property string providerModel
                                 width: acceptedTagsList.width
                                 height: 36
                                 spacing: 7
-                                Label { Layout.fillWidth: true; text: label; elide: Text.ElideRight; font.pixelSize: 12 }
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 0
+                                    Label { Layout.fillWidth: true; text: label; elide: Text.ElideRight; font.pixelSize: 12 }
+                                    Label { visible: canonicalLabel !== label; Layout.fillWidth: true; text: canonicalLabel + " · Wikidata"; elide: Text.ElideRight; font.pixelSize: 9; opacity: 0.5 }
+                                }
                                 Label { text: category; font.pixelSize: 9; opacity: 0.5 }
                                 Label { text: providerModel || method; font.pixelSize: 9; opacity: 0.5; elide: Text.ElideRight; Layout.maximumWidth: 90 }
                                 ToolButton {
@@ -539,11 +532,11 @@ Drawer {
                             opacity: 0.6
                             text: !appController.aiEnabled
                                 ? qsTr("Enable AI features to generate proposals.")
-                                : qsTr("Build TGM vectors to generate proposals.")
+                                : qsTr("Build Wikidata vectors to generate proposals.")
                         }
                         Button {
                             visible: !appController.taggingProposalAvailable && appController.aiEnabled
-                            text: qsTr("Build TGM Vectors")
+                            text: qsTr("Build Wikidata Vectors")
                             enabled: !appController.isTgmUpdating
                             onClicked: appController.rebuildTgmVectors()
                         }
@@ -571,10 +564,13 @@ Drawer {
                             delegate: RowLayout {
                                 required property string conceptId
                                 required property string label
+                                required property string canonicalLabel
                                 required property string category
                                 required property real score
                                 required property string provider
                                 required property string providerFingerprint
+                                required property string winningView
+                                required property string winningLocale
                                 width: proposalsList.width
                                     - (proposalsScrollBar.visible ? proposalsScrollBar.width : 0)
                                 height: 44
@@ -583,9 +579,29 @@ Drawer {
                                     Layout.fillWidth: true
                                     spacing: 0
                                     Label { Layout.fillWidth: true; text: label; elide: Text.ElideRight; font.pixelSize: 12 }
-                                    Label { Layout.fillWidth: true; text: category + "  |  " + provider; elide: Text.ElideRight; font.pixelSize: 9; opacity: 0.5 }
+                                    Label {
+                                        Layout.fillWidth: true
+                                        text: [
+                                            canonicalLabel !== label ? canonicalLabel : "",
+                                            category,
+                                            provider,
+                                            appSettings && appSettings.showRawTagCandidates
+                                                ? winningView + " / " + winningLocale
+                                                : ""
+                                        ].filter(Boolean).join("  |  ")
+                                        elide: Text.ElideRight
+                                        font.pixelSize: 9
+                                        opacity: 0.5
+                                    }
                                 }
-                                Label { text: Math.round(score * 100) + "%"; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                Label {
+                                    text: score.toFixed(3)
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                    ToolTip.text: qsTr("Cosine similarity")
+                                    ToolTip.visible: scoreMouse.containsMouse
+                                    MouseArea { id: scoreMouse; anchors.fill: parent; hoverEnabled: true }
+                                }
                                 ToolButton {
                                     text: "\u2713"
                                     enabled: !appController.isGeneratingTagProposals
@@ -709,7 +725,7 @@ Drawer {
                         Layout.fillWidth: true
                         Label {
                             Layout.fillWidth: true
-                            text: appController.isTgmUpdating ? qsTr("Updating TGM")
+                            text: appController.isTgmUpdating ? qsTr("Building Wikidata vectors")
                                 : appController.isTaggingBulk ? qsTr("Copying tags")
                                 : qsTr("Generating proposals")
                             font.pixelSize: 11

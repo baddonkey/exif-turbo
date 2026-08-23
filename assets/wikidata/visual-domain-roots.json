@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "snapshot_version": 2,
+  "created_at": "2026-08-23T00:00:00+00:00",
+  "source_dump_uri": "assets/wikidata/wikidata-visual-entities-v2.jsonl",
+  "target_count": 8200,
+  "domains": [
+    {"name": "people", "category": "subject", "target_count": 550, "max_depth": 4, "root_qids": ["Q5"]},
+    {"name": "animals", "category": "subject", "target_count": 1050, "max_depth": 5, "root_qids": ["Q729"]},
+    {"name": "plants", "category": "subject", "target_count": 650, "max_depth": 5, "root_qids": ["Q756"]},
+    {"name": "landscape_weather", "category": "subject", "target_count": 700, "max_depth": 5, "root_qids": ["Q271669", "Q11663"]},
+    {"name": "food", "category": "subject", "target_count": 600, "max_depth": 5, "root_qids": ["Q2095"]},
+    {"name": "apparel", "category": "subject", "target_count": 400, "max_depth": 5, "root_qids": ["Q11460"]},
+    {"name": "transport", "category": "subject", "target_count": 650, "max_depth": 5, "root_qids": ["Q7590"]},
+    {"name": "architecture", "category": "subject", "target_count": 700, "max_depth": 5, "root_qids": ["Q41176", "Q12271"]},
+    {"name": "activities_events", "category": "subject", "target_count": 650, "max_depth": 4, "root_qids": ["Q349", "Q1656682"]},
+    {"name": "objects_tools", "category": "subject", "target_count": 700, "max_depth": 5, "root_qids": ["Q39546"]},
+    {"name": "technology_industry", "category": "subject", "target_count": 600, "max_depth": 5, "root_qids": ["Q11016", "Q3966"]},
+    {"name": "arts_music", "category": "subject", "target_count": 300, "max_depth": 5, "root_qids": ["Q34379"]},
+    {"name": "genre_format", "category": "genre_format", "target_count": 650, "max_depth": 5, "root_qids": ["Q483394"]}
+  ]
+}

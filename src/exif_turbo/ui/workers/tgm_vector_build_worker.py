@@ -8,16 +8,17 @@ from PySide6.QtCore import QThread, Signal
 from ...config import (
     ai_id_map_path,
     ai_index_path,
+    ai_vector_metadata_path,
+    bundled_vocabulary_path,
     tgm_concept_map_path,
-    tgm_snapshot_path,
     tgm_term_index_path,
     tgm_vector_metadata_path,
 )
 from ...data.ai_vector_repository import AiVectorRepository
 from ...data.tgm_vector_repository import TgmVectorRepository
 from ...indexing.ai_indexer_service import AiIndexerService
-from ...tagging.tgm_snapshot_repository import TgmSnapshotRepository
 from ...tagging.tgm_vector_index_service import TgmVectorIndexService
+from ...tagging.vocabulary_snapshot_repository import VocabularySnapshotRepository
 
 
 class TgmVectorBuildWorker(QThread):
@@ -37,7 +38,9 @@ class TgmVectorBuildWorker(QThread):
     def run(self) -> None:
         try:
             image_vectors = AiVectorRepository(
-                ai_index_path(self._db_path), ai_id_map_path(self._db_path)
+                ai_index_path(self._db_path),
+                ai_id_map_path(self._db_path),
+                ai_vector_metadata_path(self._db_path),
             )
             image_vectors.load()
             term_vectors = TgmVectorRepository(
@@ -45,9 +48,9 @@ class TgmVectorBuildWorker(QThread):
                 tgm_concept_map_path(self._db_path),
                 tgm_vector_metadata_path(self._db_path),
             )
-            term_vectors.load()
+            term_vectors.load_for_rebuild()
             service = TgmVectorIndexService(
-                TgmSnapshotRepository(tgm_snapshot_path(self._db_path)),
+                VocabularySnapshotRepository(bundled_vocabulary_path()),
                 term_vectors,
                 AiIndexerService(image_vectors),
             )

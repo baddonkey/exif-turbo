@@ -53,6 +53,9 @@ _common_hiddenimports = [
     'markdown',
     'markdown.extensions.tables',
     'av',
+    'transformers',
+    'sentencepiece',
+    'sentencepiece._sentencepiece',
 ]
 
 a_gui = Analysis(

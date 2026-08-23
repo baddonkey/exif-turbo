@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 
 import numpy as np
@@ -12,7 +13,7 @@ from ..models.tgm_vector import TgmVectorFingerprint, TgmVectorHit
 
 
 class TgmVectorIndexError(RuntimeError):
-    """The persisted TGM term index is incomplete, corrupt, or inconsistent."""
+    """The persisted controlled-vocabulary index is invalid or inconsistent."""
 
 
 class TgmVectorRepository:
@@ -31,6 +32,7 @@ class TgmVectorRepository:
         self._faiss = None
         self._index = None
         self._concept_ids: tuple[str, ...] = ()
+        self._locales: tuple[str, ...] = ()
         self._fingerprint: TgmVectorFingerprint | None = None
 
     @property
@@ -41,6 +43,16 @@ class TgmVectorRepository:
     def count(self) -> int:
         return 0 if self._index is None else int(self._index.ntotal)
 
+    def load_for_rebuild(self) -> None:
+        try:
+            self.load()
+        except TgmVectorIndexError:
+            assert self._faiss is not None
+            self._index = self._faiss.IndexFlatIP(self._dimension)
+            self._concept_ids = ()
+            self._locales = ()
+            self._fingerprint = None
+
     def load(self) -> None:
         import faiss  # noqa: PLC0415
 
@@ -50,6 +62,7 @@ class TgmVectorRepository:
         if not any(existing):
             self._index = faiss.IndexFlatIP(self._dimension)
             self._concept_ids = ()
+            self._locales = ()
             self._fingerprint = None
             return
         if not all(existing):
@@ -59,13 +72,28 @@ class TgmVectorRepository:
 
         try:
             metadata = json.loads(self._metadata_path.read_text(encoding="utf-8"))
-            concept_ids_raw = json.loads(
+            concept_rows_raw = json.loads(
                 self._concept_map_path.read_text(encoding="utf-8")
             )
             index = faiss.read_index(str(self._index_path))
-            if not isinstance(metadata, dict) or not isinstance(concept_ids_raw, list):
+            if not isinstance(metadata, dict) or not isinstance(concept_rows_raw, list):
                 raise ValueError("metadata or concept map has the wrong shape")
-            concept_ids = tuple(str(value) for value in concept_ids_raw)
+            if metadata.get("schema_version") != 3:
+                raise ValueError("unsupported vector metadata schema")
+            if not all(
+                isinstance(value, dict)
+                and set(value) == {"concept_id", "locale"}
+                and isinstance(value["concept_id"], str)
+                and isinstance(value["locale"], str)
+                for value in concept_rows_raw
+            ):
+                raise ValueError("concept map entries must contain concept_id and locale")
+            concept_ids = tuple(value["concept_id"] for value in concept_rows_raw)
+            locales = tuple(value["locale"] for value in concept_rows_raw)
+            if not all(re.fullmatch(r"wikidata:Q[1-9]\d*", value) for value in concept_ids):
+                raise ValueError("concept map entries must be Wikidata QIDs")
+            if not all(locale in ("en", "de", "fr", "it") for locale in locales):
+                raise ValueError("concept map entries contain unsupported locales")
             fingerprint = TgmVectorFingerprint.from_dict(metadata["fingerprint"])
             expected_count = int(metadata["count"])
             if fingerprint.dimension != self._dimension or index.d != self._dimension:
@@ -74,8 +102,8 @@ class TgmVectorRepository:
                 )
             if index.ntotal != len(concept_ids) or index.ntotal != expected_count:
                 raise ValueError("FAISS count, concept map, and metadata count differ")
-            if len(set(concept_ids)) != len(concept_ids):
-                raise ValueError("concept map contains duplicate IDs")
+            if len(set(zip(concept_ids, locales))) != len(concept_ids):
+                raise ValueError("concept map contains duplicate concept and locale rows")
             if self._sha256(self._index_path) != str(metadata["index_sha256"]):
                 raise ValueError("FAISS index checksum does not match metadata")
             if self._sha256(self._concept_map_path) != str(metadata["map_sha256"]):
@@ -87,6 +115,7 @@ class TgmVectorRepository:
 
         self._index = index
         self._concept_ids = concept_ids
+        self._locales = locales
         self._fingerprint = fingerprint
 
     def replace_index(
@@ -94,6 +123,8 @@ class TgmVectorRepository:
         vectors: np.ndarray,
         concept_ids: list[str] | tuple[str, ...],
         fingerprint: TgmVectorFingerprint,
+        *,
+        locales: list[str] | tuple[str, ...] | None = None,
     ) -> None:
         if self._faiss is None:
             raise RuntimeError("load() must be called before replace_index()")
@@ -104,10 +135,21 @@ class TgmVectorRepository:
             )
         if matrix.shape[0] != len(concept_ids):
             raise ValueError("vector and concept counts differ")
+        row_locales = tuple(locales) if locales is not None else ("en",) * len(concept_ids)
+        if len(row_locales) != len(concept_ids):
+            raise ValueError("locale and concept counts differ")
         if fingerprint.dimension != self._dimension:
             raise ValueError("fingerprint dimension does not match repository")
-        if len(set(concept_ids)) != len(concept_ids):
-            raise ValueError("concept IDs must be unique")
+        if len(set(zip(concept_ids, row_locales))) != len(concept_ids):
+            raise ValueError("concept and locale rows must be unique")
+        if not all(
+            isinstance(concept_id, str)
+            and re.fullmatch(r"wikidata:Q[1-9]\d*", concept_id)
+            for concept_id in concept_ids
+        ):
+            raise ValueError("concept IDs must be wikidata:Q identifiers")
+        if not all(locale in ("en", "de", "fr", "it") for locale in row_locales):
+            raise ValueError("locales must be en, de, fr, or it")
         norms = np.linalg.norm(matrix, axis=1, keepdims=True)
         if np.any(norms == 0):
             raise ValueError("zero-length TGM vectors cannot be indexed")
@@ -125,14 +167,22 @@ class TgmVectorRepository:
             temp_paths.extend((index_temp, map_temp, metadata_temp))
             self._faiss.write_index(new_index, str(index_temp))
             map_temp.write_text(
-                json.dumps(list(concept_ids), ensure_ascii=False, separators=(",", ":")),
+                json.dumps(
+                    [
+                        {"concept_id": concept_id, "locale": locale}
+                        for concept_id, locale in zip(concept_ids, row_locales)
+                    ],
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
                 encoding="utf-8",
             )
             metadata_temp.write_text(
                 json.dumps(
                     {
-                        "schema_version": 1,
+                        "schema_version": 3,
                         "count": len(concept_ids),
+                        "concept_count": len(set(concept_ids)),
                         "fingerprint": fingerprint.to_dict(),
                         "index_sha256": self._sha256(index_temp),
                         "map_sha256": self._sha256(map_temp),
@@ -151,6 +201,7 @@ class TgmVectorRepository:
 
         self._index = new_index
         self._concept_ids = tuple(concept_ids)
+        self._locales = row_locales
         self._fingerprint = fingerprint
 
     def search(
@@ -170,15 +221,33 @@ class TgmVectorRepository:
         norm = float(np.linalg.norm(vector))
         if norm == 0:
             raise ValueError("image vector must not be zero-length")
-        scores, ids = self._index.search(vector / norm, min(top_k, self._index.ntotal))
+        scores, ids = self._index.search(vector / norm, self._index.ntotal)
+        pooled: dict[str, tuple[float, str]] = {}
+        for score, row_id in zip(scores[0], ids[0]):
+            if row_id < 0:
+                continue
+            row = int(row_id)
+            concept_id = self._concept_ids[row]
+            candidate = (float(score), self._locales[row])
+            current = pooled.get(concept_id)
+            if current is None or candidate[0] > current[0]:
+                pooled[concept_id] = candidate
+        ranked = sorted(
+            (
+                (score, concept_id, locale)
+                for concept_id, (score, locale) in pooled.items()
+                if score >= threshold
+            ),
+            key=lambda value: (-value[0], value[1]),
+        )[:top_k]
         return tuple(
             TgmVectorHit(
-                concept_id=self._concept_ids[int(row_id)],
-                score=float(score),
+                concept_id=concept_id,
+                locale=locale,
+                score=score,
                 rank=rank,
             )
-            for rank, (score, row_id) in enumerate(zip(scores[0], ids[0]), start=1)
-            if row_id >= 0 and float(score) >= threshold
+            for rank, (score, concept_id, locale) in enumerate(ranked, start=1)
         )
 
     @staticmethod

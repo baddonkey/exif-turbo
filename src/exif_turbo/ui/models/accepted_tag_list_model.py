@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from typing import Callable
 
 from PySide6.QtCore import QAbstractListModel, QModelIndex, Qt
 
@@ -15,10 +16,12 @@ class AcceptedTagListModel(QAbstractListModel):
     ConfidenceRole = Qt.UserRole + 5
     ModelRole = Qt.UserRole + 6
     AcceptedAtRole = Qt.UserRole + 7
+    CanonicalLabelRole = Qt.UserRole + 8
 
     def __init__(self) -> None:
         super().__init__()
         self._rows: list[ImageTag] = []
+        self._label_resolver: Callable[[str], str] | None = None
 
     def roleNames(self) -> dict[int, bytes]:
         return {
@@ -29,6 +32,7 @@ class AcceptedTagListModel(QAbstractListModel):
             self.ConfidenceRole: b"confidence",
             self.ModelRole: b"providerModel",
             self.AcceptedAtRole: b"acceptedAt",
+            self.CanonicalLabelRole: b"canonicalLabel",
         }
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
@@ -38,14 +42,20 @@ class AcceptedTagListModel(QAbstractListModel):
         if not index.isValid() or not 0 <= index.row() < len(self._rows):
             return None
         tag = self._rows[index.row()]
+        label = (
+            self._label_resolver(tag.concept_id)
+            if self._label_resolver is not None
+            else tag.label
+        )
         values: dict[int, object] = {
             self.ConceptIdRole: tag.concept_id,
-            self.LabelRole: tag.label,
+            self.LabelRole: label,
             self.CategoryRole: tag.category,
             self.MethodRole: tag.provenance.method,
             self.ConfidenceRole: tag.provenance.confidence,
             self.ModelRole: tag.provenance.model or "",
             self.AcceptedAtRole: tag.provenance.accepted_at,
+            self.CanonicalLabelRole: tag.label,
         }
         return values.get(role)
 
@@ -53,3 +63,6 @@ class AcceptedTagListModel(QAbstractListModel):
         self.beginResetModel()
         self._rows = list(rows)
         self.endResetModel()
+
+    def set_label_resolver(self, resolver: Callable[[str], str] | None) -> None:
+        self._label_resolver = resolver

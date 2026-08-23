@@ -7,10 +7,13 @@ from typing import Callable, Iterable
 
 from ..data.image_index_repository import ImageIndexRepository
 from ..models.image_tag import SidecarValidationError
+from .accepted_tag_alias_resolver import AcceptedTagAliasResolver
+from .controlled_vocabulary_repository import ControlledVocabularyRepository
 from .sidecar_repository import (
     FilesystemSidecarRepository,
     SidecarReadError,
 )
+from .tgm_snapshot_repository import TgmSnapshotRepository
 
 _log = logging.getLogger(__name__)
 
@@ -26,10 +29,17 @@ class SidecarSynchronizer:
         self,
         image_repository: ImageIndexRepository,
         sidecar_repository: FilesystemSidecarRepository | None = None,
+        *,
+        vocabulary_repository: ControlledVocabularyRepository | None = None,
+        tgm_repository: TgmSnapshotRepository | None = None,
     ) -> None:
         self._image_repository = image_repository
         self._sidecar_repository = (
             sidecar_repository or FilesystemSidecarRepository()
+        )
+        self._alias_resolver = AcceptedTagAliasResolver(
+            vocabulary_repository=vocabulary_repository,
+            tgm_repository=tgm_repository,
         )
 
     def synchronize(
@@ -99,7 +109,9 @@ class SidecarSynchronizer:
                 sidecar_size=loaded.revision.size,
                 sidecar_checksum=loaded.revision.sha256,
                 sync_status="synced",
-                aliases={},
+                aliases=self._alias_resolver.resolve(
+                    tag.concept_id for tag in loaded.sidecar.tags
+                ),
             )
             return True
         except SidecarReadError as exc:

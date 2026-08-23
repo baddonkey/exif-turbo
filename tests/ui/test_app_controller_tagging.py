@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 from PySide6.QtCore import QObject, QPoint, QPointF, QMetaObject, Qt, QUrl, Signal
 from PySide6.QtQml import QQmlApplicationEngine
@@ -13,6 +14,7 @@ from PySide6.QtTest import QTest
 from pytestqt.qtbot import QtBot
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
+from exif_turbo.data.tgm_vector_repository import TgmVectorRepository
 from exif_turbo.models.search_result import SearchResult
 from exif_turbo.models.tag_proposal import TagProposal, TagProposalStatus
 from exif_turbo.models.tag_proposal import (
@@ -20,8 +22,19 @@ from exif_turbo.models.tag_proposal import (
     ProposalGenerationResult,
     ProposalGenerationStatus,
 )
+from exif_turbo.models.tgm_vector import TgmVectorFingerprint
 from exif_turbo.models.tgm import TgmCategory, TgmConcept, TgmSnapshot, TgmSourceFormat
+from exif_turbo.models.vocabulary import (
+    LocalizedVocabularyTerms,
+    VocabularyCategory,
+    VocabularyConcept,
+    VocabularySnapshot,
+)
 from exif_turbo.tagging.tgm_snapshot_repository import TgmSnapshotRepository
+from exif_turbo.tagging.tgm_prompt_builder import TgmPromptBuilder
+from exif_turbo.tagging.vocabulary_snapshot_repository import (
+    VocabularySnapshotRepository,
+)
 from exif_turbo.tagging.derivative_export_service import (
     DerivativeExportItemResult,
     DerivativeExportResult,
@@ -63,6 +76,33 @@ def _snapshot() -> TgmSnapshot:
     )
 
 
+def _vocabulary_snapshot() -> VocabularySnapshot:
+    return VocabularySnapshot(
+        concepts=(
+            VocabularyConcept(
+                concept_id="wikidata:Q4421",
+                category=VocabularyCategory.SUBJECT,
+                canonical_label="forest",
+                localized_terms=(
+                    LocalizedVocabularyTerms("en", "forest", ("wood",)),
+                    LocalizedVocabularyTerms("de", "Wald", ("Waldgebiet",)),
+                    LocalizedVocabularyTerms("fr", "forêt", ("boisement",)),
+                    LocalizedVocabularyTerms("it", "foresta", ("selva",)),
+                ),
+                source_uri="https://www.wikidata.org/entity/Q4421",
+                license_id="CC0-1.0",
+            ),
+        ),
+        version=2,
+        created_at=datetime(2026, 8, 23, tzinfo=UTC),
+        source_name="Wikidata",
+        source_dump_uri="fixture.jsonl",
+        source_dump_sha256="1" * 64,
+        manifest_sha256="2" * 64,
+        license_id="CC0-1.0",
+    )
+
+
 @pytest.fixture
 def tagging_controller(
     qtbot: QtBot,
@@ -77,11 +117,28 @@ def tagging_controller(
     repository.close()
     snapshot_path = tmp_path / "tgm-snapshot.json.gz"
     TgmSnapshotRepository(snapshot_path).activate(_snapshot())
+    vocabulary_path = tmp_path / "wikidata-vocabulary-v2.json.gz"
+    VocabularySnapshotRepository(vocabulary_path).activate(_vocabulary_snapshot())
+    monkeypatch.setattr(
+        app_controller_module,
+        "bundled_vocabulary_path",
+        lambda: vocabulary_path,
+    )
     monkeypatch.setattr(app_controller_module, "tgm_snapshot_path", lambda _db: snapshot_path)
     monkeypatch.setattr(
         app_controller_module,
         "tgm_vector_metadata_path",
         lambda _db: tmp_path / "missing-vector-metadata.json",
+    )
+    monkeypatch.setattr(
+        app_controller_module,
+        "tgm_term_index_path",
+        lambda _db: tmp_path / "missing-vector-index.faiss",
+    )
+    monkeypatch.setattr(
+        app_controller_module,
+        "tgm_concept_map_path",
+        lambda _db: tmp_path / "missing-concept-map.json",
     )
     monkeypatch.setattr(app_controller_module, "get_exiftool_version", lambda: "test")
     search_model = SearchListModel(tmp_path / "thumbs")
@@ -124,8 +181,108 @@ def test_app_controller_unlock_initializes_tagging_services_and_status(
     # Assert
     assert controller.taggingAvailable is True
     assert controller.tgmInstalled is True
-    assert controller.tgmSourceDate == "2026-07-29"
+    assert controller.tgmStatus == "vectors_required"
+    assert controller.tgmSourceDate == "2026-08-23"
     assert controller.tgmSubjectCount == 1
+    assert controller.tgmGenreFormatCount == 0
+    assert controller.tgmLocalizationLocales == ["en", "de", "fr", "it"]
+
+
+def test_app_controller_wikidata_vector_readiness_does_not_require_tgm_snapshot(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _model, db_path, _image_path = tagging_controller
+    legacy_snapshot_path = db_path.parent / "tgm-snapshot.json.gz"
+    legacy_snapshot_path.unlink(missing_ok=True)
+    assert controller._vocabulary_repository is not None
+    snapshot = controller._vocabulary_repository.load()
+    fingerprint = TgmVectorFingerprint(
+        vocabulary="wikidata",
+        snapshot_version=snapshot.version,
+        source_dump_sha256=snapshot.source_dump_sha256,
+        manifest_sha256=snapshot.manifest_sha256,
+        prompt_version=TgmPromptBuilder.VERSION,
+        prompt_strategy=TgmPromptBuilder.STRATEGY,
+        prompt_locales=TgmPromptBuilder.LOCALES,
+        model_name=app_controller_module.CLIP_MODEL_NAME,
+        pretrained=app_controller_module.CLIP_PRETRAINED,
+        dimension=app_controller_module.CLIP_VECTOR_DIMENSION,
+    )
+    concept_ids = [
+        concept.concept_id
+        for concept in snapshot.concepts
+        for _locale in TgmPromptBuilder.LOCALES
+    ]
+    locales = [
+        locale
+        for _concept in snapshot.concepts
+        for locale in TgmPromptBuilder.LOCALES
+    ]
+    vectors = np.zeros((len(concept_ids), 512), dtype=np.float32)
+    vectors[:, 0] = 1.0
+    repository = TgmVectorRepository(
+        app_controller_module.tgm_term_index_path(db_path),
+        app_controller_module.tgm_concept_map_path(db_path),
+        app_controller_module.tgm_vector_metadata_path(db_path),
+    )
+    repository.load()
+    repository.replace_index(vectors, concept_ids, fingerprint, locales=locales)
+    controller._ai_enabled = True
+
+    # Act
+    controller._refresh_tgm_status()
+
+    # Assert
+    assert controller.tgmInstalled is True
+    assert controller.tgmStatus == "ready"
+    assert controller.taggingProposalAvailable is True
+
+
+def test_app_controller_legacy_vector_metadata_requires_rebuild(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _model, db_path, _image_path = tagging_controller
+    metadata_path = app_controller_module.tgm_vector_metadata_path(db_path)
+    metadata_path.write_text(
+        json.dumps({"schema_version": 1, "fingerprint": {}}),
+        encoding="utf-8",
+    )
+
+    # Act
+    controller._refresh_tgm_status()
+
+    # Assert
+    assert controller.tgmStatus == "vectors_required"
+    assert controller.taggingProposalAvailable is False
+
+
+def test_app_controller_legacy_vector_fingerprint_is_stale_but_vocabulary_ready(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _model, db_path, _image_path = tagging_controller
+    (db_path.parent / "missing-vector-metadata.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "fingerprint": {
+                    "raw_tgm_sha256": "legacy",
+                    "normalization_version": 1,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    controller._ai_enabled = True
+
+    # Act
+    controller._refresh_tgm_status()
+
+    # Assert
+    assert controller.tgmStatus == "vectors_required"
+    assert controller.taggingProposalAvailable is False
 
 
 def test_app_controller_selection_exposes_deduplicated_embedded_tags_read_only(
@@ -270,7 +427,7 @@ def test_app_controller_restart_reuses_installed_tgm_snapshot(
 
     # Assert
     assert restarted_controller.tgmInstalled is True
-    assert restarted_controller.tgmSourceDate == "2026-07-29"
+    assert restarted_controller.tgmSourceDate == "2026-08-23"
     restarted_controller.close()
 
 
@@ -296,7 +453,41 @@ def test_app_controller_tgm_search_resolves_alias(
     # Assert
     model = controller.tgmSearchModel
     assert model.rowCount() == 1
-    assert model.data(model.index(0), model.LabelRole) == "Forests"
+    assert model.data(model.index(0), model.LabelRole) == "forest"
+    assert model.data(model.index(0), model.ConceptIdRole) == "wikidata:Q4421"
+
+
+@pytest.mark.parametrize(
+    ("locale", "query", "expected_label"),
+    (
+        ("en", "wood", "forest"),
+        ("de", "Waldgebiet", "Wald"),
+        ("fr", "boisement", "forêt"),
+        ("it", "selva", "foresta"),
+    ),
+)
+def test_app_controller_vocabulary_search_and_accepted_display_use_metadata_locale(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    locale: str,
+    query: str,
+    expected_label: str,
+) -> None:
+    # Arrange
+    controller, _model, _db_path, _image_path = tagging_controller
+    controller.setMetadataLanguage(locale)
+
+    # Act
+    controller.searchTgm(query)
+    search_model = controller.tgmSearchModel
+    concept_id = search_model.data(search_model.index(0), search_model.ConceptIdRole)
+    controller.addSelectedTgmConcept(str(concept_id))
+
+    # Assert
+    assert search_model.data(search_model.index(0), search_model.LabelRole) == expected_label
+    assert controller.acceptedTagsModel.data(
+        controller.acceptedTagsModel.index(0),
+        controller.acceptedTagsModel.LabelRole,
+    ) == expected_label
 
 
 def test_tagging_drawer_leaving_search_or_browse_closes_drawer(
@@ -410,7 +601,7 @@ def test_tagging_drawer_clicking_tgm_result_populates_search_field(
 
     # Assert
     qtbot.waitUntil(
-        lambda: search_field.property("text") == "Forests",
+        lambda: search_field.property("text") == "forest",
         timeout=3_000,
     )
     engine.deleteLater()
@@ -489,17 +680,24 @@ def test_app_controller_manual_add_and_remove_refreshes_accepted_model(
     controller, _model, _db_path, image_path = tagging_controller
 
     # Act
-    controller.addSelectedTgmConcept("Woods")
+    controller.addSelectedTgmConcept("wikidata:Q4421")
     added_count = controller.acceptedTagsModel.rowCount()
     derivative_label = controller.derivativeTagsModel.data(
         controller.derivativeTagsModel.index(0),
         controller.derivativeTagsModel.LabelRole,
     )
-    controller.removeSelectedTgmConcept("loc-tgm:tgm000001")
+    loaded = FilesystemSidecarRepository().read(image_path)
+    controller.removeSelectedTgmConcept("wikidata:Q4421")
+    removed = FilesystemSidecarRepository().read(image_path)
 
     # Assert
     assert added_count == 1
-    assert derivative_label == "Forests"
+    assert derivative_label == "forest"
+    assert loaded is not None
+    assert loaded.sidecar.schema_version == 2
+    assert loaded.sidecar.tags[0].concept_id == "wikidata:Q4421"
+    assert removed is not None
+    assert removed.sidecar.tags == ()
     assert controller.acceptedTagsModel.rowCount() == 0
     assert controller.derivativeTagsModel.rowCount() == 0
     assert Path(f"{image_path}.sidecar.json").exists()
@@ -615,6 +813,113 @@ def test_app_controller_proposal_result_for_previous_selection_is_ignored(
 
     # Assert
     assert controller.pendingProposalsModel.rowCount() == 0
+
+
+def test_app_controller_completed_proposal_result_displays_rows(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _search_model, _db_path, image_path = tagging_controller
+    proposal = TagProposal(
+        image_path=str(image_path),
+        concept_id="loc-tgm:tgm000001",
+        label="Forests",
+        category="subject",
+        provider_fingerprint="provider-a",
+        score=0.8,
+        rank=1,
+    )
+    result = ProposalBatchResult(
+        (
+            ProposalGenerationResult(
+                str(image_path),
+                ProposalGenerationStatus.COMPLETED,
+                proposals=(proposal,),
+            ),
+        ),
+        False,
+    )
+
+    # Act
+    controller._on_proposal_result(result, None)
+
+    # Assert
+    assert controller.pendingProposalsModel.rowCount() == 1
+    assert controller.proposalGenerationError == ""
+
+
+class FakeProposalWorker(QObject):
+    progress = Signal(int, int, str)
+    result_ready = Signal(object, object)
+    failed = Signal(str)
+    canceled = Signal(object)
+    finished = Signal()
+    instances: list[FakeProposalWorker] = []
+
+    def __init__(
+        self,
+        db_path: Path,
+        key: str,
+        paths: list[str],
+        **options: object,
+    ) -> None:
+        super().__init__()
+        self.options = options
+        self.instances.append(self)
+
+    def start(self) -> None:
+        pass
+
+
+def test_app_controller_raw_proposals_disable_score_threshold(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    controller, _search_model, _db_path, image_path = tagging_controller
+    assert controller._settings is not None
+    controller._settings.setShowRawTagCandidates(True)
+    controller._ai_enabled = True
+    controller._tgm_vectors_current = True
+    FakeProposalWorker.instances.clear()
+    monkeypatch.setattr(
+        app_controller_module, "TgmProposalWorker", FakeProposalWorker
+    )
+
+    # Act
+    controller._start_proposals([str(image_path)], auto_accept=False)
+
+    # Assert
+    assert FakeProposalWorker.instances[0].options["threshold"] == float("-inf")
+    controller._proposal_worker = None
+
+
+@pytest.mark.parametrize(
+    ("status", "expected_message"),
+    [
+        (ProposalGenerationStatus.COMPLETED, "confidence threshold"),
+        (ProposalGenerationStatus.AI_SCAN_REQUIRED, "AI Full Rescan"),
+        (ProposalGenerationStatus.TGM_INDEX_REQUIRED, "TGM vectors are out of date"),
+    ],
+)
+def test_app_controller_empty_proposal_result_explains_reason(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    status: ProposalGenerationStatus,
+    expected_message: str,
+) -> None:
+    # Arrange
+    controller, _search_model, _db_path, image_path = tagging_controller
+    result = ProposalBatchResult(
+        (ProposalGenerationResult(str(image_path), status),),
+        False,
+    )
+
+    # Act
+    controller._on_proposal_result(result, None)
+
+    # Assert
+    assert controller.pendingProposalsModel.rowCount() == 0
+    assert expected_message in controller.proposalGenerationError
 
 
 def test_app_controller_refresh_selection_clears_ephemeral_proposals(
@@ -821,6 +1126,9 @@ def test_app_controller_current_results_forwards_complete_search_scope(
     controller._checked_only_filter_active = True
     controller._date_from = 100
     controller._date_to = 200
+    assert controller._settings is not None
+    controller.setMetadataLanguage("de")
+    assert controller._settings.language == "en"
     FakeDerivativeWorker.instances.clear()
     monkeypatch.setattr(app_controller_module, "DerivativeExportWorker", FakeDerivativeWorker)
 
@@ -831,6 +1139,9 @@ def test_app_controller_current_results_forwards_complete_search_scope(
 
     # Assert
     assert FakeDerivativeWorker.instances[0].options == {
+        "tag_export_mode": "canonical",
+        "interface_locale": "de",
+        "selected_locales": ("en",),
         "matching_results": True,
         "query": "family",
         "ext_filter": ".jpg",
@@ -880,7 +1191,10 @@ def test_app_controller_current_ai_results_passes_complete_cached_paths(
 
     # Assert
     assert FakeDerivativeWorker.instances[0].options == {
-        "image_paths": [str(image_path), str(second_path)]
+        "tag_export_mode": "canonical",
+        "interface_locale": "en",
+        "selected_locales": ("en",),
+        "image_paths": [str(image_path), str(second_path)],
     }
 
 

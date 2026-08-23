@@ -6,6 +6,7 @@ from typing import Iterable, Sequence
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.models.image_sidecar import ImageSidecar, SidecarSource
 from exif_turbo.models.image_tag import ImageTag, TagProvenance
+from exif_turbo.tagging.sidecar_repository import FilesystemSidecarRepository
 from exif_turbo.ui.workers.derivative_export_worker import DerivativeExportWorker
 
 
@@ -16,6 +17,8 @@ class FakeMetadataWriter:
         labels: Sequence[str],
         *,
         forbidden_sources: Iterable[Path] = (),
+        excluded_labels: Iterable[str] = (),
+        preserve_existing_keywords: bool = True,
     ) -> None:
         target.write_bytes(target.read_bytes() + b"-tagged")
 
@@ -33,17 +36,21 @@ def _index_tagged_image(
         {},
         f"{image_path.name} {label}",
     )
+    sidecar = ImageSidecar(
+        source=SidecarSource(filename=image_path.name),
+        updated_at="2026-08-09T12:00:00Z",
+        free_tags=(label,),
+    )
+    revision = FilesystemSidecarRepository().write(
+        image_path, sidecar, expected_revision=None
+    )
     repository.replace_accepted_tags_and_sidecar_state(
         str(image_path),
-        ImageSidecar(
-            source=SidecarSource(filename=image_path.name),
-            updated_at="2026-08-09T12:00:00Z",
-            free_tags=(label,),
-        ),
+        sidecar,
         sidecar_path=f"{image_path}.sidecar.json",
-        sidecar_mtime_ns=1,
-        sidecar_size=1,
-        sidecar_checksum="sha256:test",
+        sidecar_mtime_ns=revision.mtime_ns,
+        sidecar_size=revision.size,
+        sidecar_checksum=revision.sha256,
         sync_status="synced",
     )
 
@@ -59,28 +66,32 @@ def test_derivative_export_worker_emits_result_and_progress(tmp_path: Path) -> N
     repository.upsert_image(
         str(image_path), image_path.name, image_path.stat().st_mtime, image_path.stat().st_size, {}, ""
     )
-    repository.replace_accepted_tags_and_sidecar_state(
-        str(image_path),
-        ImageSidecar(
-            source=SidecarSource(filename=image_path.name),
-            updated_at="2026-08-09T12:00:00Z",
-            tags=(
-                ImageTag(
-                    concept_id="loc-tgm:tgm000001",
-                    label="Deer",
-                    category="subject",
-                    provenance=TagProvenance(
-                        method="manual",
-                        accepted_at="2026-08-09T12:00:00Z",
-                        vocabulary_checksum="sha256:tgm",
-                    ),
+    sidecar = ImageSidecar(
+        source=SidecarSource(filename=image_path.name),
+        updated_at="2026-08-09T12:00:00Z",
+        tags=(
+            ImageTag(
+                concept_id="loc-tgm:tgm000001",
+                label="Deer",
+                category="subject",
+                provenance=TagProvenance(
+                    method="manual",
+                    accepted_at="2026-08-09T12:00:00Z",
+                    vocabulary_checksum="sha256:tgm",
                 ),
             ),
         ),
+    )
+    revision = FilesystemSidecarRepository().write(
+        image_path, sidecar, expected_revision=None
+    )
+    repository.replace_accepted_tags_and_sidecar_state(
+        str(image_path),
+        sidecar,
         sidecar_path=f"{image_path}.sidecar.json",
-        sidecar_mtime_ns=1,
-        sidecar_size=1,
-        sidecar_checksum="sha256:test",
+        sidecar_mtime_ns=revision.mtime_ns,
+        sidecar_size=revision.size,
+        sidecar_checksum=revision.sha256,
         sync_status="synced",
     )
     repository.close()

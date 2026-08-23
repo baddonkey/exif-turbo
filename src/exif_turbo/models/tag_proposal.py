@@ -26,6 +26,8 @@ class TagProposal:
     rank: int
     status: TagProposalStatus = TagProposalStatus.PENDING
     provider_model: str = "clip"
+    winning_view_id: str = "full"
+    winning_locale: str = "en"
 
 
 @dataclass(frozen=True)

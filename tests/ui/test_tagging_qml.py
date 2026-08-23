@@ -44,11 +44,11 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
         "acceptSelectedProposal(",
         "rejectSelectedProposal(",
         "generateSelectedTagProposals(",
-        "installOrUpdateTgm(",
         "rebuildTgmVectors(",
         "cancelTgmOperation(",
         "cancelTagProposalGeneration(",
         "setTaggingEnabled(",
+        "setMetadataLanguage(",
         "setProposalThreshold(",
         "setAutoAcceptEnabled(",
         "setAutoAcceptThreshold(",
@@ -65,6 +65,12 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
     # Assert
     assert missing == []
     assert 'objectName: "addTgmTermButton"' in source
+    assert 'objectName: "metadataLanguageCombo"' in source
+    assert "Bundled Wikidata snapshot" in source
+    assert "Metadata language (independent of interface)" in source
+    assert "Install TGM" not in source
+    assert "Update TGM" not in source
+    assert "Install Translation Pack" not in source
     assert 'objectName: "addFreeTagButton"' in source
     assert 'objectName: "freeTagSuggestions"' in source
     assert 'objectName: "currentFreeTags"' in source

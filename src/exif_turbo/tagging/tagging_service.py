@@ -18,6 +18,9 @@ from ..models.tag_proposal import (
     TagProposalStatus,
 )
 from ..models.tgm import TgmCategory, TgmConcept, TgmSnapshot
+from ..models.vocabulary import VocabularyConcept, VocabularySnapshot
+from .accepted_tag_alias_resolver import AcceptedTagAliasResolver
+from .controlled_vocabulary_repository import ControlledVocabularyRepository
 from .derivative_export_service import extract_embedded_keyword_labels
 from .sidecar_repository import (
     FilesystemSidecarRepository,
@@ -161,11 +164,17 @@ class TaggingService:
         tgm_repository: TgmSnapshotRepository,
         *,
         clock: Callable[[], datetime] | None = None,
+        vocabulary_repository: ControlledVocabularyRepository | None = None,
     ) -> None:
         self._image_repository = image_repository
         self._sidecar_repository = sidecar_repository
         self._tgm_repository = tgm_repository
         self._clock = clock or (lambda: datetime.now(UTC))
+        self._vocabulary_repository = vocabulary_repository
+        self._alias_resolver = AcceptedTagAliasResolver(
+            vocabulary_repository=vocabulary_repository,
+            tgm_repository=tgm_repository,
+        )
 
     def get_image_tagging_state(self, image_path: str) -> ImageTaggingState:
         loaded = self._read_sidecar(Path(image_path))
@@ -177,9 +186,21 @@ class TaggingService:
         )
 
     def add_concept(self, image_path: str, concept_reference: str) -> TagMutationResult:
-        snapshot = self._tgm_repository.load()
-        concept = self._resolve_concept(concept_reference)
-        tag = self._build_tag(concept, snapshot, self._timestamp())
+        concept = self._resolve_addable_concept(concept_reference)
+        timestamp = self._timestamp()
+        if isinstance(concept, TgmConcept):
+            tag = self._build_tag(
+                concept,
+                self._tgm_repository.load(),
+                timestamp,
+            )
+        else:
+            assert self._vocabulary_repository is not None
+            tag = self._build_vocabulary_tag(
+                concept,
+                self._vocabulary_repository.load(),
+                timestamp,
+            )
         return self._apply_tag_changes(image_path, additions=(tag,))
 
     def remove_concept(self, image_path: str, concept_id: str) -> TagMutationResult:
@@ -276,13 +297,7 @@ class TaggingService:
         return TagMutationResult(image_path, True, updated)
 
     def accept_proposal(self, proposal: TagProposal) -> TagMutationResult:
-        concept = self._resolve_concept(proposal.concept_id)
-        tag = self._build_clip_tag(
-            concept,
-            self._tgm_repository.load(),
-            self._timestamp(),
-            proposal,
-        )
+        tag = self._build_proposal_tag(proposal, self._timestamp())
         return self._apply_tag_changes(
             proposal.image_path,
             additions=(tag,),
@@ -300,7 +315,7 @@ class TaggingService:
         on_progress: BulkProgress | None = None,
         cancel_check: Callable[[], bool] | None = None,
     ) -> BulkTagResult:
-        concept = self._resolve_concept(concept_reference)
+        concept = self._resolve_addable_concept(concept_reference)
         return self._bulk_apply(
             image_paths,
             lambda path: self.add_concept(path, concept.concept_id),
@@ -444,6 +459,7 @@ class TaggingService:
                 ),
             )
             for concept_id, count in sorted(counts.items())
+            if concept_id.startswith("loc-tgm:")
             if (concept := self._tgm_repository.get(concept_id)) is not None
             and concept.selectable
         )
@@ -473,6 +489,10 @@ class TaggingService:
             sidecar,
             updated_at=self._timestamp(),
             tags=self._ordered_tags(tuple(tags_by_id.values())),
+            schema_version=self._schema_version_for_tags(
+                sidecar,
+                tuple(tags_by_id.values()),
+            ),
         )
         revision = self._write_sidecar(path, updated, loaded)
         self._update_cache(
@@ -543,6 +563,7 @@ class TaggingService:
             free_tags=free_tags,
             excluded_embedded_tags=excluded_embedded_tags,
             exclude_all_embedded_tags=exclude_all_embedded_tags,
+            schema_version=self._schema_version_for_tags(sidecar, tags),
         )
         revision = self._write_sidecar(path, updated, loaded)
         self._update_cache(image_path, updated, revision)
@@ -565,19 +586,13 @@ class TaggingService:
         generation: ProposalGenerationResult,
     ) -> BulkTagItemResult:
         try:
-            snapshot = self._tgm_repository.load()
             timestamp = self._timestamp()
             proposals_by_concept = {
                 proposal.concept_id: proposal
                 for proposal in generation.auto_candidates
             }
             additions = tuple(
-                self._build_clip_tag(
-                    self._resolve_concept(proposal.concept_id),
-                    snapshot,
-                    timestamp,
-                    proposal,
-                )
+                self._build_proposal_tag(proposal, timestamp)
                 for proposal in proposals_by_concept.values()
             )
             result = self._apply_tag_changes(
@@ -650,6 +665,29 @@ class TaggingService:
             )
         return concept
 
+    def _resolve_addable_concept(
+        self,
+        reference: str,
+    ) -> TgmConcept | VocabularyConcept:
+        normalized = reference.strip()
+        if normalized.startswith("wikidata:") and self._vocabulary_repository is not None:
+            concept = self._vocabulary_repository.get(normalized)
+            if concept is not None:
+                return concept
+        try:
+            return self._resolve_concept(reference)
+        except TaggingConceptError as tgm_error:
+            if not normalized or self._vocabulary_repository is None:
+                raise tgm_error
+            concept = self._vocabulary_repository.get(normalized)
+            if concept is None:
+                concept = self._vocabulary_repository.resolve_label(normalized, "en")
+            if concept is None:
+                raise TaggingConceptError(
+                    f"unknown controlled vocabulary concept: {reference}"
+                ) from tgm_error
+            return concept
+
     @staticmethod
     def _normalize_free_tag(label: str) -> str:
         try:
@@ -699,6 +737,30 @@ class TaggingService:
             },
         )
 
+    @staticmethod
+    def _build_vocabulary_tag(
+        concept: VocabularyConcept,
+        snapshot: VocabularySnapshot,
+        timestamp: str,
+    ) -> ImageTag:
+        return ImageTag(
+            concept_id=concept.concept_id,
+            label=concept.canonical_label,
+            vocabulary="wikidata",
+            category=concept.category.value,
+            provenance=TagProvenance(
+                method="manual",
+                accepted_at=timestamp,
+                vocabulary_checksum=f"sha256:{snapshot.manifest_sha256}",
+                extra={
+                    "concept_source_uri": concept.source_uri,
+                    "license_id": concept.license_id,
+                    "snapshot_version": snapshot.version,
+                    "source_name": snapshot.source_name,
+                },
+            ),
+        )
+
     @classmethod
     def _build_clip_tag(
         cls,
@@ -717,6 +779,38 @@ class TaggingService:
                 model=proposal.provider_model,
                 vocabulary_checksum=f"sha256:{snapshot.raw_sha256}",
                 extra={
+                    "provider": "clip",
+                    "provider_fingerprint": proposal.provider_fingerprint,
+                },
+            ),
+        )
+
+    def _build_proposal_tag(
+        self,
+        proposal: TagProposal,
+        timestamp: str,
+    ) -> ImageTag:
+        concept = self._resolve_addable_concept(proposal.concept_id)
+        if isinstance(concept, TgmConcept):
+            return self._build_clip_tag(
+                concept,
+                self._tgm_repository.load(),
+                timestamp,
+                proposal,
+            )
+        assert self._vocabulary_repository is not None
+        snapshot = self._vocabulary_repository.load()
+        manual = self._build_vocabulary_tag(concept, snapshot, timestamp)
+        return replace(
+            manual,
+            provenance=TagProvenance(
+                method="clip",
+                accepted_at=timestamp,
+                confidence=proposal.score,
+                model=proposal.provider_model,
+                vocabulary_checksum=f"sha256:{snapshot.manifest_sha256}",
+                extra={
+                    **manual.provenance.extra,
                     "provider": "clip",
                     "provider_fingerprint": proposal.provider_fingerprint,
                 },
@@ -759,11 +853,9 @@ class TaggingService:
         accepted_proposals: tuple[tuple[str, str], ...] = (),
     ) -> None:
         sidecar_path = self._sidecar_repository.sidecar_path(Path(image_path))
-        aliases = {
-            tag.concept_id: concept.aliases
-            for tag in sidecar.tags
-            if (concept := self._tgm_repository.get(tag.concept_id)) is not None
-        }
+        aliases = self._alias_resolver.resolve(
+            tag.concept_id for tag in sidecar.tags
+        )
         try:
             self._image_repository.replace_accepted_tags_and_sidecar_state(
                 image_path,
@@ -801,3 +893,14 @@ class TaggingService:
     @staticmethod
     def _ordered_tags(tags: tuple[ImageTag, ...]) -> tuple[ImageTag, ...]:
         return tuple(sorted(tags, key=lambda tag: (tag.label.casefold(), tag.concept_id)))
+
+    @staticmethod
+    def _schema_version_for_tags(
+        sidecar: ImageSidecar,
+        tags: tuple[ImageTag, ...],
+    ) -> int:
+        if sidecar.schema_version == 2 or any(
+            tag.vocabulary == "wikidata" for tag in tags
+        ):
+            return 2
+        return 1

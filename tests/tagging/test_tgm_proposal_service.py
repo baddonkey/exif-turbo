@@ -16,30 +16,52 @@ from exif_turbo.models.tag_proposal import (
     TagProposal,
     TagProposalStatus,
 )
-from exif_turbo.models.tgm import TgmCategory, TgmConcept, TgmSnapshot, TgmSourceFormat
 from exif_turbo.models.tgm_vector import TgmVectorFingerprint
+from exif_turbo.models.vocabulary import (
+    LocalizedVocabularyTerms,
+    VocabularyCategory,
+    VocabularyConcept,
+    VocabularySnapshot,
+)
 from exif_turbo.tagging.tgm_clip_proposal_provider import TgmClipProposalProvider
 from exif_turbo.tagging.tgm_proposal_service import TgmProposalService
-from exif_turbo.tagging.tgm_snapshot_repository import TgmSnapshotRepository
+from exif_turbo.tagging.vocabulary_snapshot_repository import VocabularySnapshotRepository
 
 
-def _concept(number: int, label: str) -> TgmConcept:
-    return TgmConcept(
-        concept_id=f"loc-tgm:tgm{number:06d}",
-        tnr=f"tgm{number:06d}",
-        label=label,
-        categories=(TgmCategory.SUBJECT,),
+def _concept(number: int, label: str) -> VocabularyConcept:
+    return VocabularyConcept(
+        concept_id=f"wikidata:Q{number}",
+        category=VocabularyCategory.SUBJECT,
+        canonical_label=label,
+        localized_terms=tuple(
+            LocalizedVocabularyTerms(locale, label)
+            for locale in ("en", "de", "fr", "it")
+        ),
+        source_uri=f"https://www.wikidata.org/entity/Q{number}",
+        license_id="CC0-1.0",
     )
 
 
 def _fingerprint() -> TgmVectorFingerprint:
-    return TgmVectorFingerprint("snapshot", 1, 1, "ViT-B-32", "openai", 512)
+    return TgmVectorFingerprint(
+        vocabulary="wikidata",
+        snapshot_version=1,
+        source_dump_sha256="a" * 64,
+        manifest_sha256="b" * 64,
+        prompt_version=3,
+        prompt_strategy="wikidata-multilingual-labels-aliases-v1",
+        prompt_locales=("en", "de", "fr", "it"),
+        model_name="ViT-B-32",
+        pretrained="openai",
+        dimension=512,
+    )
 
 
 def _setup(
     tmp_path: Path,
     *,
     add_image_vector: bool = True,
+    add_crop_vector: bool = False,
 ) -> tuple[ImageIndexRepository, TgmProposalService, str, TgmVectorFingerprint]:
     image_path = "/photos/photo.jpg"
     image_repository = ImageIndexRepository(tmp_path / "images.db")
@@ -52,20 +74,29 @@ def _setup(
     query = np.zeros(512, dtype=np.float32)
     query[:3] = (0.9, 0.8, 0.7)
     if add_image_vector:
-        image_vectors.add_images(query, [image_path])
+        if add_crop_vector:
+            crop = np.zeros(512, dtype=np.float32)
+            crop[1] = 1.0
+            image_vectors.add_images(
+                np.stack([query, crop]),
+                [image_path, image_path],
+                view_ids=["full", "top_left"],
+            )
+        else:
+            image_vectors.add_images(query, [image_path])
 
     concepts = (_concept(1, "Forests"), _concept(2, "Deer"), _concept(3, "Rivers"))
-    snapshot = TgmSnapshot(
+    snapshot = VocabularySnapshot(
         concepts=concepts,
-        diagnostics=(),
-        source_url="https://example.test/tgm.xml",
-        source_format=TgmSourceFormat.XML,
-        distribution_date=None,
-        imported_at=datetime(2026, 8, 9, tzinfo=UTC),
-        raw_sha256="snapshot",
-        raw_size_bytes=100,
+        version=1,
+        created_at=datetime(2026, 8, 23, tzinfo=UTC),
+        source_name="Wikidata",
+        source_dump_uri="file:///offline/wikidata.json",
+        source_dump_sha256="a" * 64,
+        manifest_sha256="b" * 64,
+        license_id="CC0-1.0",
     )
-    snapshots = TgmSnapshotRepository(tmp_path / "snapshot.json.gz")
+    snapshots = VocabularySnapshotRepository(tmp_path / "snapshot.json.gz")
     snapshots.activate(snapshot)
 
     term_vectors = TgmVectorRepository(
@@ -80,7 +111,10 @@ def _setup(
     matrix[2, 2] = 1.0
     fingerprint = _fingerprint()
     term_vectors.replace_index(
-        matrix, [concept.concept_id for concept in concepts], fingerprint
+        matrix,
+        [concept.concept_id for concept in concepts],
+        fingerprint,
+        locales=["en", "de", "fr"],
     )
     provider = TgmClipProposalProvider(image_vectors, term_vectors, snapshots)
     return (
@@ -95,8 +129,9 @@ def _accept_first_concept(
     repository: ImageIndexRepository, image_path: str
 ) -> None:
     tag = ImageTag(
-        concept_id="loc-tgm:tgm000001",
+        concept_id="wikidata:Q1",
         label="Forests",
+        vocabulary="wikidata",
         category="subject",
         provenance=TagProvenance(
             method="manual",
@@ -110,6 +145,7 @@ def _accept_first_concept(
             source=SidecarSource(filename="photo.jpg"),
             updated_at="2026-08-09T12:00:00Z",
             tags=(tag,),
+            schema_version=2,
         ),
         sidecar_path=f"{image_path}.sidecar.json",
         sidecar_mtime_ns=1,
@@ -165,6 +201,31 @@ def test_tgm_proposal_service_returns_ranked_results_without_persisting_pending(
     assert repository.get_accepted_tags(image_path) == ()
 
 
+def test_tgm_proposal_service_max_pools_image_views_and_reports_winning_locale(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    repository, service, image_path, fingerprint = _setup(
+        tmp_path,
+        add_crop_vector=True,
+    )
+
+    # Act
+    batch = service.generate(
+        [image_path],
+        fingerprint,
+        top_k=3,
+        threshold=0.0,
+    )
+
+    # Assert
+    proposal = batch.results[0].proposals[0]
+    assert proposal.label == "Deer"
+    assert proposal.winning_view_id == "top_left"
+    assert proposal.winning_locale == "de"
+    repository.close()
+
+
 def test_tgm_proposal_service_excludes_accepted_and_rejected_current_concepts(
     tmp_path: Path,
 ) -> None:
@@ -183,7 +244,7 @@ def test_tgm_proposal_service_excludes_accepted_and_rejected_current_concepts(
 
     # Assert
     assert [proposal.concept_id for proposal in batch.results[0].proposals] == [
-        "loc-tgm:tgm000003"
+        "wikidata:Q3"
     ]
     rejected = repository.get_proposals(
         image_path,
@@ -191,7 +252,24 @@ def test_tgm_proposal_service_excludes_accepted_and_rejected_current_concepts(
         status=TagProposalStatus.REJECTED,
     )
     assert [proposal.concept_id for proposal in rejected] == [
-        "loc-tgm:tgm000002"
+        "wikidata:Q2"
+    ]
+
+
+def test_tgm_proposal_service_refills_limit_after_accepted_concept(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    repository, service, image_path, fingerprint = _setup(tmp_path)
+    _accept_first_concept(repository, image_path)
+
+    # Act
+    batch = service.generate([image_path], fingerprint, top_k=2, threshold=0.0)
+
+    # Assert
+    assert [proposal.concept_id for proposal in batch.results[0].proposals] == [
+        "wikidata:Q2",
+        "wikidata:Q3",
     ]
 
 
@@ -199,7 +277,7 @@ class _DuplicateProvider:
     def propose(self, image_path: str, fingerprint: TgmVectorFingerprint, **_: object) -> ProposalGenerationResult:
         proposal = TagProposal(
             image_path=image_path,
-            concept_id="loc-tgm:tgm000001",
+            concept_id="wikidata:Q1",
             label="Forests",
             category="subject",
             provider_fingerprint=fingerprint.identifier,

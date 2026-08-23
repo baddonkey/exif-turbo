@@ -5,7 +5,7 @@ from typing import List
 
 from PySide6.QtCore import QThread, Signal
 
-from ...config import ai_id_map_path, ai_index_path
+from ...config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
 from ...data.ai_vector_repository import AiVectorRepository
 from ...data.image_index_repository import ImageIndexRepository
 from ...indexing.ai_indexer_service import AiIndexerService
@@ -79,7 +79,11 @@ class AiSearchWorker(QThread):
             index_path = ai_index_path(self._db_path)
             id_map_path = ai_id_map_path(self._db_path)
 
-            vector_repo = AiVectorRepository(index_path, id_map_path)
+            vector_repo = AiVectorRepository(
+                index_path,
+                id_map_path,
+                ai_vector_metadata_path(self._db_path),
+            )
             vector_repo.load()
 
             image_repo = ImageIndexRepository(self._db_path, key=self._key)

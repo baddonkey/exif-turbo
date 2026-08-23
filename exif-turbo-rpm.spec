@@ -44,6 +44,9 @@ _common_hiddenimports = [
     'markdown',
     'markdown.extensions.tables',
     'av',
+    'transformers',
+    'sentencepiece',
+    'sentencepiece._sentencepiece',
 ]
 
 _wec_datas, _wec_bins, _wec_hidden = collect_all('PySide6.QtWebEngineCore')

@@ -8,12 +8,10 @@ import pytest
 from exif_turbo.ui.workers import bulk_tag_worker as bulk_module
 from exif_turbo.ui.workers import copy_tags_worker as copy_module
 from exif_turbo.ui.workers import tgm_proposal_worker as proposal_module
-from exif_turbo.ui.workers import tgm_update_worker as update_module
 from exif_turbo.ui.workers import tgm_vector_build_worker as vector_module
 from exif_turbo.ui.workers.bulk_tag_worker import BulkTagWorker
 from exif_turbo.ui.workers.copy_tags_worker import CopyTagsWorker
 from exif_turbo.ui.workers.tgm_proposal_worker import TgmProposalWorker
-from exif_turbo.ui.workers.tgm_update_worker import TgmUpdateWorker
 from exif_turbo.ui.workers.tgm_vector_build_worker import TgmVectorBuildWorker
 from exif_turbo.ui.workers import maintenance_worker as maintenance_module
 from exif_turbo.ui.workers.maintenance_worker import MaintenanceWorker
@@ -26,22 +24,11 @@ class FakeRepository:
     def load(self) -> None:
         pass
 
+    def load_for_rebuild(self) -> None:
+        pass
+
     def close(self) -> None:
         self.closed = True
-
-
-def test_tgm_update_worker_canceled_before_run_emits_canceled(tmp_path: Path) -> None:
-    # Arrange
-    worker = TgmUpdateWorker(tmp_path / "images.db", "")
-    canceled: list[bool] = []
-    worker.canceled.connect(lambda: canceled.append(True))
-
-    # Act
-    worker.cancel()
-    worker.run()
-
-    # Assert
-    assert canceled == [True]
 
 
 def test_tgm_vector_build_worker_fake_service_emits_success(
@@ -50,7 +37,7 @@ def test_tgm_vector_build_worker_fake_service_emits_success(
 ) -> None:
     # Arrange
     class FakeVectorService:
-        def __init__(self, *args: object) -> None:
+        def __init__(self, *args: object, **kwargs: object) -> None:
             pass
 
         def build(self, *, on_progress: object, cancel_check: object) -> object:
@@ -59,7 +46,7 @@ def test_tgm_vector_build_worker_fake_service_emits_success(
 
     monkeypatch.setattr(vector_module, "AiVectorRepository", FakeRepository)
     monkeypatch.setattr(vector_module, "TgmVectorRepository", FakeRepository)
-    monkeypatch.setattr(vector_module, "TgmSnapshotRepository", FakeRepository)
+    monkeypatch.setattr(vector_module, "VocabularySnapshotRepository", FakeRepository)
     monkeypatch.setattr(vector_module, "AiIndexerService", FakeRepository)
     monkeypatch.setattr(vector_module, "TgmVectorIndexService", FakeVectorService)
     worker = TgmVectorBuildWorker(tmp_path / "images.db")
@@ -87,6 +74,7 @@ def test_tgm_proposal_worker_repository_error_emits_failed(
 
     monkeypatch.setattr(proposal_module, "ImageIndexRepository", FakeRepository)
     monkeypatch.setattr(proposal_module, "TgmSnapshotRepository", FakeRepository)
+    monkeypatch.setattr(proposal_module, "VocabularySnapshotRepository", FakeRepository)
     monkeypatch.setattr(proposal_module, "AiVectorRepository", FailingImageVectors)
     worker = TgmProposalWorker(
         tmp_path / "images.db",

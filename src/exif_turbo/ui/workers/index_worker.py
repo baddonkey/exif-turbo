@@ -10,10 +10,13 @@ from typing import List
 
 from PySide6.QtCore import QThread, Signal
 
-from ...config import thumb_cache_dir
+from ...config import bundled_vocabulary_path, tgm_snapshot_path, thumb_cache_dir
 from ...data.image_index_repository import ImageIndexRepository
 from ...indexing.image_finder import ImageFinder
 from ...indexing.indexer_service import IndexerService
+from ...tagging.sidecar_synchronizer import SidecarSynchronizer
+from ...tagging.tgm_snapshot_repository import TgmSnapshotRepository
+from ...tagging.vocabulary_snapshot_repository import VocabularySnapshotRepository
 from ...utils.preview_cache import preview_dir
 from ._macos_activity import AppNapAssertion
 
@@ -75,7 +78,22 @@ class IndexWorker(QThread):
                 self._clear_cache_dir.mkdir(parents=True, exist_ok=True)
             repo = ImageIndexRepository(self.db_path, key=self._key)
             finder = ImageFinder(blacklist=self._blacklist)
-            indexer = IndexerService(repo, finder=finder)
+            legacy_snapshot_path = tgm_snapshot_path(self.db_path)
+            indexer = IndexerService(
+                repo,
+                finder=finder,
+                sidecar_synchronizer=SidecarSynchronizer(
+                    repo,
+                    vocabulary_repository=VocabularySnapshotRepository(
+                        bundled_vocabulary_path()
+                    ),
+                    tgm_repository=(
+                        TgmSnapshotRepository(legacy_snapshot_path)
+                        if legacy_snapshot_path.exists()
+                        else None
+                    ),
+                ),
+            )
             _last_emit: list[float] = [0.0]  # mutable cell for the closure
 
             def _on_progress(current: int, total: int, p: Path) -> None:
