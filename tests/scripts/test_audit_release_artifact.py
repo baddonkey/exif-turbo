@@ -42,6 +42,9 @@ def _write_compliant_payload(root: Path) -> None:
     (licenses / "STAGING-COMPLETE").write_text("complete\n", encoding="ascii")
     (root / "_internal" / "libvips-42.dll").write_bytes(b"binary")
     (root / "_internal" / "Qt6Core.dll").write_bytes(b"binary")
+    bpe_vocab = root / "_internal" / "open_clip" / "bpe_simple_vocab_16e6.txt.gz"
+    bpe_vocab.parent.mkdir(parents=True)
+    bpe_vocab.write_bytes(b"vocabulary")
 
 
 def test_audit_release_payload_complete_payload_succeeds(tmp_path: Path) -> None:
@@ -50,6 +53,26 @@ def test_audit_release_payload_complete_payload_succeeds(tmp_path: Path) -> None
 
     # Act / Assert
     audit_release_payload(tmp_path)
+
+
+def test_audit_release_payload_missing_open_clip_bpe_vocab_raises_error(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    _write_compliant_payload(tmp_path)
+    (
+        tmp_path
+        / "_internal"
+        / "open_clip"
+        / "bpe_simple_vocab_16e6.txt.gz"
+    ).unlink()
+
+    # Act / Assert
+    with pytest.raises(
+        ArtifactAuditError,
+        match="open_clip/bpe_simple_vocab_16e6.txt.gz",
+    ):
+        audit_release_payload(tmp_path)
 
 
 def test_audit_release_payload_bundled_tgm_data_raises_error(tmp_path: Path) -> None:

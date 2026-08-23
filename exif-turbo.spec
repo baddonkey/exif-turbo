@@ -35,7 +35,10 @@ _common_datas = [
     (str(_license_dir), 'licenses'),
     ('docs\\user-manual.pdf', 'exif_turbo\\assets'),
     ('src\\exif_turbo\\i18n\\locales', 'exif_turbo\\i18n\\locales'),
-    *collect_data_files('open_clip', includes=['model_configs/*.json']),
+    *collect_data_files(
+        'open_clip',
+        includes=['model_configs/*.json', 'bpe_simple_vocab_16e6.txt.gz'],
+    ),
 ]
 
 _common_hiddenimports = [
