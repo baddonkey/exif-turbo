@@ -29,7 +29,7 @@ Output files:
     08_gps_location_bar.png  -- GPS location bar (image with GPS coordinates selected)
     09_ai_search_mode.png    -- Search tab in AI mode (EXIF/AI toggle + precision picker)
     10_tagging_drawer.png    -- Current-image tagging drawer and derivative preview
-    11_tagging_settings.png  -- Per-database Tagging and TGM settings
+    11_tagging_settings.png  -- Per-database tagging and controlled-vocabulary settings
 """
 
 from __future__ import annotations
@@ -68,6 +68,7 @@ from PySide6.QtQuickControls2 import QQuickStyle  # noqa: E402
 from exif_turbo.data.image_index_repository import ImageIndexRepository  # noqa: E402
 from exif_turbo.data.indexed_folder_repository import IndexedFolderRepository  # noqa: E402
 from exif_turbo.indexing.indexer_service import IndexerService  # noqa: E402
+from exif_turbo.models.tag_proposal import TagProposal  # noqa: E402
 from exif_turbo.ui.models.checked_filter_proxy_model import CheckedFilterProxyModel  # noqa: E402
 from exif_turbo.ui.models.exif_list_model import ExifListModel  # noqa: E402
 from exif_turbo.ui.models.folder_list_model import FolderListModel  # noqa: E402
@@ -489,10 +490,6 @@ def _run_gui() -> None:
         from PySide6.QtCore import QMetaObject, QObject, Qt
 
         ctrl.setTaggingEnabled(True)
-        ctrl._free_tags_model.set_rows(("Alpine landscape", "Travel"))
-        ctrl._derivative_tags_model.set_rows(
-            (*ctrl._embedded_tags, "Alpine landscape", "Travel")
-        )
         drawer = root.findChild(QObject, "taggingDrawer")
         if drawer is None:
             print("  WARNING: taggingDrawer not found -- capture may be incomplete")
@@ -500,14 +497,60 @@ def _run_gui() -> None:
             QMetaObject.invokeMethod(
                 drawer, "openAndFocus", Qt.ConnectionType.DirectConnection
             )
-        print("  Tagging drawer open -- waiting for view to settle ...")
-        QTimer.singleShot(1000, step_8_tagging_grab)
+        QTimer.singleShot(700, step_8_populate_proposals)
+
+    def step_8_populate_proposals() -> None:
+        image_path = search_model.get_path(ctrl.currentResultRow) or ""
+        ctrl._free_tags_model.set_rows(("Computer history", "Museum exhibit"))
+        ctrl._derivative_tags_model.set_rows(
+            (*ctrl._embedded_tags, "Computer history", "Museum exhibit")
+        )
+        ctrl._tgm_vectors_current = True
+        ctrl._pending_proposals_model.set_rows(
+            [
+                TagProposal(
+                    image_path=image_path,
+                    concept_id="wikidata:Q216640",
+                    label="computer terminal",
+                    category="subject",
+                    provider_fingerprint="screenshot-fixture",
+                    score=0.264,
+                    rank=1,
+                    winning_view_id="full",
+                    winning_locale="en",
+                ),
+                TagProposal(
+                    image_path=image_path,
+                    concept_id="wikidata:Q3966",
+                    label="computer hardware",
+                    category="subject",
+                    provider_fingerprint="screenshot-fixture",
+                    score=0.238,
+                    rank=2,
+                    winning_view_id="center",
+                    winning_locale="en",
+                ),
+            ]
+        )
+        ctrl.taggingStateChanged.emit()
+        print("  Tagging drawer ready with Wikidata proposals -- waiting for view to settle ...")
+        QTimer.singleShot(200, step_8_center_proposals)
+
+    def step_8_center_proposals() -> None:
+        from PySide6.QtCore import QObject
+
+        scroll_view = root.findChild(QObject, "taggingScrollView")
+        if scroll_view is not None:
+            content_item = scroll_view.property("contentItem")
+            if content_item is not None:
+                content_item.setProperty("contentY", 70)
+        QTimer.singleShot(150, step_8_tagging_grab)
 
     def step_8_tagging_grab() -> None:
         _grab(root, "10_tagging_drawer")
         QTimer.singleShot(500, step_9_tagging_settings_setup)
 
-    # -- Step 9: Tagging and TGM settings ------------------------------------
+    # -- Step 9: Tagging and controlled-vocabulary settings ------------------
     def step_9_tagging_settings_setup() -> None:
         from PySide6.QtCore import QMetaObject, Qt
 
