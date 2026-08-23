@@ -25,6 +25,26 @@ _QT_DISTRIBUTIONS = {
     "pyside6-essentials",
     "shiboken6",
 }
+_UPSTREAM_PACKAGE_LICENSES = {
+    "sentencepiece": (
+        "Apache-2.0.txt",
+        "https://raw.githubusercontent.com/google/sentencepiece/v{version}/LICENSE",
+        "Apache-2.0",
+        "License :: OSI Approved :: Apache Software License",
+        "Apache License",
+        11_000,
+        "END OF TERMS AND CONDITIONS",
+    ),
+    "tokenizers": (
+        "Apache-2.0.txt",
+        "https://raw.githubusercontent.com/huggingface/tokenizers/v{version}/LICENSE",
+        "Apache-2.0",
+        "License :: OSI Approved :: Apache Software License",
+        "Apache License",
+        11_000,
+        "END OF TERMS AND CONDITIONS",
+    ),
+}
 _QT_LICENSES = {
     "GPL-2.0-only.txt": ("GNU GENERAL PUBLIC LICENSE", 17_000, "END OF TERMS AND CONDITIONS"),
     "GPL-3.0-only.txt": ("GNU GENERAL PUBLIC LICENSE", 34_000, "END OF TERMS AND CONDITIONS"),
@@ -140,6 +160,68 @@ def _license_files(package: Distribution) -> tuple[Path, ...]:
         if source.is_file():
             files.append(source)
     return tuple(sorted(set(files), key=lambda path: str(path).casefold()))
+
+
+def _upstream_package_license_files(package: Distribution) -> tuple[Path, ...]:
+    canonical_name = canonicalize_name(package.metadata["Name"])
+    specification = _UPSTREAM_PACKAGE_LICENSES.get(canonical_name)
+    if specification is None:
+        return ()
+    (
+        filename,
+        url_template,
+        expression,
+        classifier,
+        heading,
+        minimum_size,
+        required_text,
+    ) = specification
+    declared_expression = package.metadata.get("License-Expression")
+    declared_classifiers = package.metadata.get_all("Classifier") or []
+    if declared_expression != expression and classifier not in declared_classifiers:
+        raise LicenseStagingError(
+            f"expected {expression} declaration for {package.metadata['Name']} "
+            f"{package.version}"
+        )
+    cache_dir = (
+        REPO_ROOT
+        / "build"
+        / "license-cache"
+        / "python"
+        / canonical_name
+        / package.version
+    )
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    target = cache_dir / filename
+    if target.is_file():
+        cached = target.read_text(encoding="utf-8", errors="replace")
+        if (
+            len(cached.encode("utf-8")) >= minimum_size
+            and heading in cached
+            and required_text in cached
+        ):
+            return (target,)
+    url = url_template.format(version=package.version)
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response:  # noqa: S310
+            contents = response.read()
+    except OSError as exc:
+        raise LicenseStagingError(
+            f"could not download {package.metadata['Name']} {package.version} "
+            "license text"
+        ) from exc
+    text = contents.decode("utf-8")
+    if (
+        len(contents) < minimum_size
+        or heading not in text
+        or required_text not in text
+    ):
+        raise LicenseStagingError(
+            f"downloaded license text is invalid: {package.metadata['Name']} "
+            f"{package.version}"
+        )
+    target.write_text(text, encoding="utf-8")
+    return (target,)
 
 
 def _safe_filename(path: Path, used: set[str]) -> str:
@@ -321,7 +403,7 @@ def stage_runtime_licenses(
 
     package_licenses: list[tuple[Distribution, tuple[Path, ...]]] = []
     for package in packages:
-        files = _license_files(package)
+        files = _license_files(package) or _upstream_package_license_files(package)
         if not files and canonicalize_name(package.metadata["Name"]) not in (
             _QT_DISTRIBUTIONS
         ):
@@ -347,7 +429,8 @@ def stage_runtime_licenses(
             "=======================================",
             "",
             "Generated from the active build environment. Each directory below",
-            "contains the unmodified license/notice files shipped by that distribution.",
+            "contains validated license/notice files for that distribution.",
+            "Version-matched upstream texts are used only when a wheel omits its license.",
             "Qt for Python wheels that omit these files reference validated upstream",
             "Qt license texts in the shared qt/<version> directory.",
             "",
