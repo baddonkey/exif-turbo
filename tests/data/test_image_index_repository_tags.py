@@ -357,6 +357,27 @@ def test_refresh_accepted_tag_aliases_updates_fts_without_changing_tag_snapshot(
     assert repo.count_images("Wapiti") == 1
 
 
+def test_refresh_tgm_concept_search_labels_adds_localized_fts_terms(
+    repo: ImageIndexRepository,
+) -> None:
+    # Arrange
+    image_path = "/photos/photo.jpg"
+    tag = _tag(label="Golden eagles")
+    repo.upsert_image(image_path, "photo.jpg", 1.0, 100, {}, "Make Canon")
+    _replace_tags(repo, image_path, _sidecar(tag))
+
+    # Act
+    refreshed_count = repo.refresh_tgm_concept_search_labels(
+        {tag.concept_id: ("Steinadler", "Aigles royaux")}
+    )
+
+    # Assert
+    assert refreshed_count == 1
+    assert repo.get_accepted_tags(image_path) == (tag,)
+    assert repo.count_images("Steinadler") == 1
+    assert repo.count_images("Aigles") == 1
+
+
 def test_delete_missing_cascades_tag_and_sidecar_cache_rows(
     repo: ImageIndexRepository,
 ) -> None:

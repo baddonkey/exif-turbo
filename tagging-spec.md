@@ -1,22 +1,27 @@
 # EXIF Turbo Tagging Specification
 
-Status: Implemented (version 1; release validation and LOC redistribution review remain open)
+Status: Implemented (Wikidata/QID schema v2 with legacy TGM compatibility)
 
 This document is the product and technical contract for non-destructive image
 tagging in EXIF Turbo. Sections 1-16 describe the implemented version 1
 contract; sections 17-18 record remaining release questions and decisions.
 
-### Implementation status (2026-08-17)
+### Implementation status (2026-08-23)
 
 The end-to-end feature is implemented:
 
 - Adjacent schema-v1 `<complete-image-filename>.sidecar.json` files are plain
   UTF-8 JSON and authoritative for accepted tags. Atomic revision-checked
   writes preserve unknown fields and never write the original image.
-- Official TGM v1 XML is downloaded first, with official tagged text as
-  fallback. Canonical merged `TNR` values become `loc-tgm:tgmNNNNNN`; `UF` and
-  non-descriptor `USE` terms resolve as aliases; postable subject and
-  genre/form categories are selectable.
+- A bundled CC0 Wikidata snapshot provides a curated 8,313-concept visual
+  vocabulary: an 8,200-concept reviewed base plus qualified Wikidata concepts
+  linked to the Library of Congress TGM. It is not an exhaustive copy of
+  Wikidata. Every concept has intrinsic `en`,
+  `de`, `fr`, and `it` preferred labels and aliases and works offline without
+  an installer or localization pack. Accepted QIDs use sidecar schema v2.
+- Legacy schema-v1 `loc-tgm:tgmNNNNNN` tags remain readable. Their canonical
+  labels, aliases, and existing localization overlays remain compatibility
+  inputs for display, FTS, and export; low-level TGM import tooling is retained.
 - SQLCipher caches accepted controlled tags, custom free tags, the reusable
   custom-tag catalog, aliases, sidecar synchronization state, and rejected
   proposal decisions. `images_fts.tags_text` contains controlled and custom
@@ -35,8 +40,8 @@ The end-to-end feature is implemented:
 - Each Indexed Folders row can force-refresh sidecar-derived tags for its
   indexed images without re-extracting EXIF or rebuilding previews.
 - Proposal generation requires AI enabled, an explicit image AI scan, and an
-  independently built TGM term-vector index. Defaults are 0.24 for proposals
-  and 0.32 for auto-accept; auto-accept is disabled by default and its threshold
+  independently built TGM term-vector index. Defaults are 0.20 for proposals
+  and 0.28 for auto-accept; auto-accept is disabled by default and its threshold
   is kept at least 0.01 above the proposal threshold.
 - Derivatives preserve source format and relative trees, require an output root
   outside indexed sources, skip untagged/existing destinations, write and
@@ -401,9 +406,10 @@ and performs no EXIF extraction, thumbnail generation, or preview generation.
 
 ### 9.1 Separate vector indexes
 
-The existing image FAISS index remains image-only. A new TGM term index stores
-one normalized 512-dimensional vector for each canonical postable subject or
-genre/format concept.
+The image FAISS index remains image-only. Image-vector schema v2 stores up to
+five normalized rows per path: `full`, `top_left`, `top_right`, `bottom_left`,
+and `bottom_right`. The Wikidata term index uses schema v3 and stores one row
+per `(QID, locale)` for `en`, `de`, `fr`, and `it`.
 
 The TGM index is keyed by:
 
@@ -412,24 +418,24 @@ The TGM index is keyed by:
 - Prompt version.
 - CLIP model and pretrained-weight fingerprint.
 
-Changing TGM rebuilds only the term index. Existing image vectors do not need
-to be recomputed.
+Changing the vocabulary or prompt contract rebuilds only the term index.
+Upgrading an image index to schema v2 requires AI Full Rescan.
 
 ### 9.2 Term encoding
 
-Each term vector is generated from a controlled, versioned prompt containing
-the canonical term and useful alternate terms. Cataloger and history notes are
-not sent into the model. The prompt format is fixed for an index version so
-proposal scores remain reproducible.
+Each locale row is generated from a short, controlled prompt containing that
+locale's preferred label and bounded aliases. Languages are not concatenated
+or averaged. Search max-pools row scores by QID and applies `top_k` only after
+deduplication.
 
 ### 9.3 Proposal lifecycle
 
 For each selected image, the proposal service:
 
-1. Retrieves its existing CLIP vector.
-2. Searches the TGM term index.
-3. Applies the configured proposal threshold.
-4. Resolves aliases and deduplicates by canonical concept ID.
+1. Retrieves all existing CLIP view vectors for the image.
+2. Searches locale-specific Wikidata term rows for every view.
+3. Takes the maximum score across the 20 view-locale combinations per QID.
+4. Applies the configured proposal threshold and ranks deduplicated QIDs.
 5. Excludes concepts already accepted or explicitly rejected for the current
    TGM/model fingerprint.
 6. Returns ranked proposals to the current-image workbench without persisting
@@ -447,6 +453,17 @@ workbench generates them when it opens and whenever the focused image changes;
 **Generate for current image** remains available as a manual refresh. Rejected
 proposals are operational state and remain in SQLite. They are invalidated or
 reevaluated when the TGM, prompt, or CLIP fingerprint changes.
+
+Developer diagnostics can bypass the manual proposal threshold and return the
+raw top 20 QIDs with their decimal cosine similarity and winning view/locale.
+This mode never bypasses the auto-accept threshold.
+
+The offline Wikidata curator applies deterministic per-domain quotas toward an
+8,200-concept target. Explicit includes take precedence within a quota;
+impossible override/quota combinations fail; localized-label collisions retain
+the highest-priority concept; and unused domain quota is rebalanced globally.
+The review output records every decision, domain shortfall, and overflow. The
+shipped version 2 snapshot contains exactly 8,200 concepts.
 
 ### 9.4 Future providers
 
@@ -659,22 +676,22 @@ protection. AI tests must never trigger a real CLIP download.
 
 ## 16. Acceptance Criteria
 
-Version 1 is complete when:
+The current migration slice is complete when:
 
-1. A user can select a canonical TGM tag and EXIF Turbo creates or updates the
+1. A user can select a Wikidata concept and EXIF Turbo creates or updates the
    adjacent sidecar without changing the original image.
-2. An accepted canonical or alternate TGM term finds the image through existing
-   full-text search.
-3. TGM can be installed and updated from the official quarterly distribution
-   without losing the previous valid version after a failed update.
-4. CLIP can propose ranked canonical TGM tags from existing image vectors.
+2. An accepted QID's preferred labels and aliases across exactly `en`, `de`,
+   `fr`, and `it` find the image through FTS after mutation or sidecar refresh.
+3. The bundled curated 8,200-concept snapshot works offline with no pack installer.
+4. CLIP can propose ranked Wikidata concepts from existing image vectors.
 5. Review-first and explicitly enabled threshold auto-acceptance both retain
    complete provenance.
 6. A user can exclude individual embedded source keywords or ignore them all,
    persist that choice, and preview the exact merged, deduplicated keyword set
    that will be written to a derivative.
-7. A user can generate derivatives that contain canonical TGM labels in XMP
-   Subject and IPTC Keywords while original hashes and mtimes remain unchanged.
+7. A user can generate derivatives containing canonical, interface-language,
+  or selected-language Wikidata labels in XMP Subject and IPTC Keywords while
+  original hashes and mtimes remain unchanged.
 8. Existing databases migrate without losing images, metadata, marks, or search
    behavior.
 9. A user can copy accepted controlled/custom tags and target-applicable ignore
@@ -689,12 +706,13 @@ Version 1 is complete when:
 
 ## 17. Open Decisions
 
-- Confirm LOC redistribution and attribution requirements before deciding
-  whether a TGM snapshot may be bundled rather than downloaded on demand.
 - Decide how an accepted concept removed or made nonpostable by a later TGM
   release is displayed. The sidecar entry must not be silently deleted.
-- Evaluate the implemented 0.24 proposal and 0.32 auto-accept defaults on a
+- Evaluate the implemented 0.20 proposal and 0.28 auto-accept defaults on a
   representative image set before treating scores as production-calibrated.
+  `scripts/calibrate_tagging_thresholds.py` reports recall at 5/10/20, mean
+  reciprocal rank, and per-threshold hard-negative precision; the latter
+  counts only explicitly labeled hard negatives, not every unlabeled QID.
 
 ## 18. Decision Log
 
@@ -719,3 +737,5 @@ Version 1 is complete when:
 | 2026-08-17 | Add focused-source Copy Tags for marked images, current results, and the current Browse folder, with additive and confirmed replacement modes. |
 | 2026-08-17 | Add per-folder forced sidecar refresh without EXIF extraction or preview rebuilding. |
 | 2026-08-20 | Persist per-original embedded-tag exclusions and ignore-all in schema-v1 sidecars; enforce them during derivative export and copy only target-applicable exclusions. |
+| 2026-08-23 | Recalibrate multilingual XLM-R proposal and auto-accept defaults to 0.20 and 0.28; migrate untouched legacy defaults while preserving custom thresholds. |
+| 2026-08-23 | Bundle a curated 80-concept Wikidata CC0 visual subset with mandatory `en/de/fr/it`, offline QID schema-v2 runtime, and legacy TGM read/display/export compatibility; remove user-facing pack installers. |

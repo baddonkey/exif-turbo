@@ -7,6 +7,7 @@ from typing import Any
 
 
 _TGM_CONCEPT_ID = re.compile(r"^loc-tgm:tgm\d{6}$")
+_WIKIDATA_CONCEPT_ID = re.compile(r"^wikidata:Q[1-9]\d*$")
 _TAG_CATEGORIES = frozenset({"subject", "genre_format"})
 _TAG_METHODS = frozenset({"manual", "clip"})
 
@@ -117,14 +118,20 @@ class ImageTag:
     extra: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not _TGM_CONCEPT_ID.fullmatch(self.concept_id):
+        valid_identity = (
+            self.vocabulary == "loc-tgm"
+            and _TGM_CONCEPT_ID.fullmatch(self.concept_id) is not None
+        ) or (
+            self.vocabulary == "wikidata"
+            and _WIKIDATA_CONCEPT_ID.fullmatch(self.concept_id) is not None
+        )
+        if not valid_identity:
             raise SidecarValidationError(
-                "tag.concept_id must match loc-tgm:tgmNNNNNN"
+                "tag.vocabulary and concept_id must be a valid pair: "
+                "loc-tgm:tgmNNNNNN or wikidata:Q<positive integer>"
             )
         if not self.label.strip():
             raise SidecarValidationError("tag.label must be a non-empty string")
-        if self.vocabulary != "loc-tgm":
-            raise SidecarValidationError("tag.vocabulary must be loc-tgm")
         if self.category not in _TAG_CATEGORIES:
             raise SidecarValidationError(
                 "tag.category must be subject or genre_format"

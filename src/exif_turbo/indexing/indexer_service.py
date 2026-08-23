@@ -12,9 +12,11 @@ from typing import Callable, Dict, List
 
 _log = logging.getLogger(__name__)
 
+from ..config import bundled_vocabulary_path
 from ..data.image_index_repository import ImageIndexRepository
 from ..models.indexed_image import IndexedImage
 from ..tagging.sidecar_synchronizer import SidecarSynchronizer
+from ..tagging.vocabulary_snapshot_repository import VocabularySnapshotRepository
 from .exif_metadata_extractor import ExifMetadataExtractor
 from .image_finder import ImageFinder
 from .metadata_extractor import MetadataExtractor
@@ -180,7 +182,12 @@ class IndexerService:
         self.repo = repo
         self.extractor = extractor or ExifMetadataExtractor()
         self.finder = finder or ImageFinder()
-        self.sidecar_synchronizer = sidecar_synchronizer or SidecarSynchronizer(repo)
+        self.sidecar_synchronizer = sidecar_synchronizer or SidecarSynchronizer(
+            repo,
+            vocabulary_repository=VocabularySnapshotRepository(
+                bundled_vocabulary_path()
+            ),
+        )
 
     def build_index(
         self,

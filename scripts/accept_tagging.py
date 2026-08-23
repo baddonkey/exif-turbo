@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Run a hands-on acceptance check for the tagging workflow.
+"""Run a hands-on acceptance check for the offline Wikidata tagging workflow.
 
 The check uses temporary copies of repository sample images and leaves source
-fixtures and the user's EXIF Turbo profile untouched. It downloads the current
-official TGM distribution and requires a working ExifTool installation.
+fixtures and the user's EXIF Turbo profile untouched. A working ExifTool
+installation is required.
 """
 
 from __future__ import annotations
@@ -164,6 +164,7 @@ def main() -> int:
         from exif_turbo.config import (
             ai_id_map_path,
             ai_index_path,
+            bundled_vocabulary_path,
             tgm_concept_map_path,
             tgm_snapshot_path,
             tgm_term_index_path,
@@ -181,10 +182,14 @@ def main() -> int:
         from exif_turbo.models.search_result import SearchResult
         from exif_turbo.tagging.derivative_export_service import DerivativeExportService
         from exif_turbo.tagging.tgm_clip_proposal_provider import TgmClipProposalProvider
+        from exif_turbo.tagging.tgm_prompt_builder import TgmPromptBuilder
         from exif_turbo.tagging.tgm_proposal_service import TgmProposalService
         from exif_turbo.tagging.tgm_snapshot_repository import TgmSnapshotRepository
         from exif_turbo.tagging.tgm_update_service import TgmUpdateService
         from exif_turbo.tagging.tgm_vector_index_service import TgmVectorIndexService
+        from exif_turbo.tagging.vocabulary_snapshot_repository import (
+            VocabularySnapshotRepository,
+        )
         from exif_turbo.ui.models.checked_filter_proxy_model import CheckedFilterProxyModel
         from exif_turbo.ui.models.exif_list_model import ExifListModel
         from exif_turbo.ui.models.folder_list_model import FolderListModel
@@ -256,17 +261,22 @@ def main() -> int:
                 tgm_vector_metadata_path(db_path),
             )
             term_vectors.load()
+            vocabulary_repository = VocabularySnapshotRepository(
+                bundled_vocabulary_path()
+            )
+            vocabulary_snapshot = vocabulary_repository.load()
             vector_service = TgmVectorIndexService(
-                snapshot_repository,
+                vocabulary_repository,
                 term_vectors,
                 encoder,
             )
             term_started = time.perf_counter()
             build_result = vector_service.build(batch_size=64)
-            if not build_result.completed or term_vectors.count != len(
-                snapshot.selectable_concepts
-            ):
-                raise RuntimeError("real TGM vector build was incomplete")
+            expected_term_rows = (
+                len(vocabulary_snapshot.concepts) * len(TgmPromptBuilder.LOCALES)
+            )
+            if not build_result.completed or term_vectors.count != expected_term_rows:
+                raise RuntimeError("real vocabulary vector build was incomplete")
 
             proposal_repository = ImageIndexRepository(db_path, key="")
             proposal_service = TgmProposalService(
@@ -274,13 +284,13 @@ def main() -> int:
                 TgmClipProposalProvider(
                     image_vectors,
                     term_vectors,
-                    snapshot_repository,
+                    vocabulary_repository,
                 ),
             )
             proposal_result = proposal_service.generate(
                 [str(image) for image in images],
                 vector_service.expected_fingerprint(),
-                top_k=5,
+                top_k=20,
                 threshold=0.0,
             )
             pending_count = int(
@@ -314,13 +324,15 @@ def main() -> int:
                 "term_encode_seconds": round(time.perf_counter() - term_started, 2),
                 "proposals_generated": len(proposals),
                 "proposals_at_default_threshold": sum(
-                    proposal.score >= 0.24 for proposal in proposals
+                    proposal.score >= 0.20 for proposal in proposals
                 ),
                 "top_proposals": [
                     {
                         "image": Path(proposal.image_path).name,
                         "label": proposal.label,
                         "score": round(proposal.score, 4),
+                        "winning_view": proposal.winning_view_id,
+                        "winning_locale": proposal.winning_locale,
                     }
                     for proposal in proposals
                 ],

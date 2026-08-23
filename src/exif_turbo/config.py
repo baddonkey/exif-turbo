@@ -55,6 +55,11 @@ def ai_id_map_path(db_path: Path) -> Path:
     return database_data_dir(db_path) / "ai_id_map.json"
 
 
+def ai_vector_metadata_path(db_path: Path) -> Path:
+    """Path to model and integrity metadata for the AI vector index."""
+    return database_data_dir(db_path) / "ai_index_meta.json"
+
+
 def settings_path(db_path: Path) -> Path:
     """Per-database settings file.
 
@@ -64,9 +69,19 @@ def settings_path(db_path: Path) -> Path:
     return database_data_dir(db_path) / "settings.json"
 
 
+def bundled_vocabulary_path() -> Path:
+    """Bundled offline Wikidata controlled-vocabulary snapshot."""
+    return Path(__file__).resolve().parent / "assets" / "wikidata-vocabulary-v2.json.gz"
+
+
 def tgm_snapshot_path(db_path: Path) -> Path:
     """Active normalized TGM snapshot for the given database."""
     return database_data_dir(db_path) / "tgm" / "tgm-snapshot.json.gz"
+
+
+def tgm_localization_pack_path(db_path: Path) -> Path:
+    """Active independently sourced TGM localization overlay."""
+    return tgm_snapshot_path(db_path).parent / "tgm-localizations.json.gz"
 
 
 def tgm_work_dir(db_path: Path) -> Path:

@@ -19,6 +19,7 @@ dependencies = [
   "pyvips-binary>=8.18",
   "faiss-cpu>=1.14",
   "open-clip-torch>=3.3",
+  "transformers[sentencepiece]>=4.51,<5",
 ]
 
 [project.scripts]
@@ -35,7 +36,11 @@ build = ["pyinstaller", "babel", "packaging"]
 dev = ["exif-turbo[build]", "pytest", "pytest-qt", "pytest-timeout"]
 
 [tool.setuptools.package-data]
-exif_turbo = ["i18n/locales/**/*.mo", "i18n/locales/**/*.po"]
+exif_turbo = [
+  "assets/*.gz",
+  "i18n/locales/**/*.mo",
+  "i18n/locales/**/*.po",
+]
 
 [tool.pytest.ini_options]
 # Fail (with a stack dump) instead of hanging forever if a test wedges on a

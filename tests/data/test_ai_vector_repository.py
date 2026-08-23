@@ -1,12 +1,18 @@
 """Tests for AiVectorRepository — add, save, load, remove_folder, incremental skip."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from exif_turbo.data.ai_vector_repository import AiVectorRepository, _is_inside
+from exif_turbo.data.ai_vector_repository import (
+    AiVectorIndexError,
+    AiVectorRepository,
+    _is_inside,
+)
+from exif_turbo.models.ai_model_profile import AiModelProfile, DEFAULT_AI_MODEL_PROFILE
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -47,6 +53,63 @@ def test_ai_vector_repository_save_and_reload_preserves_vectors(tmp_path: Path) 
 
     # Assert
     assert "/photos/a.jpg" in repo2.get_indexed_paths()
+
+
+def test_ai_vector_repository_save_writes_model_metadata(tmp_path: Path) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    repo.add_images(_random_vec(), ["/photos/a.jpg"])
+
+    # Act
+    repo.save()
+    metadata = json.loads(
+        (tmp_path / "ai_index_meta.json").read_text(encoding="utf-8")
+    )
+
+    # Assert
+    assert metadata["model_fingerprint"] == DEFAULT_AI_MODEL_PROFILE.identifier
+    assert metadata["dimension"] == 512
+    assert metadata["count"] == 1
+    assert metadata["image_count"] == 1
+    assert metadata["view_strategy"] == "full-plus-four-corners-v1"
+
+
+def test_ai_vector_repository_load_legacy_index_requires_full_rescan(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    repo.add_images(_random_vec(), ["/photos/a.jpg"])
+    repo.save()
+    (tmp_path / "ai_index_meta.json").unlink()
+
+    # Act / Assert
+    with pytest.raises(AiVectorIndexError, match="AI Full Rescan"):
+        _make_repo(tmp_path)
+
+
+def test_ai_vector_repository_load_different_model_requires_full_rescan(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    repo.add_images(_random_vec(), ["/photos/a.jpg"])
+    repo.save()
+    other_profile = AiModelProfile(
+        identifier="other-model-v1",
+        model_name="other-model",
+        pretrained="weights",
+        dimension=512,
+    )
+    other_repo = AiVectorRepository(
+        tmp_path / "ai_index.faiss",
+        tmp_path / "ai_id_map.json",
+        profile=other_profile,
+    )
+
+    # Act / Assert
+    with pytest.raises(AiVectorIndexError, match="AI Full Rescan"):
+        other_repo.load()
 
 
 # ── add_images ────────────────────────────────────────────────────────────────
@@ -123,6 +186,28 @@ def test_ai_vector_repository_get_vectors_returns_found_and_missing_paths(
     assert np.allclose(actual["/photos/a.jpg"], expected)
 
 
+def test_ai_vector_repository_get_view_vectors_returns_all_views_for_path(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    full = _random_vec()
+    crop = np.roll(full, 1)
+    repo.add_images(
+        np.stack([full, crop]),
+        ["/photos/a.jpg", "/photos/a.jpg"],
+        view_ids=["full", "top_left"],
+    )
+
+    # Act
+    actual = repo.get_view_vectors("/photos/a.jpg")
+
+    # Assert
+    assert tuple(actual) == ("full", "top_left")
+    assert np.allclose(actual["full"], full)
+    assert np.allclose(actual["top_left"], crop)
+
+
 # ── remove_folder ─────────────────────────────────────────────────────────────
 
 def test_ai_vector_repository_remove_folder_drops_all_paths_in_folder(tmp_path: Path) -> None:
@@ -195,6 +280,34 @@ def test_ai_vector_repository_search_empty_index_returns_empty(tmp_path: Path) -
 
     # Assert
     assert results == []
+
+
+def test_ai_vector_repository_search_max_pools_views_before_top_k(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    query = np.zeros(512, dtype=np.float32)
+    query[0] = 1.0
+    vectors = np.zeros((4, 512), dtype=np.float32)
+    vectors[0, :2] = (0.9, 0.1)
+    vectors[1, :2] = (0.8, 0.2)
+    vectors[2, :2] = (0.7, 0.3)
+    vectors[3, :2] = (0.1, 0.9)
+    repo.add_images(
+        vectors,
+        ["/photos/a.jpg", "/photos/a.jpg", "/photos/b.jpg", "/photos/b.jpg"],
+        view_ids=["full", "top_left", "full", "top_left"],
+    )
+
+    # Act
+    results = repo.search(query, top_k=2, threshold=0.0)
+
+    # Assert
+    assert [path for path, _score in results] == [
+        "/photos/a.jpg",
+        "/photos/b.jpg",
+    ]
 
 
 def test_ai_vector_repository_search_filtered_top_k_none_returns_all_matches(

@@ -41,25 +41,25 @@ class TgmProposalService:
         for index, image_path in enumerate(paths):
             if cancel_check is not None and cancel_check():
                 return ProposalBatchResult(tuple(results), True)
+            accepted = {
+                tag.concept_id
+                for tag in self._image_repository.get_accepted_tags(image_path)
+            }
+            rejected = {
+                proposal.concept_id
+                for proposal in self._image_repository.get_proposals(
+                    image_path,
+                    provider_fingerprint=provider_id,
+                    status=TagProposalStatus.REJECTED,
+                )
+            }
             result = self._provider.propose(
                 image_path,
                 expected_fingerprint,
-                top_k=top_k,
+                top_k=top_k + len(accepted | rejected),
                 threshold=threshold,
             )
             if result.status is ProposalGenerationStatus.COMPLETED:
-                accepted = {
-                    tag.concept_id
-                    for tag in self._image_repository.get_accepted_tags(image_path)
-                }
-                rejected = {
-                    proposal.concept_id
-                    for proposal in self._image_repository.get_proposals(
-                        image_path,
-                        provider_fingerprint=provider_id,
-                        status=TagProposalStatus.REJECTED,
-                    )
-                }
                 seen: set[str] = set()
                 filtered: list[TagProposal] = []
                 for proposal in result.proposals:
@@ -71,6 +71,8 @@ class TgmProposalService:
                         continue
                     seen.add(proposal.concept_id)
                     filtered.append(replace(proposal, rank=len(filtered) + 1))
+                    if len(filtered) == top_k:
+                        break
                 auto_candidates = tuple(
                     proposal
                     for proposal in filtered

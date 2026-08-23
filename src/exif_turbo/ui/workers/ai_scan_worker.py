@@ -6,8 +6,8 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
-from ...config import ai_id_map_path, ai_index_path, thumb_cache_dir
-from ...data.ai_vector_repository import AiVectorRepository
+from ...config import ai_id_map_path, ai_index_path, ai_vector_metadata_path, thumb_cache_dir
+from ...data.ai_vector_repository import AiVectorIndexError, AiVectorRepository
 from ...data.image_index_repository import ImageIndexRepository
 from ...indexing.ai_indexer_service import AiIndexerService, image_paths_for_folder
 
@@ -66,8 +66,17 @@ class AiScanWorker(QThread):
             # 2. Load (or create) the FAISS index.
             idx_path = ai_index_path(self._db_path)
             map_path = ai_id_map_path(self._db_path)
-            vector_repo = AiVectorRepository(idx_path, map_path)
-            vector_repo.load()
+            vector_repo = AiVectorRepository(
+                idx_path,
+                map_path,
+                ai_vector_metadata_path(self._db_path),
+            )
+            try:
+                vector_repo.load()
+            except AiVectorIndexError:
+                if not self._force_rebuild:
+                    raise
+                vector_repo.reset()
             if self._force_rebuild:
                 vector_repo.remove_folder(self._folder_path)
 

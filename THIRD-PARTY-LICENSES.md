@@ -29,6 +29,8 @@ These packages are required at runtime by the application.
 | [pyvips-binary](https://pypi.org/project/pyvips-binary/) | Pre-built libvips shared library — bundled libvips binary wheels that provide the native library for `pyvips` on Windows and Linux without a separate system install | LGPL-3.0-or-later | https://github.com/kleisauke/pyvips-binary |
 | [faiss-cpu](https://pypi.org/project/faiss-cpu/) | AI vector search index — stores and queries CLIP embeddings for AI-based image search using an inner-product FAISS index | MIT | https://github.com/facebookresearch/faiss |
 | [open-clip-torch](https://pypi.org/project/open-clip-torch/) | AI search and AI indexing — loads the CLIP model/tokenizer used to embed images and text; downloads its runtime cache into the per-database user folder under `~/.exif-turbo/data/<db-stem>/open_clip/` | MIT | https://github.com/mlfoundations/open_clip |
+| [transformers](https://pypi.org/project/transformers/) | Loads the XLM-R text encoder and tokenizer used by the multilingual OpenCLIP model | Apache-2.0 | https://github.com/huggingface/transformers |
+| [sentencepiece](https://pypi.org/project/sentencepiece/) | Tokenizes multilingual XLM-R text for AI search and TGM vector generation | Apache-2.0 | https://github.com/google/sentencepiece |
 
 The `pyvips-binary` wheel contains dynamically loaded, separate shared-library
 files built by [libvips-packaging](https://github.com/kleisauke/libvips-packaging).
@@ -48,30 +50,34 @@ AI use and cached in the per-database user folder under
 
 | Asset | Used for | License | URL |
 |-------|----------|---------|-----|
-| OpenCLIP tokenizer vocabulary (`bpe_simple_vocab_16e6.txt.gz`) | Text tokenization for AI search and AI indexing | MIT (via OpenAI CLIP repository) | https://github.com/openai/CLIP |
-| OpenAI ViT-B/32 pretrained weights (`timm/vit_base_patch32_clip_224.openai`) | Pretrained CLIP model weights downloaded by OpenCLIP for AI search and AI indexing | Apache-2.0 | https://huggingface.co/timm/vit_base_patch32_clip_224.openai |
+| LAION CLIP ViT-B/32 XLM-R checkpoint and tokenizer (`laion/CLIP-ViT-B-32-xlm-roberta-base-laion5B-s13B-b90k`) | Multilingual image/text retrieval and TGM proposal vectors; trained with LAION-5B | MIT (model card declaration) | https://huggingface.co/laion/CLIP-ViT-B-32-xlm-roberta-base-laion5B-s13B-b90k |
 
-> **OpenAI CLIP attribution:** The OpenCLIP project states that portions of its
-> modeling and tokenizer code are adapted from OpenAI's CLIP repository, which
-> is licensed under MIT. The runtime tokenizer vocabulary used here follows
-> that upstream source.
+> **CLIP attribution:** The multilingual checkpoint is loaded through OpenCLIP
+> and its model card requests citation of OpenAI CLIP, OpenCLIP, and LAION-5B.
+> Runtime downloads are not bundled with exif-turbo.
 
 ---
 
-## Runtime-Downloaded Controlled Vocabulary
+## Bundled Controlled Vocabulary
 
-This data is **not bundled in the installer**. When the user chooses
-**Install TGM** or **Update TGM**, exif-turbo downloads one of the official
-quarterly distributions and stores a normalized snapshot in the current
-database's application-data directory.
+exif-turbo bundles an offline, curated 80-concept visual subset of Wikidata.
+It is an initial reviewed subset, not an exhaustive vocabulary. Every included
+concept carries intrinsic preferred labels and aliases for English, German,
+French, and Italian. Runtime tagging, FTS, export, and QID proposal lookup do
+not contact Wikidata and do not install a separate localization pack.
 
 | Asset | Used for | Terms / status | URL |
 |-------|----------|----------------|-----|
-| Library of Congress Thesaurus for Graphic Materials (TGM), XML or tagged-text distribution | Canonical controlled terms, aliases, categories, and the separate TGM proposal-vector index | The Library of Congress download page makes both formats available for importing into other systems but does not state a standalone SPDX license. Use remains subject to the [Library of Congress legal notice](https://www.loc.gov/legal/). | https://guides.loc.gov/tgm-i/download-tgm |
+| Curated Wikidata visual-concept snapshot (80 concepts) | Bundled QIDs, categories, and `en/de/fr/it` preferred labels/aliases for offline controlled tagging and proposal vectors | CC0 1.0 | https://www.wikidata.org/ |
 
-exif-turbo records the source URL, source date, and SHA-256 checksum for the
-downloaded snapshot. The checksum records provenance and change; it is not a
-publisher signature or a grant of additional rights.
+The bundled artifact records source-dump and manifest SHA-256 checksums for
+reproducibility. Wikidata structured data is available under
+[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
+
+Library of Congress TGM parsers and repositories remain for legacy sidecars
+and maintenance tooling. No TGM snapshot or translation pack is installed by
+the current user interface; existing user-provided legacy data retains its
+original terms and provenance obligations.
 
 ---
 

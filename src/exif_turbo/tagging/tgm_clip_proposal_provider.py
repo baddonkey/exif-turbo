@@ -8,7 +8,7 @@ from ..models.tag_proposal import (
     TagProposal,
 )
 from ..models.tgm_vector import TgmVectorFingerprint
-from .tgm_snapshot_repository import TgmSnapshotRepository
+from .vocabulary_snapshot_repository import VocabularySnapshotRepository
 
 
 class TgmClipProposalProvider:
@@ -16,7 +16,7 @@ class TgmClipProposalProvider:
         self,
         image_vectors: AiVectorRepository,
         term_vectors: TgmVectorRepository,
-        snapshots: TgmSnapshotRepository,
+        snapshots: VocabularySnapshotRepository,
     ) -> None:
         self._image_vectors = image_vectors
         self._term_vectors = term_vectors
@@ -34,31 +34,49 @@ class TgmClipProposalProvider:
             return ProposalGenerationResult(
                 image_path, ProposalGenerationStatus.TGM_INDEX_REQUIRED
             )
-        image_vector = self._image_vectors.get_vector(image_path)
-        if image_vector is None:
+        image_vectors = self._image_vectors.get_view_vectors(image_path)
+        if not image_vectors:
             return ProposalGenerationResult(
                 image_path, ProposalGenerationStatus.AI_SCAN_REQUIRED
             )
+        pooled: dict[str, tuple[float, str, str]] = {}
+        for view_id, image_vector in image_vectors.items():
+            for hit in self._term_vectors.search(
+                image_vector,
+                top_k=top_k,
+                threshold=threshold,
+            ):
+                candidate = (hit.score, view_id, hit.locale)
+                current = pooled.get(hit.concept_id)
+                if current is None or candidate[0] > current[0]:
+                    pooled[hit.concept_id] = candidate
+        ranked = sorted(
+            (
+                (score, concept_id, view_id, locale)
+                for concept_id, (score, view_id, locale) in pooled.items()
+            ),
+            key=lambda value: (-value[0], value[1]),
+        )[:top_k]
         proposals: list[TagProposal] = []
-        for hit in self._term_vectors.search(
-            image_vector, top_k=top_k, threshold=threshold
-        ):
-            concept = self._snapshots.get(hit.concept_id)
-            if concept is None or not concept.selectable:
+        for rank, (score, concept_id, view_id, locale) in enumerate(ranked, start=1):
+            concept = self._snapshots.get(concept_id)
+            if concept is None:
                 continue
             proposals.append(
                 TagProposal(
                     image_path=image_path,
                     concept_id=concept.concept_id,
-                    label=concept.label,
-                    category=concept.categories[0].value,
+                    label=concept.canonical_label,
+                    category=concept.category.value,
                     provider_fingerprint=expected_fingerprint.identifier,
-                    score=hit.score,
-                    rank=hit.rank,
+                    score=score,
+                    rank=rank,
                     provider_model=(
                         f"{expected_fingerprint.model_name}:"
                         f"{expected_fingerprint.pretrained}"
                     ),
+                    winning_view_id=view_id,
+                    winning_locale=locale,
                 )
             )
         return ProposalGenerationResult(

@@ -32,6 +32,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TESTS_DIR = REPO_ROOT / "tests"
 UI_DIR = TESTS_DIR / "ui"
+HEAVY_TEST_FILES = (
+    TESTS_DIR / "tagging" / "test_bundled_vocabulary.py",
+)
 
 
 def _run_pytest(targets: list[str], extra: list[str]) -> int:
@@ -47,11 +50,21 @@ def main(argv: list[str]) -> int:
 
     results: list[tuple[str, int]] = []
 
-    # 1) Everything except the UI tests, in a single clean process.
-    rc = _run_pytest(["tests", f"--ignore={UI_DIR.as_posix()}"], extra)
+    # 1) Everything except UI and memory-heavy release tests in one process.
+    aggregate_ignores = [
+        f"--ignore={path.as_posix()}"
+        for path in (UI_DIR, *HEAVY_TEST_FILES)
+    ]
+    rc = _run_pytest(["tests", *aggregate_ignores], extra)
     results.append(("non-ui", rc))
 
-    # 2) Each UI test file in its own process so native state can't accumulate.
+    # 2) Release regeneration tests need a low-memory parent process.
+    for heavy_test_file in HEAVY_TEST_FILES:
+        rel = heavy_test_file.relative_to(REPO_ROOT).as_posix()
+        rc = _run_pytest([rel], extra)
+        results.append((rel, rc))
+
+    # 3) Each UI test file in its own process so native state can't accumulate.
     ui_files = sorted(p for p in UI_DIR.glob("test_*.py"))
     for ui_file in ui_files:
         rel = ui_file.relative_to(REPO_ROOT).as_posix()

@@ -34,7 +34,15 @@ from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication, QImage
 
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
-from ...config import tgm_snapshot_path, tgm_vector_metadata_path
+from ...data.tgm_vector_repository import TgmVectorIndexError, TgmVectorRepository
+from ...config import (
+    bundled_vocabulary_path,
+    tgm_concept_map_path,
+    tgm_localization_pack_path,
+    tgm_snapshot_path,
+    tgm_term_index_path,
+    tgm_vector_metadata_path,
+)
 from ...i18n import _
 from ...indexing.exif_metadata_extractor import get_exiftool_version
 from ...indexing.ai_indexer_service import (
@@ -45,7 +53,10 @@ from ...indexing.ai_indexer_service import (
 from ...indexing.image_utils import RAW_EXTENSIONS
 from ...models.indexed_folder import IndexedFolder
 from ...models.search_result import SearchResult
+from ...models.tag_proposal import ProposalGenerationStatus
 from ...models.tgm import TgmCategory
+from ...models.tgm_vector import TgmVectorFingerprint
+from ...models.vocabulary import REQUIRED_VOCABULARY_LOCALES, VocabularyCategory
 from ...tagging.derivative_export_service import (
     extract_embedded_keyword_labels,
     merge_keyword_labels,
@@ -53,6 +64,9 @@ from ...tagging.derivative_export_service import (
 from ...tagging.sidecar_repository import FilesystemSidecarRepository
 from ...tagging.tagging_service import TaggingService
 from ...tagging.tgm_snapshot_repository import TgmSnapshotRepository
+from ...tagging.vocabulary_snapshot_repository import VocabularySnapshotRepository
+from ...tagging.tgm_localization_repository import TgmLocalizationRepository
+from ...tagging.tgm_localization_service import TgmLocalizationService
 from ...tagging.tgm_prompt_builder import TgmPromptBuilder
 from ...utils.preview_cache import (
     clear_cached_previews_for,
@@ -88,7 +102,6 @@ from ..workers.preview_build_worker import PreviewBuildWorker
 from ..workers.search_worker import SearchPageWorker, SearchWorker
 from ..workers.thumb_worker import ThumbWorker
 from ..workers.tgm_proposal_worker import TgmProposalWorker
-from ..workers.tgm_update_worker import TgmUpdateWorker
 from ..workers.tgm_vector_build_worker import TgmVectorBuildWorker
 from ..workers.year_counts_worker import YearCountsWorker
 from ...utils.preview_render import MAX_PREVIEW_PX, render_preview
@@ -100,6 +113,8 @@ _DEFAULT_WORKERS = max(1, (os.cpu_count() or 2) // 2)
 # IndexWorker is active starves the scan thread and GUI event loop on Windows.
 # 2 threads gives a mild throughput boost without measurable GIL pressure.
 _MAX_THUMB_WORKERS = 2
+_METADATA_LOCALES = ("en", "de", "fr", "it")
+assert frozenset(_METADATA_LOCALES) == REQUIRED_VOCABULARY_LOCALES
 _log = logging.getLogger(__name__)
 
 
@@ -361,6 +376,9 @@ class AppController(QObject):
         self._password_change_old: str = ""
         self._password_change_new: str = ""
         self._tgm_repository: TgmSnapshotRepository | None = None
+        self._vocabulary_repository: VocabularySnapshotRepository | None = None
+        self._tgm_localization_repository: TgmLocalizationRepository | None = None
+        self._tgm_localization_service: TgmLocalizationService | None = None
         self._tagging_service: TaggingService | None = None
         self._accepted_tags_model = AcceptedTagListModel()
         self._embedded_tags_model = EmbeddedTagListModel()
@@ -391,7 +409,6 @@ class AppController(QObject):
         self._derivative_operation = False
         self._derivative_progress = (0, 0)
         self._derivative_summary = ""
-        self._tgm_update_worker: TgmUpdateWorker | None = None
         self._tgm_vector_worker: TgmVectorBuildWorker | None = None
         self._proposal_worker: TgmProposalWorker | None = None
         self._bulk_tag_worker: BulkTagWorker | None = None
@@ -649,6 +666,10 @@ class AppController(QObject):
     @Property(str, notify=tgmOperationChanged)
     def tgmUpdateError(self) -> str:
         return self._tgm_error
+
+    @Property("QVariantList", constant=True)
+    def tgmLocalizationLocales(self) -> list[str]:
+        return list(_METADATA_LOCALES)
 
     @Property(bool, notify=proposalOperationChanged)
     def isGeneratingTagProposals(self) -> bool:
@@ -3588,16 +3609,53 @@ class AppController(QObject):
         if self._repo is None:
             return
         self._tgm_repository = TgmSnapshotRepository(tgm_snapshot_path(self._db_path))
+        self._vocabulary_repository = VocabularySnapshotRepository(
+            bundled_vocabulary_path()
+        )
+        self._tgm_localization_repository = TgmLocalizationRepository(
+            tgm_localization_pack_path(self._db_path)
+        )
+        self._tgm_localization_service = TgmLocalizationService(
+            self._tgm_repository,
+            self._tgm_localization_repository,
+        )
+        self._configure_tgm_localization()
         self._tagging_service = TaggingService(
             self._repo,
             FilesystemSidecarRepository(),
             self._tgm_repository,
+            vocabulary_repository=self._vocabulary_repository,
         )
+        if self._tgm_localization_repository.exists:
+            self._repo.refresh_tgm_concept_search_labels(
+                self._tgm_localization_service.search_labels_by_concept()
+            )
         self._refresh_tgm_status()
+
+    def _configure_tgm_localization(self) -> None:
+        locale = (
+            self._settings.metadata_language if self._settings is not None else "en"
+        )
+        self._accepted_tags_model.set_label_resolver(
+            lambda concept_id: self._controlled_vocabulary_label(concept_id, locale)
+        )
+        self._pending_proposals_model.set_label_resolver(
+            lambda concept_id: self._controlled_vocabulary_label(concept_id, locale)
+        )
+        self._tgm_search_model.set_localization(
+            lambda concept_id: self._controlled_vocabulary_label(concept_id, locale),
+            lambda concept_id: self._controlled_vocabulary_aliases(concept_id, locale),
+        )
 
     def _clear_tagging_services(self) -> None:
         self._cancel_tagging_workers(wait=True)
         self._tgm_repository = None
+        self._vocabulary_repository = None
+        self._tgm_localization_repository = None
+        self._tgm_localization_service = None
+        self._accepted_tags_model.set_label_resolver(None)
+        self._pending_proposals_model.set_label_resolver(None)
+        self._tgm_search_model.set_localization(None, None)
         self._tagging_service = None
         self._tgm_metadata = {}
         self._tgm_vectors_current = False
@@ -3614,37 +3672,53 @@ class AppController(QObject):
     def _refresh_tgm_status(self) -> None:
         self._tgm_metadata = {}
         self._tgm_vectors_current = False
-        repository = self._tgm_repository
-        if repository is None or not tgm_snapshot_path(self._db_path).exists():
+        vocabulary_repository = self._vocabulary_repository
+        if vocabulary_repository is None:
             self.taggingStateChanged.emit()
             return
         try:
-            snapshot = repository.load()
-            counts = repository.counts()
+            vocabulary_snapshot = vocabulary_repository.load()
             self._tgm_metadata = {
-                "source_date": snapshot.distribution_date
-                or snapshot.imported_at.date().isoformat(),
-                "checksum": snapshot.raw_sha256,
-                "subject_count": counts[TgmCategory.SUBJECT],
-                "genre_count": counts[TgmCategory.GENRE_FORMAT],
-                "diagnostics": (
-                    _("TGM source diagnostics: {}").format(len(snapshot.diagnostics))
-                    if snapshot.diagnostics
-                    else ""
+                "source_date": vocabulary_snapshot.created_at.date().isoformat(),
+                "checksum": vocabulary_snapshot.manifest_sha256,
+                "subject_count": sum(
+                    concept.category is VocabularyCategory.SUBJECT
+                    for concept in vocabulary_snapshot.concepts
                 ),
+                "genre_count": sum(
+                    concept.category is VocabularyCategory.GENRE_FORMAT
+                    for concept in vocabulary_snapshot.concepts
+                ),
+                "diagnostics": "",
             }
-            metadata_path = tgm_vector_metadata_path(self._db_path)
-            if metadata_path.exists():
-                vector_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-                fingerprint = vector_metadata.get("fingerprint", {})
-                self._tgm_vectors_current = fingerprint == {
-                    "raw_tgm_sha256": snapshot.raw_sha256,
-                    "normalization_version": snapshot.normalization_version,
-                    "prompt_version": TgmPromptBuilder.VERSION,
-                    "model_name": CLIP_MODEL_NAME,
-                    "pretrained": CLIP_PRETRAINED,
-                    "dimension": CLIP_VECTOR_DIMENSION,
-                }
+            expected = TgmVectorFingerprint(
+                vocabulary="wikidata",
+                snapshot_version=vocabulary_snapshot.version,
+                source_dump_sha256=vocabulary_snapshot.source_dump_sha256,
+                manifest_sha256=vocabulary_snapshot.manifest_sha256,
+                prompt_version=TgmPromptBuilder.VERSION,
+                prompt_strategy=TgmPromptBuilder.STRATEGY,
+                prompt_locales=TgmPromptBuilder.LOCALES,
+                model_name=CLIP_MODEL_NAME,
+                pretrained=CLIP_PRETRAINED,
+                dimension=CLIP_VECTOR_DIMENSION,
+            )
+            term_vectors = TgmVectorRepository(
+                tgm_term_index_path(self._db_path),
+                tgm_concept_map_path(self._db_path),
+                tgm_vector_metadata_path(self._db_path),
+            )
+            try:
+                term_vectors.load()
+                expected_rows = len(vocabulary_snapshot.concepts) * len(
+                    TgmPromptBuilder.LOCALES
+                )
+                self._tgm_vectors_current = (
+                    term_vectors.fingerprint == expected
+                    and term_vectors.count == expected_rows
+                )
+            except TgmVectorIndexError:
+                self._tgm_vectors_current = False
         except Exception as exc:  # noqa: BLE001
             self._tgm_metadata = {"diagnostics": str(exc)}
         self.taggingStateChanged.emit()
@@ -3656,16 +3730,60 @@ class AppController(QObject):
             self.taggingStateChanged.emit()
 
     @Slot(str)
+    def setMetadataLanguage(self, locale: str) -> None:
+        if self._settings is None:
+            return
+        self._settings.setMetadataLanguage(locale)
+        self._configure_tgm_localization()
+        self._refresh_selected_tagging_state(preserve_proposals=True)
+        self.taggingStateChanged.emit()
+
+    @Slot(str)
     def searchTgm(self, query: str) -> None:
-        if self._tgm_repository is None or not self.tgmInstalled:
+        if self._vocabulary_repository is None or not self.tgmInstalled:
             self._tgm_search_model.set_rows([])
             return
         try:
-            self._tgm_search_model.set_rows(self._tgm_repository.search(query))
+            locale = (
+                self._settings.metadata_language
+                if self._settings is not None
+                else "en"
+            )
+            concepts = self._vocabulary_repository.search(query, locale)
+            self._tgm_search_model.set_rows(concepts)
             self._selected_tagging_error = ""
         except Exception as exc:  # noqa: BLE001
             self._selected_tagging_error = str(exc)
         self.taggingStateChanged.emit()
+
+    def _localized_tgm_label(self, concept_id: str, locale: str) -> str:
+        if self._tgm_localization_service is None:
+            return ""
+        return self._tgm_localization_service.display_label(concept_id, locale)
+
+    def _localized_tgm_aliases(self, concept_id: str, locale: str) -> tuple[str, ...]:
+        if self._tgm_localization_service is None:
+            return ()
+        return self._tgm_localization_service.localized_aliases(concept_id, locale)
+
+    def _controlled_vocabulary_label(self, concept_id: str, locale: str) -> str:
+        if concept_id.startswith("wikidata:"):
+            repository = self._vocabulary_repository
+            if repository is None:
+                return ""
+            return repository.preferred_label(concept_id, locale) or ""
+        return self._localized_tgm_label(concept_id, locale)
+
+    def _controlled_vocabulary_aliases(
+        self,
+        concept_id: str,
+        locale: str,
+    ) -> tuple[str, ...]:
+        if concept_id.startswith("wikidata:"):
+            repository = self._vocabulary_repository
+            concept = None if repository is None else repository.get(concept_id)
+            return () if concept is None else concept.aliases(locale)
+        return self._localized_tgm_aliases(concept_id, locale)
 
     @Slot(str)
     def searchFreeTags(self, query: str) -> None:
@@ -3886,22 +4004,6 @@ class AppController(QObject):
             self._search_model.dataChanged.emit(index, index, [])
 
     @Slot()
-    def installOrUpdateTgm(self) -> None:
-        if self._repo is None or self._tgm_update_worker is not None:
-            return
-        worker = TgmUpdateWorker(self._db_path, self._key)
-        self._tgm_update_worker = worker
-        worker.progress.connect(self._on_tgm_progress)
-        worker.result_ready.connect(self._on_tgm_update_result)
-        worker.failed.connect(self._on_tgm_failed)
-        worker.canceled.connect(self._on_tgm_canceled)
-        worker.finished.connect(lambda: self._release_worker("_tgm_update_worker", worker))
-        self._tgm_operation = True
-        self._tgm_error = ""
-        self.tgmOperationChanged.emit()
-        worker.start()
-
-    @Slot()
     def rebuildTgmVectors(self) -> None:
         if not self.tgmInstalled or not self._ai_enabled or self._tgm_vector_worker is not None:
             return
@@ -3921,13 +4023,6 @@ class AppController(QObject):
         self._tgm_progress = (done, total)
         self.tgmOperationChanged.emit()
 
-    def _on_tgm_update_result(self, _result: object) -> None:
-        self._tgm_operation = False
-        self._initialize_tagging_services()
-        self.refreshSelectedTaggingState()
-        self._refresh_marked_tagging_state()
-        self.tgmOperationChanged.emit()
-
     def _on_tgm_vector_result(self, _result: object) -> None:
         self._tgm_operation = False
         self._refresh_tgm_status()
@@ -3944,7 +4039,7 @@ class AppController(QObject):
 
     @Slot()
     def cancelTgmOperation(self) -> None:
-        worker = self._tgm_vector_worker or self._tgm_update_worker
+        worker = self._tgm_vector_worker
         if worker is not None:
             worker.cancel()
 
@@ -3967,12 +4062,14 @@ class AppController(QObject):
         if not paths or not self.taggingProposalAvailable or self._proposal_worker is not None:
             return
         assert self._settings is not None
+        show_raw = self._settings.show_raw_tag_candidates and not auto_accept
         worker = TgmProposalWorker(
             self._db_path,
             self._key,
             paths,
-            threshold=self._settings.proposal_threshold,
+            threshold=float("-inf") if show_raw else self._settings.proposal_threshold,
             auto_accept_threshold=self._settings.auto_accept_threshold if auto_accept else None,
+            top_k=20,
         )
         self._proposal_worker = worker
         worker.progress.connect(self._on_proposal_progress)
@@ -4002,9 +4099,24 @@ class AppController(QObject):
             ),
             None,
         )
-        self._pending_proposals_model.set_rows(
-            () if matching_result is None else matching_result.proposals
-        )
+        proposals = () if matching_result is None else matching_result.proposals
+        self._pending_proposals_model.set_rows(proposals)
+        if matching_result is None:
+            self._proposal_error = ""
+        elif matching_result.status is ProposalGenerationStatus.AI_SCAN_REQUIRED:
+            self._proposal_error = _(
+                "This image has no AI vector. Run AI Full Rescan to generate tag suggestions."
+            )
+        elif matching_result.status is ProposalGenerationStatus.TGM_INDEX_REQUIRED:
+            self._proposal_error = _(
+                "TGM vectors are out of date. Rebuild them to generate tag suggestions."
+            )
+        elif not proposals:
+            self._proposal_error = _(
+                "No tag suggestions met the current confidence threshold."
+            )
+        else:
+            self._proposal_error = ""
         self._refresh_selected_tagging_state(preserve_proposals=True)
         self.proposalOperationChanged.emit()
 
@@ -4199,6 +4311,17 @@ class AppController(QObject):
             self._key,
             roots,
             output_root,
+            tag_export_mode=(
+                self._settings.tag_export_mode if self._settings is not None else "canonical"
+            ),
+            interface_locale=(
+                self._settings.metadata_language
+                if self._settings is not None
+                else "en"
+            ),
+            selected_locales=(
+                self._settings.tag_export_languages if self._settings is not None else ()
+            ),
             **worker_options,
         )
         self._derivative_worker = worker
@@ -4291,7 +4414,6 @@ class AppController(QObject):
 
     def _cancel_tagging_workers(self, *, wait: bool) -> None:
         for worker in (
-            self._tgm_update_worker,
             self._tgm_vector_worker,
             self._proposal_worker,
             self._bulk_tag_worker,
@@ -4735,7 +4857,6 @@ class AppController(QObject):
             self._index_worker,
             self._password_change_worker,
             self._maint_worker,
-            self._tgm_update_worker,
             self._tgm_vector_worker,
             self._proposal_worker,
             self._bulk_tag_worker,
@@ -4754,7 +4875,6 @@ class AppController(QObject):
         self._index_worker = None
         self._password_change_worker = None
         self._maint_worker = None
-        self._tgm_update_worker = None
         self._tgm_vector_worker = None
         self._proposal_worker = None
         self._bulk_tag_worker = None
@@ -4762,6 +4882,7 @@ class AppController(QObject):
         self._derivative_worker = None
         self._tagging_service = None
         self._tgm_repository = None
+        self._vocabulary_repository = None
 
         if self._repo is not None:
             self._repo.close()

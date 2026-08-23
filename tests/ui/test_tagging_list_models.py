@@ -8,6 +8,11 @@ from pytestqt.qtbot import QtBot
 from exif_turbo.models.image_tag import ImageTag, TagProvenance
 from exif_turbo.models.tag_proposal import TagProposal
 from exif_turbo.models.tgm import TgmCategory, TgmConcept
+from exif_turbo.models.vocabulary import (
+    LocalizedVocabularyTerms,
+    VocabularyCategory,
+    VocabularyConcept,
+)
 from exif_turbo.tagging.tagging_service import AggregatedConceptState, TagMembership
 from exif_turbo.ui.models.accepted_tag_list_model import AcceptedTagListModel
 from exif_turbo.ui.models.marked_tag_list_model import MarkedTagListModel
@@ -61,6 +66,37 @@ def test_tgm_search_list_model_exposes_categories_and_aliases(qtbot: QtBot) -> N
     # Assert
     assert model.data(model.index(0), model.CategoriesRole) == ["subject"]
     assert model.data(model.index(0), model.AliasesRole) == ["Woods"]
+
+
+def test_tgm_search_list_model_exposes_vocabulary_roles(qtbot: QtBot) -> None:
+    # Arrange
+    model = TgmSearchListModel()
+    concept = VocabularyConcept(
+        concept_id="wikidata:Q4421",
+        category=VocabularyCategory.SUBJECT,
+        canonical_label="forest",
+        localized_terms=(
+            LocalizedVocabularyTerms("en", "forest", ("wood",)),
+            LocalizedVocabularyTerms("de", "Wald", ("Waldgebiet",)),
+            LocalizedVocabularyTerms("fr", "forêt", ("bois",)),
+            LocalizedVocabularyTerms("it", "foresta", ("selva",)),
+        ),
+        source_uri="https://www.wikidata.org/entity/Q4421",
+        license_id="CC0-1.0",
+    )
+    model.set_localization(
+        lambda _concept_id: concept.preferred_label("de"),
+        lambda _concept_id: concept.aliases("de"),
+    )
+
+    # Act
+    model.set_rows([concept])
+
+    # Assert
+    assert model.data(model.index(0), model.LabelRole) == "Wald"
+    assert model.data(model.index(0), model.CategoriesRole) == ["subject"]
+    assert model.data(model.index(0), model.AliasesRole) == ["Waldgebiet"]
+    assert model.data(model.index(0), model.CanonicalLabelRole) == "forest"
 
 
 def test_pending_proposal_list_model_exposes_score_and_provider(qtbot: QtBot) -> None:

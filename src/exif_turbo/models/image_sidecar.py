@@ -71,9 +71,15 @@ class ImageSidecar:
     extra: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if self.schema_version != 1:
+        if self.schema_version not in {1, 2}:
             raise SidecarValidationError(
                 f"unsupported sidecar schema version: {self.schema_version}"
+            )
+        if self.schema_version == 1 and any(
+            tag.vocabulary != "loc-tgm" for tag in self.tags
+        ):
+            raise SidecarValidationError(
+                "Wikidata and mixed controlled tags require sidecar schema version 2"
             )
         validate_utc_timestamp(self.updated_at, "updated_at")
         concept_ids = [tag.concept_id for tag in self.tags]

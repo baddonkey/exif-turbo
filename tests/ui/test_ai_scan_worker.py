@@ -6,7 +6,7 @@ from uuid import uuid4
 import numpy as np
 from PIL import Image
 
-from exif_turbo.config import ai_id_map_path, ai_index_path
+from exif_turbo.config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
 from exif_turbo.data.ai_vector_repository import AiVectorRepository
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.data.indexed_folder_repository import IndexedFolderRepository
@@ -125,6 +125,31 @@ def test_ai_scan_worker_full_rescan_replaces_folder_vectors(
         _FakeAiIndexerService,
     )
 
+    worker = AiScanWorker(db_path, folder_id, str(src_dir), force_rebuild=True)
+
+    # Act
+    worker.run()
+
+    # Assert
+    assert _load_indexed_paths(db_path) == {str(current)}
+
+
+def test_ai_scan_worker_full_rescan_recovers_legacy_index(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    # Arrange
+    src_dir = tmp_path / "src"
+    current = src_dir / "current.jpg"
+    _make_jpeg(current)
+    db_path = _unique_db_path(tmp_path)
+    folder_id = _seed_db(db_path, [current])
+    _seed_ai_vectors(db_path, [str(current)])
+    ai_vector_metadata_path(db_path).unlink()
+    monkeypatch.setattr(
+        "exif_turbo.ui.workers.ai_scan_worker.AiIndexerService",
+        _FakeAiIndexerService,
+    )
     worker = AiScanWorker(db_path, folder_id, str(src_dir), force_rebuild=True)
 
     # Act

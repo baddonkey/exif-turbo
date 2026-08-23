@@ -16,6 +16,12 @@ from exif_turbo.models.tag_proposal import (
     TagProposalStatus,
 )
 from exif_turbo.models.tgm import TgmCategory, TgmConcept, TgmSnapshot, TgmSourceFormat
+from exif_turbo.models.vocabulary import (
+    LocalizedVocabularyTerms,
+    VocabularyCategory,
+    VocabularyConcept,
+    VocabularySnapshot,
+)
 from exif_turbo.tagging.sidecar_repository import (
     FilesystemSidecarRepository,
     SidecarRevision,
@@ -31,6 +37,9 @@ from exif_turbo.tagging.tagging_service import (
     TaggingSidecarError,
 )
 from exif_turbo.tagging.tgm_snapshot_repository import TgmSnapshotRepository
+from exif_turbo.tagging.vocabulary_snapshot_repository import (
+    VocabularySnapshotRepository,
+)
 
 
 NOW = datetime(2026, 8, 9, 12, 30, tzinfo=UTC)
@@ -38,6 +47,7 @@ NOW = datetime(2026, 8, 9, 12, 30, tzinfo=UTC)
 
 def _service(
     tmp_path: Path,
+    vocabulary_repository: VocabularySnapshotRepository | None = None,
 ) -> tuple[TaggingService, ImageIndexRepository, Path]:
     image_path = tmp_path / "photo.jpg"
     image_path.write_bytes(b"original image bytes")
@@ -85,10 +95,54 @@ def _service(
             FilesystemSidecarRepository(),
             snapshot_repository,
             clock=lambda: NOW,
+            vocabulary_repository=vocabulary_repository,
         ),
         image_repository,
         image_path,
     )
+
+
+def _vocabulary_repository(tmp_path: Path) -> VocabularySnapshotRepository:
+    repository = VocabularySnapshotRepository(tmp_path / "wikidata.json.gz")
+    repository.activate(
+        VocabularySnapshot(
+            concepts=(
+                VocabularyConcept(
+                    concept_id="wikidata:Q42",
+                    category=VocabularyCategory.SUBJECT,
+                    canonical_label="Douglas Adams",
+                    localized_terms=(
+                        LocalizedVocabularyTerms("en", "Douglas Adams"),
+                        LocalizedVocabularyTerms(
+                            "de",
+                            "Englischer Schriftsteller",
+                            aliases=("Englischer Autor",),
+                        ),
+                        LocalizedVocabularyTerms(
+                            "fr",
+                            "Ecrivain britannique",
+                            aliases=("Auteur anglais",),
+                        ),
+                        LocalizedVocabularyTerms(
+                            "it",
+                            "Autore britannico",
+                            aliases=("Scrittore inglese",),
+                        ),
+                    ),
+                    source_uri="https://www.wikidata.org/entity/Q42",
+                    license_id="CC0-1.0",
+                ),
+            ),
+            version=7,
+            created_at=NOW,
+            source_name="Wikidata",
+            source_dump_uri="file:///offline/wikidata.json",
+            source_dump_sha256="a" * 64,
+            manifest_sha256="b" * 64,
+            license_id="CC0-1.0",
+        )
+    )
+    return repository
 
 
 def _add_indexed_image(
@@ -153,6 +207,79 @@ def test_tagging_service_add_alias_creates_canonical_sidecar_and_cache(
     assert image_repository.count_images("Cervidae") == 1
     assert image_path.read_bytes() == original_bytes
     assert image_path.stat().st_mtime_ns == original_stat.st_mtime_ns
+
+
+def test_tagging_service_promotes_v1_only_when_adding_wikidata(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    service, _image_repository, image_path = _service(
+        tmp_path,
+        _vocabulary_repository(tmp_path),
+    )
+
+    # Act
+    free_tag_result = service.add_free_tag(str(image_path), "Family")
+    tgm_result = service.add_concept(str(image_path), "Deer")
+    wikidata_result = service.add_concept(str(image_path), "wikidata:Q42")
+
+    # Assert
+    assert free_tag_result.sidecar.schema_version == 1
+    assert tgm_result.sidecar.schema_version == 1
+    assert wikidata_result.sidecar.schema_version == 2
+
+
+def test_tagging_service_wikidata_add_and_remove_preserves_v2_provenance(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    service, image_repository, image_path = _service(
+        tmp_path,
+        _vocabulary_repository(tmp_path),
+    )
+
+    # Act
+    added = service.add_concept(str(image_path), "wikidata:Q42")
+    removed = service.remove_concept(str(image_path), "wikidata:Q42")
+
+    # Assert
+    tag = added.sidecar.tags[0]
+    assert tag.concept_id == "wikidata:Q42"
+    assert tag.label == "Douglas Adams"
+    assert tag.category == "subject"
+    assert tag.vocabulary == "wikidata"
+    assert tag.provenance.vocabulary_checksum == f"sha256:{'b' * 64}"
+    assert tag.provenance.extra == {
+        "concept_source_uri": "https://www.wikidata.org/entity/Q42",
+        "license_id": "CC0-1.0",
+        "snapshot_version": 7,
+        "source_name": "Wikidata",
+    }
+    assert removed.changed is True
+    assert removed.sidecar.tags == ()
+    assert removed.sidecar.schema_version == 2
+    assert image_repository.get_accepted_tags(str(image_path)) == ()
+
+
+def test_tagging_service_wikidata_add_indexes_required_locale_aliases(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    service, image_repository, image_path = _service(
+        tmp_path,
+        _vocabulary_repository(tmp_path),
+    )
+
+    # Act
+    service.add_concept(str(image_path), "wikidata:Q42")
+
+    # Assert
+    assert image_repository.count_images('"Englischer Schriftsteller"') == 1
+    assert image_repository.count_images('"Englischer Autor"') == 1
+    assert image_repository.count_images('"Ecrivain britannique"') == 1
+    assert image_repository.count_images('"Auteur anglais"') == 1
+    assert image_repository.count_images('"Autore britannico"') == 1
+    assert image_repository.count_images('"Scrittore inglese"') == 1
 
 
 def test_tagging_service_db_failure_leaves_sidecar_and_raises_partial_failure(
@@ -554,6 +681,54 @@ def test_tagging_service_auto_accepts_multiple_candidates_in_one_clip_write(
         tag.provenance.extra["provider_fingerprint"] for tag in loaded.sidecar.tags
     } == {"provider-fingerprint"}
     assert image_repository.get_proposals(str(image_path)) == ()
+
+
+def test_tagging_service_wikidata_auto_accept_does_not_load_legacy_tgm(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    vocabulary = _vocabulary_repository(tmp_path)
+    _legacy_service, image_repository, image_path = _service(tmp_path, vocabulary)
+    service = TaggingService(
+        image_repository,
+        FilesystemSidecarRepository(),
+        TgmSnapshotRepository(tmp_path / "missing-tgm.json.gz"),
+        clock=lambda: NOW,
+        vocabulary_repository=vocabulary,
+    )
+    proposal = _proposal(
+        str(image_path), "wikidata:Q42", "Douglas Adams", 0.93
+    )
+    batch = ProposalBatchResult(
+        (
+            ProposalGenerationResult(
+                str(image_path),
+                ProposalGenerationStatus.COMPLETED,
+                proposals=(proposal,),
+                auto_candidates=(proposal,),
+            ),
+        ),
+        False,
+    )
+
+    # Act
+    result = service.accept_auto_candidates(batch)
+
+    # Assert
+    loaded = FilesystemSidecarRepository().read(image_path)
+    assert result.succeeded_count == 1
+    assert loaded is not None
+    assert loaded.sidecar.schema_version == 2
+    assert loaded.sidecar.tags[0].concept_id == "wikidata:Q42"
+    assert loaded.sidecar.tags[0].label == "Douglas Adams"
+    assert loaded.sidecar.tags[0].provenance.extra == {
+        "concept_source_uri": "https://www.wikidata.org/entity/Q42",
+        "license_id": "CC0-1.0",
+        "provider": "clip",
+        "provider_fingerprint": "provider-fingerprint",
+        "snapshot_version": 7,
+        "source_name": "Wikidata",
+    }
 
 
 def test_tagging_service_bulk_mixed_results_and_cancellation_retain_completion(

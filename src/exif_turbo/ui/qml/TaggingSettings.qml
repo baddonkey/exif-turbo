@@ -12,7 +12,7 @@ ColumnLayout {
     Layout.fillWidth: true
     spacing: 8
 
-    Label { text: qsTr("Tagging and TGM"); font.pixelSize: 14; font.weight: Font.DemiBold }
+    Label { text: qsTr("Tagging and Controlled Vocabulary"); font.pixelSize: 14; font.weight: Font.DemiBold }
 
     Switch {
         id: taggingEnabledSwitch
@@ -27,25 +27,16 @@ ColumnLayout {
         enabled: taggingEnabledSwitch.checked
         Label {
             Layout.fillWidth: true
-            text: appController.tgmInstalled
-                ? qsTr("TGM ready: %1 subjects, %2 genre/form terms").arg(appController.tgmSubjectCount).arg(appController.tgmGenreFormatCount)
-                : qsTr("TGM is not installed")
+            text: qsTr("Bundled Wikidata snapshot: %1 subjects, %2 genre/form terms").arg(appController.tgmSubjectCount).arg(appController.tgmGenreFormatCount)
             wrapMode: Text.WordWrap
             font.pixelSize: 12
             opacity: 0.7
-        }
-        Button {
-            objectName: "tgmInstallUpdateButton"
-            text: appController.tgmInstalled ? qsTr("Update TGM") : qsTr("Install TGM")
-            enabled: !appController.isTgmUpdating
-            onClicked: appController.installOrUpdateTgm()
         }
     }
 
     RowLayout {
         Layout.fillWidth: true
-        visible: appController.tgmInstalled
-        Label { text: qsTr("Source date: %1").arg(appController.tgmSourceDate || qsTr("unknown")); font.pixelSize: 11; opacity: 0.55 }
+        Label { text: qsTr("Snapshot date: %1").arg(appController.tgmSourceDate || qsTr("unknown")); font.pixelSize: 11; opacity: 0.55 }
         Label {
             Layout.fillWidth: true
             text: appController.tgmChecksum
@@ -81,7 +72,7 @@ ColumnLayout {
     RowLayout {
         visible: appController.isTgmUpdating
         Layout.fillWidth: true
-        Label { Layout.fillWidth: true; text: qsTr("Updating TGM"); font.pixelSize: 11 }
+        Label { Layout.fillWidth: true; text: qsTr("Building controlled-vocabulary vectors"); font.pixelSize: 11 }
         Button { text: qsTr("Cancel"); onClicked: appController.cancelTgmOperation() }
     }
 
@@ -96,10 +87,10 @@ ColumnLayout {
 
     RowLayout {
         Layout.fillWidth: true
-        enabled: taggingEnabledSwitch.checked && appController.tgmInstalled
+        enabled: taggingEnabledSwitch.checked
         Label {
             Layout.fillWidth: true
-            text: appController.tgmStatus === "ready" ? qsTr("TGM vectors are current") : qsTr("TGM vectors are required")
+            text: appController.tgmStatus === "ready" ? qsTr("Wikidata vectors are current") : qsTr("Wikidata vectors are required")
             font.pixelSize: 12
             opacity: 0.7
         }
@@ -151,5 +142,74 @@ ColumnLayout {
             onValueModified: appSettings.setAutoAcceptThreshold(value / 100.0)
         }
         Label { text: "%"; opacity: 0.6; enabled: autoAcceptSwitch.checked }
+    }
+
+    RowLayout {
+        Layout.fillWidth: true
+        enabled: taggingEnabledSwitch.checked
+        Label {
+            Layout.fillWidth: true
+            text: qsTr("Developer diagnostics: show raw top 20 candidates")
+            font.pixelSize: 12
+        }
+        Switch {
+            objectName: "showRawTagCandidatesSwitch"
+            checked: appSettings ? appSettings.showRawTagCandidates : false
+            onToggled: appSettings.setShowRawTagCandidates(checked)
+        }
+    }
+
+    RowLayout {
+        Layout.fillWidth: true
+        enabled: taggingEnabledSwitch.checked
+        Label {
+            text: qsTr("Metadata language (independent of interface)")
+            font.pixelSize: 12
+        }
+        ComboBox {
+            id: metadataLanguageCombo
+            objectName: "metadataLanguageCombo"
+            Layout.fillWidth: true
+            model: appController ? appController.tgmLocalizationLocales : ["en"]
+            currentIndex: {
+                if (!appSettings) return 0
+                var index = model.indexOf(appSettings.metadataLanguage)
+                return index < 0 ? 0 : index
+            }
+            onActivated: appController.setMetadataLanguage(model[currentIndex])
+        }
+    }
+
+    RowLayout {
+        Layout.fillWidth: true
+        enabled: taggingEnabledSwitch.checked
+        Label { text: qsTr("Export controlled-vocabulary labels"); font.pixelSize: 12 }
+        ComboBox {
+            id: tagExportModeCombo
+            objectName: "tagExportModeCombo"
+            Layout.fillWidth: true
+            model: [qsTr("Canonical English"), qsTr("Metadata language"), qsTr("Selected languages")]
+            currentIndex: {
+                if (!appSettings || appSettings.tagExportMode === "canonical") return 0
+                return appSettings.tagExportMode === "interface" ? 1 : 2
+            }
+            onActivated: appSettings.setTagExportMode(["canonical", "interface", "selected"][currentIndex])
+        }
+    }
+
+    Flow {
+        Layout.fillWidth: true
+        spacing: 8
+        visible: taggingEnabledSwitch.checked && appSettings && appSettings.tagExportMode === "selected"
+        Repeater {
+            model: appController ? appController.tgmLocalizationLocales : ["en"]
+            CheckBox {
+                required property int index
+                required property string modelData
+                text: modelData
+                checked: appSettings.tagExportLanguages.indexOf(modelData) >= 0
+                onToggled: appSettings.setTagExportLanguageEnabled(modelData, checked)
+            }
+        }
     }
 }

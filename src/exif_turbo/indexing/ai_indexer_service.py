@@ -26,6 +26,7 @@ import urllib.request
 import numpy as np
 
 from ..data.ai_vector_repository import AiVectorRepository
+from ..models.ai_model_profile import AiModelProfile, DEFAULT_AI_MODEL_PROFILE
 from ..utils.preview_cache import preview_cache_name_from_stamp, preview_cache_path, preview_dir
 from ..utils.thumb_crypto import ThumbCrypto
 
@@ -35,9 +36,9 @@ if TYPE_CHECKING:
 _log = logging.getLogger(__name__)
 
 _BATCH_SIZE = 32
-CLIP_MODEL_NAME = "ViT-B-32"
-CLIP_PRETRAINED = "openai"
-CLIP_VECTOR_DIMENSION = 512
+CLIP_MODEL_NAME = DEFAULT_AI_MODEL_PROFILE.model_name
+CLIP_PRETRAINED = DEFAULT_AI_MODEL_PROFILE.pretrained
+CLIP_VECTOR_DIMENSION = DEFAULT_AI_MODEL_PROFILE.dimension
 _OPEN_CLIP_CACHE_DIRNAME = "open_clip"
 _BPE_VOCAB_FILENAME = "bpe_simple_vocab_16e6.txt.gz"
 _BPE_VOCAB_URLS = (
@@ -51,6 +52,7 @@ _BPE_VOCAB_URLS = (
 # torch.load() call once per app lifetime.
 _cached_model = None
 _cached_preprocess = None
+_cached_profile_identifier: str | None = None
 _open_clip_import_lock = threading.Lock()
 
 
@@ -62,10 +64,14 @@ class AiIndexerService:
         vector_repo: AiVectorRepository,
         cache_dir: Path | None = None,
         *,
+        profile: AiModelProfile = DEFAULT_AI_MODEL_PROFILE,
         preview_cache_dir: Path | None = None,
         preview_cache_key: str = "",
     ) -> None:
+        if vector_repo.profile != profile:
+            raise ValueError("AI encoder profile must match vector repository profile")
         self._repo = vector_repo
+        self._profile = profile
         self._cache_dir = (
             cache_dir
             if cache_dir is not None
@@ -109,14 +115,20 @@ class AiIndexerService:
                 break
 
             batch_paths = pending[batch_start : batch_start + _BATCH_SIZE]
-            embeddings, batch_errors, successful_paths = self._encode_batch(
+            (
+                embeddings,
+                batch_errors,
+                successful_paths,
+                row_paths,
+                view_ids,
+            ) = self._encode_batch(
                 batch_paths,
                 stamps=stamps,
             )
             errors += batch_errors
 
             if successful_paths:
-                self._repo.add_images(embeddings, successful_paths)
+                self._repo.add_images(embeddings, row_paths, view_ids=view_ids)
                 indexed += len(successful_paths)
 
             done = min(batch_start + _BATCH_SIZE, total)
@@ -127,8 +139,12 @@ class AiIndexerService:
         return indexed, errors
 
     def encode_text(self, text: str) -> "np.ndarray":
-        """Return a normalised 512-d float32 vector for *text* (for search)."""
+        """Return a normalized float32 vector for *text* (for search)."""
         return self.encode_texts([text], batch_size=1)[0]
+
+    @property
+    def profile(self) -> AiModelProfile:
+        return self._profile
 
     def encode_texts(
         self, texts: List[str], batch_size: int = _BATCH_SIZE
@@ -139,7 +155,7 @@ class AiIndexerService:
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
         if not texts:
-            return np.empty((0, CLIP_VECTOR_DIMENSION), dtype=np.float32)
+            return np.empty((0, self._profile.dimension), dtype=np.float32)
         self._ensure_model_loaded()
         tokenizer = self._get_tokenizer()
         batches: list[np.ndarray] = []
@@ -157,10 +173,13 @@ class AiIndexerService:
     # ── Internals ─────────────────────────────────────────────────────────
 
     def _ensure_model_loaded(self) -> None:
-        global _cached_model, _cached_preprocess
+        global _cached_model, _cached_preprocess, _cached_profile_identifier
         if self._model is not None:
             return
-        if _cached_model is not None:
+        if _cached_model is not None and _cached_profile_identifier in (
+            None,
+            self._profile.identifier,
+        ):
             self._model = _cached_model
             self._preprocess = _cached_preprocess
             return
@@ -168,15 +187,22 @@ class AiIndexerService:
 
         open_clip = self._import_open_clip()
 
-        _log.debug("Loading CLIP model %s (%s)…", CLIP_MODEL_NAME, CLIP_PRETRAINED)
+        _log.debug(
+            "Loading CLIP model %s (%s)",
+            self._profile.model_name,
+            self._profile.pretrained,
+        )
+        model_kwargs: dict[str, str] = {"cache_dir": str(self._cache_dir)}
+        if self._profile.pretrained:
+            model_kwargs["pretrained"] = self._profile.pretrained
         model, _, preprocess = open_clip.create_model_and_transforms(
-            CLIP_MODEL_NAME,
-            pretrained=CLIP_PRETRAINED,
-            cache_dir=str(self._cache_dir),
+            self._profile.model_ref,
+            **model_kwargs,
         )
         model.eval()
         _cached_model = model
         _cached_preprocess = preprocess
+        _cached_profile_identifier = self._profile.identifier
         self._model = model
         self._preprocess = preprocess
         _log.debug("CLIP model loaded.")
@@ -186,11 +212,19 @@ class AiIndexerService:
             return self._tokenizer
 
         open_clip = self._import_open_clip()
-        bpe_path = self._ensure_bpe_vocab_downloaded()
-        self._tokenizer = open_clip.SimpleTokenizer(bpe_path=str(bpe_path))
+        self._tokenizer = open_clip.get_tokenizer(
+            self._profile.model_ref,
+            cache_dir=str(self._cache_dir),
+        )
         return self._tokenizer
 
     def _import_open_clip(self):
+        if not self._profile.requires_legacy_bpe:
+            with _open_clip_import_lock:
+                import open_clip  # noqa: PLC0415
+
+                return open_clip
+
         bpe_path = self._ensure_bpe_vocab_downloaded()
 
         def _gzip_open_with_bpe_fallback(filename, *args, **kwargs):
@@ -276,34 +310,76 @@ class AiIndexerService:
         paths: List[str],
         *,
         stamps: dict[str, tuple[float, int]] | None = None,
-    ) -> Tuple["np.ndarray", int, List[str]]:
-        """Return (embeddings, error_count, successful_paths) for *paths*."""
+    ) -> Tuple["np.ndarray", int, List[str], List[str], List[str]]:
+        """Return view embeddings and image/row identities for *paths*."""
         import torch  # noqa: PLC0415
 
         tensors = []
         successful: List[str] = []
+        row_paths: List[str] = []
+        view_ids: List[str] = []
         errors = 0
 
         for path in paths:
             try:
                 img = self._load_rgb_image(path, stamp=stamps.get(path) if stamps else None)
-                tensors.append(self._preprocess(img))  # type: ignore[misc]
+                views = self._build_image_views(img)
+                image_tensors = [
+                    self._preprocess(view) for _view_id, view in views  # type: ignore[misc]
+                ]
+                tensors.extend(image_tensors)
+                row_paths.extend(path for _view_id, _view in views)
+                view_ids.extend(view_id for view_id, _view in views)
                 successful.append(path)
             except Exception as exc:  # noqa: BLE001
                 _log.warning("AI-Scan: could not open %s: %s", path, exc)
                 errors += 1
 
         if not tensors:
-            return np.empty((0, 512), dtype=np.float32), errors, []
+            return (
+                np.empty((0, self._profile.dimension), dtype=np.float32),
+                errors,
+                [],
+                [],
+                [],
+            )
 
-        batch = torch.stack(tensors)
-        with torch.no_grad():
-            vecs = self._model.encode_image(batch).float()  # type: ignore[union-attr]
-
-        vecs_np = vecs.numpy()
+        encoded_batches: list[np.ndarray] = []
+        for start in range(0, len(tensors), _BATCH_SIZE):
+            batch = torch.stack(tensors[start : start + _BATCH_SIZE])
+            with torch.no_grad():
+                vecs = self._model.encode_image(batch).float()  # type: ignore[union-attr]
+            encoded_batches.append(np.asarray(vecs.numpy(), dtype=np.float32))
+        vecs_np = np.concatenate(encoded_batches, axis=0)
         norms = np.linalg.norm(vecs_np, axis=1, keepdims=True)
         vecs_np = vecs_np / np.where(norms > 0, norms, 1.0)
-        return vecs_np.astype(np.float32), errors, successful
+        return vecs_np.astype(np.float32), errors, successful, row_paths, view_ids
+
+    @staticmethod
+    def _build_image_views(image: "Image.Image") -> tuple[tuple[str, "Image.Image"], ...]:
+        size = image.size
+        if (
+            not isinstance(size, tuple)
+            or len(size) != 2
+            or not all(isinstance(value, int) for value in size)
+            or size[0] < 2
+            or size[1] < 2
+        ):
+            return (("full", image),)
+        width, height = size
+        crop_width = max(1, round(width * 0.7))
+        crop_height = max(1, round(height * 0.7))
+        right = width - crop_width
+        bottom = height - crop_height
+        boxes = (
+            ("top_left", (0, 0, crop_width, crop_height)),
+            ("top_right", (right, 0, width, crop_height)),
+            ("bottom_left", (0, bottom, crop_width, height)),
+            ("bottom_right", (right, bottom, width, height)),
+        )
+        return (("full", image),) + tuple(
+            (view_id, image.crop(box)) for view_id, box in boxes
+        )
 
     def _load_rgb_image(
         self,
@@ -311,13 +387,13 @@ class AiIndexerService:
         *,
         stamp: tuple[float, int] | None = None,
     ) -> "Image.Image":
-        from PIL import Image  # noqa: PLC0415
+        from PIL import Image, ImageOps  # noqa: PLC0415
 
         preview = self._load_cached_preview(path, stamp=stamp)
         if preview is not None:
             return preview
         with Image.open(path) as img:
-            return img.convert("RGB")
+            return ImageOps.exif_transpose(img).convert("RGB")
 
     def _load_cached_preview(
         self,
