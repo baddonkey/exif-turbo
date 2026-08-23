@@ -255,6 +255,85 @@ def test_stage_runtime_licenses_package_without_license_raises_error(
     )
 
 
+def test_stage_runtime_licenses_sentencepiece_without_license_uses_upstream_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    _write_project_notices(project_root)
+    package = FakeDistribution(tmp_path, "sentencepiece", "0.2.2")
+    package.metadata.replace_header("License-Expression", "Apache-2.0")
+    python_license = tmp_path / "PYTHON-LICENSE.txt"
+    python_license.write_text("Python terms", encoding="utf-8")
+    upstream_license = tmp_path / "Apache-2.0.txt"
+    upstream_license.write_text("Apache terms", encoding="utf-8")
+    monkeypatch.setattr(stage_runtime_licenses, "REPO_ROOT", project_root)
+    monkeypatch.setattr(
+        stage_runtime_licenses, "_python_license_file", lambda: python_license
+    )
+    monkeypatch.setattr(
+        stage_runtime_licenses,
+        "_upstream_package_license_files",
+        lambda _package: (upstream_license,),
+    )
+    monkeypatch.setattr(
+        stage_runtime_licenses,
+        "distribution",
+        lambda _name: _as_distribution(package),
+    )
+    output_dir = tmp_path / "staged"
+
+    # Act
+    stage_runtime_licenses.stage_runtime_licenses(
+        output_dir, requirements=("sentencepiece",)
+    )
+
+    # Assert
+    assert (
+        output_dir / "python" / "sentencepiece-0.2.2" / "Apache-2.0.txt"
+    ).read_text(encoding="utf-8") == "Apache terms"
+    manifest = (output_dir / "PYTHON-RUNTIME-LICENSES.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "sentencepiece 0.2.2 [Apache-2.0]" in manifest
+    assert "python/sentencepiece-0.2.2/Apache-2.0.txt" in manifest
+
+
+def test_upstream_package_license_files_classifier_and_valid_cache_returns_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    package = FakeDistribution(tmp_path, "tokenizers", "0.22.2")
+    del package.metadata["License-Expression"]
+    package.metadata["Classifier"] = (
+        "License :: OSI Approved :: Apache Software License"
+    )
+    cached_license = (
+        tmp_path
+        / "build"
+        / "license-cache"
+        / "python"
+        / "tokenizers"
+        / "0.22.2"
+        / "Apache-2.0.txt"
+    )
+    cached_license.parent.mkdir(parents=True)
+    cached_license.write_text(
+        "Apache License\n" + ("license text\n" * 1_000) + "END OF TERMS AND CONDITIONS\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(stage_runtime_licenses, "REPO_ROOT", tmp_path)
+
+    # Act
+    result = stage_runtime_licenses._upstream_package_license_files(
+        _as_distribution(package)
+    )
+
+    # Assert
+    assert result == (cached_license,)
+
+
 def test_stage_runtime_licenses_qt_wheels_without_licenses_use_upstream_texts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
