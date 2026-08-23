@@ -54,21 +54,23 @@ If you already have ExifTool installed system-wide, that version takes priority.
 
 ### macOS installer
 
-Download `exif-turbo-<version>-macos.dmg` from the same Releases page,
-open it, and drag **exif-turbo.app** into your **Applications** folder.
+Download `exif-turbo-<version>-macos-arm64.dmg` for Apple silicon or
+`exif-turbo-<version>-macos-intel.dmg` for an Intel Mac from the same Releases
+page, open it, and drag **exif-turbo.app** into your **Applications** folder.
 
 ### Linux package
 
-Download either `exif-turbo_<version>_amd64.deb` (Debian/Ubuntu) or
-`exif-turbo-<version>-1.x86_64.rpm` (Fedora/openSUSE) from the Releases page
+Download `exif-turbo-<version>-linux-amd64.deb` or
+`exif-turbo-<version>-linux-arm64.deb` (Debian/Ubuntu), or
+`exif-turbo-<version>-linux-x86_64.rpm` (Fedora/openSUSE), from the Releases page
 and install it with your package manager:
 
 ```bash
 # Debian / Ubuntu
-sudo apt install ./exif-turbo_<version>_amd64.deb
+sudo apt install ./exif-turbo-<version>-linux-amd64.deb
 
 # Fedora / openSUSE
-sudo dnf install ./exif-turbo-<version>-1.x86_64.rpm
+sudo dnf install ./exif-turbo-<version>-linux-x86_64.rpm
 ```
 
 The package installs the application to `/opt/exif-turbo/`, registers a
@@ -904,7 +906,9 @@ Copy Tags or use **Action → Generate Tagged Derivatives for Marked Images…**
 
 ### CLIP proposal prerequisites
 
-Manual Wikidata search and tagging do not require AI or network access. Proposals do. They require:
+Manual Wikidata search and tagging do not require AI or network access. CLIP
+model assets require network access on first AI use unless they are already
+cached; proposal generation then works offline. Proposals require:
 
 1. **AI Features** enabled in Settings. This is unavailable on macOS Intel.
 2. Image CLIP vectors built separately with **AI-Scan** or **AI Full Rescan**
@@ -991,7 +995,7 @@ Click the **Settings** tab to configure application behaviour.
 
 ### Tagging and Controlled Vocabulary
 
-![Tagging and TGM settings](screenshots/11_tagging_settings.png)
+![Tagging and Controlled Vocabulary settings](screenshots/11_tagging_settings.png)
 
 **Enable tagging for this database** controls the drawer UI. The section shows
 the bundled Wikidata snapshot's subject and genre/form counts, date, and
@@ -1065,9 +1069,9 @@ The theme changes immediately.
 ### Language
 
 Select the application display language from the dropdown. A restart is
-required for that change to take full effect. This does not change TGM lookup
-or metadata export language; configure those separately under **Tagging and
-TGM**.
+required for that change to take full effect. This does not change controlled
+vocabulary lookup or metadata export language; configure those separately
+under **Tagging and Controlled Vocabulary**.
 
 ### ExifTool
 
@@ -1125,7 +1129,8 @@ Click **OK** to confirm. This permanently:
 - Deletes all indexed images from the database
 - Removes all indexed folder records
 - Wipes the thumbnail and preview cache on disk
-- Removes the per-database TGM snapshot and TGM term-vector index
+- Removes the per-database controlled-vocabulary term-vector index and legacy
+  TGM compatibility snapshot
 
 The database is vacuumed and checkpointed immediately, so the database file
 shrinks to near-zero on disk straight away.
@@ -1182,7 +1187,9 @@ A: The files must be indexed first. Go to the **Indexed Folders** tab, add the
 folder, and click **Rescan**.
 
 **Q: Does exif-turbo modify my image files?**  
-A: Never. exif-turbo only *reads* metadata — it never writes to your images.
+A: Tagging, indexing, and derivative generation never modify originals.
+**Delete Marked Images** is an explicit destructive action that permanently
+deletes the selected original files after confirmation.
 
 **Q: What image formats are supported?**  
 A: JPEG, PNG, TIFF, HEIC, BMP, GIF, and RAW formats: CR2, CR3, NEF, ARW, DNG,

@@ -13,6 +13,8 @@ addition. The version 1 files retain the original 80-concept release inputs.
 The production runtime snapshot is checked in at
 `src/exif_turbo/assets/wikidata-vocabulary-v2.json.gz`. Wikidata access is a
 curator/release operation only; the application never calls the API at runtime.
+The 250+ MiB production entity export is stored through Git LFS. After a fresh
+clone, run `git lfs pull` before curation or byte-identical artifact tests.
 
 ## Curator workflow
 

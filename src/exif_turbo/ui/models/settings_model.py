@@ -62,8 +62,8 @@ _IS_MACOS_INTEL = sys.platform == "darwin" and platform.machine().lower() in {"x
 _AI_FEATURE_SUPPORTED = not _IS_MACOS_INTEL
 _AI_UNAVAILABLE_REASON = _("PyTorch is not available on macOS Intel for Python 3.13+.")
 
-# XLM-R CLIP cosine-similarity policy, calibrated against the multilingual
-# model.  Automatic acceptance remains materially stricter than suggestions.
+# Provisional XLM-R CLIP cosine-similarity policy. Automatic acceptance remains
+# materially stricter than suggestions and is disabled by default.
 _DEFAULT_PROPOSAL_THRESHOLD = 0.20
 _DEFAULT_AUTO_ACCEPT_THRESHOLD = 0.28
 _LEGACY_PROPOSAL_THRESHOLD = 0.24

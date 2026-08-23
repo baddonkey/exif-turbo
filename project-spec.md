@@ -30,7 +30,7 @@
 | Database | SQLCipher 3 (`sqlcipher3` 0.5+) — encrypted SQLite with WAL mode |
 | Full-text search | SQLite FTS5 virtual table |
 | AI semantic search | Multilingual OpenCLIP `xlm-roberta-base-ViT-B-32` / `laion5b_s13b_b90k` ([LAION checkpoint](https://huggingface.co/laion/CLIP-ViT-B-32-xlm-roberta-base-laion5B-s13B-b90k)) + FAISS (`faiss-cpu`) with cosine similarity (IndexFlatIP on L2-normalized vectors) |
-| Controlled vocabulary | Bundled curated 8,200-concept Wikidata CC0 visual vocabulary; intrinsic `en/de/fr/it`; offline runtime |
+| Controlled vocabulary | Bundled curated 8,313-concept Wikidata CC0 visual vocabulary: 8,200-concept base plus 113 qualified `P5160` additions; intrinsic `en/de/fr/it`; offline runtime |
 | Tag persistence | Adjacent schema-v2 UTF-8 JSON sidecars plus normalized SQLCipher cache; schema-v1 TGM reader compatibility |
 | EXIF extraction | ExifTool (external process, `-g1 -j` JSON output) |
 | Thumbnails | Pillow ≥10.0 + `ImageOps.exif_transpose` (JPEG/PNG/TIFF) |
@@ -54,21 +54,22 @@ Ports & adapters (hexagonal) structure. Domain logic has no dependency on PySide
 │  UI Layer (PySide6 / QML)                               │
 │  AppController · search/tag list models · QML drawer   │
 │  PreviewImageProvider · RawImageProvider                │
-│  index, TGM, proposal, bulk-tag, derivative workers     │
+│  index, vocabulary, proposal, bulk-tag, derivative workers │
 └───────────────────┬─────────────────────────────────────┘
                     │ Slots / Signals
 ┌───────────────────▼─────────────────────────────────────┐
 │  Domain / Application Layer                             │
 │  IndexerService · TaggingService · SidecarSynchronizer  │
-│  TGM import/update/vector/proposal services             │
+│  bundled vocabulary/vector/proposal services            │
+│  legacy TGM compatibility services                      │
 │  DerivativeExportService · ExifMetadataWriter           │
 └───────────────────┬─────────────────────────────────────┘
                     │ Repository interface
 ┌───────────────────▼─────────────────────────────────────┐
 │  Data Layer                                             │
 │  ImageIndexRepository (SQLCipher + FTS5 tag cache)      │
-│  FilesystemSidecarRepository · TgmSnapshotRepository    │
-│  separate image-vector and TGM-term FAISS repositories  │
+│  FilesystemSidecarRepository · VocabularySnapshotRepository │
+│  separate image-vector and vocabulary-term FAISS repositories │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -83,7 +84,7 @@ Ports & adapters (hexagonal) structure. Domain logic has no dependency on PySide
 | `__init__.py` | Package init; single source of truth for `__version__` |
 | `app.py` | GUI entry point — imports and re-exports `ui.app_main.main` |
 | `index.py` | CLI entry point — imports `indexing.cli.main` |
-| `config.py` | `AppConfig` dataclass and per-database paths for DB/cache, image FAISS artifacts, normalized TGM snapshot/work directory, and separate TGM term index/concept map/fingerprint metadata |
+| `config.py` | `AppConfig` dataclass and per-database paths for DB/cache, image FAISS artifacts, bundled-vocabulary term index/concept map/fingerprint metadata, and legacy TGM compatibility state |
 | `db.py` | Low-level DB helpers |
 | `indexer.py` | Convenience re-exports for the indexing sub-package |
 
@@ -177,7 +178,7 @@ JSON columns. Existing databases migrate `images_fts` transactionally to add
 | `exif_metadata_extractor.py` | `ExifMetadataExtractor` — runs `exiftool -g1 -j`; parses JSON output. `is_exiftool_available() -> bool` and `get_exiftool_version() -> str` probe for a working ExifTool via `_find_exiftool()`, which checks: (1) augmented `PATH` (adds macOS/Windows well-known install locations); (2) on Windows frozen bundles only, the bundled copy at `Path(sys.executable).parent / "exiftool" / "exiftool.exe"`; returning `False` / `""` if not found or if the process exits non-zero. |
 | `metadata_extractor.py` | `MetadataExtractor` protocol (port) |
 | `indexer_service.py` | `IndexerService` — orchestrates scan → extract → upsert, then synchronizes adjacent sidecars for every discovered image, including images whose own mtime/size is unchanged. Created, changed, deleted, malformed, and unsupported sidecars update/report cache state without writing originals. Supports parallel workers, force-rebuild, progress, and cancel. Capture-time resolution retains the documented EXIF/XMP/IPTC/QuickTime/filesystem fallback chain. |
-| `ai_indexer_service.py` | `AiIndexerService` — lazy-loads OpenCLIP ViT-B/32, downloads tokenizer vocab if missing, encodes image previews into 512-d normalized vectors for FAISS, and encodes text queries for semantic search. |
+| `ai_indexer_service.py` | `AiIndexerService` — lazy-loads OpenCLIP ViT-B/32, downloads uncached model and tokenizer assets on first AI use, encodes image previews into 512-d normalized vectors for FAISS, and encodes text queries for semantic search. Cached assets support later offline use. |
 | `image_utils.py` | Image file type helpers. Defines `RAW_EXTENSIONS`, `VIDEO_EXTENSIONS`, `IMAGE_EXTENSIONS` (union of stills + RAW + video), `is_image_file()`, `is_video_file()`. RAW orientation helper `orient_raw_thumb()` maps `rawpy.RawPy.sizes.flip` → Pillow transpose ops. |
 
 **Incremental indexing:** On each run, `IndexerService` compares `(mtime, size)` against DB-stored stamps. Only new or modified files are re-extracted. `force=True` clears all and rebuilds. After scanning, `delete_missing(existing_paths, folder_roots=[...])` removes stale records scoped to the rescanned folder roots — records from other folders are not affected.
@@ -189,9 +190,9 @@ JSON columns. Existing databases migrate `images_fts` transactionally to add
 | `IndexedImage` | `path`, `filename`, `mtime`, `size`, `metadata: dict[str, str]`, `captured_at: float \| None` |
 | `SearchResult` | `path`, `filename`, `metadata_json`, `size`, `mtime` |
 | `IndexedFolder` | `id`, `path`, `display_name`, `status`, `image_count`, `error_message`, `enabled` |
-| `ImageSidecar` / `ImageTag` / `TagProvenance` | Schema-v1 authoritative accepted-tag and derivative-exclusion document, original identity snapshot, canonical `loc-tgm:tgmNNNNNN` tags, normalized custom free tags and `excluded_embedded_tags`, `exclude_all_embedded_tags`, manual/CLIP provenance, and forward-compatible unknown fields |
+| `ImageSidecar` / `ImageTag` / `TagProvenance` | Authoritative accepted-tag and derivative-exclusion document. Schema v2 stores `wikidata:Q…` or mixed controlled tags; schema v1 remains readable for `loc-tgm:tgmNNNNNN`. Includes original identity, custom free tags, embedded-tag exclusions, manual/CLIP provenance, and forward-compatible unknown fields. |
 | `TgmConcept` / `TgmSnapshot` | Canonical descriptors, aliases, subject and genre/form categories, relationships/notes, diagnostics, source URL/date/checksum, and normalized snapshot version |
-| `TgmConceptLocalization` / `TgmLocalizationPack` | Optional localized preferred labels and aliases keyed by canonical TGM ID, with locale, source/license provenance, translation method, review status, and pack version |
+| `TgmConceptLocalization` / `TgmLocalizationPack` | Legacy schema-v1 compatibility types for optional localized labels and aliases keyed by canonical TGM ID, with locale, source/license provenance, translation method, review status, and pack version |
 | `TagProposal` | Ranked ephemeral/rejected canonical concept with score, category, provider model, and fingerprint |
 
 `SearchResult.mtime` is populated from the DB-stored stamp so the UI can
@@ -201,13 +202,12 @@ derive stable thumbnail cache names without a live `os.stat` call.
 
 | Module | Purpose |
 |--------|---------|
-| `sidecar_repository.py` | Maps an image to adjacent `<complete-filename>.sidecar.json`; validates schema v1, reads stable SHA-256/stamp revisions, writes deterministic UTF-8 JSON through fsynced sibling temporaries, and refuses external-edit races. Originals are never write targets. |
+| `sidecar_repository.py` | Maps an image to adjacent `<complete-filename>.sidecar.json`; validates schema v1/v2, reads stable SHA-256/stamp revisions, writes deterministic UTF-8 JSON through fsynced sibling temporaries, and refuses external-edit races. Originals are never write targets. |
 | `sidecar_synchronizer.py` | Reconciles sidecar create/change/delete/error state into normalized SQLite accepted tags and FTS cache without modifying the image or malformed sidecar. |
 | `tagging_service.py` | Single mutation boundary for controlled/custom tag changes, embedded-tag exclusions, proposal decisions, and bulk operations. Copy Tags applies target-aware Add/Replace semantics to tags and ignore settings. Writes the sidecar first, updates derived cache transactionally, preserves valid sidecars after cache failures, and returns partial/conflict status. |
-| `tgm_xml_parser.py`, `tgm_text_parser.py`, `tgm_importer.py` | Parse official TGM v1 XML and tagged text. Merged `TNR` values become `loc-tgm:<TNR>` IDs; `UF` and non-descriptor `USE` terms become canonical aliases; only postable MARC 150/650 subjects and 155/655 genre/form concepts are selectable. Optional unresolved relations become diagnostics. |
-| `tgm_update_service.py`, `tgm_snapshot_repository.py` | Download LOC-hosted HTTPS XML first with tagged-text fallback, enforce size/sanity checks, retain source format/date/checksum, and atomically activate a gzip JSON snapshot. A failed candidate leaves the previous snapshot active. Checksums prove provenance/change, not publisher authenticity. |
-| `tgm_localization_repository.py`, `tgm_localization_service.py` | Validate and atomically activate optional user-supplied provenance-bearing translation packs, resolve localized display/search labels by canonical ID, and preserve canonical fallback. Localized terms remain an overlay and never rewrite schema-v1 sidecars. |
-| `tgm_prompt_builder.py`, `tgm_vector_index_service.py`, `tgm_clip_proposal_provider.py`, `tgm_proposal_service.py` | Build versioned canonical/alias/localized text prompts, maintain a fingerprinted TGM term index separate from image vectors, rank proposals, exclude accepted/rejected concepts for the current fingerprint, and require an existing image AI vector. The fingerprint includes localization checksum, locales, and prompt strategy. |
+| `vocabulary_snapshot_repository.py` | Loads the immutable bundled Wikidata snapshot with QIDs, categories, intrinsic `en/de/fr/it` terms, source/manifest checksums, source URIs, and CC0 identity. |
+| `tgm_prompt_builder.py`, `tgm_vector_index_service.py`, `tgm_clip_proposal_provider.py`, `tgm_proposal_service.py` | Build four locale-specific prompt rows per bundled QID, maintain a fingerprinted vocabulary term index separate from five-view image vectors, max-pool scores by QID, and apply proposal/rejection thresholds. Historical class names are retained for compatibility. |
+| `tgm_xml_parser.py`, `tgm_text_parser.py`, `tgm_importer.py`, `tgm_update_service.py`, `tgm_snapshot_repository.py`, `tgm_localization_repository.py`, `tgm_localization_service.py` | Legacy compatibility tooling for existing `loc-tgm` sidecars and maintenance workflows. It is not the user-facing vocabulary installation or proposal source. |
 | `derivative_export_service.py`, `exif_metadata_writer.py` | Validate an output root outside indexed sources, preserve formats/relative trees, skip images without accepted additions and existing destinations, filter live embedded keywords through per-original exclusions or ignore-all, merge included keywords with canonical, interface-language, or selected-language controlled labels, replace XMP Subject and IPTC Keywords on temporary copies only, verify exact deduplicated readback, and atomically publish or clean up. |
 
 ### 5.5 `ui/`
@@ -219,13 +219,13 @@ derive stable thumbnail cache names without a live `os.stat` call.
 | `models/search_list_model.py` | `QAbstractListModel` — search result rows; roles: `path`, `filename`, `metadataJson`, `thumbnailSource`, `fileSize`. Thumbnail URIs are pre-computed at `set_rows` / `append_rows` time using DB-stored `mtime`/`size` stamps — no `os.stat` per repaint. **All thumbnails are served via `image://thumb/<sha1>` (never `file://`)**; an optional `?t=N` per-path bust counter is appended after a `bust_thumbnail(row)` call so QML’s pixmap cache refetches the rebuilt PNG. |
 | `models/exif_list_model.py` | `QAbstractListModel` — EXIF key/value pairs for the detail panel |
 | `models/folder_list_model.py` | `QAbstractListModel` — rows for the Folders management panel; roles: `folderId`, `path`, `displayName`, `status`, `imageCount`, `errorMessage`, `enabled` |
-| `models/settings_model.py` | `SettingsModel(QObject)` — existing UI/index settings plus an independent per-database metadata language, tagging thresholds, and derivative TGM-label export mode (`canonical`, metadata language, or selected languages). Thresholds are clamped and auto-accept remains at least 0.01 stricter. AI availability excludes macOS Intel. |
-| `models/accepted_tag_list_model.py`, `free_tag_list_model.py`, `marked_tag_list_model.py`, `pending_proposal_list_model.py`, `tgm_search_list_model.py` | Models for accepted controlled tags, current/remembered custom tags, ranked proposals, and canonical/alias TGM type-ahead results. `MarkedTagListModel` supports the internal bulk-tagging service but has no version 1 QML surface. |
+| `models/settings_model.py` | `SettingsModel(QObject)` — existing UI/index settings plus an independent per-database metadata language, tagging thresholds, and derivative controlled-label export mode (`canonical`, metadata language, or selected languages). Thresholds are clamped and auto-accept remains at least 0.01 stricter. AI availability excludes macOS Intel. |
+| `models/accepted_tag_list_model.py`, `free_tag_list_model.py`, `marked_tag_list_model.py`, `pending_proposal_list_model.py`, `tgm_search_list_model.py` | Models for accepted controlled tags, current/remembered custom tags, ranked proposals, and preferred-label/alias vocabulary type-ahead results. `MarkedTagListModel` supports the internal bulk-tagging service but has no version 1 QML surface. |
 | `workers/index_worker.py` | `QThread` — runs `IndexerService.build_index` off the GUI thread; emits progress signals; supports `pause()`/`resume()` via `threading.Event` to yield I/O bandwidth during preview loads. After a successful (non-canceled) run, performs a **cache garbage-collection pass**: hashes every DB stamp into the expected SHA-1 set, scans `<cache_dir>` and `<cache_dir>/previews/`, and unlinks every file whose 40-character prefix is not expected. Emits a `(-1, -1, "")` sentinel `progress` signal so the controller can show a translated *“Cleaning up cache…”* status. |
 | `workers/ai_scan_worker.py` | `QThread` — folder-scoped CLIP embedding build for AI search. `aiScanFolder` indexes only missing vectors; `aiFullRescanFolder` removes vectors under that folder and rebuilds from scratch. Emits progress/canceled/failed signals mirrored in the Indexed Folders UI. |
 | `workers/ai_search_worker.py` | `QThread` — semantic query worker used by Search-tab AI mode. Encodes query text with CLIP, searches FAISS with precision thresholds (**fine 0.22**, **normal 0.20**, **broad 0.18**), then hydrates ranked paths back to DB rows for display. |
-| `workers/tgm_vector_build_worker.py` | Encodes canonical postable TGM concepts and aliases with the configured CLIP model into the separate term index; cancellation keeps the prior complete index active. |
-| `workers/tgm_proposal_worker.py` | Searches existing image vectors against current TGM term vectors, applies proposal/optional auto-accept thresholds, returns ephemeral suggestions, persists rejection decisions, and reports missing image vectors as AI-scan-required without decoding originals. |
+| `workers/tgm_vector_build_worker.py` | Encodes preferred labels and aliases from the active controlled vocabulary with the configured CLIP model into the separate term index; cancellation keeps the prior complete index active. |
+| `workers/tgm_proposal_worker.py` | Searches existing image vectors against current controlled-vocabulary term vectors, applies proposal/optional auto-accept thresholds, returns ephemeral suggestions, persists rejection decisions, and reports missing image vectors as AI-scan-required without decoding originals. |
 | `workers/bulk_tag_worker.py` | Internal worker for applying/removing one canonical concept across enabled-folder marks with per-image progress and partial-result summaries; retained for a future bulk-tagging UI and not invoked by version 1 QML. |
 | `workers/derivative_export_worker.py` | Plans and exports marked tagged copies outside indexed roots, preserving relative trees/formats and delegating XMP/IPTC writes to the verified ExifTool adapter. |
 | `workers/thumb_worker.py` | `QThread` — generates thumbnail cache off the GUI thread; supports `pause()`/`resume()` via `threading.Event`. `build_thumb()` wraps `_open_image()` with `_call_with_timeout()` (`_DECODE_TIMEOUT_S = 300.0 s`); a `TimeoutError` calls `_mark_skip()` so the file is excluded from future runs. |
@@ -237,8 +237,8 @@ derive stable thumbnail cache names without a live `os.stat` call.
 | `providers/thumb_image_provider.py` | `ThumbnailImageProvider(QQuickImageProvider)` — serves `image://thumb/<sha1_hex>` URIs; reads `.enc` files (encrypted mode) or `.png` files (plain mode) from the cache dir, decrypts via `ThumbCrypto` (AES-256-GCM) when needed, decodes PNG bytes to `QImage`; thread-safe (key set once on unlock). Strips an optional `?t=N` cache-bust query string from the request id so the same SHA-1 can be re-served after a thumbnail rebuild. |
 | `qml/Main.qml` | Main application window: tab bar (Search, Browse), split-pane layout, EXIF detail panel, Settings sheet, lock screen; **preview toolbar** — identical overlay on **both the Search-tab and Browse-tab** preview panes: **Copy** pill calls `controller.copyPreviewToClipboard()`; **Save Preview As** (white ⤓) and **Save Original As** (orange ⤓) pills open `savePreviewDialog` / `saveOriginalDialog` (`FileDialog`, `SaveFile` mode) with suggested filenames from `_suggestedPreviewUrl()` / `_suggestedOriginalUrl()` JS helpers; **Show Original / Show Preview** toggle pill calls `controller.setUseRawPreview()` and reflects the current mode with a colour-coded dot (green = preview, orange = original); a **loading overlay** (`BusyIndicator` + "Loading original…" label, rounded semi-transparent pill) fades in while the full-resolution image is decoding (only when `controller.useRawPreview` is `true`); matching *Save Preview As…* / *Save Original As…* items in the shared `previewContextMenu`; a pill-shaped toast `Rectangle` (`id: clipboardToast`) fades in/out (z:9999) and auto-hides after 2 s via `Timer`, driven by `onClipboardCopyDone`; **GPS location bar** in the Metadata panel (visible when the selected image has GPS coordinates — shows links to OpenStreetMap, Google Maps, and GeoHack); **search-syntax tooltip** — a `?` icon button (`searchHelpButton`) at the right edge of the search field, with a custom `ToolTip` `contentItem` (ColumnLayout with accent-coloured section headers, a two-column `GridLayout` of examples, and a tips bullet list); translated via `qsTr()`; **ExifTool section in Settings** — **Check** button calls `controller.checkExiftool()`; colour-coded status badge (green dot + version string / red dot + "Not found") bound to `controller.exiftoolVersion` and `controller.exiftoolMissing`; download link styled with `Material.accent` for dark-mode readability; all bindings guarded against `null` controller; **ExifTool missing dialog** — modal dialog triggered by `onExiftoolMissingChanged` when ExifTool is absent at unlock time, with a clickable `exiftool.org` link; **Browse-tab METADATA and EXIF TAGS panels** — the Browse tab has the same split-view METADATA panel (with inline Ctrl+F find bar and GPS location bar) and EXIF TAGS table as the Search tab; **search overlay** — when `controller.isSearching` is `true`, a semi-transparent grey `Rectangle` covers the entire window and `QGuiApplication.setOverrideCursor(Qt.BusyCursor)` blocks all input; both clear automatically when the search worker finishes |
 | `qml/FoldersPanel.qml` | Folder management panel — add/remove/enable folders, shows per-folder indexing status |
-| `qml/TaggingDrawer.qml` | Non-modal current-image drawer, available from Search/Browse via tag button or `Ctrl+T`: displays keywords embedded in the original without modifying it and allows per-keyword exclusion or ignore-all for derivatives; custom-tag creation/reuse/removal; canonical/alias TGM type-ahead; focused controlled-tag removal; proposal generation; scored accept/reject; progress and cancellation; fixed read-only footer previewing the final merged derivative keywords. |
-| `qml/TaggingSettings.qml` | Per-database enable switch; canonical TGM and optional translation-pack installation; TGM vector build/rebuild; proposal thresholds; and derivative label-language controls. |
+| `qml/TaggingDrawer.qml` | Non-modal current-image drawer, available from Search/Browse via tag button or `Ctrl+T`: displays keywords embedded in the original without modifying it and allows per-keyword exclusion or ignore-all for derivatives; custom-tag creation/reuse/removal; Wikidata preferred-label/alias type-ahead; focused controlled-tag removal; proposal generation; scored accept/reject; progress and cancellation; fixed read-only footer previewing the final merged derivative keywords. |
+| `qml/TaggingSettings.qml` | Per-database enable switch for the bundled Wikidata vocabulary; controlled-vocabulary vector build/rebuild; proposal thresholds; diagnostics; and derivative label-language controls. No vocabulary or translation-pack installation is exposed. |
 | `scroll_fix.py` | `ListScrollFix(QObject)` — window-level event filter that normalises mouse-wheel scrolling on QML `ListView`s to one row per 120-unit notch (`ROW_HEIGHT = 210 px`, accumulator for sub-notch input devices, pixelDelta fallback for trackpads/Wayland). Installed per ListView object name (`resultsList`, `browseImageList`, `foldersList`). The filter short-circuits when the target `ListView` is not actually visible (`QQuickItem.isVisible()` returns false when any ancestor is hidden), so the Search-tab `resultsList` does not silently consume wheel events while the user is on the Browse tab. |
 | `qml/FloatingBadge.qml` | Reusable badge overlay component |
 
@@ -423,7 +423,7 @@ in memory only; rejected decisions remain database-only and never enter
 ### Wikidata proposals
 
 ```
-Explicit TGM install/update → normalized snapshot (XML, text fallback)
+Bundled checksummed Wikidata snapshot → 8,313 reviewed QIDs
 Explicit Build/Rebuild Vectors → four locale rows/QID in separate tgm_terms.faiss
 AI Full Rescan → five views/image in separate ai_index.faiss
 Open tagging drawer, change image, or manually generate
@@ -434,20 +434,21 @@ Open tagging drawer, change image, or manually generate
   → accepted concepts pass through the same sidecar mutation service
 ```
 
-A TGM checksum, localization-pack checksum/locales, prompt strategy/version, or
-CLIP model change makes term vectors stale. Rebuilding TGM vectors does not
+A vocabulary dump/manifest checksum, prompt strategy/version/locales, or CLIP
+model change makes term vectors stale. Rebuilding vocabulary vectors does not
 rebuild image vectors. Missing image vectors return an AI-scan-required result
 rather than reading originals.
 
 Developer diagnostics can bypass the threshold for manual generation and show
 the raw top 20 QIDs with decimal cosine similarity and the winning view and
 locale. Auto-accept remains thresholded. The offline domain-root curator
-targets exactly 8,200 reviewed visual concepts. It applies deterministic
+fills an identity-preserved 8,200-concept base. It applies deterministic
 per-domain quotas, preserves valid forced includes, rejects override/quota
 conflicts, resolves localized-label collisions by priority, and rebalances
 unused domain quota globally. The audit reports every decision plus domain
-shortfalls and overflow. The checked-in version 2 snapshot contains all 8,200
-selected concepts.
+shortfalls and overflow. Qualified mapped `P5160` concepts that pass every
+quality gate append above that floor; version 2 ships 113 such additions for
+8,313 selected concepts total.
 
 ### Tagged derivatives
 
@@ -504,18 +505,18 @@ User selects image in UI
 
 | Setting | Source | Default |
 |---------|--------|---------|
-| Database path | `--db` CLI arg or env | `~/.exif-turbo/data/index.db` |
+| Database path | `--db` CLI arg or env | `~/.exif-turbo/data/index/index.db` |
 | Thumbnail cache | Derived from db path | `~/.exif-turbo/data/<db-stem>/thumbs/` |
 | Skip dotfiles | `EXIF_TURBO_SKIP_DOTFILES` env | `true` |
 | Database encryption key | UI lock screen | — (required; prompted on first launch) |
 | UI language | Settings sheet → Language | System locale, fallback `en` |
 | UI theme | Settings sheet → Theme | `system` (follows OS dark/light mode) |
 | Sort order | Sort combo in Search tab | `captured_desc` (Date taken ↓) |
-| Tagging enabled | Settings → Tagging and TGM | `false` per database |
-| Proposal threshold | Settings → Tagging and TGM | `0.20` |
-| Auto-accept enabled / threshold | Settings → Tagging and TGM | `false` / `0.28` |
-| Raw proposal diagnostics | Settings → Tagging and TGM | `false` |
-| TGM snapshot and term vectors | Derived from database path | Per-database TGM directory; snapshot plus `tgm_terms.faiss`, concept map, fingerprint metadata |
+| Tagging enabled | Settings → Tagging and Controlled Vocabulary | `false` per database |
+| Proposal threshold | Settings → Tagging and Controlled Vocabulary | `0.20` |
+| Auto-accept enabled / threshold | Settings → Tagging and Controlled Vocabulary | `false` / `0.28` |
+| Raw proposal diagnostics | Settings → Tagging and Controlled Vocabulary | `false` |
+| Vocabulary and term vectors | Bundled snapshot plus database-derived vector paths | Immutable bundled snapshot; per-database `tgm_terms.faiss`, concept map, and fingerprint metadata |
 | Image AI vectors | Derived from database path | Separate `ai_index.faiss` + `ai_id_map.json` + model/checksum `ai_index_meta.json`; built only by AI-Scan / AI Full Rescan |
 
 Language and theme are persisted globally to `settings.json`:
@@ -606,8 +607,8 @@ Single source of truth: `src/exif_turbo/__init__.py` → `__version__ = "X.Y.Z"`
 | Platform | Script | Output |
 |----------|--------|--------|
 | Windows | `scripts/build_windows.py` | `dist\exif-turbo\` (onedir) + `dist\exif-turbo-<ver>-windows.msi` |
-| macOS | `scripts/build_macos.py` | `dist/exif-turbo.app` + `dist/exif-turbo-<ver>-macos.dmg` |
-| Linux | `scripts/build_linux.py` | `dist/exif-turbo/` (onedir) + `dist/exif-turbo_<ver>_amd64.deb` + `dist/exif-turbo-<ver>-1.x86_64.rpm` (via PyInstaller + fpm) |
+| macOS | `scripts/build_macos.py` | `dist/exif-turbo.app` + `dist/exif-turbo-<ver>-macos-arm64.dmg` or `dist/exif-turbo-<ver>-macos-intel.dmg` |
+| Linux | `scripts/build_linux.py` | `dist/exif-turbo/` (onedir) + `dist/exif-turbo-<ver>-linux-amd64.deb` or `dist/exif-turbo-<ver>-linux-arm64.deb` + `dist/exif-turbo-<ver>-linux-x86_64.rpm` |
 
 **Windows MSI notes (`installer/exif-turbo.wxs`):**
 - `Scope="perMachine"` + `ProgramFiles64Folder` — installs machine-wide under `C:\Program Files\exif-turbo\`.
@@ -714,7 +715,7 @@ exif-turbo/
 │       ├── test_preview_cache.py
 │       └── test_thumb_crypto.py
 ├── installer/
-│   └── exif-turbo.wxs           # WiX v4 MSI descriptor
+│   └── exif-turbo.wxs           # WiX v6 MSI descriptor
 ├── scripts/
 │   ├── build_windows.py
 │   ├── build_macos.py
@@ -744,6 +745,6 @@ Build-time only:
 | Dependency | Purpose |
 |------------|---------|
 | PyInstaller | Standalone binary packaging |
-| WiX Toolset v4 | Windows MSI generation |
+| WiX Toolset v6 | Windows MSI generation |
 | hdiutil | macOS DMG creation (built in to macOS) |
 | gh (GitHub CLI) | Publishing GitHub Releases |
