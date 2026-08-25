@@ -112,6 +112,7 @@ class WikidataVocabularyCurator:
         review_path: Path,
         discovery_path: Path | None = None,
         tgm_discovery_path: Path | None = None,
+        priority_path: Path | None = None,
     ) -> dict[str, Any]:
         roots = _load_json(roots_path)
         overrides = _load_json(overrides_path)
@@ -153,6 +154,15 @@ class WikidataVocabularyCurator:
                         depth,
                         1_000_000_000 + priority,
                     )
+        if priority_path is not None:
+            priority_assignments = self._load_priority_assignments(
+                priority_path,
+                roots["domains"],
+                entities,
+                snapshot_version=int(roots["snapshot_version"]),
+            )
+            assignments.update(priority_assignments)
+            forced_includes.update(priority_assignments)
         assignments.update(include_assignments)
         self._validate_overrides(
             forced_includes,
@@ -294,6 +304,45 @@ class WikidataVocabularyCurator:
             raise WikidataCurationError(
                 "include and include_assignments overrides overlap"
             )
+        return assignments
+
+    @staticmethod
+    def _load_priority_assignments(
+        path: Path,
+        domains: list[dict[str, Any]],
+        entities: dict[str, dict[str, Any]],
+        *,
+        snapshot_version: int,
+    ) -> dict[str, tuple[str, str, int, int]]:
+        document = _load_json(path)
+        concepts = document.get("concepts")
+        if (
+            document.get("schema_version") != 1
+            or document.get("snapshot_version") != snapshot_version
+            or not isinstance(concepts, list)
+        ):
+            raise WikidataCurationError("unsupported priority concepts schema")
+        configured = {
+            str(domain["name"]): str(domain["category"])
+            for domain in domains
+        }
+        assignments: dict[str, tuple[str, str, int, int]] = {}
+        for concept in concepts:
+            if not isinstance(concept, dict):
+                raise WikidataCurationError("priority concepts must be objects")
+            qid = concept.get("qid")
+            domain = concept.get("domain")
+            category = concept.get("category")
+            if (
+                not isinstance(qid, str)
+                or not _QID_PATTERN.fullmatch(qid)
+                or qid not in entities
+                or not isinstance(domain, str)
+                or configured.get(domain) != category
+                or qid in assignments
+            ):
+                raise WikidataCurationError("invalid priority concept")
+            assignments[qid] = (domain, str(category), 0, 0)
         return assignments
 
     @staticmethod
@@ -778,6 +827,7 @@ def main() -> int:
     parser.add_argument("review", type=Path)
     parser.add_argument("--discovery", type=Path)
     parser.add_argument("--tgm-discovery", type=Path)
+    parser.add_argument("--priority", type=Path)
     arguments = parser.parse_args()
     WikidataVocabularyCurator().curate(
         arguments.roots,
@@ -787,6 +837,7 @@ def main() -> int:
         arguments.review,
         arguments.discovery,
         arguments.tgm_discovery,
+        arguments.priority,
     )
     return 0
 

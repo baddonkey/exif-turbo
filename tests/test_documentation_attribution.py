@@ -123,12 +123,12 @@ def test_wikidata_license_notice_matches_bundled_manifest() -> None:
     license_id = manifest["source"]["license_id"]
 
     # Assert
-    assert concept_count == 8_313
+    assert concept_count == 8_339
     assert review["target_count"] == 8_200
-    assert review["selected_overflow"] == 113
+    assert review["selected_overflow"] == 139
     assert review["target_count"] + review["selected_overflow"] == concept_count
     assert f"{concept_count:,}-concept" in notice
     assert license_id == "CC0-1.0"
     assert "CC0 1.0" in notice
-    assert "113 qualified concepts" in notice
+    assert "139 qualified concepts" in notice
     assert "P5160" in notice

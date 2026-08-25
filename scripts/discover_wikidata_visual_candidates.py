@@ -21,6 +21,7 @@ _USER_AGENT = (
     "(https://github.com/baddonkey/exif-turbo; build-time curator script)"
 )
 _QID_PATTERN = re.compile(r"^Q[1-9]\d*$")
+_PROPERTY_ID_PATTERN = re.compile(r"^P[1-9]\d*$")
 _ENTITY_PREFIX = "http://www.wikidata.org/entity/"
 _TIMEOUT_SECONDS = 180.0
 _FRONTIER_BATCH_SIZE = 400
@@ -111,6 +112,7 @@ class WikidataVisualCandidateDiscoverer:
             target_count = domain.get("target_count")
             max_depth = domain.get("max_depth")
             root_qids = domain.get("root_qids")
+            traversal_properties = domain.get("traversal_properties", ["P279"])
             if (
                 not name
                 or category not in ("subject", "genre_format")
@@ -126,6 +128,14 @@ class WikidataVisualCandidateDiscoverer:
                     isinstance(qid, str) and _QID_PATTERN.fullmatch(qid)
                     for qid in root_qids
                 )
+                or not isinstance(traversal_properties, list)
+                or not traversal_properties
+                or not all(
+                    isinstance(property_id, str)
+                    and _PROPERTY_ID_PATTERN.fullmatch(property_id)
+                    for property_id in traversal_properties
+                )
+                or len(traversal_properties) != len(set(traversal_properties))
             ):
                 raise WikidataDiscoveryError(f"invalid domain configuration: {name}")
             if name in completed_domains:
@@ -140,6 +150,7 @@ class WikidataVisualCandidateDiscoverer:
                 tuple(root_qids),
                 limit=limit,
                 max_depth=max_depth,
+                traversal_properties=tuple(traversal_properties),
             )
             rank = 0
             for qid, popularity in rows:
@@ -207,6 +218,7 @@ class WikidataVisualCandidateDiscoverer:
         *,
         limit: int,
         max_depth: int,
+        traversal_properties: tuple[str, ...],
     ) -> list[tuple[str, int]]:
         candidates = {qid: 1_000_000_000 for qid in root_qids}
         frontier = tuple(sorted(root_qids, key=lambda qid: int(qid[1:])))
@@ -214,7 +226,9 @@ class WikidataVisualCandidateDiscoverer:
             children: dict[str, int] = {}
             for offset in range(0, len(frontier), _FRONTIER_BATCH_SIZE):
                 for qid, popularity in self._query_direct_children(
-                    frontier[offset : offset + _FRONTIER_BATCH_SIZE]
+                    frontier[offset : offset + _FRONTIER_BATCH_SIZE],
+                    traversal_properties,
+                    limit,
                 ):
                     children[qid] = max(popularity, children.get(qid, -1))
                     candidates[qid] = max(popularity, candidates.get(qid, -1))
@@ -233,17 +247,24 @@ class WikidataVisualCandidateDiscoverer:
     def _query_direct_children(
         self,
         parent_qids: tuple[str, ...],
+        traversal_properties: tuple[str, ...],
+        limit: int,
     ) -> list[tuple[str, int]]:
         parents = " ".join(f"wd:{qid}" for qid in parent_qids)
+        properties = " ".join(
+            f"wdt:{property_id}" for property_id in traversal_properties
+        )
         query = f"""
 SELECT ?item (MAX(?links) AS ?popularity) WHERE {{
   VALUES ?parent {{ {parents} }}
-  ?item wdt:P279 ?parent.
+      VALUES ?traversalProperty {{ {properties} }}
+      ?item ?traversalProperty ?parent.
     FILTER(REGEX(STR(?item), "/Q[1-9][0-9]*$"))
   OPTIONAL {{ ?item wikibase:sitelinks ?links. }}
 }}
 GROUP BY ?item
-ORDER BY DESC(?popularity) ?item
+ORDER BY DESC(?popularity) xsd:integer(STRAFTER(STR(?item), "/Q"))
+LIMIT {limit}
 """.strip()
         url = f"{self._endpoint}?{urlencode({'query': query, 'format': 'json'})}"
         request = Request(

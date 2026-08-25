@@ -336,6 +336,56 @@ def test_wikidata_curator_domain_quota_is_deterministic_and_keeps_override(
     ]
 
 
+def test_wikidata_curator_priority_concept_consumes_existing_domain_quota(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    entities = [
+        _entity("Q1", "root"),
+        _entity("Q2", "normal", parent="Q1"),
+        _entity("Q3", "priority"),
+    ]
+    roots, overrides, source = _write_inputs(
+        tmp_path,
+        entities,
+        target_count=2,
+    )
+    priority_path = tmp_path / "priority.json"
+    priority_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "snapshot_version": 2,
+                "concepts": [
+                    {
+                        "qid": "Q3",
+                        "domain": "objects",
+                        "category": "subject",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_path = tmp_path / "manifest.json"
+
+    # Act
+    review = WikidataVocabularyCurator().curate(
+        roots,
+        overrides,
+        source,
+        manifest_path,
+        tmp_path / "review.json",
+        priority_path=priority_path,
+    )
+
+    # Assert
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert [concept["qid"] for concept in manifest["concepts"]] == ["Q1", "Q3"]
+    assert review["selected_count"] == 2
+    assert review["domain_counts"][0]["overflow"] == 0
+
+
 def test_wikidata_curator_rebalances_unused_domain_quota(
     tmp_path: Path,
 ) -> None:

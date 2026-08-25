@@ -5,12 +5,108 @@
   "source": {
     "name": "Wikidata",
     "dump_uri": "assets/wikidata/wikidata-priority-entities-v2.jsonl",
-    "dump_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "dump_sha256": "a1d600016dc1c2a7b1a6068d9721ffd2806ba3cf7f664f61016722b9efc3815e",
     "license_id": "CC0-1.0"
   },
   "concepts": [
     {
+      "qid": "Q140",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q144",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q146",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q152",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q726",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q830",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q1367",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q2934",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q5113",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q7368",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q7378",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q9394",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q9482",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q11788",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q19939",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q30034",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
       "qid": "Q32789",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q43169",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q83310",
+      "domain": "animals",
+      "category": "subject"
+    },
+    {
+      "qid": "Q862089",
+      "domain": "animals",
       "category": "subject"
     }
   ]

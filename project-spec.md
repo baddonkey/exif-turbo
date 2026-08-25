@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-**exif-turbo** is a cross-platform desktop application and CLI tool for indexing, searching, and non-destructively tagging image metadata. It scans one or more folders, extracts metadata from every image using ExifTool, stores searchable derived state in an encrypted SQLite database, and exposes the corpus through SQLite FTS5 and optional CLIP retrieval. A bundled CC0 Wikidata snapshot provides an offline, curated 8,313-concept visual vocabulary with mandatory `en/de/fr/it` terms. The 8,200-concept base is extended with qualified Wikidata concepts linked to the Library of Congress TGM. Accepted QIDs use schema-v2 adjacent plain-JSON sidecars; legacy `loc-tgm` sidecars remain compatible. A PySide6 QML UI provides real-time search, thumbnail preview, browsing, a focused-image tagging drawer, and a separate marked-image tool for bulk workflows.
+**exif-turbo** is a cross-platform desktop application and CLI tool for indexing, searching, and non-destructively tagging image metadata. It scans one or more folders, extracts metadata from every image using ExifTool, stores searchable derived state in an encrypted SQLite database, and exposes the corpus through SQLite FTS5 and optional CLIP retrieval. A bundled CC0 Wikidata snapshot provides an offline, curated 8,339-concept visual vocabulary with mandatory `en/de/fr/it` terms. The 8,200-concept base is extended with qualified Wikidata concepts linked to the Library of Congress TGM. Accepted QIDs use schema-v2 adjacent plain-JSON sidecars; legacy `loc-tgm` sidecars remain compatible. A PySide6 QML UI provides real-time search, thumbnail preview, browsing, a focused-image tagging drawer, and a separate marked-image tool for bulk workflows.
 
 ---
 
@@ -30,7 +30,7 @@
 | Database | SQLCipher 3 (`sqlcipher3` 0.5+) — encrypted SQLite with WAL mode |
 | Full-text search | SQLite FTS5 virtual table |
 | AI semantic search | Multilingual OpenCLIP `xlm-roberta-base-ViT-B-32` / `laion5b_s13b_b90k` ([LAION checkpoint](https://huggingface.co/laion/CLIP-ViT-B-32-xlm-roberta-base-laion5B-s13B-b90k)) + FAISS (`faiss-cpu`) with cosine similarity (IndexFlatIP on L2-normalized vectors) |
-| Controlled vocabulary | Bundled curated 8,313-concept Wikidata CC0 visual vocabulary: 8,200-concept base plus 113 qualified `P5160` additions; intrinsic `en/de/fr/it`; offline runtime |
+| Controlled vocabulary | Bundled curated 8,339-concept Wikidata CC0 visual vocabulary: 8,200-concept base plus 139 qualified `P5160` additions; intrinsic `en/de/fr/it`; offline runtime |
 | Tag persistence | Adjacent schema-v2 UTF-8 JSON sidecars plus normalized SQLCipher cache; schema-v1 TGM reader compatibility |
 | EXIF extraction | ExifTool (external process, `-g1 -j` JSON output) |
 | Thumbnails | Pillow ≥10.0 + `ImageOps.exif_transpose` (JPEG/PNG/TIFF) |
@@ -423,7 +423,7 @@ in memory only; rejected decisions remain database-only and never enter
 ### Wikidata proposals
 
 ```
-Bundled checksummed Wikidata snapshot → 8,313 reviewed QIDs
+Bundled checksummed Wikidata snapshot → 8,339 reviewed QIDs
 Explicit Build/Rebuild Vectors → four locale rows/QID in separate tgm_terms.faiss
 AI Full Rescan → five views/image in separate ai_index.faiss
 Open tagging drawer, change image, or manually generate
@@ -448,7 +448,7 @@ conflicts, resolves localized-label collisions by priority, and rebalances
 unused domain quota globally. The audit reports every decision plus domain
 shortfalls and overflow. Qualified mapped `P5160` concepts that pass every
 quality gate append above that floor; version 2 ships 113 such additions for
-8,313 selected concepts total.
+8,339 selected concepts total.
 
 ### Tagged derivatives
 
