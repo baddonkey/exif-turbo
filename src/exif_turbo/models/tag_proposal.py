@@ -15,6 +15,11 @@ class ProposalGenerationStatus(StrEnum):
     TGM_INDEX_REQUIRED = "tgm_index_required"
 
 
+class TagProposalKind(StrEnum):
+    VISUAL_CONCEPT = "visual_concept"
+    PUBLIC_FIGURE = "public_figure"
+
+
 @dataclass(frozen=True)
 class TagProposal:
     image_path: str
@@ -28,6 +33,7 @@ class TagProposal:
     provider_model: str = "clip"
     winning_view_id: str = "full"
     winning_locale: str = "en"
+    kind: TagProposalKind = TagProposalKind.VISUAL_CONCEPT
 
 
 @dataclass(frozen=True)

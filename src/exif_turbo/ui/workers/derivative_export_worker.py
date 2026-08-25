@@ -7,7 +7,6 @@ from typing import Iterable, Mapping
 from PySide6.QtCore import QThread, Signal
 
 from ...config import (
-    bundled_vocabulary_path,
     tgm_localization_pack_path,
     tgm_snapshot_path,
 )
@@ -21,7 +20,9 @@ from ...tagging.derivative_export_service import (
 from ...tagging.tgm_localization_repository import TgmLocalizationRepository
 from ...tagging.tgm_localization_service import TgmLocalizationService
 from ...tagging.tgm_snapshot_repository import TgmSnapshotRepository
-from ...tagging.vocabulary_snapshot_repository import VocabularySnapshotRepository
+from ...tagging.composite_vocabulary_repository import (
+    bundled_controlled_vocabulary_repository,
+)
 
 
 class DerivativeExportWorker(QThread):
@@ -92,9 +93,7 @@ class DerivativeExportWorker(QThread):
                 repository,
                 self._metadata_writer,
                 localization_service=localization_service,
-                vocabulary_repository=VocabularySnapshotRepository(
-                    bundled_vocabulary_path()
-                ),
+                vocabulary_repository=bundled_controlled_vocabulary_repository(),
                 tag_export_mode=self._tag_export_mode,
                 interface_locale=self._interface_locale,
                 selected_locales=self._selected_locales,

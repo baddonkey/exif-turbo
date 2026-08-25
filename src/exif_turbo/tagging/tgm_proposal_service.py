@@ -9,6 +9,7 @@ from ..models.tag_proposal import (
     ProposalGenerationResult,
     ProposalGenerationStatus,
     TagProposal,
+    TagProposalKind,
     TagProposalStatus,
 )
 from ..models.tgm_vector import TgmVectorFingerprint
@@ -29,6 +30,7 @@ class TgmProposalService:
         image_paths: Iterable[str],
         expected_fingerprint: TgmVectorFingerprint,
         *,
+        expected_public_figure_fingerprint: TgmVectorFingerprint | None = None,
         top_k: int,
         threshold: float,
         auto_accept_threshold: float | None = None,
@@ -49,13 +51,13 @@ class TgmProposalService:
                 proposal.concept_id
                 for proposal in self._image_repository.get_proposals(
                     image_path,
-                    provider_fingerprint=provider_id,
                     status=TagProposalStatus.REJECTED,
                 )
             }
             result = self._provider.propose(
                 image_path,
                 expected_fingerprint,
+                expected_public_figure_fingerprint=expected_public_figure_fingerprint,
                 top_k=top_k + len(accepted | rejected),
                 threshold=threshold,
             )
@@ -78,6 +80,7 @@ class TgmProposalService:
                     for proposal in filtered
                     if auto_accept_threshold is not None
                     and proposal.score >= auto_accept_threshold
+                    and proposal.kind is TagProposalKind.VISUAL_CONCEPT
                 )
                 result = replace(
                     result,

@@ -14,6 +14,7 @@ from exif_turbo.models.vocabulary import (
     VocabularySnapshot,
 )
 from exif_turbo.tagging.tgm_prompt_builder import TgmPromptBuilder
+from exif_turbo.tagging.public_figure_prompt_builder import PublicFigurePromptBuilder
 from exif_turbo.tagging.tgm_vector_index_service import TgmVectorIndexService
 from exif_turbo.tagging.vocabulary_snapshot_repository import VocabularySnapshotRepository
 
@@ -101,6 +102,34 @@ def test_tgm_prompt_builder_builds_bounded_prompt_for_each_locale() -> None:
     assert all(
         len(prompt) <= TgmPromptBuilder.MAX_PROMPT_LENGTH
         for _locale, prompt in prompts
+    )
+
+
+def test_public_figure_prompt_builder_uses_names_and_aliases() -> None:
+    # Arrange
+    concept = VocabularyConcept(
+        concept_id="wikidata:Q43274",
+        category=VocabularyCategory.SUBJECT,
+        canonical_label="Charles III",
+        localized_terms=(
+            LocalizedVocabularyTerms("en", "Charles III", ("King Charles III",)),
+            LocalizedVocabularyTerms("de", "Charles III.", ("König Charles III.",)),
+            LocalizedVocabularyTerms("fr", "Charles III", ("roi Charles III",)),
+            LocalizedVocabularyTerms("it", "Carlo III", ("re Carlo III",)),
+        ),
+        source_uri="https://www.wikidata.org/entity/Q43274",
+        license_id="CC0-1.0",
+    )
+
+    # Act
+    prompts = PublicFigurePromptBuilder().build_all(concept)
+
+    # Assert
+    assert prompts == (
+        ("en", "A photograph of Charles III (also known as: King Charles III)."),
+        ("de", "Ein Foto von Charles III. (auch bekannt als: König Charles III.)."),
+        ("fr", "Une photographie de Charles III (aussi connu comme : roi Charles III)."),
+        ("it", "Una fotografia di Carlo III (noto anche come: re Carlo III)."),
     )
 
 

@@ -14,6 +14,7 @@ from exif_turbo.models.tag_proposal import (
     ProposalGenerationResult,
     ProposalGenerationStatus,
     TagProposal,
+    TagProposalKind,
     TagProposalStatus,
 )
 from exif_turbo.models.tgm_vector import TgmVectorFingerprint
@@ -57,11 +58,27 @@ def _fingerprint() -> TgmVectorFingerprint:
     )
 
 
+def _public_figure_fingerprint() -> TgmVectorFingerprint:
+    return TgmVectorFingerprint(
+        vocabulary="wikidata",
+        snapshot_version=1,
+        source_dump_sha256="c" * 64,
+        manifest_sha256="d" * 64,
+        prompt_version=1,
+        prompt_strategy="wikidata-public-figure-names-v1",
+        prompt_locales=("en", "de", "fr", "it"),
+        model_name="ViT-B-32",
+        pretrained="openai",
+        dimension=512,
+    )
+
+
 def _setup(
     tmp_path: Path,
     *,
     add_image_vector: bool = True,
     add_crop_vector: bool = False,
+    add_public_figure_index: bool = False,
 ) -> tuple[ImageIndexRepository, TgmProposalService, str, TgmVectorFingerprint]:
     image_path = "/photos/photo.jpg"
     image_repository = ImageIndexRepository(tmp_path / "images.db")
@@ -116,13 +133,81 @@ def _setup(
         fingerprint,
         locales=["en", "de", "fr"],
     )
-    provider = TgmClipProposalProvider(image_vectors, term_vectors, snapshots)
+    public_figure_vectors = None
+    public_figure_snapshots = None
+    if add_public_figure_index:
+        public_figure_snapshots = VocabularySnapshotRepository(
+            tmp_path / "public-figures.json.gz"
+        )
+        public_figure_snapshots.activate(
+            VocabularySnapshot(
+                concepts=(_concept(43274, "Charles III"),),
+                version=1,
+                created_at=datetime(2026, 8, 24, tzinfo=UTC),
+                source_name="Wikidata public figures",
+                source_dump_uri="file:///offline/public-figures.json",
+                source_dump_sha256="c" * 64,
+                manifest_sha256="d" * 64,
+                license_id="CC0-1.0",
+            )
+        )
+        public_figure_vectors = TgmVectorRepository(
+            tmp_path / "people.faiss",
+            tmp_path / "people-map.json",
+            tmp_path / "people-metadata.json",
+        )
+        public_figure_vectors.load()
+        public_figure_vectors.replace_index(
+            query.reshape(1, -1),
+            ["wikidata:Q43274"],
+            _public_figure_fingerprint(),
+            locales=["en"],
+        )
+    provider = TgmClipProposalProvider(
+        image_vectors,
+        term_vectors,
+        snapshots,
+        public_figure_vectors,
+        public_figure_snapshots,
+    )
     return (
         image_repository,
         TgmProposalService(image_repository, provider),
         image_path,
         fingerprint,
     )
+
+
+def test_tgm_proposal_service_merges_public_figure_as_review_only_candidate(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    repository, service, image_path, fingerprint = _setup(
+        tmp_path,
+        add_public_figure_index=True,
+    )
+
+    # Act
+    batch = service.generate(
+        [image_path],
+        fingerprint,
+        expected_public_figure_fingerprint=_public_figure_fingerprint(),
+        top_k=4,
+        threshold=0.0,
+        auto_accept_threshold=0.5,
+    )
+
+    # Assert
+    proposals = batch.results[0].proposals
+    assert proposals[0].concept_id == "wikidata:Q43274"
+    assert proposals[0].label == "Charles III"
+    assert proposals[0].kind is TagProposalKind.PUBLIC_FIGURE
+    assert proposals[0].provider_fingerprint == _public_figure_fingerprint().identifier
+    assert all(
+        proposal.concept_id != "wikidata:Q43274"
+        for proposal in batch.results[0].auto_candidates
+    )
+    repository.close()
 
 
 def _accept_first_concept(

@@ -10,6 +10,8 @@ class ControlledVocabularyRepository(Protocol):
 
     def get(self, concept_id: str) -> VocabularyConcept | None: ...
 
+    def snapshot_for(self, concept_id: str) -> VocabularySnapshot | None: ...
+
     def resolve_label(
         self,
         label: str,

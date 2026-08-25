@@ -196,9 +196,14 @@ class TaggingService:
             )
         else:
             assert self._vocabulary_repository is not None
+            snapshot = self._vocabulary_repository.snapshot_for(concept.concept_id)
+            if snapshot is None:
+                raise TaggingConceptError(
+                    f"unknown controlled vocabulary concept: {concept.concept_id}"
+                )
             tag = self._build_vocabulary_tag(
                 concept,
-                self._vocabulary_repository.load(),
+                snapshot,
                 timestamp,
             )
         return self._apply_tag_changes(image_path, additions=(tag,))
@@ -799,7 +804,11 @@ class TaggingService:
                 proposal,
             )
         assert self._vocabulary_repository is not None
-        snapshot = self._vocabulary_repository.load()
+        snapshot = self._vocabulary_repository.snapshot_for(concept.concept_id)
+        if snapshot is None:
+            raise TaggingConceptError(
+                f"unknown controlled vocabulary concept: {proposal.concept_id}"
+            )
         manual = self._build_vocabulary_tag(concept, snapshot, timestamp)
         return replace(
             manual,

@@ -25,11 +25,13 @@ from PySide6.QtCore import QThread, Signal
 
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
-from ...config import bundled_vocabulary_path, tgm_snapshot_path
+from ...config import tgm_snapshot_path
 from ...i18n import _
 from ...tagging.sidecar_synchronizer import SidecarSynchronizer
 from ...tagging.tgm_snapshot_repository import TgmSnapshotRepository
-from ...tagging.vocabulary_snapshot_repository import VocabularySnapshotRepository
+from ...tagging.composite_vocabulary_repository import (
+    bundled_controlled_vocabulary_repository,
+)
 from ...utils.preview_cache import expected_preview_filenames, preview_dir
 from ._macos_activity import AppNapAssertion
 
@@ -184,9 +186,7 @@ class MaintenanceWorker(QThread):
             legacy_snapshot_path = tgm_snapshot_path(self._db_path)
             result = SidecarSynchronizer(
                 repo,
-                vocabulary_repository=VocabularySnapshotRepository(
-                    bundled_vocabulary_path()
-                ),
+                vocabulary_repository=bundled_controlled_vocabulary_repository(),
                 tgm_repository=(
                     TgmSnapshotRepository(legacy_snapshot_path)
                     if legacy_snapshot_path.exists()

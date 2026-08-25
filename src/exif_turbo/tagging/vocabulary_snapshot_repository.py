@@ -62,6 +62,10 @@ class VocabularySnapshotRepository:
         self.load()
         return self._by_id.get(concept_id)
 
+    def snapshot_for(self, concept_id: str) -> VocabularySnapshot | None:
+        snapshot = self.load()
+        return snapshot if concept_id in self._by_id else None
+
     def preferred_label(self, concept_id: str, locale: str) -> str | None:
         self._require_locale(locale)
         concept = self.get(concept_id)

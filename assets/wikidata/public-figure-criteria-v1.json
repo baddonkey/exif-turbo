@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "identity_snapshot_version": 1,
+  "created_at": "2026-08-24T00:00:00+00:00",
+  "earliest_life_date": "1826-01-01T00:00:00Z",
+  "min_sitelinks": 10,
+  "required_locales": ["en", "de", "fr", "it"],
+  "groups": [
+    {
+      "name": "politicians",
+      "target_count": 3000,
+      "occupation_root_qids": ["Q82955"]
+    },
+    {
+      "name": "monarchs",
+      "target_count": 500,
+      "position_root_qids": ["Q116"]
+    },
+    {
+      "name": "entertainers",
+      "target_count": 3000,
+      "occupation_root_qids": ["Q33999", "Q177220", "Q639669"]
+    },
+    {
+      "name": "athletes",
+      "target_count": 1500,
+      "occupation_root_qids": ["Q2066131"]
+    },
+    {
+      "name": "artists_writers",
+      "target_count": 1500,
+      "occupation_root_qids": ["Q483501", "Q36180"]
+    },
+    {
+      "name": "scientists_business_leaders",
+      "target_count": 1000,
+      "occupation_root_qids": ["Q901", "Q43845"]
+    }
+  ]
+}
