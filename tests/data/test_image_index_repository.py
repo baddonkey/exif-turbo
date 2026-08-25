@@ -7,6 +7,7 @@ import pytest
 import sqlcipher3
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
+from exif_turbo.models.tag_proposal import TagProposal, TagProposalKind, TagProposalStatus
 from tests.conftest import make_jpeg, make_png
 
 
@@ -121,6 +122,34 @@ def test_repository_reopen_removes_legacy_pending_proposals_only(
 
     # Assert
     assert statuses == ["rejected"]
+
+
+def test_rejected_public_figure_proposal_round_trip_preserves_kind(
+    repo: ImageIndexRepository,
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    image_path = str(make_jpeg(tmp_path / "person.jpg"))
+    repo.upsert_image(image_path, "person.jpg", 1.0, 100, {}, "person jpg")
+    repo.commit()
+    proposal = TagProposal(
+        image_path=image_path,
+        concept_id="wikidata:Q42",
+        label="Douglas Adams",
+        category="subject",
+        provider_fingerprint="public-figures-v1",
+        score=0.8,
+        rank=1,
+        kind=TagProposalKind.PUBLIC_FIGURE,
+    )
+
+    # Act
+    repo.record_rejected_proposal(proposal)
+    loaded = repo.get_proposals(image_path, status=TagProposalStatus.REJECTED)
+
+    # Assert
+    assert len(loaded) == 1
+    assert loaded[0].kind is TagProposalKind.PUBLIC_FIGURE
 
 
 def test_find_image_offset_path_filter_returns_sorted_offset(repo: ImageIndexRepository, tmp_path: Path) -> None:

@@ -36,7 +36,11 @@ from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
 from ...data.tgm_vector_repository import TgmVectorIndexError, TgmVectorRepository
 from ...config import (
+    bundled_public_figure_vocabulary_path,
     bundled_vocabulary_path,
+    public_figure_concept_map_path,
+    public_figure_term_index_path,
+    public_figure_vector_metadata_path,
     tgm_concept_map_path,
     tgm_localization_pack_path,
     tgm_snapshot_path,
@@ -62,6 +66,10 @@ from ...tagging.derivative_export_service import (
     merge_keyword_labels,
 )
 from ...tagging.sidecar_repository import FilesystemSidecarRepository
+from ...tagging.composite_vocabulary_repository import (
+    CompositeVocabularyRepository,
+)
+from ...tagging.public_figure_prompt_builder import PublicFigurePromptBuilder
 from ...tagging.tagging_service import TaggingService
 from ...tagging.tgm_snapshot_repository import TgmSnapshotRepository
 from ...tagging.vocabulary_snapshot_repository import VocabularySnapshotRepository
@@ -376,7 +384,7 @@ class AppController(QObject):
         self._password_change_old: str = ""
         self._password_change_new: str = ""
         self._tgm_repository: TgmSnapshotRepository | None = None
-        self._vocabulary_repository: VocabularySnapshotRepository | None = None
+        self._vocabulary_repository: CompositeVocabularyRepository | None = None
         self._tgm_localization_repository: TgmLocalizationRepository | None = None
         self._tgm_localization_service: TgmLocalizationService | None = None
         self._tagging_service: TaggingService | None = None
@@ -3609,8 +3617,14 @@ class AppController(QObject):
         if self._repo is None:
             return
         self._tgm_repository = TgmSnapshotRepository(tgm_snapshot_path(self._db_path))
-        self._vocabulary_repository = VocabularySnapshotRepository(
-            bundled_vocabulary_path()
+        public_figure_path = bundled_public_figure_vocabulary_path()
+        self._vocabulary_repository = CompositeVocabularyRepository(
+            VocabularySnapshotRepository(bundled_vocabulary_path()),
+            *(
+                (VocabularySnapshotRepository(public_figure_path),)
+                if public_figure_path.exists()
+                else ()
+            ),
         )
         self._tgm_localization_repository = TgmLocalizationRepository(
             tgm_localization_pack_path(self._db_path)
@@ -3717,6 +3731,37 @@ class AppController(QObject):
                     term_vectors.fingerprint == expected
                     and term_vectors.count == expected_rows
                 )
+                public_figure_path = bundled_public_figure_vocabulary_path()
+                if self._tgm_vectors_current and public_figure_path.exists():
+                    public_figure_snapshot = VocabularySnapshotRepository(
+                        public_figure_path
+                    ).load()
+                    public_figure_expected = TgmVectorFingerprint(
+                        vocabulary="wikidata",
+                        snapshot_version=public_figure_snapshot.version,
+                        source_dump_sha256=(
+                            public_figure_snapshot.source_dump_sha256
+                        ),
+                        manifest_sha256=public_figure_snapshot.manifest_sha256,
+                        prompt_version=PublicFigurePromptBuilder.VERSION,
+                        prompt_strategy=PublicFigurePromptBuilder.STRATEGY,
+                        prompt_locales=PublicFigurePromptBuilder.LOCALES,
+                        model_name=CLIP_MODEL_NAME,
+                        pretrained=CLIP_PRETRAINED,
+                        dimension=CLIP_VECTOR_DIMENSION,
+                    )
+                    public_figure_vectors = TgmVectorRepository(
+                        public_figure_term_index_path(self._db_path),
+                        public_figure_concept_map_path(self._db_path),
+                        public_figure_vector_metadata_path(self._db_path),
+                    )
+                    public_figure_vectors.load()
+                    self._tgm_vectors_current = (
+                        public_figure_vectors.fingerprint == public_figure_expected
+                        and public_figure_vectors.count
+                        == len(public_figure_snapshot.concepts)
+                        * len(PublicFigurePromptBuilder.LOCALES)
+                    )
             except TgmVectorIndexError:
                 self._tgm_vectors_current = False
         except Exception as exc:  # noqa: BLE001

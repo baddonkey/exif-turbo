@@ -26,6 +26,9 @@ from exif_turbo.tagging.sidecar_repository import (
     FilesystemSidecarRepository,
     SidecarRevision,
 )
+from exif_turbo.tagging.composite_vocabulary_repository import (
+    CompositeVocabularyRepository,
+)
 from exif_turbo.tagging.tagging_service import (
     BulkTagStatus,
     CopyTagsMode,
@@ -563,6 +566,55 @@ def test_tagging_service_accept_proposal_uses_clip_provenance_without_pending_ca
     assert result.sidecar.tags[0].provenance.method == "clip"
     assert result.sidecar.tags[0].provenance.confidence == 0.91
     assert image_repository.get_proposals(str(image_path)) == ()
+
+
+def test_tagging_service_accept_public_figure_uses_identity_snapshot_provenance(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    generic = _vocabulary_repository(tmp_path)
+    identities = VocabularySnapshotRepository(tmp_path / "public-figures.json.gz")
+    identities.activate(
+        VocabularySnapshot(
+            concepts=(
+                VocabularyConcept(
+                    concept_id="wikidata:Q43274",
+                    category=VocabularyCategory.SUBJECT,
+                    canonical_label="Charles III",
+                    localized_terms=tuple(
+                        LocalizedVocabularyTerms(locale, "Charles III")
+                        for locale in ("en", "de", "fr", "it")
+                    ),
+                    source_uri="https://www.wikidata.org/entity/Q43274",
+                    license_id="CC0-1.0",
+                ),
+            ),
+            version=1,
+            created_at=NOW,
+            source_name="Wikidata public figures",
+            source_dump_uri="file:///offline/public-figures.jsonl",
+            source_dump_sha256="c" * 64,
+            manifest_sha256="d" * 64,
+            license_id="CC0-1.0",
+        )
+    )
+    service, _image_repository, image_path = _service(
+        tmp_path,
+        CompositeVocabularyRepository(generic, identities),  # type: ignore[arg-type]
+    )
+    proposal = _proposal(
+        str(image_path), "wikidata:Q43274", "Charles III", 0.84
+    )
+
+    # Act
+    result = service.accept_proposal(proposal)
+
+    # Assert
+    tag = result.sidecar.tags[0]
+    assert tag.concept_id == "wikidata:Q43274"
+    assert tag.label == "Charles III"
+    assert tag.provenance.vocabulary_checksum == f"sha256:{'d' * 64}"
+    assert tag.provenance.extra["source_name"] == "Wikidata public figures"
 
 
 def test_tagging_service_reject_proposal_does_not_write_sidecar(

@@ -9,7 +9,11 @@ from ...config import (
     ai_id_map_path,
     ai_index_path,
     ai_vector_metadata_path,
+    bundled_public_figure_vocabulary_path,
     bundled_vocabulary_path,
+    public_figure_concept_map_path,
+    public_figure_term_index_path,
+    public_figure_vector_metadata_path,
     tgm_concept_map_path,
     tgm_snapshot_path,
     tgm_term_index_path,
@@ -19,6 +23,8 @@ from ...data.ai_vector_repository import AiVectorRepository
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.tgm_vector_repository import TgmVectorRepository
 from ...tagging.sidecar_repository import FilesystemSidecarRepository
+from ...tagging.composite_vocabulary_repository import CompositeVocabularyRepository
+from ...tagging.public_figure_prompt_builder import PublicFigurePromptBuilder
 from ...tagging.tagging_service import TaggingService
 from ...tagging.tgm_clip_proposal_provider import TgmClipProposalProvider
 from ...tagging.tgm_proposal_service import TgmProposalService
@@ -79,12 +85,43 @@ class TgmProposalWorker(QThread):
                 term_vectors,
                 AiIndexerService(image_vectors),
             ).expected_fingerprint()
+            public_figure_vectors = None
+            public_figure_vocabulary = None
+            public_figure_fingerprint = None
+            public_figure_path = bundled_public_figure_vocabulary_path()
+            if public_figure_path.exists():
+                public_figure_vocabulary = VocabularySnapshotRepository(
+                    public_figure_path
+                )
+                public_figure_vectors = TgmVectorRepository(
+                    public_figure_term_index_path(self._db_path),
+                    public_figure_concept_map_path(self._db_path),
+                    public_figure_vector_metadata_path(self._db_path),
+                )
+                public_figure_vectors.load()
+                public_figure_fingerprint = TgmVectorIndexService(
+                    public_figure_vocabulary,
+                    public_figure_vectors,
+                    AiIndexerService(image_vectors),
+                    PublicFigurePromptBuilder(),
+                ).expected_fingerprint()
+            controlled_vocabulary = CompositeVocabularyRepository(
+                vocabulary,
+                *((public_figure_vocabulary,) if public_figure_vocabulary else ()),
+            )
             proposals = TgmProposalService(
                 image_repository,
-                TgmClipProposalProvider(image_vectors, term_vectors, vocabulary),
+                TgmClipProposalProvider(
+                    image_vectors,
+                    term_vectors,
+                    vocabulary,
+                    public_figure_vectors,
+                    public_figure_vocabulary,
+                ),
             ).generate(
                 self._image_paths,
                 fingerprint,
+                expected_public_figure_fingerprint=public_figure_fingerprint,
                 top_k=self._top_k,
                 threshold=self._threshold,
                 auto_accept_threshold=self._auto_accept_threshold,
@@ -100,7 +137,7 @@ class TgmProposalWorker(QThread):
                     image_repository,
                     FilesystemSidecarRepository(),
                     legacy_tgm,
-                    vocabulary_repository=vocabulary,
+                    vocabulary_repository=controlled_vocabulary,
                 ).accept_auto_candidates(
                     proposals,
                     on_progress=self.progress.emit,

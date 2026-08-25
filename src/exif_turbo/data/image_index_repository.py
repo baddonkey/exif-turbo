@@ -11,7 +11,7 @@ import sqlcipher3
 
 from ..models.image_sidecar import ImageSidecar
 from ..models.image_tag import ImageTag, TagProvenance
-from ..models.tag_proposal import TagProposal, TagProposalStatus
+from ..models.tag_proposal import TagProposal, TagProposalKind, TagProposalStatus
 from ._connection import open_encrypted_connection, rekey_connection
 from .sidecar_sync_state import SidecarSyncState
 
@@ -164,6 +164,7 @@ class ImageIndexRepository:
                 rank INTEGER NOT NULL,
                 status TEXT NOT NULL CHECK(status IN ('pending', 'rejected')),
                 provider_model TEXT NOT NULL DEFAULT 'clip',
+                kind TEXT NOT NULL DEFAULT 'visual_concept',
                 PRIMARY KEY (image_id, concept_id, provider_fingerprint)
             );
 
@@ -195,6 +196,11 @@ class ImageIndexRepository:
             self.conn.execute(
                 "ALTER TABLE image_tag_proposals "
                 "ADD COLUMN provider_model TEXT NOT NULL DEFAULT 'clip'"
+            )
+        if "kind" not in proposal_columns:
+            self.conn.execute(
+                "ALTER TABLE image_tag_proposals "
+                "ADD COLUMN kind TEXT NOT NULL DEFAULT 'visual_concept'"
             )
         self.conn.execute(
             "DELETE FROM image_tag_proposals WHERE status = 'pending'"
@@ -680,12 +686,13 @@ class ImageIndexRepository:
                 """
                 INSERT INTO image_tag_proposals (
                     image_id, concept_id, provider_fingerprint, canonical_label,
-                    category, score, rank, status, provider_model
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'rejected', ?)
+                    category, score, rank, status, provider_model, kind
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'rejected', ?, ?)
                 ON CONFLICT(image_id, concept_id, provider_fingerprint)
                 DO UPDATE SET status = 'rejected', canonical_label = excluded.canonical_label,
                     category = excluded.category, score = excluded.score,
-                    rank = excluded.rank, provider_model = excluded.provider_model
+                    rank = excluded.rank, provider_model = excluded.provider_model,
+                    kind = excluded.kind
                 """,
                 (
                     image_id,
@@ -696,6 +703,7 @@ class ImageIndexRepository:
                     proposal.score,
                     proposal.rank,
                     proposal.provider_model,
+                    proposal.kind.value,
                 ),
             )
 
@@ -719,7 +727,7 @@ class ImageIndexRepository:
             SELECT proposals.concept_id, proposals.canonical_label,
                    proposals.category, proposals.provider_fingerprint,
                      proposals.score, proposals.rank, proposals.status,
-                     proposals.provider_model
+                                         proposals.provider_model, proposals.kind
             FROM image_tag_proposals AS proposals
             JOIN images ON images.id = proposals.image_id
             WHERE """ + " AND ".join(clauses) + " ORDER BY proposals.rank",
@@ -736,6 +744,7 @@ class ImageIndexRepository:
                 rank=int(row[5]),
                 status=TagProposalStatus(str(row[6])),
                 provider_model=str(row[7]),
+                kind=TagProposalKind(str(row[8])),
             )
             for row in rows
         )

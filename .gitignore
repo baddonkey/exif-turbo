@@ -86,6 +86,9 @@ docs/_build/
 docs/screenshots/demo.db
 docs/screenshots/thumbs/
 
+# Large local build input for the bundled public-figure snapshot.
+assets/wikidata/wikidata-public-figure-entities-v1.jsonl
+
 # PyBuilder
 .pybuilder/
 target/

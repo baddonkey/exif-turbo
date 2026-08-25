@@ -100,3 +100,52 @@ The generator uses only local files and performs no API or WDQS requests. The
 selected Wikidata labels and aliases are recorded as `CC0-1.0`. Generation fails
 when the dump checksum differs, a selected QID is missing or deleted, or any
 selected concept lacks `en`, `de`, `fr`, or `it` labels.
+
+## Public-figure identity workflow
+
+Named people are curated separately from the visual-concept vocabulary. The
+version 1 criteria select prominent politicians, monarchs, entertainers,
+athletes, artists, writers, scientists, and business leaders who were alive at
+some point since 1826 and have a Commons portrait plus `en`, `de`, `fr`, and
+`it` labels. Per-group targets total 10,500 before identities belonging to
+multiple groups are deduplicated:
+
+```text
+python scripts/discover_wikidata_public_figures.py \
+  assets/wikidata/public-figure-criteria-v1.json \
+  assets/wikidata/wikidata-public-figures-v1.json
+```
+
+The resulting schema-v1 document is directly consumable by the existing entity
+fetcher. Keep the identity export separate from the visual entity export:
+
+```text
+python scripts/fetch_wikidata_entities.py \
+  --manifest assets/wikidata/wikidata-public-figures-v1.json \
+  --output assets/wikidata/wikidata-public-figure-entities-v1.jsonl
+```
+
+Discovery records one Wikidata `P18` portrait reference per identity for audit
+and later reference-image acquisition. Each identity retains every matching
+group so clients can expose category filters. Discovery does not perform face
+recognition or download Commons media at application runtime.
+
+Convert the completed discovery plus pinned entities into the standard,
+checksummed manifest format and generate the bundled runtime snapshot:
+
+```text
+python scripts/prepare_wikidata_public_figure_manifest.py \
+  assets/wikidata/wikidata-public-figures-v1.json \
+  assets/wikidata/wikidata-public-figure-entities-v1.jsonl \
+  assets/wikidata/public-figure-manifest-v1.json
+python scripts/generate_wikidata_snapshot.py \
+  --manifest assets/wikidata/public-figure-manifest-v1.json \
+  --dump assets/wikidata/wikidata-public-figure-entities-v1.jsonl \
+  --output src/exif_turbo/assets/wikidata-public-figures-v1.json.gz
+```
+
+At runtime, public figures use a separate FAISS index built from multilingual
+name and alias prompts. Their hits are merged with visual-concept proposals,
+but remain review-only and are never auto-accepted. This is CLIP name matching,
+not biometric face recognition. When the optional bundled identity snapshot is
+absent, visual-concept proposals continue to operate unchanged.
