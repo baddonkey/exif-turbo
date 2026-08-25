@@ -57,6 +57,7 @@ def test_wikidata_visual_discoverer_ranks_multilingual_domain_candidates(
                         "target_count": 2,
                         "max_depth": 2,
                         "root_qids": ["Q1"],
+                        "traversal_properties": ["P279", "P171"],
                     }
                 ],
             }
@@ -77,9 +78,14 @@ def test_wikidata_visual_discoverer_ranks_multilingual_domain_candidates(
     assert [concept["priority"] for concept in document["concepts"]] == [1, 2]
     assert document["completed_domains"] == ["objects"]
     query = parse_qs(urlparse(opener.requests[0].full_url).query)["query"][0]
-    assert "?item wdt:P279 ?parent" in query
+    assert "VALUES ?traversalProperty { wdt:P279 wdt:P171 }" in query
+    assert "?item ?traversalProperty ?parent" in query
     assert 'FILTER(REGEX(STR(?item), "/Q[1-9][0-9]*$"))' in query
-    assert "ORDER BY DESC(?popularity)" in query
+    assert (
+        'ORDER BY DESC(?popularity) xsd:integer(STRAFTER(STR(?item), "/Q"))'
+        in query
+    )
+    assert "LIMIT 4" in query
     assert len(opener.requests) == 2
     assert json.loads(output_path.read_text(encoding="utf-8")) == document
 

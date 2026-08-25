@@ -15,7 +15,7 @@ The end-to-end feature is implemented:
 - Adjacent schema-v1/v2 `<complete-image-filename>.sidecar.json` files are plain
   UTF-8 JSON and authoritative for accepted tags. Atomic revision-checked
   writes preserve unknown fields and never write the original image.
-- A bundled CC0 Wikidata snapshot provides a curated 8,313-concept visual
+- A bundled CC0 Wikidata snapshot provides a curated 8,339-concept visual
   vocabulary: an 8,200-concept reviewed base plus qualified Wikidata concepts
   linked to the Library of Congress TGM. It is not an exhaustive copy of
   Wikidata. Every concept has intrinsic `en`,
@@ -476,8 +476,8 @@ impossible override/quota combinations fail; localized-label collisions retain
 the highest-priority concept; and unused domain quota is rebalanced globally.
 The review output records every decision, domain shortfall, and overflow.
 Qualified mapped `P5160` concepts that pass all quality gates append above the
-base. The shipped version 2 snapshot contains 8,313 concepts: 8,200 base
-concepts plus 113 TGM-linked additions.
+base. The shipped version 2 snapshot contains 8,339 concepts: 8,200 base
+concepts plus 139 TGM-linked additions.
 
 ### 9.4 Future providers
 
@@ -698,7 +698,7 @@ The current migration slice is complete when:
    adjacent sidecar without changing the original image.
 2. An accepted QID's preferred labels and aliases across exactly `en`, `de`,
    `fr`, and `it` find the image through FTS after mutation or sidecar refresh.
-3. The bundled curated 8,313-concept snapshot (8,200 base plus 113 qualified
+3. The bundled curated 8,339-concept snapshot (8,200 base plus 139 qualified
   `P5160` additions) works offline with no vocabulary-pack installer.
 4. CLIP can propose ranked Wikidata concepts from existing image vectors.
 5. Review-first and explicitly enabled threshold auto-acceptance both retain

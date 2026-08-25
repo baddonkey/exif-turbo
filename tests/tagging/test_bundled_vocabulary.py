@@ -36,7 +36,7 @@ def test_bundled_vocabulary_matches_reviewed_manifest_and_required_locales() -> 
         source_sha256 = hashlib.file_digest(source_stream, "sha256").hexdigest()
 
     # Assert
-    assert len(snapshot.concepts) == len(manifest["concepts"]) == 8_313
+    assert len(snapshot.concepts) == len(manifest["concepts"]) == 8_339
     assert snapshot_path.parent == Path(exif_turbo.__file__).parent / "assets"
     assert source_sha256 == manifest["source"]["dump_sha256"]
     assert snapshot.source_dump_sha256 == source_sha256
@@ -69,8 +69,8 @@ def test_bundled_vocabulary_matches_reviewed_manifest_and_required_locales() -> 
         if row["status"] == "included" and row["reasons"] == ["tgm_priority"]
     ]
     assert len(base_rows) == review["target_count"] == 8_200
-    assert len(overflow_rows) == review["selected_overflow"] == 113
-    assert review["selected_count"] == 8_313
+    assert len(overflow_rows) == review["selected_overflow"] == 139
+    assert review["selected_count"] == 8_339
     assert review["target_shortfall"] == 0
     assert all(row["tgm_ids"] for row in overflow_rows)
     assert review["source_sha256"] == source_sha256
@@ -92,6 +92,46 @@ def test_bundled_vocabulary_contains_zebra_visual_concept() -> None:
     assert zebra is not None
     assert zebra.preferred_label("en") == "zebra"
     assert "zebras" in zebra.aliases("en")
+
+
+def test_bundled_vocabulary_giraffe_search_returns_generic_concept() -> None:
+    # Arrange
+    repository = VocabularySnapshotRepository(bundled_vocabulary_path())
+
+    # Act
+    english_results = repository.search("giraffe", "en")
+    german_results = repository.search("Giraffe", "de")
+
+    # Assert
+    assert [concept.concept_id for concept in english_results] == [
+        "wikidata:Q862089"
+    ]
+    assert [concept.concept_id for concept in german_results] == [
+        "wikidata:Q862089"
+    ]
+
+
+def test_bundled_vocabulary_contains_priority_visual_concepts() -> None:
+    # Arrange
+    repository_root = Path(__file__).parents[2]
+    priority_path = (
+        repository_root
+        / "assets"
+        / "wikidata"
+        / "priority-visual-concepts-v2.json"
+    )
+    priority = json.loads(priority_path.read_text(encoding="utf-8"))
+    snapshot = VocabularySnapshotRepository(bundled_vocabulary_path()).load()
+
+    # Act
+    missing_qids = [
+        concept["qid"]
+        for concept in priority["concepts"]
+        if snapshot.concept_by_id(f"wikidata:{concept['qid']}") is None
+    ]
+
+    # Assert
+    assert missing_qids == []
 
 
 def test_bundled_vocabulary_regenerates_byte_identically(tmp_path: Path) -> None:
@@ -148,6 +188,8 @@ def test_reviewed_vocabulary_inputs_regenerate_byte_identically(tmp_path: Path) 
             str(assets_path / "wikidata-discovery-v2.json"),
             "--tgm-discovery",
             str(assets_path / "wikidata-tgm-discovery-v2.json"),
+            "--priority",
+            str(assets_path / "priority-visual-concepts-v2.json"),
         ],
         check=True,
     )

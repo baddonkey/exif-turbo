@@ -805,7 +805,7 @@ shown in full and never truncated.
 
 ## 10. Tagging with Wikidata
 
-Tagging uses a bundled, curated 8,313-concept visual vocabulary from Wikidata
+Tagging uses a bundled, curated 8,339-concept visual vocabulary from Wikidata
 without writing metadata into the original image. Its reviewed 8,200-concept
 base is extended with qualified concepts linked to the Library of Congress
 TGM. It is disabled by default for each database; enable it under **Settings → Tagging and Controlled Vocabulary**.

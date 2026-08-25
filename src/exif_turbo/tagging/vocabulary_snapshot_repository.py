@@ -89,13 +89,24 @@ class VocabularySnapshotRepository:
         matches: list[tuple[int, str, str, VocabularyConcept]] = []
         for concept in self.load().concepts:
             terms = concept.terms(locale)
-            labels = (terms.preferred_label, *terms.aliases)
-            folded = tuple(label.casefold() for label in labels)
-            if not any(normalized in label for label in folded):
+            preferred = terms.preferred_label.casefold()
+            aliases = tuple(alias.casefold() for alias in terms.aliases)
+            if normalized == preferred:
+                rank = 0
+            elif normalized in aliases:
+                rank = 1
+            elif preferred.startswith(normalized):
+                rank = 2
+            elif any(alias.startswith(normalized) for alias in aliases):
+                rank = 3
+            elif normalized in preferred:
+                rank = 4
+            elif any(normalized in alias for alias in aliases):
+                rank = 5
+            else:
                 continue
-            rank = 0 if any(label.startswith(normalized) for label in folded) else 1
             matches.append(
-                (rank, terms.preferred_label.casefold(), concept.concept_id, concept)
+                (rank, preferred, concept.concept_id, concept)
             )
         matches.sort(key=lambda item: item[:3])
         return tuple(item[3] for item in matches[:limit])

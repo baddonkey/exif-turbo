@@ -6,7 +6,7 @@
   "target_count": 8200,
   "domains": [
     {"name": "people", "category": "subject", "target_count": 550, "max_depth": 4, "root_qids": ["Q5"]},
-    {"name": "animals", "category": "subject", "target_count": 1050, "max_depth": 5, "root_qids": ["Q729"]},
+    {"name": "animals", "category": "subject", "target_count": 1050, "max_depth": 8, "root_qids": ["Q729"], "traversal_properties": ["P279", "P171"]},
     {"name": "plants", "category": "subject", "target_count": 650, "max_depth": 5, "root_qids": ["Q756"]},
     {"name": "landscape_weather", "category": "subject", "target_count": 700, "max_depth": 5, "root_qids": ["Q271669", "Q11663"]},
     {"name": "food", "category": "subject", "target_count": 600, "max_depth": 5, "root_qids": ["Q2095"]},

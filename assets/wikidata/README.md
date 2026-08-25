@@ -3,12 +3,13 @@
 `vocabulary-manifest.example.json` is a small curator example, not a production
 manifest. Its all-zero SHA256 is intentionally invalid for real input.
 `vocabulary-manifest-v2.json` and `wikidata-visual-entities-v2.jsonl` are the
-auto-reviewed, pinned inputs for the bundled 8,313-concept version 2
+auto-reviewed, pinned inputs for the bundled 8,339-concept version 2
 vocabulary. The configured 8,200-concept base is preserved while qualified
 Wikidata concepts carrying the Library of Congress TGM identifier (`P5160`)
 may be appended. `wikidata-review-v2.json` records every inclusion, exclusion,
 collision, domain shortfall, rebalanced quota decision, and TGM-priority
-addition. The version 1 files retain the original 80-concept release inputs.
+addition. Version 2 supersedes the original 80-concept visual vocabulary;
+obsolete version 1 visual inputs and runtime snapshots are not retained.
 
 The production runtime snapshot is checked in at
 `src/exif_turbo/assets/wikidata-vocabulary-v2.json.gz`. Wikidata access is a
@@ -69,6 +70,22 @@ python scripts/merge_wikidata_entities.py \
   --output assets/wikidata/wikidata-visual-entities-v2.jsonl
 ```
 
+Fetch the reviewed priority baseline the same way. Priority concepts guarantee
+recognizable visual concepts when Wikidata graph links are incomplete, but
+still consume their configured domain quota:
+
+```text
+python scripts/fetch_wikidata_entities.py \
+  --manifest assets/wikidata/priority-visual-concepts-v2.json \
+  --output assets/wikidata/wikidata-priority-entities-v2.jsonl \
+  --exclude-entities assets/wikidata/wikidata-visual-entities-v2.jsonl \
+  --include-claims
+python scripts/merge_wikidata_entities.py \
+  assets/wikidata/wikidata-visual-entities-v2.jsonl \
+  assets/wikidata/wikidata-priority-entities-v2.jsonl \
+  --output assets/wikidata/wikidata-visual-entities-v2.jsonl
+```
+
 4. Apply hard quality gates, explicit overrides, localized-label collision
 resolution, domain quotas, and global quota rebalancing. The curator writes
 both the selected manifest and a complete decision audit. TGM-linked concepts
@@ -83,7 +100,8 @@ python scripts/curate_wikidata_vocabulary.py \
   assets/wikidata/vocabulary-manifest-v2.json \
   assets/wikidata/wikidata-review-v2.json \
   --discovery assets/wikidata/wikidata-discovery-v2.json \
-  --tgm-discovery assets/wikidata/wikidata-tgm-discovery-v2.json
+  --tgm-discovery assets/wikidata/wikidata-tgm-discovery-v2.json \
+  --priority assets/wikidata/priority-visual-concepts-v2.json
 ```
 
 5. Generate the runtime snapshot from the auto-reviewed, checksummed local

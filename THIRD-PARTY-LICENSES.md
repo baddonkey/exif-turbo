@@ -60,18 +60,17 @@ AI use and cached in the per-database user folder under
 
 ## Bundled Controlled Vocabulary
 
-exif-turbo bundles an offline, curated 8,313-concept visual subset of Wikidata:
-an 8,200-concept reviewed base plus 113 qualified concepts carrying Library of
+exif-turbo bundles an offline, curated 8,339-concept visual subset of Wikidata:
+an 8,200-concept reviewed base plus 139 qualified concepts carrying Library of
 Congress TGM identifiers through Wikidata property `P5160`. It is not an
 exhaustive vocabulary. Every included concept carries intrinsic preferred
 labels and aliases for English, German, French, and Italian. Runtime tagging,
 FTS, export, and QID proposal lookup do not contact Wikidata and do not install
-a separate localization pack. The original 80-concept version 1 snapshot is
-retained for reproducibility and compatibility.
+a separate localization pack.
 
 | Asset | Used for | Terms / status | URL |
 |-------|----------|----------------|-----|
-| Curated Wikidata visual-concept snapshots (8,313-concept v2 and legacy 80-concept v1) | Bundled QIDs, categories, and `en/de/fr/it` preferred labels/aliases for offline controlled tagging and proposal vectors | CC0 1.0 | https://www.wikidata.org/ |
+| Curated Wikidata visual-concept snapshot (8,339-concept v2) | Bundled QIDs, categories, and `en/de/fr/it` preferred labels/aliases for offline controlled tagging and proposal vectors | CC0 1.0 | https://www.wikidata.org/ |
 
 The bundled artifact records source-dump and manifest SHA-256 checksums for
 reproducibility. Wikidata structured data is available under
