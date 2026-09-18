@@ -747,7 +747,6 @@ Item {
                     current: controller ? controller.aiScanCurrent : 0
                     total: controller ? controller.aiScanTotal : 0
                     currentFile: controller ? controller.aiScanCurrentFile : ""
-                    progressPrefix: controller ? controller.aiScanFolderName : ""
                     cancelText: qsTr("Cancel")
                     canceling: false
                     onCancelRequested: controller.cancelAiScan()

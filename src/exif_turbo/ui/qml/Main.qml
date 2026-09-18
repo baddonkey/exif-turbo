@@ -336,6 +336,7 @@ ApplicationWindow {
     readonly property string _previewCurrentFile:  controller ? controller.previewCurrentFile : ""
     readonly property string _unlockError:         controller ? controller.unlockError        : ""
     readonly property string _statusText:          controller ? controller.statusText         : ""
+    readonly property string _statusFolderName:    controller ? controller.statusFolderName   : ""
     readonly property int    _indexCurrent:        controller ? controller.indexCurrent       : 0
     readonly property int    _indexTotal:          controller ? controller.indexTotal         : 0
     readonly property string _indexCurrentFile:    controller ? controller.indexCurrentFile   : ""
@@ -369,6 +370,10 @@ ApplicationWindow {
     readonly property string _appVersion:         controller ? controller.appVersion          : ""
     readonly property bool   _isBusy:             controller ? controller.isBusy             : false
     readonly property bool   _isRefreshingTags:   controller ? controller.isRefreshingTags   : false
+    readonly property bool   _isAiScanning:       controller ? controller.isAiScanning       : false
+    readonly property bool   _folderOperationActive: _isIndexing || _isBuildingThumbs
+                                                   || _isRefreshingTags || _isBuildingPreviews
+                                                   || _isAiScanning
     readonly property bool   _isSearching:        controller ? controller.isSearching        : false
     readonly property bool   _aiFeatureAvailable: settingsModel ? settingsModel.aiFeatureAvailable : false
     readonly property string _busyLabel:          controller ? controller.busyLabel          : ""
@@ -5047,42 +5052,39 @@ ApplicationWindow {
         visible: !_isLocked
         color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.06)
 
-        // Pulsing blue dot — visible only while indexing
-        Rectangle {
-            id: indexingDot
+        Label {
+            id: statusFolderLabel
             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-            width: 8; height: 8
-            radius: 4
-            color: root._accentColor
-            visible: _isIndexing
+            text: _statusFolderName
+            visible: text.length > 0
+            font.pixelSize: 11
+            font.weight: Font.DemiBold
+            color: _folderOperationActive
+                   ? root._accentColor
+                   : ((controller && controller.statusIsError)
+                      ? Material.color(Material.Red) : Material.foreground)
+            opacity: _folderOperationActive ? 1.0 : 0.7
 
             SequentialAnimation on opacity {
-                running: indexingDot.visible
+                running: statusFolderLabel.visible && _folderOperationActive
                 loops: Animation.Infinite
-                NumberAnimation { to: 0.25; duration: 800; easing.type: Easing.InOutSine }
+                NumberAnimation { to: 0.35; duration: 800; easing.type: Easing.InOutSine }
                 NumberAnimation { to: 1.0;  duration: 800; easing.type: Easing.InOutSine }
             }
         }
 
         Label {
-            id: indexingLabel
-            anchors { left: indexingDot.right; leftMargin: 5; verticalCenter: parent.verticalCenter }
-            text: qsTr("Indexing…")
-            visible: _isIndexing
-            font.pixelSize: 11
-            color: root._accentColor
-        }
-
-        Label {
             id: statusLabel
             anchors {
-                left: _isIndexing ? indexingLabel.right : parent.left
-                leftMargin: _isIndexing ? 10 : 12
+                left: statusFolderLabel.visible ? statusFolderLabel.right : parent.left
+                leftMargin: statusFolderLabel.visible ? 0 : 12
                 right: clearStatusButton.visible ? clearStatusButton.left : parent.right
                 rightMargin: clearStatusButton.visible ? 6 : 12
                 verticalCenter: parent.verticalCenter
             }
-            text: _statusText
+            text: statusFolderLabel.visible
+                ? _statusText.substring(_statusFolderName.length)
+                : _statusText
             elide: Text.ElideRight
             font.pixelSize: 11
             color: (controller && controller.statusIsError)

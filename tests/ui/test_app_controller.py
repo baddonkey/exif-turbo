@@ -721,6 +721,23 @@ def test_folder_operation_status_formats_folder_operation_and_detail(
 
     # Assert
     assert bare_controller.statusText == "Holiday Photos, Previews: 2 / 2 built"
+    assert bare_controller.statusFolderName == "Holiday Photos"
+
+
+def test_regular_status_clears_folder_name_context(
+    bare_controller: AppController,
+) -> None:
+    # Arrange
+    bare_controller._set_folder_operation_status(
+        "Holiday Photos", "Previews", "2 / 2 built"
+    )
+
+    # Act
+    bare_controller._set_status("Folder list reloaded.")
+
+    # Assert
+    assert bare_controller.statusText == "Folder list reloaded."
+    assert bare_controller.statusFolderName == ""
 
 
 def test_index_progress_with_folder_context_updates_standard_status(

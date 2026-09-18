@@ -157,13 +157,13 @@ def test_folders_progress_bars_idle_display_zero() -> None:
     assert "value: active ? current : 0" in source
 
 
-def test_ai_scan_progress_status_starts_with_active_folder_name() -> None:
+def test_ai_scan_progress_matches_other_activity_blocks() -> None:
     # Arrange
     source = (_QML_PATH.parent / "FoldersPanel.qml").read_text(encoding="utf-8")
 
     # Act / Assert
     assert 'title: qsTr("AI-Scan")' in source
-    assert "progressPrefix: controller ? controller.aiScanFolderName" in source
+    assert "progressPrefix: controller ? controller.aiScanFolderName" not in source
     assert 'progressPrefix + ": "' in source
     assert "elide: Text.ElideMiddle" in source
 
@@ -184,6 +184,19 @@ def test_refresh_tags_uses_activity_block_without_busy_overlay() -> None:
     assert "progressPrefix: controller ? controller.refreshTagsFolderName" in folders_source
     assert "onCancelRequested: controller.cancelRefreshTags()" in folders_source
     assert "visible: _isBusy && !_isRefreshingTags" in main_source
+
+
+def test_status_bar_glows_folder_name_without_indexing_bullet() -> None:
+    # Arrange
+    source = _QML_PATH.read_text(encoding="utf-8")
+
+    # Act / Assert
+    assert "id: indexingDot" not in source
+    assert "id: indexingLabel" not in source
+    assert "id: statusFolderLabel" in source
+    assert "text: _statusFolderName" in source
+    assert "running: statusFolderLabel.visible && _folderOperationActive" in source
+    assert "_statusText.substring(_statusFolderName.length)" in source
 
 
 def test_folders_basic_toolbar_uses_concise_scan_labels() -> None:

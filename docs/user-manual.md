@@ -254,14 +254,14 @@ Each active column contains:
   disabled until the worker has stopped.
 
 While AI scanning is active, the affected folder row also shows a spinner and
-an **AI-Scan** or **AI Full Scan** badge. The AI activity progress starts with
-the folder name, for example `Holiday Photos: 960 / 1000`. Its normal folder
-status returns when the operation stops.
+an **AI-Scan** or **AI Full Scan** badge. Its normal folder status returns when
+the operation stops.
 
-Across **all tabs** the **status bar** at the very bottom of the window shows a
-pulsing blue dot and the text **Indexing…** during the file-indexing phase, so
-you always know the indexer is running even when you are working in Search or
-Browse. The dot is not shown during the separate thumbnail-building phase. The
+Across **all tabs**, folder-operation messages in the **status bar** begin with
+the indexed folder name. While indexing, refreshing tags, building thumbnails
+or previews, or running AI-Scan, that folder name pulses in the accent colour
+so the active folder remains visible even when you are working in Search or
+Browse. There is no separate activity dot or redundant **Indexing…** label. The
 status bar also shows brief event messages to its right (such as "Indexed 42
 images" after a scan completes).
 

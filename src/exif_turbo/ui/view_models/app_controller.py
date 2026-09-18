@@ -243,6 +243,7 @@ class AppController(QObject):
         self._exif_model = exif_model
         self._folder_model = folder_model
         self._status_text = _("Enter the database password to continue")
+        self._status_folder_name = ""
         self._status_is_error = False
         self._is_locked = True
         self._is_new_database = not db_path.exists()
@@ -486,6 +487,10 @@ class AppController(QObject):
     @Property(str, notify=statusTextChanged)
     def statusText(self) -> str:
         return self._status_text
+
+    @Property(str, notify=statusTextChanged)
+    def statusFolderName(self) -> str:
+        return self._status_folder_name
 
     @Property(bool, notify=statusTextChanged)
     def statusIsError(self) -> bool:
@@ -1461,6 +1466,7 @@ class AppController(QObject):
             self._date_from = None
             self._date_to = None
             self._status_text = ""
+            self._status_folder_name = ""
             self._status_is_error = False
             self._is_unlocking = False
             self.isUnlockingChanged.emit()
@@ -4859,10 +4865,17 @@ class AppController(QObject):
 
     # ── Private helpers ───────────────────────────────────────────────────────
 
-    def _set_status(self, text: str, *, error: bool = False) -> None:
-        if self._status_text != text or self._status_is_error != error:
+    def _set_status(
+        self, text: str, *, error: bool = False, folder_name: str = ""
+    ) -> None:
+        if (
+            self._status_text != text
+            or self._status_is_error != error
+            or self._status_folder_name != folder_name
+        ):
             self._status_text = text
             self._status_is_error = error
+            self._status_folder_name = folder_name
             self.statusTextChanged.emit()
 
     def _set_folder_operation_status(
@@ -4875,6 +4888,7 @@ class AppController(QObject):
                 detail=detail,
             ),
             error=error,
+            folder_name=folder_name,
         )
 
     @Slot()
