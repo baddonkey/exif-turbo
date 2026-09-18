@@ -115,6 +115,23 @@ def _write_desktop_file(path: Path, version: str) -> None:
     )
 
 
+def _normalize_package_permissions(
+    staging: Path, lib_dir: Path, executable_paths: set[Path]
+) -> None:
+    for path in staging.rglob("*"):
+        if not path.is_file():
+            continue
+        with path.open("rb") as file:
+            header = file.read(4)
+        mode = path.stat().st_mode
+        if path in executable_paths or (
+            path.is_relative_to(lib_dir) and header.startswith(b"\x7fELF")
+        ):
+            path.chmod(mode | 0o111)
+        else:
+            path.chmod(mode & ~0o111)
+
+
 def create_package_staging(bundle_dir: Path, version: str, staging: Path) -> bool:
     """Populate *staging* with the standard /usr layout. Returns True if an icon was installed."""
     lib_dir = staging / "usr" / "lib" / "exif-turbo"
@@ -153,6 +170,7 @@ def create_package_staging(bundle_dir: Path, version: str, staging: Path) -> boo
     icon_src = _find_icon()
     if icon_src:
         shutil.copy2(icon_src, icon_dir / "exif-turbo.png")
+    _normalize_package_permissions(staging, lib_dir, {wrapper})
     return icon_src is not None
 
 
