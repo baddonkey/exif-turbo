@@ -19,7 +19,7 @@ dependencies = [
   "pyvips-binary>=8.18",
   "faiss-cpu>=1.14",
   "open-clip-torch>=3.3",
-  "transformers[sentencepiece]>=4.51,<5",
+  "transformers[sentencepiece]>=4.51,<6",
 ]
 
 [project.scripts]
