@@ -157,3 +157,28 @@ def test_ai_scan_worker_full_rescan_recovers_legacy_index(
 
     # Assert
     assert _load_indexed_paths(db_path) == {str(current)}
+
+
+def test_ai_scan_worker_empty_folder_finishes_without_canceling(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    db_path = _unique_db_path(tmp_path)
+    source_dir = tmp_path / "empty"
+    source_dir.mkdir()
+    folder_repo = IndexedFolderRepository(db_path, key="")
+    folder = folder_repo.add(str(source_dir))
+    folder_repo.close()
+    ImageIndexRepository(db_path, key="").close()
+    worker = AiScanWorker(db_path, folder.id, str(source_dir))
+    finished: list[tuple[int, int]] = []
+    canceled: list[int] = []
+    worker.finished.connect(lambda indexed, errors: finished.append((indexed, errors)))
+    worker.canceled.connect(canceled.append)
+
+    # Act
+    worker.run()
+
+    # Assert
+    assert finished == [(0, 0)]
+    assert canceled == []

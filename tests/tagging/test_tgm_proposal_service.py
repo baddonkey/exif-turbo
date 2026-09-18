@@ -194,7 +194,6 @@ def test_tgm_proposal_service_merges_public_figure_as_review_only_candidate(
         expected_public_figure_fingerprint=_public_figure_fingerprint(),
         top_k=4,
         threshold=0.0,
-        auto_accept_threshold=0.5,
     )
 
     # Assert
@@ -203,10 +202,6 @@ def test_tgm_proposal_service_merges_public_figure_as_review_only_candidate(
     assert proposals[0].label == "Charles III"
     assert proposals[0].kind is TagProposalKind.PUBLIC_FIGURE
     assert proposals[0].provider_fingerprint == _public_figure_fingerprint().identifier
-    assert all(
-        proposal.concept_id != "wikidata:Q43274"
-        for proposal in batch.results[0].auto_candidates
-    )
     repository.close()
 
 
@@ -270,7 +265,6 @@ def test_tgm_proposal_service_returns_ranked_results_without_persisting_pending(
         fingerprint,
         top_k=3,
         threshold=0.0,
-        auto_accept_threshold=0.55,
     )
 
     # Assert
@@ -281,7 +275,6 @@ def test_tgm_proposal_service_returns_ranked_results_without_persisting_pending(
         "Rivers",
     ]
     assert [proposal.rank for proposal in result.proposals] == [1, 2, 3]
-    assert [proposal.label for proposal in result.auto_candidates] == ["Forests", "Deer"]
     assert repository.get_proposals(image_path) == ()
     assert repository.get_accepted_tags(image_path) == ()
 

@@ -9,7 +9,6 @@ from ..models.tag_proposal import (
     ProposalGenerationResult,
     ProposalGenerationStatus,
     TagProposal,
-    TagProposalKind,
     TagProposalStatus,
 )
 from ..models.tgm_vector import TgmVectorFingerprint
@@ -33,7 +32,6 @@ class TgmProposalService:
         expected_public_figure_fingerprint: TgmVectorFingerprint | None = None,
         top_k: int,
         threshold: float,
-        auto_accept_threshold: float | None = None,
         on_progress: Callable[[int, int, str], None] | None = None,
         cancel_check: Callable[[], bool] | None = None,
     ) -> ProposalBatchResult:
@@ -75,17 +73,9 @@ class TgmProposalService:
                     filtered.append(replace(proposal, rank=len(filtered) + 1))
                     if len(filtered) == top_k:
                         break
-                auto_candidates = tuple(
-                    proposal
-                    for proposal in filtered
-                    if auto_accept_threshold is not None
-                    and proposal.score >= auto_accept_threshold
-                    and proposal.kind is TagProposalKind.VISUAL_CONCEPT
-                )
                 result = replace(
                     result,
                     proposals=tuple(filtered),
-                    auto_candidates=auto_candidates,
                 )
             results.append(result)
             if on_progress is not None:

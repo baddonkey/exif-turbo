@@ -219,13 +219,13 @@ derive stable thumbnail cache names without a live `os.stat` call.
 | `models/search_list_model.py` | `QAbstractListModel` — search result rows; roles: `path`, `filename`, `metadataJson`, `thumbnailSource`, `fileSize`. Thumbnail URIs are pre-computed at `set_rows` / `append_rows` time using DB-stored `mtime`/`size` stamps — no `os.stat` per repaint. **All thumbnails are served via `image://thumb/<sha1>` (never `file://`)**; an optional `?t=N` per-path bust counter is appended after a `bust_thumbnail(row)` call so QML’s pixmap cache refetches the rebuilt PNG. |
 | `models/exif_list_model.py` | `QAbstractListModel` — EXIF key/value pairs for the detail panel |
 | `models/folder_list_model.py` | `QAbstractListModel` — rows for the Folders management panel; roles: `folderId`, `path`, `displayName`, `status`, `imageCount`, `errorMessage`, `enabled` |
-| `models/settings_model.py` | `SettingsModel(QObject)` — existing UI/index settings plus an independent per-database metadata language, tagging thresholds, and derivative controlled-label export mode (`canonical`, metadata language, or selected languages). Thresholds are clamped and auto-accept remains at least 0.01 stricter. AI availability excludes macOS Intel. |
+| `models/settings_model.py` | `SettingsModel(QObject)` — existing UI/index settings plus an independent per-database metadata language, proposal threshold, and derivative controlled-label export mode (`canonical`, metadata language, or selected languages). The threshold is clamped. AI availability excludes macOS Intel. |
 | `models/accepted_tag_list_model.py`, `free_tag_list_model.py`, `marked_tag_list_model.py`, `pending_proposal_list_model.py`, `tgm_search_list_model.py` | Models for accepted controlled tags, current/remembered custom tags, ranked proposals, and preferred-label/alias vocabulary type-ahead results. `MarkedTagListModel` supports the internal bulk-tagging service but has no version 1 QML surface. |
 | `workers/index_worker.py` | `QThread` — runs `IndexerService.build_index` off the GUI thread; emits progress signals; supports `pause()`/`resume()` via `threading.Event` to yield I/O bandwidth during preview loads. After a successful (non-canceled) run, performs a **cache garbage-collection pass**: hashes every DB stamp into the expected SHA-1 set, scans `<cache_dir>` and `<cache_dir>/previews/`, and unlinks every file whose 40-character prefix is not expected. Emits a `(-1, -1, "")` sentinel `progress` signal so the controller can show a translated *“Cleaning up cache…”* status. |
 | `workers/ai_scan_worker.py` | `QThread` — folder-scoped CLIP embedding build for AI search. `aiScanFolder` indexes only missing vectors; `aiFullRescanFolder` removes vectors under that folder and rebuilds from scratch. Emits progress/canceled/failed signals mirrored in the Indexed Folders UI. |
 | `workers/ai_search_worker.py` | `QThread` — semantic query worker used by Search-tab AI mode. Encodes query text with CLIP, searches FAISS with precision thresholds (**fine 0.22**, **normal 0.20**, **broad 0.18**), then hydrates ranked paths back to DB rows for display. |
 | `workers/tgm_vector_build_worker.py` | Encodes preferred labels and aliases from the active controlled vocabulary with the configured CLIP model into the separate term index; cancellation keeps the prior complete index active. |
-| `workers/tgm_proposal_worker.py` | Searches existing image vectors against current controlled-vocabulary term vectors, applies proposal/optional auto-accept thresholds, returns ephemeral suggestions, persists rejection decisions, and reports missing image vectors as AI-scan-required without decoding originals. |
+| `workers/tgm_proposal_worker.py` | Searches existing image vectors against current controlled-vocabulary term vectors, applies the proposal threshold, returns ephemeral review-only suggestions, persists rejection decisions, and reports missing image vectors as AI-scan-required without decoding originals. |
 | `workers/bulk_tag_worker.py` | Internal worker for applying/removing one canonical concept across enabled-folder marks with per-image progress and partial-result summaries; retained for a future bulk-tagging UI and not invoked by version 1 QML. |
 | `workers/derivative_export_worker.py` | Plans and exports marked tagged copies outside indexed roots, preserving relative trees/formats and delegating XMP/IPTC writes to the verified ExifTool adapter. |
 | `workers/thumb_worker.py` | `QThread` — generates thumbnail cache off the GUI thread; supports `pause()`/`resume()` via `threading.Event`. `build_thumb()` wraps `_open_image()` with `_call_with_timeout()` (`_DECODE_TIMEOUT_S = 300.0 s`); a `TimeoutError` calls `_mark_skip()` so the file is excluded from future runs. |
@@ -430,7 +430,7 @@ Open tagging drawer, change image, or manually generate
   → all image views search all locale-specific term rows
   → max score over 5 × 4 combinations/QID
   → threshold (default 0.20) → ranked ephemeral proposals
-  → manual accept/reject, or confirmed auto-accept (default threshold 0.28)
+  → explicit manual accept/reject
   → accepted concepts pass through the same sidecar mutation service
 ```
 
@@ -441,7 +441,7 @@ rather than reading originals.
 
 Developer diagnostics can bypass the threshold for manual generation and show
 the raw top 20 QIDs with decimal cosine similarity and the winning view and
-locale. Auto-accept remains thresholded. The offline domain-root curator
+locale. The offline domain-root curator
 fills an identity-preserved 8,200-concept base. It applies deterministic
 per-domain quotas, preserves valid forced includes, rejects override/quota
 conflicts, resolves localized-label collisions by priority, and rebalances
@@ -514,7 +514,6 @@ User selects image in UI
 | Sort order | Sort combo in Search tab | `captured_desc` (Date taken ↓) |
 | Tagging enabled | Settings → Tagging and Controlled Vocabulary | `false` per database |
 | Proposal threshold | Settings → Tagging and Controlled Vocabulary | `0.20` |
-| Auto-accept enabled / threshold | Settings → Tagging and Controlled Vocabulary | `false` / `0.28` |
 | Raw proposal diagnostics | Settings → Tagging and Controlled Vocabulary | `false` |
 | Vocabulary and term vectors | Bundled snapshot plus database-derived vector paths | Immutable bundled snapshot; per-database `tgm_terms.faiss`, concept map, and fingerprint metadata |
 | Image AI vectors | Derived from database path | Separate `ai_index.faiss` + `ai_id_map.json` + model/checksum `ai_index_meta.json`; built only by AI-Scan / AI Full Rescan |

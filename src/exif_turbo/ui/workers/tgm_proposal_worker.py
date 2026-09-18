@@ -15,20 +15,15 @@ from ...config import (
     public_figure_term_index_path,
     public_figure_vector_metadata_path,
     tgm_concept_map_path,
-    tgm_snapshot_path,
     tgm_term_index_path,
     tgm_vector_metadata_path,
 )
 from ...data.ai_vector_repository import AiVectorRepository
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.tgm_vector_repository import TgmVectorRepository
-from ...tagging.sidecar_repository import FilesystemSidecarRepository
-from ...tagging.composite_vocabulary_repository import CompositeVocabularyRepository
 from ...tagging.public_figure_prompt_builder import PublicFigurePromptBuilder
-from ...tagging.tagging_service import TaggingService
 from ...tagging.tgm_clip_proposal_provider import TgmClipProposalProvider
 from ...tagging.tgm_proposal_service import TgmProposalService
-from ...tagging.tgm_snapshot_repository import TgmSnapshotRepository
 from ...tagging.tgm_vector_index_service import TgmVectorIndexService
 from ...tagging.vocabulary_snapshot_repository import VocabularySnapshotRepository
 from ...indexing.ai_indexer_service import AiIndexerService
@@ -47,7 +42,6 @@ class TgmProposalWorker(QThread):
         image_paths: list[str],
         *,
         threshold: float,
-        auto_accept_threshold: float | None = None,
         top_k: int = 20,
     ) -> None:
         super().__init__()
@@ -55,7 +49,6 @@ class TgmProposalWorker(QThread):
         self._key = key
         self._image_paths = tuple(image_paths)
         self._threshold = threshold
-        self._auto_accept_threshold = auto_accept_threshold
         self._top_k = top_k
         self._cancel_event = threading.Event()
 
@@ -66,7 +59,6 @@ class TgmProposalWorker(QThread):
         image_repository: ImageIndexRepository | None = None
         try:
             image_repository = ImageIndexRepository(self._db_path, key=self._key)
-            legacy_tgm = TgmSnapshotRepository(tgm_snapshot_path(self._db_path))
             vocabulary = VocabularySnapshotRepository(bundled_vocabulary_path())
             image_vectors = AiVectorRepository(
                 ai_index_path(self._db_path),
@@ -105,10 +97,6 @@ class TgmProposalWorker(QThread):
                     AiIndexerService(image_vectors),
                     PublicFigurePromptBuilder(),
                 ).expected_fingerprint()
-            controlled_vocabulary = CompositeVocabularyRepository(
-                vocabulary,
-                *((public_figure_vocabulary,) if public_figure_vocabulary else ()),
-            )
             proposals = TgmProposalService(
                 image_repository,
                 TgmClipProposalProvider(
@@ -124,26 +112,13 @@ class TgmProposalWorker(QThread):
                 expected_public_figure_fingerprint=public_figure_fingerprint,
                 top_k=self._top_k,
                 threshold=self._threshold,
-                auto_accept_threshold=self._auto_accept_threshold,
                 on_progress=self.progress.emit,
                 cancel_check=self._cancel_event.is_set,
             )
             if proposals.cancelled:
                 self.canceled.emit(proposals)
                 return
-            bulk_result = None
-            if self._auto_accept_threshold is not None:
-                bulk_result = TaggingService(
-                    image_repository,
-                    FilesystemSidecarRepository(),
-                    legacy_tgm,
-                    vocabulary_repository=controlled_vocabulary,
-                ).accept_auto_candidates(
-                    proposals,
-                    on_progress=self.progress.emit,
-                    cancel_check=self._cancel_event.is_set,
-                )
-            self.result_ready.emit(proposals, bulk_result)
+            self.result_ready.emit(proposals, None)
         except Exception as exc:  # noqa: BLE001
             self.failed.emit(str(exc))
         finally:

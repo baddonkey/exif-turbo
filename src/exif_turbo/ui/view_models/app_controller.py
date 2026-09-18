@@ -153,6 +153,7 @@ class AppController(QObject):
     isAiSearchModeChanged = Signal()
     aiEnabledChanged = Signal()
     aiScanFolderIdChanged = Signal()
+    aiScanFolderNameChanged = Signal()
     aiScanIsFullRescanChanged = Signal()
     aiScanCurrentChanged = Signal()
     aiScanTotalChanged = Signal()
@@ -194,6 +195,7 @@ class AppController(QObject):
     indexedFoldersChanged = Signal()
     indexQueuePositionChanged = Signal()
     indexQueueTotalChanged = Signal()
+    folderWorkflowRunningChanged = Signal()
     checkedCountChanged = Signal()
     checkedOnlyFilterChanged = Signal()
     currentProxyResultRowChanged = Signal()
@@ -202,6 +204,7 @@ class AppController(QObject):
     busyLabelChanged = Signal()
     busyDetailChanged = Signal()
     bulkProgressChanged = Signal()
+    refreshTagsChanged = Signal()
     isUnlockingChanged = Signal()
     passwordChangeFinished = Signal(bool, str)  # (success, message)
     busyCancelableChanged = Signal()
@@ -329,13 +332,21 @@ class AppController(QObject):
         # the other selectable years.
         self._ai_facet_paths: list[str] = []
         self._ai_scan_folder_id: int = 0
+        self._ai_scan_folder_name: str = ""
         self._ai_scan_is_full_rescan: bool = False
         self._ai_scan_current: int = 0
         self._ai_scan_total: int = 0
         self._ai_scan_current_file: str = ""
         self._use_raw_preview: bool = False
         self._scanning_folder_id: int | None = None
+        self._scanning_folder_name: str = ""
+        self._thumb_folder_name: str = ""
+        self._pending_thumb_folder_name: str = ""
+        self._preview_build_folder_name: str = ""
         self._scan_queue: list[tuple[int, bool]] = []
+        self._folder_workflow_queue: list[tuple[int, bool]] = []
+        self._active_folder_workflow: tuple[int, bool] | None = None
+        self._folder_workflow_step: str = ""
         self._index_queue_position = 0
         self._index_queue_total = 0
         self._app_closing = False
@@ -375,6 +386,8 @@ class AppController(QObject):
         self._bulk_worker: BulkOpWorker | None = None
         self._maint_worker: MaintenanceWorker | None = None
         self._maint_operation: str = ""
+        self._maint_folder_name: str = ""
+        self._maint_status_operation: str = ""
         self._pending_remove_folder: IndexedFolder | None = None
         self._pending_export_path: Path | None = None
         self._is_unlocking: bool = False
@@ -521,6 +534,10 @@ class AppController(QObject):
     @Property(int, notify=aiScanFolderIdChanged)
     def aiScanFolderId(self) -> int:
         return self._ai_scan_folder_id
+
+    @Property(str, notify=aiScanFolderNameChanged)
+    def aiScanFolderName(self) -> str:
+        return self._ai_scan_folder_name
 
     @Property(bool, notify=aiScanIsFullRescanChanged)
     def aiScanIsFullRescan(self) -> bool:
@@ -860,6 +877,10 @@ class AppController(QObject):
     def indexQueueTotal(self) -> int:
         return self._index_queue_total
 
+    @Property(bool, notify=folderWorkflowRunningChanged)
+    def folderWorkflowRunning(self) -> bool:
+        return bool(self._active_folder_workflow or self._folder_workflow_queue)
+
     @Property(int, notify=checkedCountChanged)
     def checkedCount(self) -> int:
         return self._checked_total_count
@@ -905,6 +926,30 @@ class AppController(QObject):
     @Property(int, notify=bulkProgressChanged)
     def bulkProgressTotal(self) -> int:
         return self._bulk_progress_total
+
+    @Property(bool, notify=refreshTagsChanged)
+    def isRefreshingTags(self) -> bool:
+        return self._maint_operation == "refresh_sidecars"
+
+    @Property(str, notify=refreshTagsChanged)
+    def refreshTagsFolderName(self) -> str:
+        return self._maint_folder_name
+
+    @Property(int, notify=refreshTagsChanged)
+    def refreshTagsCurrent(self) -> int:
+        return self._bulk_progress
+
+    @Property(int, notify=refreshTagsChanged)
+    def refreshTagsTotal(self) -> int:
+        return self._bulk_progress_total
+
+    @Property(str, notify=refreshTagsChanged)
+    def refreshTagsCurrentFile(self) -> str:
+        return self._busy_detail
+
+    @Property(bool, notify=refreshTagsChanged)
+    def refreshTagsCancelable(self) -> bool:
+        return self._busy_cancelable
 
     @Property(bool, notify=isUnlockingChanged)
     def isUnlocking(self) -> bool:
@@ -1106,6 +1151,11 @@ class AppController(QObject):
         if self._maint_worker is not None:
             self._maint_worker.cancel()
 
+    @Slot()
+    def cancelRefreshTags(self) -> None:
+        if self._maint_operation == "refresh_sidecars" and self._maint_worker is not None:
+            self._maint_worker.cancel()
+
     # ── Bulk-op worker helpers ────────────────────────────────────────────
 
     def _start_bulk_op(
@@ -1248,6 +1298,12 @@ class AppController(QObject):
         if self._is_busy:
             return
         self._maint_operation = operation
+        folder = self._folder_repo.get_by_id(folder_id) if self._folder_repo and folder_id else None
+        self._maint_folder_name = folder.display_name if folder is not None else ""
+        self._maint_status_operation = {
+            "refresh_sidecars": _("Refresh Tags"),
+            "remove_folder": _("Remove Folder"),
+        }.get(operation, "")
         self._maint_worker = MaintenanceWorker(
             self._db_path,
             self._key,
@@ -1272,6 +1328,13 @@ class AppController(QObject):
         self.busyDetailChanged.emit()
         self.busyCancelableChanged.emit()
         self.bulkProgressChanged.emit()
+        self.refreshTagsChanged.emit()
+        if self._maint_folder_name and self._maint_status_operation:
+            self._set_folder_operation_status(
+                self._maint_folder_name,
+                self._maint_status_operation,
+                _("Starting..."),
+            )
         self._maint_worker.start()
 
     def _on_maint_progress(self, done: int, total: int, message: str) -> None:
@@ -1281,11 +1344,18 @@ class AppController(QObject):
         if message and message != self._busy_detail:
             self._busy_detail = message
             self.busyDetailChanged.emit()
+        self.refreshTagsChanged.emit()
+        if self._maint_folder_name and self._maint_status_operation:
+            detail = _("{done} / {total}").format(done=done, total=total) if total else message
+            self._set_folder_operation_status(
+                self._maint_folder_name, self._maint_status_operation, detail
+            )
 
     def _on_maint_cancelable(self, flag: bool) -> None:
         if self._busy_cancelable != flag:
             self._busy_cancelable = flag
             self.busyCancelableChanged.emit()
+            self.refreshTagsChanged.emit()
 
     def _clear_maint_busy(self) -> None:
         self._maint_worker = None
@@ -1293,33 +1363,68 @@ class AppController(QObject):
         self._busy_detail = ""
         self.isBusyChanged.emit()
         self.busyDetailChanged.emit()
+        self.refreshTagsChanged.emit()
 
     def _on_maint_finished(self) -> None:
         operation = self._maint_operation
         worker = self._maint_worker
+        folder_name = self._maint_folder_name
         self._maint_operation = ""
         self._clear_maint_busy()
         if operation == "remove_folder":
             self._finish_remove_folder()
+            self._set_folder_operation_status(
+                folder_name, _("Remove Folder"), _("Removed")
+            )
         elif operation == "reset_database":
             self._finish_reset_database()
         elif operation == "refresh_sidecars" and worker is not None:
             self._finish_refresh_sidecars(
                 worker.sidecar_image_count,
                 worker.sidecar_error_count,
+                folder_name,
             )
+            if self._folder_workflow_step == "tags":
+                self._advance_folder_workflow()
+        self._maint_folder_name = ""
+        self._maint_status_operation = ""
 
     def _on_maint_failed(self, msg: str) -> None:
+        workflow_failed = self._folder_workflow_step == "tags"
+        folder_name = self._maint_folder_name
+        status_operation = self._maint_status_operation
         self._maint_operation = ""
         self._pending_remove_folder = None
         self._clear_maint_busy()
-        self._set_status(_("Operation failed: {}").format(msg))
+        if folder_name and status_operation:
+            self._set_folder_operation_status(
+                folder_name,
+                status_operation,
+                _("Failed: {error}").format(error=msg),
+                error=True,
+            )
+        else:
+            self._set_status(_("Operation failed: {}").format(msg))
+        self._maint_folder_name = ""
+        self._maint_status_operation = ""
+        if workflow_failed:
+            self._finish_folder_workflow()
 
     def _on_maint_canceled(self) -> None:
+        workflow_canceled = self._folder_workflow_step == "tags"
+        folder_name = self._maint_folder_name
+        status_operation = self._maint_status_operation
         self._maint_operation = ""
         self._pending_remove_folder = None
         self._clear_maint_busy()
-        self._set_status(_("Operation canceled."))
+        if folder_name and status_operation:
+            self._set_folder_operation_status(folder_name, status_operation, _("Canceled"))
+        else:
+            self._set_status(_("Operation canceled."))
+        self._maint_folder_name = ""
+        self._maint_status_operation = ""
+        if workflow_canceled:
+            self._cancel_folder_workflow()
 
 
     @Slot(str)
@@ -2665,7 +2770,14 @@ class AppController(QObject):
     def removeIndexedFolder(self, folder_id: int) -> None:
         if self._repo is None or self._folder_repo is None:
             return
-        if self._is_busy:
+        if (
+            self._is_busy
+            or self._is_indexing
+            or self._is_building_previews
+            or self._is_ai_scanning
+            or self.folderWorkflowRunning
+        ):
+            self._set_status(_("Wait for the current folder operation to finish."))
             return
         folder = self._folder_repo.get_by_id(folder_id)
         if folder is None:
@@ -2764,21 +2876,35 @@ class AppController(QObject):
             folder_id=folder_id,
         )
 
-    def _finish_refresh_sidecars(self, image_count: int, error_count: int) -> None:
+    @Slot(int)
+    def scanFolder(self, folder_id: int) -> None:
+        self._queue_folder_workflows([folder_id], force=False)
+
+    @Slot(int)
+    def fullScanFolder(self, folder_id: int) -> None:
+        self._queue_folder_workflows([folder_id], force=True)
+
+    def _finish_refresh_sidecars(
+        self, image_count: int, error_count: int, folder_name: str
+    ) -> None:
         self._refresh_selected_tagging_state(preserve_proposals=False)
         self._refresh_marked_tagging_state()
         self._run_search()
         if error_count:
-            self._set_status(
-                _("Refreshed tags for {count} images; {errors} sidecars had errors.").format(
+            self._set_folder_operation_status(
+                folder_name,
+                _("Refresh Tags"),
+                _("{count} images refreshed; {errors} sidecars had errors").format(
                     count=image_count,
                     errors=error_count,
                 ),
                 error=True,
             )
         else:
-            self._set_status(
-                _("Refreshed sidecar tags for {count} images.").format(
+            self._set_folder_operation_status(
+                folder_name,
+                _("Refresh Tags"),
+                _("{count} images refreshed").format(
                     count=image_count,
                 )
             )
@@ -2788,16 +2914,77 @@ class AppController(QObject):
         if self._folder_repo is None:
             return
         folders = self._folder_repo.get_enabled_folders()
-        for folder in folders:
-            self._start_managed_folder_indexing(folder, force=False)
+        self._queue_folder_workflows([folder.id for folder in folders], force=False)
 
     @Slot()
     def fullRescanAllFolders(self) -> None:
         if self._folder_repo is None:
             return
         folders = self._folder_repo.get_enabled_folders()
-        for folder in folders:
-            self._start_managed_folder_indexing(folder, force=True)
+        self._queue_folder_workflows([folder.id for folder in folders], force=True)
+
+    def _queue_folder_workflows(self, folder_ids: list[int], *, force: bool) -> None:
+        if self._folder_repo is None or not folder_ids:
+            return
+        if (
+            self.folderWorkflowRunning
+            or self._is_indexing
+            or self._is_busy
+            or self._is_building_previews
+            or self._is_ai_scanning
+        ):
+            self._set_status(_("Wait for the current folder operation to finish."))
+            return
+        self._folder_workflow_queue = [(folder_id, force) for folder_id in folder_ids]
+        self.folderWorkflowRunningChanged.emit()
+        self._start_next_folder_workflow()
+
+    def _start_next_folder_workflow(self) -> None:
+        if not self._folder_workflow_queue:
+            self._active_folder_workflow = None
+            self._folder_workflow_step = ""
+            self.folderWorkflowRunningChanged.emit()
+            return
+        folder_id, force = self._folder_workflow_queue.pop(0)
+        folder = self._folder_repo.get_by_id(folder_id) if self._folder_repo else None
+        if folder is None or not folder.enabled:
+            self._start_next_folder_workflow()
+            return
+        self._active_folder_workflow = (folder_id, force)
+        self._folder_workflow_step = "scan"
+        self._start_managed_folder_indexing(folder, force=force)
+
+    def _advance_folder_workflow(self) -> None:
+        if self._active_folder_workflow is None:
+            return
+        folder_id, force = self._active_folder_workflow
+        if self._folder_workflow_step == "scan":
+            self._folder_workflow_step = "tags"
+            self.refreshSidecarsForFolder(folder_id)
+        elif self._folder_workflow_step == "tags":
+            if force and not self._clear_previews_for_folder(folder_id):
+                self._finish_folder_workflow()
+                return
+            self._folder_workflow_step = "previews"
+            self.buildPreviewsForFolder(folder_id)
+        elif self._folder_workflow_step == "previews" and self._ai_enabled:
+            self._folder_workflow_step = "ai"
+            self._start_ai_scan(folder_id, force_rebuild=force)
+        else:
+            self._finish_folder_workflow()
+
+    def _finish_folder_workflow(self) -> None:
+        self._active_folder_workflow = None
+        self._folder_workflow_step = ""
+        self._start_next_folder_workflow()
+
+    def _cancel_folder_workflow(self) -> None:
+        was_running = self.folderWorkflowRunning
+        self._folder_workflow_queue.clear()
+        self._active_folder_workflow = None
+        self._folder_workflow_step = ""
+        if was_running:
+            self.folderWorkflowRunningChanged.emit()
 
     def _load_indexed_folders(self) -> None:
         if self._folder_repo is None:
@@ -2871,6 +3058,12 @@ class AppController(QObject):
             return
         self._actually_start_indexing(folder_obj, force=force)
 
+    def _reset_index_queue_progress(self) -> None:
+        self._index_queue_position = 0
+        self._index_queue_total = 0
+        self.indexQueuePositionChanged.emit()
+        self.indexQueueTotalChanged.emit()
+
     def _actually_start_indexing(self, folder_obj, *, force: bool) -> None:
         """Immediately start an IndexWorker for the given folder."""
         if self._repo is None:
@@ -2879,6 +3072,8 @@ class AppController(QObject):
             # Surface the warning again in case the user dismissed the dialog
             # and then tried to start a scan from the folder actions.
             self.exiftoolMissingChanged.emit()
+            self._reset_index_queue_progress()
+            self._cancel_folder_workflow()
             return
         # Bail out early if the folder is not reachable (network drive detached).
         if not Path(folder_obj.path).exists():
@@ -2890,9 +3085,15 @@ class AppController(QObject):
                 updated = self._folder_repo.get_by_id(folder_obj.id)
                 if updated:
                     self._folder_model.update_folder(updated)
-            self._set_status(
-                _("Folder not accessible: {}").format(folder_obj.display_name)
+            self._set_folder_operation_status(
+                folder_obj.display_name,
+                _("Indexing"),
+                _("Folder not accessible"),
+                error=True,
             )
+            self._reset_index_queue_progress()
+            if self._folder_workflow_step == "scan":
+                self._finish_folder_workflow()
             self._process_next_in_queue()
             return
         # Cancel any thumb worker that is still running (e.g. the one started at
@@ -2917,6 +3118,7 @@ class AppController(QObject):
             self._pending_thumb_restart = False
             self.isBuildingThumbsChanged.emit()
         self._scanning_folder_id = folder_obj.id
+        self._scanning_folder_name = folder_obj.display_name
         if self._folder_repo:
             self._folder_repo.update_status(folder_obj.id, "scanning")
             updated = self._folder_repo.get_by_id(folder_obj.id)
@@ -2930,7 +3132,9 @@ class AppController(QObject):
         self.indexCurrentChanged.emit()
         self.indexTotalChanged.emit()
         self.indexCurrentFileChanged.emit()
-        self._set_status(_("Indexing {}\u2026").format(folder_obj.display_name))
+        self._set_folder_operation_status(
+            folder_obj.display_name, _("Indexing"), _("Starting...")
+        )
         self._index_worker = IndexWorker(
             self._db_path,
             [Path(folder_obj.path)],
@@ -2956,6 +3160,8 @@ class AppController(QObject):
         self._thumb_batch_timer.stop()
         self._is_indexing = False
         self.isIndexingChanged.emit()
+        completed_folder_id = self._scanning_folder_id
+        completed_folder_name = self._scanning_folder_name
         if self._folder_repo and self._scanning_folder_id is not None:
             self._folder_repo.update_status(
                 self._scanning_folder_id, "indexed", image_count=count
@@ -2964,17 +3170,37 @@ class AppController(QObject):
             if updated:
                 self._folder_model.update_folder(updated)
         self._scanning_folder_id = None
+        self._scanning_folder_name = ""
         if error_count:
-            self._set_status(
-                _("Indexed {count} images ({errors} skipped due to errors)").format(
-                    count=count, errors=error_count
-                )
+            status_detail = _(
+                "{count} images indexed; {errors} skipped due to errors"
+            ).format(
+                count=count, errors=error_count
             )
         else:
-            self._set_status(_("Indexed {} images").format(count))
+            status_detail = _("{count} images indexed").format(count=count)
         self._load_formats()
         self._invalidate_folder_tree()
         self.search(self._query_text)
+        self._set_folder_operation_status(
+            completed_folder_name, _("Indexing"), status_detail
+        )
+        if (
+            self._active_folder_workflow is not None
+            and self._active_folder_workflow[0] == completed_folder_id
+            and self._folder_workflow_step == "scan"
+        ):
+            self._index_queue_position = 0
+            self._index_queue_total = 0
+            self.indexQueuePositionChanged.emit()
+            self.indexQueueTotalChanged.emit()
+            if self._is_building_thumbs:
+                self._pending_thumb_restart = True
+                self._pending_thumb_folder_name = completed_folder_name
+            else:
+                self._start_auto_thumbs(completed_folder_name)
+            self._advance_folder_workflow()
+            return
         if self._scan_queue:
             # More folders waiting — keep going before building thumbs
             self._process_next_in_queue()
@@ -2989,13 +3215,16 @@ class AppController(QObject):
                 # with a stale DB snapshot.  Flag it to restart when it finishes
                 # so it picks up any images added since it began.
                 self._pending_thumb_restart = True
+                self._pending_thumb_folder_name = completed_folder_name
             else:
-                self._start_auto_thumbs()
+                self._start_auto_thumbs(completed_folder_name)
 
     def _on_managed_folder_index_failed(self, error: str) -> None:
         self._thumb_batch_timer.stop()
         self._is_indexing = False
         self.isIndexingChanged.emit()
+        failed_folder_id = self._scanning_folder_id
+        failed_folder_name = self._scanning_folder_name
         if self._folder_repo and self._scanning_folder_id is not None:
             self._folder_repo.update_status(
                 self._scanning_folder_id, "error", error_message=error
@@ -3004,7 +3233,24 @@ class AppController(QObject):
             if updated:
                 self._folder_model.update_folder(updated)
         self._scanning_folder_id = None
-        self._set_status(_("Index failed: {}").format(error))
+        self._scanning_folder_name = ""
+        self._set_folder_operation_status(
+            failed_folder_name,
+            _("Indexing"),
+            _("Failed: {error}").format(error=error),
+            error=True,
+        )
+        if (
+            self._active_folder_workflow is not None
+            and self._active_folder_workflow[0] == failed_folder_id
+            and self._folder_workflow_step == "scan"
+        ):
+            self._index_queue_position = 0
+            self._index_queue_total = 0
+            self.indexQueuePositionChanged.emit()
+            self.indexQueueTotalChanged.emit()
+            self._finish_folder_workflow()
+            return
         if self._scan_queue:
             self._process_next_in_queue()
         else:
@@ -3018,6 +3264,7 @@ class AppController(QObject):
         self._thumb_batch_timer.stop()
         self._is_indexing = False
         self.isIndexingChanged.emit()
+        canceled_folder_name = self._scanning_folder_name
         if not self._app_closing:
             # User-initiated cancel: reset folder to new
             if self._folder_repo and self._scanning_folder_id is not None:
@@ -3028,6 +3275,7 @@ class AppController(QObject):
                 if updated:
                     self._folder_model.update_folder(updated)
         self._scanning_folder_id = None
+        self._scanning_folder_name = ""
         # Reset queue counters (cancel stops the whole queue)
         self._index_queue_position = 0
         self._index_queue_total = 0
@@ -3036,8 +3284,13 @@ class AppController(QObject):
         if not self._app_closing:
             self._is_canceling = False
             self.isCancelingChanged.emit()
-            self._set_status(_("Index canceled"))
             self.search(self._query_text)
+            self._set_folder_operation_status(
+                canceled_folder_name,
+                _("Indexing"),
+                _("Canceled after {count} images").format(count=count),
+            )
+        self._cancel_folder_workflow()
 
     @Slot()
     def cancelIndex(self) -> None:
@@ -3056,7 +3309,9 @@ class AppController(QObject):
             if self._index_worker and self._index_worker.isRunning():
                 self._is_canceling = True
                 self.isCancelingChanged.emit()
-                self._set_status(_("Canceling\u2026"))
+                self._set_folder_operation_status(
+                    self._scanning_folder_name, _("Indexing"), _("Canceling...")
+                )
                 self._index_worker.cancel()
         except Exception:
             _log.exception("cancelIndex failed")
@@ -3082,6 +3337,7 @@ class AppController(QObject):
         if self._preview_worker and self._preview_worker.isRunning():
             self._preview_worker.cancel()
         self._scan_queue.clear()
+        self._cancel_folder_workflow()
 
     @Slot()
     def cancelThumbnails(self) -> None:
@@ -3118,6 +3374,8 @@ class AppController(QObject):
         self._preview_worker.oversized.connect(self._on_preview_oversized)
         self._is_building_previews = True
         self._preview_build_folder_id = folder_id
+        folder = self._folder_repo.get_by_id(folder_id) if self._folder_repo else None
+        self._preview_build_folder_name = folder.display_name if folder is not None else ""
         self._preview_current = 0
         self._preview_total = 0
         self._preview_current_file = ""
@@ -3127,6 +3385,9 @@ class AppController(QObject):
         self.previewCurrentChanged.emit()
         self.previewTotalChanged.emit()
         self.previewCurrentFileChanged.emit()
+        self._set_folder_operation_status(
+            self._preview_build_folder_name, _("Previews"), _("Starting...")
+        )
         self._preview_worker.start(QThread.Priority.LowPriority)
 
     @Slot()
@@ -3170,16 +3431,23 @@ class AppController(QObject):
         self._ai_scan_worker.canceled.connect(self._on_ai_scan_canceled)
         self._is_ai_scanning = True
         self._ai_scan_folder_id = folder_id
+        self._ai_scan_folder_name = folder.display_name
         self._ai_scan_is_full_rescan = force_rebuild
         self._ai_scan_current = 0
         self._ai_scan_total = 0
         self._ai_scan_current_file = ""
         self.isAiScanningChanged.emit()
         self.aiScanFolderIdChanged.emit()
+        self.aiScanFolderNameChanged.emit()
         self.aiScanIsFullRescanChanged.emit()
         self.aiScanCurrentChanged.emit()
         self.aiScanTotalChanged.emit()
         self.aiScanCurrentFileChanged.emit()
+        self._set_folder_operation_status(
+            self._ai_scan_folder_name,
+            _("AI Full Scan") if force_rebuild else _("AI-Scan"),
+            _("Starting..."),
+        )
         self._ai_scan_worker.start(QThread.Priority.LowPriority)
 
     @Slot()
@@ -3241,45 +3509,76 @@ class AppController(QObject):
         self.aiScanCurrentChanged.emit()
         self.aiScanTotalChanged.emit()
         self.aiScanCurrentFileChanged.emit()
+        self._set_folder_operation_status(
+            self._ai_scan_folder_name,
+            _("AI Full Scan") if self._ai_scan_is_full_rescan else _("AI-Scan"),
+            _("{done} / {total}").format(done=done, total=total),
+        )
 
     def _clear_ai_scan_state(self) -> None:
         self._is_ai_scanning = False
         self._ai_scan_folder_id = 0
+        self._ai_scan_folder_name = ""
         self._ai_scan_is_full_rescan = False
+        self._ai_scan_current = 0
+        self._ai_scan_total = 0
+        self._ai_scan_current_file = ""
         self.isAiScanningChanged.emit()
         self.aiScanFolderIdChanged.emit()
+        self.aiScanFolderNameChanged.emit()
         self.aiScanIsFullRescanChanged.emit()
+        self.aiScanCurrentChanged.emit()
+        self.aiScanTotalChanged.emit()
+        self.aiScanCurrentFileChanged.emit()
 
     def _on_ai_scan_finished(self, indexed: int, errors: int) -> None:
+        completed_folder_id = self._ai_scan_folder_id
+        completed_folder_name = self._ai_scan_folder_name
         was_full_rescan = self._ai_scan_is_full_rescan
         self._clear_ai_scan_state()
-        if was_full_rescan:
-            msg = _("AI full rescan complete: {n} image(s) vectorised.").format(n=indexed)
-        else:
-            msg = _("AI-Scan complete: {n} image(s) vectorised.").format(n=indexed)
+        msg = _("{n} images vectorised").format(n=indexed)
         if errors:
-            msg += " " + _("{n} file(s) could not be processed.").format(n=errors)
-        self._set_status(msg)
+            msg += "; " + _("{n} files could not be processed").format(n=errors)
+        self._set_folder_operation_status(
+            completed_folder_name,
+            _("AI Full Scan") if was_full_rescan else _("AI-Scan"),
+            msg,
+        )
+        if (
+            self._active_folder_workflow is not None
+            and self._active_folder_workflow[0] == completed_folder_id
+            and self._folder_workflow_step == "ai"
+        ):
+            self._finish_folder_workflow()
 
     def _on_ai_scan_failed(self, error: str) -> None:
+        failed_folder_id = self._ai_scan_folder_id
+        failed_folder_name = self._ai_scan_folder_name
         was_full_rescan = self._ai_scan_is_full_rescan
         self._clear_ai_scan_state()
-        if was_full_rescan:
-            self._set_status(_("AI full rescan failed: {error}").format(error=error))
-        else:
-            self._set_status(_("AI-Scan failed: {error}").format(error=error))
+        self._set_folder_operation_status(
+            failed_folder_name,
+            _("AI Full Scan") if was_full_rescan else _("AI-Scan"),
+            _("Failed: {error}").format(error=error),
+            error=True,
+        )
+        if (
+            self._active_folder_workflow is not None
+            and self._active_folder_workflow[0] == failed_folder_id
+            and self._folder_workflow_step == "ai"
+        ):
+            self._finish_folder_workflow()
 
     def _on_ai_scan_canceled(self, indexed: int) -> None:
+        canceled_folder_name = self._ai_scan_folder_name
         was_full_rescan = self._ai_scan_is_full_rescan
         self._clear_ai_scan_state()
-        if was_full_rescan:
-            self._set_status(
-                _("AI full rescan canceled ({n} image(s) vectorised so far).").format(n=indexed)
-            )
-        else:
-            self._set_status(
-                _("AI-Scan canceled ({n} image(s) vectorised so far).").format(n=indexed)
-            )
+        self._set_folder_operation_status(
+            canceled_folder_name,
+            _("AI Full Scan") if was_full_rescan else _("AI-Scan"),
+            _("Canceled after {n} images").format(n=indexed),
+        )
+        self._cancel_folder_workflow()
 
     def _on_preview_progress(self, done: int, total: int, path: str) -> None:
         self._preview_current = done
@@ -3288,10 +3587,16 @@ class AppController(QObject):
         self.previewCurrentChanged.emit()
         self.previewTotalChanged.emit()
         self.previewCurrentFileChanged.emit()
+        self._set_folder_operation_status(
+            self._preview_build_folder_name,
+            _("Previews"),
+            _("{done} / {total}").format(done=done, total=total),
+        )
 
     def _clear_preview_build_state(self) -> None:
         self._is_building_previews = False
         self._preview_build_folder_id = 0
+        self._preview_build_folder_name = ""
         self.isBuildingPreviewsChanged.emit()
         self.previewBuildFolderIdChanged.emit()
 
@@ -3300,62 +3605,107 @@ class AppController(QObject):
 
     def _on_preview_done(self, built: int, total: int) -> None:
         folder_id = self._preview_build_folder_id
+        folder_name = self._preview_build_folder_name
         oversized = self._preview_oversized_skipped
         self._clear_preview_build_state()
         if folder_id > 0:
             self._refresh_preview_count(folder_id)
-        msg = _("Built {built} preview(s) of {total}.").format(
+        msg = _("{built} / {total} built").format(
             built=built, total=total
         )
         if oversized:
             msg += " " + _("{n} image(s) skipped — too large to decode safely.").format(
                 n=oversized
             )
-        self._set_status(msg)
+        self._set_folder_operation_status(folder_name, _("Previews"), msg)
+        if (
+            self._active_folder_workflow is not None
+            and self._active_folder_workflow[0] == folder_id
+            and self._folder_workflow_step == "previews"
+        ):
+            self._advance_folder_workflow()
 
     def _on_preview_failed(self, error: str) -> None:
         folder_id = self._preview_build_folder_id
+        folder_name = self._preview_build_folder_name
         self._clear_preview_build_state()
         if folder_id > 0:
             self._refresh_preview_count(folder_id)
-        self._set_status(_("Preview build failed: {error}").format(error=error))
+        self._set_folder_operation_status(
+            folder_name,
+            _("Previews"),
+            _("Failed: {error}").format(error=error),
+            error=True,
+        )
+        if (
+            self._active_folder_workflow is not None
+            and self._active_folder_workflow[0] == folder_id
+            and self._folder_workflow_step == "previews"
+        ):
+            self._finish_folder_workflow()
 
     def _on_preview_canceled(self, built: int, total: int) -> None:
         folder_id = self._preview_build_folder_id
+        folder_name = self._preview_build_folder_name
         self._clear_preview_build_state()
         if folder_id > 0:
             self._refresh_preview_count(folder_id)
-        self._set_status(
-            _("Preview build canceled ({built} of {total} done).").format(
+        self._set_folder_operation_status(
+            folder_name,
+            _("Previews"),
+            _("Canceled after {built} / {total}").format(
                 built=built, total=total
             )
         )
+        self._cancel_folder_workflow()
 
     @Slot(int)
     def clearPreviewsForFolder(self, folder_id: int) -> None:
         """Delete every cached preview belonging to *folder_id*."""
+        self._clear_previews_for_folder(folder_id)
+
+    def _clear_previews_for_folder(self, folder_id: int) -> bool:
         if self._repo is None or folder_id <= 0:
-            return
+            return False
+        folder = self._folder_repo.get_by_id(folder_id) if self._folder_repo else None
+        folder_name = folder.display_name if folder is not None else str(folder_id)
         if self._is_building_previews and self._preview_build_folder_id == folder_id:
             # Don't race the worker — make the user cancel first.
-            self._set_status(
-                _("Cancel the running preview build before clearing the cache.")
+            self._set_folder_operation_status(
+                folder_name,
+                _("Clear Previews"),
+                _("Cancel the running preview build first"),
             )
-            return
+            return False
         cache_dir = self._search_model.cache_dir
         encrypted = bool(self._key)
         try:
             stamps = self._repo.get_folder_stamps(folder_id)
         except Exception as exc:  # noqa: BLE001
-            self._set_status(
-                _("Failed to clear preview cache: {error}").format(error=str(exc))
+            self._set_folder_operation_status(
+                folder_name,
+                _("Clear Previews"),
+                _("Failed: {error}").format(error=str(exc)),
+                error=True,
             )
-            return
-        removed = clear_cached_previews_for(cache_dir, stamps, encrypted=encrypted)
+            return False
+        try:
+            removed = clear_cached_previews_for(cache_dir, stamps, encrypted=encrypted)
+        except Exception as exc:  # noqa: BLE001
+            self._set_folder_operation_status(
+                folder_name,
+                _("Clear Previews"),
+                _("Failed: {error}").format(error=str(exc)),
+                error=True,
+            )
+            return False
         self._refresh_preview_count(folder_id)
-        self._set_status(
-            _("Removed {n} cached preview(s).").format(n=removed)
+        self._set_folder_operation_status(
+            folder_name,
+            _("Clear Previews"),
+            _("{n} cached previews removed").format(n=removed),
         )
+        return True
 
     # ── Preview source toggle ─────────────────────────────────────────────
 
@@ -4091,29 +4441,23 @@ class AppController(QObject):
     @Slot()
     def generateSelectedTagProposals(self) -> None:
         path = self._search_model.get_path(self._current_result_row)
-        self._start_proposals([] if path is None else [path], auto_accept=False)
+        self._start_proposals([] if path is None else [path])
 
     @Slot()
     def generateMarkedTagProposals(self) -> None:
         paths = self._repo.get_marked_paths() if self._repo is not None else []
-        self._start_proposals(paths, auto_accept=False)
+        self._start_proposals(paths)
 
-    @Slot()
-    def autoAcceptMarkedTagProposals(self) -> None:
-        paths = self._repo.get_marked_paths() if self._repo is not None else []
-        self._start_proposals(paths, auto_accept=True)
-
-    def _start_proposals(self, paths: list[str], *, auto_accept: bool) -> None:
+    def _start_proposals(self, paths: list[str]) -> None:
         if not paths or not self.taggingProposalAvailable or self._proposal_worker is not None:
             return
         assert self._settings is not None
-        show_raw = self._settings.show_raw_tag_candidates and not auto_accept
+        show_raw = self._settings.show_raw_tag_candidates
         worker = TgmProposalWorker(
             self._db_path,
             self._key,
             paths,
             threshold=float("-inf") if show_raw else self._settings.proposal_threshold,
-            auto_accept_threshold=self._settings.auto_accept_threshold if auto_accept else None,
             top_k=20,
         )
         self._proposal_worker = worker
@@ -4124,8 +4468,7 @@ class AppController(QObject):
         worker.finished.connect(lambda: self._release_worker("_proposal_worker", worker))
         self._proposal_operation = True
         self._proposal_error = ""
-        if not auto_accept:
-            self._pending_proposals_model.set_rows([])
+        self._pending_proposals_model.set_rows([])
         self.proposalOperationChanged.emit()
         worker.start()
 
@@ -4522,6 +4865,18 @@ class AppController(QObject):
             self._status_is_error = error
             self.statusTextChanged.emit()
 
+    def _set_folder_operation_status(
+        self, folder_name: str, operation: str, detail: str, *, error: bool = False
+    ) -> None:
+        self._set_status(
+            _("{folder}, {operation}: {detail}").format(
+                folder=folder_name,
+                operation=operation,
+                detail=detail,
+            ),
+            error=error,
+        )
+
     @Slot()
     def clearStatus(self) -> None:
         self._set_status("")
@@ -4737,7 +5092,9 @@ class AppController(QObject):
         # Cache GC sentinel: emitted once after build_index, before the
         # finished signal, while orphaned thumb/preview files are unlinked.
         if current == -1 and total == -1:
-            self._set_status(_("Cleaning up cache\u2026"))
+            self._set_folder_operation_status(
+                self._scanning_folder_name, _("Indexing"), _("Cleaning up cache...")
+            )
             return
         # current == 0 and total > 0 is the scan-complete sentinel emitted by
         # IndexerService once the directory walk finishes and the file count is
@@ -4757,11 +5114,14 @@ class AppController(QObject):
         self.indexTotalChanged.emit()
         self.indexCurrentFileChanged.emit()
         if total == 0 and current > 0:
-            self._set_status(_("Indexing\u2026 {} (scanning)").format(current))
+            detail = _("{current} found while scanning").format(current=current)
         elif is_scan_complete:
-            self._set_status(_("Indexing\u2026 0 / {}").format(total))
+            detail = _("0 / {total}").format(total=total)
         else:
-            self._set_status(_("Indexing\u2026 {} / {}").format(current, total))
+            detail = _("{current} / {total}").format(current=current, total=total)
+        self._set_folder_operation_status(
+            self._scanning_folder_name, _("Indexing"), detail
+        )
         if is_scan_complete:
             pass  # timer already running since indexing started
 
@@ -4778,12 +5138,19 @@ class AppController(QObject):
         self.thumbCurrentChanged.emit()
         self.thumbTotalChanged.emit()
         self.thumbCurrentFileChanged.emit()
+        if self._thumb_folder_name:
+            self._set_folder_operation_status(
+                self._thumb_folder_name,
+                _("Thumbnails"),
+                _("{current} / {total}").format(current=current, total=total),
+            )
 
-    def _start_auto_thumbs(self) -> None:
+    def _start_auto_thumbs(self, folder_name: str = "") -> None:
         """Queue thumbnail generation for all images not yet cached."""
         if self._repo is None or self._is_building_thumbs:
             return
         self._is_building_thumbs = True
+        self._thumb_folder_name = folder_name or self._scanning_folder_name
         self._thumb_current = 0
         self._thumb_total = 0  # indeterminate until ThumbWorker reports total
         self._thumb_current_file = ""
@@ -4791,6 +5158,10 @@ class AppController(QObject):
         self.thumbCurrentChanged.emit()
         self.thumbTotalChanged.emit()
         self.thumbCurrentFileChanged.emit()
+        if self._thumb_folder_name:
+            self._set_folder_operation_status(
+                self._thumb_folder_name, _("Thumbnails"), _("Starting...")
+            )
         self._thumb_worker = ThumbWorker(
             self._db_path,
             self._search_model.cache_dir,
@@ -4872,23 +5243,55 @@ class AppController(QObject):
         self.isBuildingThumbsChanged.emit()
         self._search_model.refresh_thumbnails()
         self._refresh_selected_thumb_source()
+        folder_name = self._thumb_folder_name
+        if folder_name:
+            self._set_folder_operation_status(
+                folder_name,
+                _("Thumbnails"),
+                _("{cached} / {total} built").format(cached=cached, total=total),
+            )
         if self._pending_thumb_restart:
             self._pending_thumb_restart = False
-            self._start_auto_thumbs()
+            restart_folder_name = self._pending_thumb_folder_name or folder_name
+            self._pending_thumb_folder_name = ""
+            self._start_auto_thumbs(restart_folder_name)
+        else:
+            self._thumb_folder_name = ""
 
     def _on_thumb_failed(self, error: str) -> None:
         self._thumb_refresh_timer.stop()
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
+        if self._thumb_folder_name:
+            self._set_folder_operation_status(
+                self._thumb_folder_name,
+                _("Thumbnails"),
+                _("Failed: {error}").format(error=error),
+                error=True,
+            )
+        self._thumb_folder_name = ""
 
     def _on_thumb_canceled(self, cached: int, total: int) -> None:
         self._thumb_refresh_timer.stop()
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
         self._search_model.refresh_thumbnails()
+        folder_name = self._thumb_folder_name
+        if folder_name:
+            self._set_folder_operation_status(
+                folder_name,
+                _("Thumbnails"),
+                _("Canceled after {cached} / {total}").format(
+                    cached=cached, total=total
+                ),
+            )
         if self._pending_thumb_restart:
             self._pending_thumb_restart = False
-            self._start_auto_thumbs()
+            restart_folder_name = self._pending_thumb_folder_name or folder_name
+            self._pending_thumb_folder_name = ""
+            self._start_auto_thumbs(restart_folder_name)
+        else:
+            self._thumb_folder_name = ""
 
     def close(self) -> None:
         # Stop any running background QThread workers before closing the DB

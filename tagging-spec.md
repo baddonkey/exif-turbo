@@ -1,7 +1,7 @@
 # EXIF Turbo Tagging Specification
 
-Status: Implemented (Wikidata/QID schema v2 with legacy TGM compatibility;
-auto-accept remains experimental and disabled by default)
+Status: Implemented (review-only Wikidata/QID schema v2 with legacy TGM
+compatibility)
 
 This document is the product and technical contract for non-destructive image
 tagging in EXIF Turbo. Sections 1-6 and 8-16 describe the implemented bundled
@@ -43,9 +43,8 @@ The end-to-end feature is implemented:
 - Each Indexed Folders row can force-refresh sidecar-derived tags for its
   indexed images without re-extracting EXIF or rebuilding previews.
 - Proposal generation requires AI enabled, an explicit image AI scan, and an
-  independently built controlled-vocabulary term-vector index. Defaults are 0.20 for proposals
-  and 0.28 for auto-accept; auto-accept is disabled by default and its threshold
-  is kept at least 0.01 above the proposal threshold.
+  independently built controlled-vocabulary term-vector index. Its threshold
+  defaults to 0.20. Every proposal requires explicit user acceptance.
 - Derivatives preserve source format and relative trees, require an output root
   outside indexed sources, skip untagged/existing destinations, write and
   verify the deduplicated union of non-excluded live embedded keywords and
@@ -69,8 +68,8 @@ available to the existing full-text search.
 
 The active controlled vocabulary is the bundled, curated Wikidata snapshot.
 Existing CLIP image vectors are compared with a separate multilingual term
-index to propose QIDs. Users may review proposals or explicitly enable
-automatic acceptance above a configured threshold. LOC TGM identifiers remain
+index to propose QIDs. Users review proposals and explicitly accept or reject
+them. LOC TGM identifiers remain
 supported for legacy sidecars and maintenance tooling.
 
 Marked images form one working set for derivative generation; the complete
@@ -86,7 +85,7 @@ targets.
 - Make accepted sidecar tags available to the existing SQLite FTS5 search.
 - Support fast keyboard-oriented tagging of the focused image.
 - Propose canonical Wikidata concepts using existing CLIP image vectors.
-- Support review-first proposals and optional threshold-based auto-acceptance.
+- Support ranked, review-only proposals with explicit acceptance or rejection.
 - Generate tagged derivatives without modifying originals.
 - Leave clear extension points for later thesauri and OCR proposal providers.
 
@@ -101,7 +100,7 @@ targets.
 - Hierarchical tag browsing or tag facets in the main search UI.
 - Custom metadata mappings or JPEG conversion during derivative export.
 - Automatically overwriting an existing derivative.
-- Automatically accepting CLIP proposals unless the user enables that mode.
+- Automatically accepting CLIP proposals.
 
 ## 4. Terminology
 
@@ -113,8 +112,7 @@ targets.
 accepted tags.
 
 **Accepted tag**
-: A canonical controlled-vocabulary concept deliberately accepted by the user
-or by an explicitly enabled experimental auto-accept rule.
+: A canonical controlled-vocabulary concept deliberately accepted by the user.
 
 **Proposal**
 : A ranked controlled-vocabulary concept suggested by CLIP or, later, another
@@ -218,8 +216,8 @@ label are not a real TGM record pair.
 | `category` | Required `subject` or `genre_format`. |
 | `provenance.method` | Required `manual` or `clip`. `ocr` is reserved for a later version. |
 | `provenance.accepted_at` | Required UTC RFC 3339 timestamp. |
-| `provenance.confidence` | Required number from 0 through 1 for CLIP auto-acceptance; otherwise nullable. |
-| `provenance.model` | Required CLIP model fingerprint for CLIP auto-acceptance; otherwise nullable. |
+| `provenance.confidence` | Proposal score from 0 through 1 when an accepted tag came from CLIP; otherwise nullable. |
+| `provenance.model` | CLIP model fingerprint when an accepted tag came from a proposal; otherwise nullable. |
 | `provenance.vocabulary_checksum` | Required checksum. Wikidata tags use the bundled manifest SHA-256; legacy tags use the normalized TGM snapshot SHA-256. |
 
 Wikidata provenance additionally preserves `concept_source_uri`, `license_id`,
@@ -455,10 +453,8 @@ For each selected image, the proposal service:
 Missing image vectors produce an actionable "AI scan required" state. Proposal
 generation does not implicitly load originals or build image vectors.
 
-Review-first is the default. Optional experimental auto-acceptance requires a
-separate, explicit setting and threshold. Every auto-accepted tag records its
-score, CLIP fingerprint, vocabulary manifest checksum, and acceptance time in
-the sidecar.
+All proposals require explicit user review and acceptance. Proposal generation
+does not create or modify sidecars.
 
 Undecided proposals remain in memory only while their image is selected. The
 workbench generates them when it opens and whenever the focused image changes;
@@ -468,7 +464,7 @@ reevaluated when the vocabulary, prompt, or CLIP fingerprint changes.
 
 Developer diagnostics can bypass the manual proposal threshold and return the
 raw top 20 QIDs with their decimal cosine similarity and winning view/locale.
-This mode never bypasses the auto-accept threshold.
+These candidates remain review-only.
 
 The offline Wikidata curator applies deterministic per-domain quotas to an
 identity-preserved 8,200-concept base. Explicit includes take precedence within a quota;
@@ -660,7 +656,7 @@ immediately available; proposal vectors must be rebuilt before proposals run.
 
 - AI tests always mock CLIP and never download a model.
 - Image and controlled-vocabulary indexes remain separate.
-- Ranking, thresholding, alias deduplication, rejection, and auto-acceptance.
+- Ranking, thresholding, alias deduplication, rejection, and explicit acceptance.
 - Vocabulary manifest, prompt strategy/locales, and CLIP fingerprint invalidation.
 - Missing image vectors produce an actionable state.
 
@@ -701,8 +697,7 @@ The current migration slice is complete when:
 3. The bundled curated 8,339-concept snapshot (8,200 base plus 139 qualified
   `P5160` additions) works offline with no vocabulary-pack installer.
 4. CLIP can propose ranked Wikidata concepts from existing image vectors.
-5. Review-first and explicitly enabled threshold auto-acceptance both retain
-   complete provenance.
+5. Explicitly accepted proposals retain complete provenance.
 6. A user can exclude individual embedded source keywords or ignore them all,
    persist that choice, and preview the exact merged, deduplicated keyword set
    that will be written to a derivative.
@@ -726,10 +721,8 @@ The current migration slice is complete when:
 - Decide how an accepted QID removed from a future bundled snapshot, or a
   legacy concept made nonpostable by a later TGM release, is displayed. The
   sidecar entry must not be silently deleted.
-- Evaluate the implemented 0.20 proposal and 0.28 auto-accept defaults on a
-  representative image set before treating scores as production-calibrated.
-  Until then auto-accept is experimental, disabled by default, and requires an
-  explicit user opt-in.
+- Evaluate the implemented 0.20 proposal default on a representative image set
+  before treating scores as production-calibrated.
   `scripts/calibrate_tagging_thresholds.py` reports recall at 5/10/20, mean
   reciprocal rank, and per-threshold hard-negative precision; the latter
   counts only explicitly labeled hard negatives, not every unlabeled QID.
@@ -762,3 +755,4 @@ The current migration slice is complete when:
 | 2026-08-23 | Replace the initial subset with an identity-preserved 8,200-concept base plus 113 qualified Wikidata `P5160` additions (8,313 total); keep runtime access offline and retain LOC TGM tooling only for compatibility and maintenance. |
 | 2026-08-23 | Store new Wikidata and mixed controlled tags in schema v2 with QID identity, manifest checksum, concept source URI, CC0 license ID, snapshot version, and source name. |
 | 2026-08-23 | Keep the 0.28 auto-accept path experimental and disabled by default until representative calibration evidence is recorded. |
+| 2026-09-18 | Remove automatic proposal acceptance; all generated proposals require explicit user acceptance. |

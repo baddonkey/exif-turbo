@@ -368,6 +368,7 @@ ApplicationWindow {
     readonly property string _searchError:        controller ? controller.searchError         : ""
     readonly property string _appVersion:         controller ? controller.appVersion          : ""
     readonly property bool   _isBusy:             controller ? controller.isBusy             : false
+    readonly property bool   _isRefreshingTags:   controller ? controller.isRefreshingTags   : false
     readonly property bool   _isSearching:        controller ? controller.isSearching        : false
     readonly property bool   _aiFeatureAvailable: settingsModel ? settingsModel.aiFeatureAvailable : false
     readonly property string _busyLabel:          controller ? controller.busyLabel          : ""
@@ -1102,7 +1103,7 @@ ApplicationWindow {
         id: busyOverlay
         anchors.fill: parent
         z: 60
-        visible: _isBusy
+        visible: _isBusy && !_isRefreshingTags
         color: Qt.rgba(0, 0, 0, 0.45)
 
         // Swallow all mouse/touch events so the UI is fully blocked

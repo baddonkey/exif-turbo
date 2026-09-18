@@ -17,8 +17,6 @@ def test_tagging_settings_defaults_are_conservative(
     # Assert
     assert model.taggingEnabled is False
     assert model.proposalThreshold == 0.20
-    assert model.autoAcceptEnabled is False
-    assert model.autoAcceptThreshold == 0.28
     assert model.showRawTagCandidates is False
     assert model.metadataLanguage == "en"
     assert model.metadataLanguageCodes == ["en", "de", "fr", "it"]
@@ -36,8 +34,6 @@ def test_tagging_settings_persist_across_reload(
     # Act
     model.setTaggingEnabled(True)
     model.setProposalThreshold(0.4)
-    model.setAutoAcceptEnabled(True)
-    model.setAutoAcceptThreshold(0.8)
     model.setShowRawTagCandidates(True)
     model.setMetadataLanguage("de")
     model.setTagExportMode("selected")
@@ -47,8 +43,6 @@ def test_tagging_settings_persist_across_reload(
     # Assert
     assert reloaded.taggingEnabled is True
     assert reloaded.proposalThreshold == 0.4
-    assert reloaded.autoAcceptEnabled is True
-    assert reloaded.autoAcceptThreshold == 0.8
     assert reloaded.showRawTagCandidates is True
     assert reloaded.metadataLanguage == "de"
     assert reloaded.tagExportMode == "selected"
@@ -71,7 +65,7 @@ def test_metadata_language_rejects_locale_outside_vocabulary_contract(
     assert model.metadataLanguage == "en"
 
 
-def test_proposal_threshold_clamps_and_keeps_auto_accept_stricter(
+def test_proposal_threshold_clamps_to_valid_range(
     qtbot: QtBot, tmp_path: Path
 ) -> None:
     # Arrange
@@ -82,24 +76,9 @@ def test_proposal_threshold_clamps_and_keeps_auto_accept_stricter(
 
     # Assert
     assert model.proposalThreshold == 0.99
-    assert model.autoAcceptThreshold == 1.0
 
 
-def test_auto_accept_threshold_clamps_above_proposal_threshold(
-    qtbot: QtBot, tmp_path: Path
-) -> None:
-    # Arrange
-    model = SettingsModel(tmp_path / "settings.json")
-    model.setProposalThreshold(0.5)
-
-    # Act
-    model.setAutoAcceptThreshold(0.2)
-
-    # Assert
-    assert model.autoAcceptThreshold == 0.51
-
-
-def test_loaded_tagging_thresholds_are_clamped_and_reconciled(
+def test_loaded_proposal_threshold_is_clamped(
     qtbot: QtBot, tmp_path: Path
 ) -> None:
     # Arrange
@@ -108,7 +87,6 @@ def test_loaded_tagging_thresholds_are_clamped_and_reconciled(
         json.dumps(
             {
                 "proposalThreshold": 2.0,
-                "autoAcceptThreshold": -1.0,
             }
         ),
         encoding="utf-8",
@@ -119,7 +97,6 @@ def test_loaded_tagging_thresholds_are_clamped_and_reconciled(
 
     # Assert
     assert model.proposalThreshold == 0.99
-    assert model.autoAcceptThreshold == 1.0
 
 
 def test_legacy_default_thresholds_migrate_to_multilingual_calibration(
@@ -143,10 +120,11 @@ def test_legacy_default_thresholds_migrate_to_multilingual_calibration(
 
     # Assert
     assert model.proposalThreshold == 0.20
-    assert model.autoAcceptThreshold == 0.28
     assert persisted["proposalThresholdCalibration"] == (
         "openclip-xlm-r-b32-laion5b-v1"
     )
+    assert "autoAcceptEnabled" not in persisted
+    assert "autoAcceptThreshold" not in persisted
 
 
 def test_legacy_custom_thresholds_are_preserved_during_calibration_migration(
@@ -169,4 +147,3 @@ def test_legacy_custom_thresholds_are_preserved_during_calibration_migration(
 
     # Assert
     assert model.proposalThreshold == 0.18
-    assert model.autoAcceptThreshold == 0.30
