@@ -207,7 +207,7 @@ def test_refresh_sidecars_indexed_folder_updates_search_tags(
     folder_db: tuple[Path, Path, int, str],
 ) -> None:
     # Arrange
-    db_path, image_dir, folder_id, _folder_path = folder_db
+    db_path, image_dir, folder_id, folder_path = folder_db
     image_path = image_dir / "a.jpg"
     sidecar = ImageSidecar(
         source=SidecarSource(filename=image_path.name),
@@ -236,6 +236,7 @@ def test_refresh_sidecars_indexed_folder_updates_search_tags(
         "",
         "refresh_sidecars",
         folder_id=folder_id,
+        folder_path=folder_path,
     )
     finished: list[bool] = []
     progress: list[tuple[int, int]] = []
@@ -254,8 +255,94 @@ def test_refresh_sidecars_indexed_folder_updates_search_tags(
     assert finished == [True]
     assert worker.sidecar_error_count == 0
     assert search_count == 1
-    assert progress[0] == (0, 2)
-    assert progress[-1] == (2, 2)
+    assert progress[0] == (0, 0)
+    assert progress[-1] == (1, 1)
+
+
+def test_refresh_sidecars_deleted_file_clears_cached_tags(
+    qtbot: QtBot,
+    folder_db: tuple[Path, Path, int, str],
+) -> None:
+    # Arrange
+    db_path, image_dir, folder_id, folder_path = folder_db
+    image_path = image_dir / "a.jpg"
+    sidecar = ImageSidecar(
+        source=SidecarSource(filename=image_path.name),
+        updated_at="2026-08-09T12:30:00Z",
+        free_tags=("Temporary tag",),
+    )
+    sidecar_repository = FilesystemSidecarRepository()
+    sidecar_repository.write(image_path, sidecar, expected_revision=None)
+    MaintenanceWorker(
+        db_path,
+        "",
+        "refresh_sidecars",
+        folder_id=folder_id,
+        folder_path=folder_path,
+    ).run()
+    sidecar_repository.sidecar_path(image_path).unlink()
+    worker = MaintenanceWorker(
+        db_path,
+        "",
+        "refresh_sidecars",
+        folder_id=folder_id,
+        folder_path=folder_path,
+    )
+
+    # Act
+    worker.run()
+
+    # Assert
+    repo = ImageIndexRepository(db_path, key="")
+    search_count = repo.count_images("Temporary tag")
+    state = repo.get_sidecar_sync_state(str(image_path))
+    repo.close()
+    assert worker.sidecar_image_count == 1
+    assert search_count == 0
+    assert state is None
+
+
+def test_refresh_sidecars_canceled_discovery_preserves_cached_tags(
+    qtbot: QtBot,
+    folder_db: tuple[Path, Path, int, str],
+) -> None:
+    # Arrange
+    db_path, image_dir, folder_id, folder_path = folder_db
+    image_path = image_dir / "a.jpg"
+    sidecar = ImageSidecar(
+        source=SidecarSource(filename=image_path.name),
+        updated_at="2026-08-09T12:30:00Z",
+        free_tags=("Preserved tag",),
+    )
+    sidecar_repository = FilesystemSidecarRepository()
+    sidecar_repository.write(image_path, sidecar, expected_revision=None)
+    MaintenanceWorker(
+        db_path,
+        "",
+        "refresh_sidecars",
+        folder_id=folder_id,
+        folder_path=folder_path,
+    ).run()
+    sidecar_repository.sidecar_path(image_path).unlink()
+    worker = MaintenanceWorker(
+        db_path,
+        "",
+        "refresh_sidecars",
+        folder_id=folder_id,
+        folder_path=folder_path,
+    )
+    worker.cancel()
+
+    # Act
+    worker.run()
+
+    # Assert
+    repo = ImageIndexRepository(db_path, key="")
+    search_count = repo.count_images("Preserved tag")
+    state = repo.get_sidecar_sync_state(str(image_path))
+    repo.close()
+    assert search_count == 1
+    assert state is not None
 
 
 def test_refresh_sidecars_malformed_file_reports_error_and_finishes(
@@ -263,7 +350,7 @@ def test_refresh_sidecars_malformed_file_reports_error_and_finishes(
     folder_db: tuple[Path, Path, int, str],
 ) -> None:
     # Arrange
-    db_path, image_dir, folder_id, _folder_path = folder_db
+    db_path, image_dir, folder_id, folder_path = folder_db
     sidecar_path = FilesystemSidecarRepository.sidecar_path(image_dir / "a.jpg")
     sidecar_path.write_text("{invalid JSON", encoding="utf-8")
     worker = MaintenanceWorker(
@@ -271,6 +358,7 @@ def test_refresh_sidecars_malformed_file_reports_error_and_finishes(
         "",
         "refresh_sidecars",
         folder_id=folder_id,
+        folder_path=folder_path,
     )
     finished: list[bool] = []
     worker.finished.connect(lambda: finished.append(True))

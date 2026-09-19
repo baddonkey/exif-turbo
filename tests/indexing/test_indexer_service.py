@@ -244,6 +244,56 @@ def test_build_index_deleted_sidecar_clears_tag_search_and_preserves_exif_search
     assert repo.get_sidecar_sync_state(str(image_path)) is None
 
 
+def test_build_index_sparse_sidecars_only_report_discovered_sidecars(
+    repo: ImageIndexRepository, image_folder: Path
+) -> None:
+    # Arrange
+    image_paths = [
+        _make_jpeg(image_folder / f"photo-{index}.jpg") for index in range(5)
+    ]
+    _write_sidecar(image_paths[2], "Only sidecar")
+    progress_calls: list[tuple[int, int, Path]] = []
+
+    # Act
+    IndexerService(repo, extractor=_FakeExtractor()).build_index(
+        [image_folder],
+        on_progress=lambda current, total, path: progress_calls.append(
+            (current, total, path)
+        ),
+    )
+
+    # Assert
+    sync_calls = [call for call in progress_calls if call[1] < 0]
+    assert sync_calls == [(1, -1, image_paths[2])]
+    assert len(repo.search_images("Only sidecar", limit=10, offset=0)) == 1
+
+
+def test_build_index_deleted_sidecar_reports_stale_sidecar_cleanup(
+    repo: ImageIndexRepository, image_folder: Path
+) -> None:
+    # Arrange
+    image_path = _make_jpeg(image_folder / "photo.jpg")
+    service = IndexerService(repo, extractor=_FakeExtractor())
+    _write_sidecar(image_path, "Deleted sidecar tag")
+    service.build_index([image_folder])
+    FilesystemSidecarRepository.sidecar_path(image_path).unlink()
+    progress_calls: list[tuple[int, int, Path]] = []
+
+    # Act
+    service.build_index(
+        [image_folder],
+        on_progress=lambda current, total, path: progress_calls.append(
+            (current, total, path)
+        ),
+    )
+
+    # Assert
+    sync_calls = [call for call in progress_calls if call[1] < 0]
+    assert sync_calls == [(1, -1, image_path)]
+    assert repo.get_sidecar_sync_state(str(image_path)) is None
+    assert repo.search_images("Deleted sidecar tag", limit=10, offset=0) == []
+
+
 def test_build_index_malformed_sidecar_preserves_tags_and_records_error(
     repo: ImageIndexRepository, image_folder: Path
 ) -> None:
@@ -526,11 +576,13 @@ def test_build_index_calls_progress_callback(
     service.build_index([image_folder], on_progress=lambda c, t, p: progress_calls.append((c, t, p)))
 
     # Assert: pipeline emits (indexed, 0, path) per file while scanning, then
-    # the scan-complete sentinel (0, total, Path("")) once scanner finishes.
-    assert len(progress_calls) == 4
-    assert progress_calls[-1] == (0, 3, Path(""))   # scan-complete sentinel
-    assert [c for c, _, _ in progress_calls[:-1]] == [1, 2, 3]
-    assert all(t == 0 for _, t, _ in progress_calls[:-1])
+    # the scan-complete sentinel (0, total, Path("")) once scanner finishes,
+    # Sidecar synchronization does not emit progress when no sidecars are
+    # discovered or cached from a previous scan.
+    index_calls = progress_calls
+    assert index_calls[-1] == (0, 3, Path(""))   # scan-complete sentinel
+    assert [c for c, _, _ in index_calls[:-1]] == [1, 2, 3]
+    assert all(t == 0 for _, t, _ in index_calls[:-1])
 
 
 # ── _resolve_captured_at ─────────────────────────────────────────────────────

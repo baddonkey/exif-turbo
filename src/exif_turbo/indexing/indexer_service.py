@@ -203,6 +203,7 @@ class IndexerService:
         error_count = 0
         canceled = False
         scan_total = 0
+        discovered_sidecar_images: set[str] = set()
 
         if force:
             # Wipe only the rows that belong to the folders being rescanned.
@@ -233,7 +234,17 @@ class IndexerService:
         def _scan_producer() -> None:
             n = 0
             try:
-                for entry in self.finder.iter_images(folders, cancel_check=cancel_check):
+                def _record_sidecar(sidecar_path: Path) -> None:
+                    image_name = sidecar_path.name.removesuffix(".sidecar.json")
+                    discovered_sidecar_images.add(
+                        str(sidecar_path.with_name(image_name))
+                    )
+
+                for entry in self.finder.iter_images(
+                    folders,
+                    cancel_check=cancel_check,
+                    on_sidecar=_record_sidecar,
+                ):
                     if cancel_check and cancel_check():
                         return
                     while True:
@@ -445,9 +456,34 @@ class IndexerService:
         # Flush any remaining buffered writes before the cleanup phase.
         if not canceled:
             flush_batch()
+            # Commit now, before the (potentially slow, unbounded) sidecar sync
+            # phase below.  Without this, the newly-indexed rows stay in this
+            # connection's uncommitted transaction until the very end of
+            # build_index — invisible to any other connection (e.g. the
+            # ThumbWorker's own ImageIndexRepository).  On a large/slow scan
+            # that made thumbnail generation appear stuck re-scanning the same
+            # "missing" set every few seconds while indexing sat at 100% doing
+            # sidecar work with no progress reported.
+            self.repo.commit()
+
+            def _sync_progress(index: int, total: int, path: str) -> None:
+                # Negative total distinguishes this phase from normal indexing
+                # progress in the UI layer (see IndexWorker/_on_index_progress).
+                if on_progress and total > 0:
+                    on_progress(index, -total, Path(path))
+
+            existing_path_set = set(existing_paths)
+            discovered_paths = discovered_sidecar_images & existing_path_set
+            stale_paths = (
+                set(self.repo.get_sidecar_sync_image_paths())
+                & existing_path_set
+                - discovered_paths
+            )
+            sync_paths = sorted(discovered_paths | stale_paths)
             sync_result = self.sidecar_synchronizer.synchronize(
-                existing_paths,
+                sync_paths,
                 cancel_check=cancel_check,
+                on_progress=_sync_progress if on_progress else None,
             )
             error_count += sync_result.error_count
             canceled = sync_result.canceled

@@ -45,6 +45,8 @@ class ImageFinder:
         self,
         folders: Iterable[Path],
         cancel_check: Optional[Callable[[], bool]] = None,
+        *,
+        on_sidecar: Callable[[Path], None] | None = None,
     ) -> Iterable[FindEntry]:
         """Yield (path, None, None) for every image found under *folders*.
 
@@ -73,6 +75,10 @@ class ImageFinder:
                         continue
                     path = root_path / file_name
                     if self._is_blacklisted(path):
+                        continue
+                    if file_name.endswith(".sidecar.json"):
+                        if on_sidecar is not None:
+                            on_sidecar(path)
                         continue
                     if is_image_file(path):
                         _log.debug("found: %s", path)

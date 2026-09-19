@@ -2904,6 +2904,7 @@ class AppController(QObject):
             "refresh_sidecars",
             _("Refreshing sidecar tags\u2026"),
             folder_id=folder_id,
+            folder_path=folder.path,
         )
 
     @Slot(int)
@@ -5132,6 +5133,18 @@ class AppController(QObject):
         if current == -1 and total == -1:
             self._set_folder_operation_status(
                 self._scanning_folder_name, _("Indexing"), _("Cleaning up cache...")
+            )
+            return
+        # Negative total (excluding the -1/-1 sentinel above) marks the
+        # post-scan sidecar-tag sync phase — reported separately so the UI
+        # doesn't look frozen at "N / N" while it runs on large/slow scans.
+        if total < 0:
+            self._set_folder_operation_status(
+                self._scanning_folder_name,
+                _("Indexing"),
+                _("Synchronizing tags: {current} / {total}").format(
+                    current=current, total=-total
+                ),
             )
             return
         # current == 0 and total > 0 is the scan-complete sentinel emitted by
