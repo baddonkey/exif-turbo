@@ -385,6 +385,7 @@ ApplicationWindow {
     readonly property double _dateFrom:   controller ? controller.dateFrom   : -1
     readonly property double _dateTo:     controller ? controller.dateTo     : -1
     readonly property string _yearCounts: controller ? controller.yearCounts : "[]"
+    readonly property bool _isLoadingYearCounts: controller ? controller.isLoadingYearCounts : false
     readonly property var    _years: {
         try { return JSON.parse(_yearCounts) } catch(e) { return [] }
     }
@@ -1881,8 +1882,9 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         readonly property bool _hasYears: root._years.length > 0
                         readonly property bool _filterActive: root._dateFrom !== -1 || root._dateTo !== -1
-                        implicitHeight: _hasYears ? contentRowLayout.implicitHeight + 8 : 0
-                        visible: _hasYears
+                        implicitHeight: (_hasYears || root._isLoadingYearCounts)
+                                        ? contentRowLayout.implicitHeight + 8 : 0
+                        visible: _hasYears || root._isLoadingYearCounts
                         color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.04)
 
                         // Tooltip for the whole filter strip (non-blocking).
@@ -1920,6 +1922,23 @@ ApplicationWindow {
                             id: contentRowLayout
                             anchors { top: parent.top; left: parent.left; right: parent.right; leftMargin: 8; rightMargin: 8; topMargin: 4 }
                             spacing: 8
+
+                            BusyIndicator {
+                                objectName: "timelineLoadingIndicator"
+                                Layout.alignment: Qt.AlignTop
+                                Layout.preferredWidth: 22
+                                Layout.preferredHeight: 22
+                                running: root._isLoadingYearCounts
+                                visible: running
+                            }
+
+                            Label {
+                                Layout.alignment: Qt.AlignTop
+                                visible: root._isLoadingYearCounts && !dateFilterRow._hasYears
+                                text: qsTr("Loading timeline...")
+                                font.pixelSize: 10
+                                opacity: 0.65
+                            }
 
                             // ── Mini histogram ────────────────────────────
                             Flow {

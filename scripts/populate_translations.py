@@ -2029,6 +2029,22 @@ TRANSLATIONS["rm"].update({
     "Thumbnails": "Miniaturas",
 })
 
+TRANSLATIONS["de"].update({
+    "Loading timeline...": "Zeitleiste wird geladen...",
+})
+
+TRANSLATIONS["fr"].update({
+    "Loading timeline...": "Chargement de la chronologie...",
+})
+
+TRANSLATIONS["it"].update({
+    "Loading timeline...": "Caricamento della cronologia...",
+})
+
+TRANSLATIONS["rm"].update({
+    "Loading timeline...": "La cronologia vegn chargiada...",
+})
+
 
 def populate(lang: str, translations: dict[str, str]) -> None:
     po_path = LOCALES_DIR / lang / "LC_MESSAGES" / "exif_turbo.po"

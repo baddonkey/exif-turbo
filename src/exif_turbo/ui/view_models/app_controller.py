@@ -213,6 +213,7 @@ class AppController(QObject):
     clipboardCopyDone = Signal(str)  # message to show in toast
     dateFilterChanged = Signal()
     yearCountsChanged = Signal()
+    yearCountsLoadingChanged = Signal()
     taggingStateChanged = Signal()
     tgmOperationChanged = Signal()
     proposalOperationChanged = Signal()
@@ -355,6 +356,8 @@ class AppController(QObject):
         self._search_worker: SearchWorker | None = None
         self._year_counts_worker: YearCountsWorker | None = None
         self._pending_year_counts_serial: int = 0
+        self._is_loading_year_counts: bool = False
+        self._year_counts_loading_serial: int = 0
         self._load_more_worker: SearchPageWorker | None = None
         self._page_load_mode = "append"
         self._search_serial: int = 0
@@ -979,6 +982,10 @@ class AppController(QObject):
     @Property(str, notify=yearCountsChanged)
     def yearCounts(self) -> str:
         return self._year_counts
+
+    @Property(bool, notify=yearCountsLoadingChanged)
+    def isLoadingYearCounts(self) -> bool:
+        return self._is_loading_year_counts
 
     @Slot()
     def checkExiftool(self) -> None:
@@ -2315,18 +2322,25 @@ class AppController(QObject):
 
     def _schedule_year_counts_reload(self, serial: int) -> None:
         """Refresh year counts after the current search result has rendered."""
+        self._year_counts_loading_serial = serial
+        self._set_year_counts_loading(True)
         if self._results_use_ai_pipeline():
             # AI-mode year counts currently depend on in-memory AI path sets.
             # Keep the existing synchronous path for that mode.
             def _reload_ai() -> None:
-                if serial != self._search_serial:
-                    return
-                self._load_year_counts()
+                try:
+                    if serial != self._search_serial:
+                        return
+                    self._load_year_counts()
+                finally:
+                    if serial == self._year_counts_loading_serial:
+                        self._set_year_counts_loading(False)
 
             QTimer.singleShot(0, _reload_ai)
             return
 
         if self._db_path is None:
+            self._set_year_counts_loading(False)
             return
         if self._year_counts_worker is not None:
             self._pending_year_counts_serial = serial
@@ -2357,11 +2371,21 @@ class AppController(QObject):
         _log.debug("Year-count worker failed (serial=%s): %s", serial, error)
 
     def _on_year_counts_finished(self) -> None:
+        worker = self._year_counts_worker
         self._year_counts_worker = None
         if self._pending_year_counts_serial:
             serial = self._pending_year_counts_serial
             self._pending_year_counts_serial = 0
             self._schedule_year_counts_reload(serial)
+            return
+        if worker is not None and worker._serial == self._year_counts_loading_serial:
+            self._set_year_counts_loading(False)
+
+    def _set_year_counts_loading(self, loading: bool) -> None:
+        if self._is_loading_year_counts == loading:
+            return
+        self._is_loading_year_counts = loading
+        self.yearCountsLoadingChanged.emit()
 
     def _on_search_failed(self, error: str) -> None:
         if self.sender() is self._ai_search_worker:

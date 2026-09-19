@@ -430,7 +430,8 @@ the next time you open the application.
 Whenever at least one indexed image has a known capture date a **year histogram**
 appears below the format chips in the Search tab. Each bar represents one
 calendar year; its height is proportional to the number of matching images taken
-in that year relative to the busiest year.
+in that year relative to the busiest year. A small spinner appears in this area
+while the timeline counts are loading or refreshing.
 
 | Action | Effect |
 |--------|--------|

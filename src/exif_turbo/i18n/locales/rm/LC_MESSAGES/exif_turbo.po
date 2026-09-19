@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-09-19 00:09+0200\n"
+"POT-Creation-Date: 2026-09-19 11:11+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: rm\n"
@@ -22,170 +22,170 @@ msgstr ""
 msgid "PyTorch is not available on macOS Intel for Python 3.13+."
 msgstr "PyTorch na è betg disponibel sin macOS Intel per Python 3.13+."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:244
+#: src/exif_turbo/ui/view_models/app_controller.py:246
 msgid "Enter the database password to continue"
 msgstr "Endatar la pled-clav da la banca da datas per cuntinuar"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1048
+#: src/exif_turbo/ui/view_models/app_controller.py:1085
 msgid "Selecting all matching images…"
 msgstr "Seleziun da tuts ils maletgs correspundentas…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1058
+#: src/exif_turbo/ui/view_models/app_controller.py:1095
 msgid "Deselecting all matching images…"
 msgstr "Deseleziun da tuts ils maletgs correspundentas…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1068
+#: src/exif_turbo/ui/view_models/app_controller.py:1105
 msgid "Inverting selection…"
 msgstr "Inversiun da la selecziun…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1082
+#: src/exif_turbo/ui/view_models/app_controller.py:1119
 msgid "Selecting images without a cached thumbnail…"
 msgstr "Seleziun da maletgs senza miniatura en il cache…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1097
+#: src/exif_turbo/ui/view_models/app_controller.py:1134
 msgid "No marked images to delete."
 msgstr "Nagins maletgs marcads per stizzar."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1101
+#: src/exif_turbo/ui/view_models/app_controller.py:1138
 msgid "Deleting marked images…"
 msgstr "Maletgs marcads vegnan stizzads…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1111
+#: src/exif_turbo/ui/view_models/app_controller.py:1148
 msgid "No marked images to export."
 msgstr "Nagins maletgs marcads per exportar."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1116
+#: src/exif_turbo/ui/view_models/app_controller.py:1153
 msgid "Exporting metadata…"
 msgstr "Exportaziun da metadata…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1218
+#: src/exif_turbo/ui/view_models/app_controller.py:1260
 #, python-brace-format
 msgid "Deleted {n} image(s)."
 msgstr "{n} maletg(s) stizzad(s)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1222
+#: src/exif_turbo/ui/view_models/app_controller.py:1264
 #, python-brace-format
 msgid "{n} were already missing."
 msgstr "{n} eran gia betg chattabels."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1228
+#: src/exif_turbo/ui/view_models/app_controller.py:1270
 #, python-brace-format
 msgid "{n} could not be deleted."
 msgstr "{n} n’han betg pudì vegnir stizzads."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1238
+#: src/exif_turbo/ui/view_models/app_controller.py:1280
 #, python-brace-format
 msgid "Exported {count} image(s) to {name}"
 msgstr "{count} maletg(s) exportad(s) en {name}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1248
-#: src/exif_turbo/ui/view_models/app_controller.py:1373
+#: src/exif_turbo/ui/view_models/app_controller.py:1290
+#: src/exif_turbo/ui/view_models/app_controller.py:1419
 #, python-brace-format
 msgid "Operation failed: {}"
 msgstr "Operaziun buca reussida: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1254
-#: src/exif_turbo/ui/view_models/app_controller.py:1389
+#: src/exif_turbo/ui/view_models/app_controller.py:1296
+#: src/exif_turbo/ui/view_models/app_controller.py:1435
 msgid "Operation canceled."
 msgstr "Operaziun annullada."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1274
-#: src/exif_turbo/ui/view_models/app_controller.py:2862
-#: src/exif_turbo/ui/view_models/app_controller.py:2872
+#: src/exif_turbo/ui/view_models/app_controller.py:1316
+#: src/exif_turbo/ui/view_models/app_controller.py:2926
+#: src/exif_turbo/ui/view_models/app_controller.py:2936
 msgid "Refresh Tags"
 msgstr "Actualisar tags"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1275
-#: src/exif_turbo/ui/view_models/app_controller.py:1343
+#: src/exif_turbo/ui/view_models/app_controller.py:1317
+#: src/exif_turbo/ui/view_models/app_controller.py:1389
 msgid "Remove Folder"
 msgstr "Stizzar cartella"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1305
-#: src/exif_turbo/ui/view_models/app_controller.py:3102
-#: src/exif_turbo/ui/view_models/app_controller.py:3358
-#: src/exif_turbo/ui/view_models/app_controller.py:3418
-#: src/exif_turbo/ui/view_models/app_controller.py:5132
+#: src/exif_turbo/ui/view_models/app_controller.py:1348
+#: src/exif_turbo/ui/view_models/app_controller.py:3166
+#: src/exif_turbo/ui/view_models/app_controller.py:3419
+#: src/exif_turbo/ui/view_models/app_controller.py:3479
+#: src/exif_turbo/ui/view_models/app_controller.py:5201
 msgid "Starting..."
 msgstr "Vegn inizià..."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1317
-#: src/exif_turbo/ui/view_models/app_controller.py:3484
-#: src/exif_turbo/ui/view_models/app_controller.py:3562
+#: src/exif_turbo/ui/view_models/app_controller.py:1361
+#: src/exif_turbo/ui/view_models/app_controller.py:3545
+#: src/exif_turbo/ui/view_models/app_controller.py:3623
 #, python-brace-format
 msgid "{done} / {total}"
 msgstr "{done} / {total}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1343
+#: src/exif_turbo/ui/view_models/app_controller.py:1389
 msgid "Removed"
 msgstr "Allontanà"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1369
-#: src/exif_turbo/ui/view_models/app_controller.py:3209
-#: src/exif_turbo/ui/view_models/app_controller.py:3531
-#: src/exif_turbo/ui/view_models/app_controller.py:3606
-#: src/exif_turbo/ui/view_models/app_controller.py:3657
+#: src/exif_turbo/ui/view_models/app_controller.py:1415
+#: src/exif_turbo/ui/view_models/app_controller.py:3270
+#: src/exif_turbo/ui/view_models/app_controller.py:3592
 #: src/exif_turbo/ui/view_models/app_controller.py:3667
-#: src/exif_turbo/ui/view_models/app_controller.py:5238
+#: src/exif_turbo/ui/view_models/app_controller.py:3718
+#: src/exif_turbo/ui/view_models/app_controller.py:3728
+#: src/exif_turbo/ui/view_models/app_controller.py:5307
 #, python-brace-format
 msgid "Failed: {error}"
 msgstr "Betg reussì: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1387
+#: src/exif_turbo/ui/view_models/app_controller.py:1433
 msgid "Canceled"
 msgstr "Interrut"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1481
+#: src/exif_turbo/ui/view_models/app_controller.py:1528
 msgid "Wrong password — please try again."
 msgstr "Pled-clav fauss — emprova p.pl. anc ina giada."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1493
+#: src/exif_turbo/ui/view_models/app_controller.py:1540
 #, python-brace-format
 msgid "Failed to open database: {error}"
 msgstr "Impussibel da rir la banca da datas: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1519
+#: src/exif_turbo/ui/view_models/app_controller.py:1566
 msgid "Database is locked."
 msgstr "La banca da datas è serrada."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1524
+#: src/exif_turbo/ui/view_models/app_controller.py:1571
 msgid "Cannot change password while indexing or thumb-building is running."
 msgstr ""
 "Impussibel da midar la pled-clav durant l’indexaziun u la creaziun da "
 "miniaturas."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1528
+#: src/exif_turbo/ui/view_models/app_controller.py:1575
 msgid "Current password is incorrect."
 msgstr "La pled-clav actuala n’è betg correcta."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1531
+#: src/exif_turbo/ui/view_models/app_controller.py:1578
 msgid "New password must not be empty."
 msgstr "La nova pled-clav na dastga betg esser vida."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1535
+#: src/exif_turbo/ui/view_models/app_controller.py:1582
 msgid "New password must differ from the current password."
 msgstr "La nova pled-clav sto esser differenta da quella actuala."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1553
+#: src/exif_turbo/ui/view_models/app_controller.py:1600
 msgid "Changing password…"
 msgstr "Pled-clav vegn midada…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1594
+#: src/exif_turbo/ui/view_models/app_controller.py:1641
 #, python-brace-format
 msgid "Database password changed, but reopening failed: {error}"
 msgstr ""
 "La pled-clav da la banca da datas è vegnida midada, ma la reaviertura n’è"
 " betg reussida: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1604
+#: src/exif_turbo/ui/view_models/app_controller.py:1651
 msgid "Password changed successfully."
 msgstr "Pled-clav midada cun success."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1645
+#: src/exif_turbo/ui/view_models/app_controller.py:1692
 #, python-brace-format
 msgid "Failed to change password: {error}"
 msgstr "Midada da la pled-clav betg reussida: {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1650
+#: src/exif_turbo/ui/view_models/app_controller.py:1697
 #, python-brace-format
 msgid ""
 "Password changed but thumbnail cache could not be re-wrapped ({error}). "
@@ -194,178 +194,177 @@ msgstr ""
 "La pled-clav è vegnida midada, ma il cache da miniaturas n’è betg pudida "
 "vegnir cifrada da nov ({error}). Il cache è vegnì stizzad e vegn rebatgì."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2491
+#: src/exif_turbo/ui/view_models/app_controller.py:2555
 msgid "Folder list reloaded."
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2728
+#: src/exif_turbo/ui/view_models/app_controller.py:2792
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Cartella gia trackata: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2746
-#: src/exif_turbo/ui/view_models/app_controller.py:2902
+#: src/exif_turbo/ui/view_models/app_controller.py:2810
+#: src/exif_turbo/ui/view_models/app_controller.py:2966
 msgid "Wait for the current folder operation to finish."
 msgstr "Spetgai fin che l'operaziun actuala da la cartella saja terminada."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2762
+#: src/exif_turbo/ui/view_models/app_controller.py:2826
 msgid "Removing folder…"
 msgstr "Allontanar la cartella…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2841
+#: src/exif_turbo/ui/view_models/app_controller.py:2905
 msgid "Refreshing sidecar tags…"
 msgstr "Actualisar ils tags sidecar…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2863
+#: src/exif_turbo/ui/view_models/app_controller.py:2927
 #, python-brace-format
 msgid "{count} images refreshed; {errors} sidecars had errors"
 msgstr "{count} maletgs actualisads; {errors} sidecars avevan errurs"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2873
+#: src/exif_turbo/ui/view_models/app_controller.py:2937
 #, python-brace-format
 msgid "{count} images refreshed"
 msgstr "{count} maletgs actualisads"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3049
-#: src/exif_turbo/ui/view_models/app_controller.py:3057
+#: src/exif_turbo/ui/view_models/app_controller.py:3113
+#: src/exif_turbo/ui/view_models/app_controller.py:3121
 msgid "Folder not accessible"
 msgstr "Ordinatur betg accessibel"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3056
-#: src/exif_turbo/ui/view_models/app_controller.py:3102
-#: src/exif_turbo/ui/view_models/app_controller.py:3143
-#: src/exif_turbo/ui/view_models/app_controller.py:3151
-#: src/exif_turbo/ui/view_models/app_controller.py:3208
-#: src/exif_turbo/ui/view_models/app_controller.py:3258
-#: src/exif_turbo/ui/view_models/app_controller.py:3282
-#: src/exif_turbo/ui/view_models/app_controller.py:5065
-#: src/exif_turbo/ui/view_models/app_controller.py:5092
+#: src/exif_turbo/ui/view_models/app_controller.py:3120
+#: src/exif_turbo/ui/view_models/app_controller.py:3166
+#: src/exif_turbo/ui/view_models/app_controller.py:3216
+#: src/exif_turbo/ui/view_models/app_controller.py:3269
+#: src/exif_turbo/ui/view_models/app_controller.py:3320
+#: src/exif_turbo/ui/view_models/app_controller.py:3343
+#: src/exif_turbo/ui/view_models/app_controller.py:5134
+#: src/exif_turbo/ui/view_models/app_controller.py:5161
 msgid "Indexing"
 msgstr "Indexaziun"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3144
+#: src/exif_turbo/ui/view_models/app_controller.py:3206
 #, python-brace-format
 msgid "{count} images indexed; {errors} skipped due to errors"
 msgstr "{count} maletgs indexads; {errors} sursiglids pervia d'errurs"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3152
+#: src/exif_turbo/ui/view_models/app_controller.py:3211
 #, python-brace-format
 msgid "{count} images indexed"
 msgstr "{count} maletgs indexads"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3259
+#: src/exif_turbo/ui/view_models/app_controller.py:3321
 #, python-brace-format
 msgid "Canceled after {count} images"
 msgstr "Interrut suenter {count} maletgs"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3282
+#: src/exif_turbo/ui/view_models/app_controller.py:3343
 msgid "Canceling..."
 msgstr "Vegn interrut..."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3358
-#: src/exif_turbo/ui/view_models/app_controller.py:3561
-#: src/exif_turbo/ui/view_models/app_controller.py:3589
-#: src/exif_turbo/ui/view_models/app_controller.py:3605
-#: src/exif_turbo/ui/view_models/app_controller.py:3624
+#: src/exif_turbo/ui/view_models/app_controller.py:3419
+#: src/exif_turbo/ui/view_models/app_controller.py:3622
+#: src/exif_turbo/ui/view_models/app_controller.py:3650
+#: src/exif_turbo/ui/view_models/app_controller.py:3666
+#: src/exif_turbo/ui/view_models/app_controller.py:3685
 msgid "Previews"
 msgstr "Previstas"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3417
-#: src/exif_turbo/ui/view_models/app_controller.py:3483
-#: src/exif_turbo/ui/view_models/app_controller.py:3513
-#: src/exif_turbo/ui/view_models/app_controller.py:3530
-#: src/exif_turbo/ui/view_models/app_controller.py:3547
+#: src/exif_turbo/ui/view_models/app_controller.py:3478
+#: src/exif_turbo/ui/view_models/app_controller.py:3544
+#: src/exif_turbo/ui/view_models/app_controller.py:3574
+#: src/exif_turbo/ui/view_models/app_controller.py:3591
+#: src/exif_turbo/ui/view_models/app_controller.py:3608
 msgid "AI Full Scan"
 msgstr "Scannada AI cumplaina"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3417
-#: src/exif_turbo/ui/view_models/app_controller.py:3483
-#: src/exif_turbo/ui/view_models/app_controller.py:3513
-#: src/exif_turbo/ui/view_models/app_controller.py:3530
-#: src/exif_turbo/ui/view_models/app_controller.py:3547
+#: src/exif_turbo/ui/view_models/app_controller.py:3478
+#: src/exif_turbo/ui/view_models/app_controller.py:3544
+#: src/exif_turbo/ui/view_models/app_controller.py:3574
+#: src/exif_turbo/ui/view_models/app_controller.py:3591
+#: src/exif_turbo/ui/view_models/app_controller.py:3608
 msgid "AI-Scan"
 msgstr "Scan IA"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3508
+#: src/exif_turbo/ui/view_models/app_controller.py:3569
 #, python-brace-format
 msgid "{n} images vectorised"
 msgstr "{n} maletgs vectorisads"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3510
+#: src/exif_turbo/ui/view_models/app_controller.py:3571
 #, python-brace-format
 msgid "{n} files could not be processed"
 msgstr "{n} datotecas na pudevan betg vegnir elavuradas"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3548
+#: src/exif_turbo/ui/view_models/app_controller.py:3609
 #, python-brace-format
 msgid "Canceled after {n} images"
 msgstr "Interrut suenter {n} maletgs"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3582
+#: src/exif_turbo/ui/view_models/app_controller.py:3643
 #, python-brace-format
 msgid "{built} / {total} built"
 msgstr "{built} / {total} creads"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3586
+#: src/exif_turbo/ui/view_models/app_controller.py:3647
 #, python-brace-format
 msgid "{n} image(s) skipped — too large to decode safely."
 msgstr "{n} maletg(s) sursiglid(s) — memia gronds per decodar senza riscu."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3625
+#: src/exif_turbo/ui/view_models/app_controller.py:3686
 #, python-brace-format
 msgid "Canceled after {built} / {total}"
 msgstr "Interrut suenter {built} / {total}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3645
-#: src/exif_turbo/ui/view_models/app_controller.py:3656
-#: src/exif_turbo/ui/view_models/app_controller.py:3666
-#: src/exif_turbo/ui/view_models/app_controller.py:3674
+#: src/exif_turbo/ui/view_models/app_controller.py:3706
+#: src/exif_turbo/ui/view_models/app_controller.py:3717
+#: src/exif_turbo/ui/view_models/app_controller.py:3727
+#: src/exif_turbo/ui/view_models/app_controller.py:3735
 msgid "Clear Previews"
 msgstr "Stizzar previstas"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3646
+#: src/exif_turbo/ui/view_models/app_controller.py:3707
 msgid "Cancel the running preview build first"
 msgstr "Interrumper l'emprim la creaziun da previstas activa"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3675
+#: src/exif_turbo/ui/view_models/app_controller.py:3736
 #, python-brace-format
 msgid "{n} cached previews removed"
 msgstr "{n} previstas memorisadas allontanadas"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3801
+#: src/exif_turbo/ui/view_models/app_controller.py:3862
 msgid "Image copied to clipboard"
 msgstr "Maletg copià en la tavla d’interscambi"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3805
+#: src/exif_turbo/ui/view_models/app_controller.py:3866
 msgid "Path copied to clipboard"
 msgstr "Traject copià en la tavla d’interscambi"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3818
+#: src/exif_turbo/ui/view_models/app_controller.py:3879
 msgid "Preview source file not accessible"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3825
+#: src/exif_turbo/ui/view_models/app_controller.py:3886
 msgid "Preview saved"
 msgstr "Prevista memorisada"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3837
-#: src/exif_turbo/ui/view_models/app_controller.py:3846
+#: src/exif_turbo/ui/view_models/app_controller.py:3898
+#: src/exif_turbo/ui/view_models/app_controller.py:3907
 msgid "File not accessible"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3842
+#: src/exif_turbo/ui/view_models/app_controller.py:3903
 msgid "Original saved"
 msgstr "Original memorisà"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3906
+#: src/exif_turbo/ui/view_models/app_controller.py:3967
 msgid "Resetting database…"
 msgstr "Reinizialisar la banca da datas…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3931
+#: src/exif_turbo/ui/view_models/app_controller.py:3992
 msgid "Database reset"
 msgstr "Banca da datas resettada"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4465
+#: src/exif_turbo/ui/view_models/app_controller.py:4526
 msgid ""
 "This image has no AI vector. Run AI Full Rescan to generate tag "
 "suggestions."
@@ -373,102 +372,102 @@ msgstr ""
 "Quest maletg n'ha nagin vector dad IA. Exequì ina nova scansiun cumpletta"
 " dad IA per generar propostas da tags."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4469
+#: src/exif_turbo/ui/view_models/app_controller.py:4530
 msgid "TGM vectors are out of date. Rebuild them to generate tag suggestions."
 msgstr ""
 "Ils vectors TGM èn antiquads. Creai els da nov per generar propostas da "
 "tags."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4473
+#: src/exif_turbo/ui/view_models/app_controller.py:4534
 msgid "No tag suggestions met the current confidence threshold."
 msgstr "Naginas propostas da tags han cuntanschì la sava da confidenza actuala."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4514
+#: src/exif_turbo/ui/view_models/app_controller.py:4575
 msgid "Choose whether to add or replace tags."
 msgstr "Tscherna sche tags duain vegnir agiuntads u remplazzads."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4525
+#: src/exif_turbo/ui/view_models/app_controller.py:4586
 msgid "Choose a folder in Browse first."
 msgstr "Tscherna l’emprim ina cartella en Sfegliar."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4542
+#: src/exif_turbo/ui/view_models/app_controller.py:4603
 msgid "Choose a valid copy target."
 msgstr "Tscherna ina destinaziun valida per copiar."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4598
+#: src/exif_turbo/ui/view_models/app_controller.py:4659
 #, python-brace-format
 msgid "Removed from {} image(s). Already absent: {}. Problems: {}."
 msgstr "Allontanà da {} maletg(s). Gia absent: {}. Problems: {}."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4602
+#: src/exif_turbo/ui/view_models/app_controller.py:4663
 #, python-brace-format
 msgid "Copied tags to {} image(s). Unchanged: {}. Problems: {}."
 msgstr "Tags copiads sin {} maletg(s). Betg midà: {}. Problems: {}."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4606
+#: src/exif_turbo/ui/view_models/app_controller.py:4667
 #, python-brace-format
 msgid "Added to {} image(s). Already tagged: {}. Problems: {}."
 msgstr "Agiuntà a {} maletg(s). Gia chavazzinà: {}. Problems: {}."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4610
+#: src/exif_turbo/ui/view_models/app_controller.py:4671
 #, python-brace-format
 msgid "Canceled. {}"
 msgstr "Interrut. {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4714
+#: src/exif_turbo/ui/view_models/app_controller.py:4775
 #, python-brace-format
 msgid "Created derivative: {}"
 msgstr "Derivat creà: {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4716
+#: src/exif_turbo/ui/view_models/app_controller.py:4777
 msgid "Created 1 derivative."
 msgstr "1 derivat creà."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4720
+#: src/exif_turbo/ui/view_models/app_controller.py:4781
 #, python-brace-format
 msgid "Created {} derivatives in {}."
 msgstr "{} derivats creads en {}."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4725
+#: src/exif_turbo/ui/view_models/app_controller.py:4786
 #, python-brace-format
 msgid "Created {} derivatives."
 msgstr "{} derivats creads."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4727
+#: src/exif_turbo/ui/view_models/app_controller.py:4788
 msgid "No derivatives were created."
 msgstr "Nagins derivats èn vegnids creads."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4730
+#: src/exif_turbo/ui/view_models/app_controller.py:4791
 #, python-brace-format
 msgid "{} image(s) had no accepted tags."
 msgstr "{} maletg(s) n’aveva(n) nagins tags acceptads."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4734
+#: src/exif_turbo/ui/view_models/app_controller.py:4795
 #, python-brace-format
 msgid "{} destination file(s) already existed."
 msgstr "{} datoteca(s) da destinaziun existiva(n) gia."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4737
+#: src/exif_turbo/ui/view_models/app_controller.py:4798
 #, python-brace-format
 msgid "{} derivative(s) failed."
 msgstr "{} derivat(s) n'è(n) betg reussì(s)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4751
+#: src/exif_turbo/ui/view_models/app_controller.py:4812
 #, python-brace-format
 msgid "First failure ({}): {}"
 msgstr "Emprim sbagl ({}): {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4754
+#: src/exif_turbo/ui/view_models/app_controller.py:4815
 #, python-brace-format
 msgid "{} derivative(s) canceled."
 msgstr "{} derivat(s) interrut(s)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4841
+#: src/exif_turbo/ui/view_models/app_controller.py:4909
 #, python-brace-format
 msgid "{folder}, {operation}: {detail}"
 msgstr "{folder}, {operation}: {detail}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4898
+#: src/exif_turbo/ui/view_models/app_controller.py:4967
 #, python-brace-format
 msgid ""
 "Original data source not attached: {source} — attach or mount this folder"
@@ -477,45 +476,45 @@ msgstr ""
 "Funtauna da datas originala betg colliada: {source} — colliai u montai "
 "questa cartella per avrir datotecas."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4905
+#: src/exif_turbo/ui/view_models/app_controller.py:4974
 #, python-brace-format
 msgid "File not found: {}"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:5065
+#: src/exif_turbo/ui/view_models/app_controller.py:5134
 msgid "Cleaning up cache..."
 msgstr "Cache vegn nettegià..."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:5086
+#: src/exif_turbo/ui/view_models/app_controller.py:5155
 #, python-brace-format
 msgid "{current} found while scanning"
 msgstr "{current} chattads durant la tschertga"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:5088
+#: src/exif_turbo/ui/view_models/app_controller.py:5157
 #, python-brace-format
 msgid "0 / {total}"
 msgstr "0 / {total}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:5090
-#: src/exif_turbo/ui/view_models/app_controller.py:5114
+#: src/exif_turbo/ui/view_models/app_controller.py:5159
+#: src/exif_turbo/ui/view_models/app_controller.py:5183
 #, python-brace-format
 msgid "{current} / {total}"
 msgstr "{current} / {total}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:5113
-#: src/exif_turbo/ui/view_models/app_controller.py:5132
-#: src/exif_turbo/ui/view_models/app_controller.py:5219
-#: src/exif_turbo/ui/view_models/app_controller.py:5237
-#: src/exif_turbo/ui/view_models/app_controller.py:5252
+#: src/exif_turbo/ui/view_models/app_controller.py:5182
+#: src/exif_turbo/ui/view_models/app_controller.py:5201
+#: src/exif_turbo/ui/view_models/app_controller.py:5288
+#: src/exif_turbo/ui/view_models/app_controller.py:5306
+#: src/exif_turbo/ui/view_models/app_controller.py:5321
 msgid "Thumbnails"
 msgstr "Miniaturas"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:5220
+#: src/exif_turbo/ui/view_models/app_controller.py:5289
 #, python-brace-format
 msgid "{cached} / {total} built"
 msgstr "{cached} / {total} creads"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:5253
+#: src/exif_turbo/ui/view_models/app_controller.py:5322
 #, python-brace-format
 msgid "Canceled after {cached} / {total}"
 msgstr "Interrut suenter {cached} / {total}"
@@ -1194,10 +1193,6 @@ msgid "Indexing Blacklist"
 msgstr "Glista naira d’indexaziun"
 
 #: QML
-msgid "Indexing…"
-msgstr "Indexaziun…"
-
-#: QML
 msgid "JSON Export Formatting"
 msgstr "Formataziun da l'export JSON"
 
@@ -1228,6 +1223,10 @@ msgstr "Licenza: MIT"
 #: QML
 msgid "Loading original…"
 msgstr "Original vegn chargià…"
+
+#: QML
+msgid "Loading timeline..."
+msgstr "La cronologia vegn chargiada..."
 
 #: QML
 msgid ""

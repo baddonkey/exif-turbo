@@ -740,6 +740,45 @@ def test_regular_status_clears_folder_name_context(
     assert bare_controller.statusFolderName == ""
 
 
+def test_year_counts_finished_latest_request_clears_loading_state(
+    bare_controller: AppController,
+) -> None:
+    # Arrange
+    bare_controller._year_counts_worker = SimpleNamespace(_serial=7)
+    bare_controller._year_counts_loading_serial = 7
+    bare_controller._set_year_counts_loading(True)
+
+    # Act
+    bare_controller._on_year_counts_finished()
+
+    # Assert
+    assert bare_controller.isLoadingYearCounts is False
+
+
+def test_year_counts_finished_with_queued_request_keeps_loading_state(
+    bare_controller: AppController,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    scheduled: list[int] = []
+    bare_controller._year_counts_worker = SimpleNamespace(_serial=7)
+    bare_controller._pending_year_counts_serial = 8
+    bare_controller._year_counts_loading_serial = 8
+    bare_controller._set_year_counts_loading(True)
+    monkeypatch.setattr(
+        bare_controller,
+        "_schedule_year_counts_reload",
+        lambda serial: scheduled.append(serial),
+    )
+
+    # Act
+    bare_controller._on_year_counts_finished()
+
+    # Assert
+    assert bare_controller.isLoadingYearCounts is True
+    assert scheduled == [8]
+
+
 def test_index_progress_with_folder_context_updates_standard_status(
     bare_controller: AppController,
 ) -> None:
