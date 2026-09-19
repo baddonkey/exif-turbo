@@ -2904,6 +2904,7 @@ class AppController(QObject):
             "refresh_sidecars",
             _("Refreshing sidecar tags\u2026"),
             folder_id=folder_id,
+            folder_path=folder.path,
         )
 
     @Slot(int)

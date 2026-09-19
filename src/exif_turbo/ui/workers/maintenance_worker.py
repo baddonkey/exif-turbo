@@ -168,16 +168,28 @@ class MaintenanceWorker(QThread):
             folder_repo.close()
 
     def _run_refresh_sidecars(self) -> None:
-        if self._folder_id is None:
-            self.failed.emit("folder_id is required")
+        if self._folder_id is None or self._folder_path is None:
+            self.failed.emit("folder_id and folder_path are required")
             return
         repo = ImageIndexRepository(self._db_path, key=self._key)
         try:
-            image_paths = tuple(repo.get_folder_stamps(self._folder_id))
-            total = len(image_paths)
-            self.sidecar_image_count = total
+            indexed_paths = set(repo.get_folder_stamps(self._folder_id))
             message = _("Re-reading sidecar tags\u2026")
             self.cancelable.emit(True)
+            self._emit_progress(0, 0, message, force=True)
+            discovered_paths = self._discover_sidecar_image_paths(
+                Path(self._folder_path)
+            )
+            if discovered_paths is None:
+                self.canceled.emit()
+                return
+            discovered_paths &= indexed_paths
+            cached_paths = (
+                set(repo.get_sidecar_sync_image_paths()) & indexed_paths
+            )
+            image_paths = tuple(sorted(discovered_paths | cached_paths))
+            total = len(image_paths)
+            self.sidecar_image_count = total
             self._emit_progress(0, total, message, force=True)
 
             def on_progress(done: int, count: int, path: str) -> None:
@@ -206,6 +218,28 @@ class MaintenanceWorker(QThread):
                 self.finished.emit()
         finally:
             repo.close()
+
+    def _discover_sidecar_image_paths(self, folder: Path) -> set[str] | None:
+        if not folder.is_dir():
+            raise FileNotFoundError(f"indexed folder is not accessible: {folder}")
+
+        def raise_walk_error(error: OSError) -> None:
+            raise error
+
+        discovered: set[str] = set()
+        suffix = ".sidecar.json"
+        for root, _dirs, files in os.walk(folder, onerror=raise_walk_error):
+            if self._is_canceled():
+                return None
+            root_path = Path(root)
+            for file_name in files:
+                if self._is_canceled():
+                    return None
+                if file_name.endswith(suffix):
+                    discovered.add(
+                        str(root_path / file_name.removesuffix(suffix))
+                    )
+        return discovered
 
     # ------------------------------------------------------------------
     def _clear_previews(self, stamps: dict[str, tuple[float, int]]) -> bool:

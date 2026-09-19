@@ -538,6 +538,16 @@ class ImageIndexRepository:
             error=None if row[6] is None else str(row[6]),
         )
 
+    def get_sidecar_sync_image_paths(self) -> tuple[str, ...]:
+        rows = self.conn.execute(
+            """
+            SELECT images.path
+            FROM image_sidecar_state AS state
+            JOIN images ON images.id = state.image_id
+            """
+        ).fetchall()
+        return tuple(str(row[0]) for row in rows)
+
     def record_sidecar_sync_error(
         self,
         image_path: str,

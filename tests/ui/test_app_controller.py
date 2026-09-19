@@ -393,19 +393,23 @@ def test_refresh_sidecars_for_folder_starts_folder_maintenance(
 ) -> None:
     # Arrange
     bare_controller._folder_repo = SimpleNamespace(
-        get_by_id=lambda folder_id: SimpleNamespace(id=folder_id),
+        get_by_id=lambda folder_id: SimpleNamespace(
+            id=folder_id,
+            path="C:/photos",
+        ),
         close=lambda: None,
     )
-    calls: list[tuple[str, int | None]] = []
+    calls: list[tuple[str, int | None, str | None]] = []
 
     def record_operation(
         operation: str,
         _label: str,
         *,
         folder_id: int | None = None,
+        folder_path: str | None = None,
         **_kwargs: object,
     ) -> None:
-        calls.append((operation, folder_id))
+        calls.append((operation, folder_id, folder_path))
 
     monkeypatch.setattr(
         bare_controller,
@@ -417,7 +421,7 @@ def test_refresh_sidecars_for_folder_starts_folder_maintenance(
     bare_controller.refreshSidecarsForFolder(7)
 
     # Assert
-    assert calls == [("refresh_sidecars", 7)]
+    assert calls == [("refresh_sidecars", 7, "C:/photos")]
 
 
 def test_scan_folder_runs_basic_incremental_workflow_without_ai(

@@ -203,6 +203,7 @@ class IndexerService:
         error_count = 0
         canceled = False
         scan_total = 0
+        discovered_sidecar_images: set[str] = set()
 
         if force:
             # Wipe only the rows that belong to the folders being rescanned.
@@ -233,7 +234,17 @@ class IndexerService:
         def _scan_producer() -> None:
             n = 0
             try:
-                for entry in self.finder.iter_images(folders, cancel_check=cancel_check):
+                def _record_sidecar(sidecar_path: Path) -> None:
+                    image_name = sidecar_path.name.removesuffix(".sidecar.json")
+                    discovered_sidecar_images.add(
+                        str(sidecar_path.with_name(image_name))
+                    )
+
+                for entry in self.finder.iter_images(
+                    folders,
+                    cancel_check=cancel_check,
+                    on_sidecar=_record_sidecar,
+                ):
                     if cancel_check and cancel_check():
                         return
                     while True:
@@ -461,8 +472,16 @@ class IndexerService:
                 if on_progress and total > 0:
                     on_progress(index, -total, Path(path))
 
+            existing_path_set = set(existing_paths)
+            discovered_paths = discovered_sidecar_images & existing_path_set
+            stale_paths = (
+                set(self.repo.get_sidecar_sync_image_paths())
+                & existing_path_set
+                - discovered_paths
+            )
+            sync_paths = sorted(discovered_paths | stale_paths)
             sync_result = self.sidecar_synchronizer.synchronize(
-                existing_paths,
+                sync_paths,
                 cancel_check=cancel_check,
                 on_progress=_sync_progress if on_progress else None,
             )
