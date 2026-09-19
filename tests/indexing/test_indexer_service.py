@@ -526,11 +526,17 @@ def test_build_index_calls_progress_callback(
     service.build_index([image_folder], on_progress=lambda c, t, p: progress_calls.append((c, t, p)))
 
     # Assert: pipeline emits (indexed, 0, path) per file while scanning, then
-    # the scan-complete sentinel (0, total, Path("")) once scanner finishes.
-    assert len(progress_calls) == 4
-    assert progress_calls[-1] == (0, 3, Path(""))   # scan-complete sentinel
-    assert [c for c, _, _ in progress_calls[:-1]] == [1, 2, 3]
-    assert all(t == 0 for _, t, _ in progress_calls[:-1])
+    # the scan-complete sentinel (0, total, Path("")) once scanner finishes,
+    # then one (index, -total, path) call per file during sidecar-tag sync
+    # (negative total distinguishes this phase — see IndexerService.build_index).
+    index_calls = progress_calls[:4]
+    sync_calls = progress_calls[4:]
+    assert index_calls[-1] == (0, 3, Path(""))   # scan-complete sentinel
+    assert [c for c, _, _ in index_calls[:-1]] == [1, 2, 3]
+    assert all(t == 0 for _, t, _ in index_calls[:-1])
+    assert len(sync_calls) == 3
+    assert [c for c, _, _ in sync_calls] == [1, 2, 3]
+    assert all(t == -3 for _, t, _ in sync_calls)
 
 
 # ── _resolve_captured_at ─────────────────────────────────────────────────────

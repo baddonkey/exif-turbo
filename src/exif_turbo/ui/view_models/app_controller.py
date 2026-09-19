@@ -5134,6 +5134,18 @@ class AppController(QObject):
                 self._scanning_folder_name, _("Indexing"), _("Cleaning up cache...")
             )
             return
+        # Negative total (excluding the -1/-1 sentinel above) marks the
+        # post-scan sidecar-tag sync phase — reported separately so the UI
+        # doesn't look frozen at "N / N" while it runs on large/slow scans.
+        if total < 0:
+            self._set_folder_operation_status(
+                self._scanning_folder_name,
+                _("Indexing"),
+                _("Synchronizing tags: {current} / {total}").format(
+                    current=current, total=-total
+                ),
+            )
+            return
         # current == 0 and total > 0 is the scan-complete sentinel emitted by
         # IndexerService once the directory walk finishes and the file count is
         # known.  Never throttle it — it fires exactly once per run and is the

@@ -445,9 +445,26 @@ class IndexerService:
         # Flush any remaining buffered writes before the cleanup phase.
         if not canceled:
             flush_batch()
+            # Commit now, before the (potentially slow, unbounded) sidecar sync
+            # phase below.  Without this, the newly-indexed rows stay in this
+            # connection's uncommitted transaction until the very end of
+            # build_index — invisible to any other connection (e.g. the
+            # ThumbWorker's own ImageIndexRepository).  On a large/slow scan
+            # that made thumbnail generation appear stuck re-scanning the same
+            # "missing" set every few seconds while indexing sat at 100% doing
+            # sidecar work with no progress reported.
+            self.repo.commit()
+
+            def _sync_progress(index: int, total: int, path: str) -> None:
+                # Negative total distinguishes this phase from normal indexing
+                # progress in the UI layer (see IndexWorker/_on_index_progress).
+                if on_progress and total > 0:
+                    on_progress(index, -total, Path(path))
+
             sync_result = self.sidecar_synchronizer.synchronize(
                 existing_paths,
                 cancel_check=cancel_check,
+                on_progress=_sync_progress if on_progress else None,
             )
             error_count += sync_result.error_count
             canceled = sync_result.canceled
