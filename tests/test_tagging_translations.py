@@ -57,8 +57,9 @@ _TAGGING_MESSAGES = (
         "Re-read sidecar tag files for indexed images in this folder",
         "Re-reading sidecar tags\u2026",
         "Refreshing sidecar tags\u2026",
-        "Refreshed sidecar tags for {count} images.",
-        "Refreshed tags for {count} images; {errors} sidecars had errors.",
+        "{folder}, {operation}: {detail}",
+        "{count} images refreshed",
+        "{count} images refreshed; {errors} sidecars had errors",
     }
 )
 

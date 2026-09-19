@@ -59,8 +59,11 @@ class AiScanWorker(QThread):
             repo.close()
             image_paths = image_paths_for_folder(stamps)
 
-            if not image_paths or self._cancel_event.is_set():
+            if self._cancel_event.is_set():
                 self.canceled.emit(0)
+                return
+            if not image_paths:
+                self.finished.emit(0, 0)
                 return
 
             # 2. Load (or create) the FAISS index.

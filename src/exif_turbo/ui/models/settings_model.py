@@ -62,17 +62,12 @@ _IS_MACOS_INTEL = sys.platform == "darwin" and platform.machine().lower() in {"x
 _AI_FEATURE_SUPPORTED = not _IS_MACOS_INTEL
 _AI_UNAVAILABLE_REASON = _("PyTorch is not available on macOS Intel for Python 3.13+.")
 
-# Provisional XLM-R CLIP cosine-similarity policy. Automatic acceptance remains
-# materially stricter than suggestions and is disabled by default.
+# Provisional XLM-R CLIP cosine-similarity policy for review-only proposals.
 _DEFAULT_PROPOSAL_THRESHOLD = 0.20
-_DEFAULT_AUTO_ACCEPT_THRESHOLD = 0.28
 _LEGACY_PROPOSAL_THRESHOLD = 0.24
-_LEGACY_AUTO_ACCEPT_THRESHOLD = 0.32
 _THRESHOLD_CALIBRATION = "openclip-xlm-r-b32-laion5b-v1"
 _MIN_THRESHOLD = 0.0
 _MAX_PROPOSAL_THRESHOLD = 0.99
-_MAX_THRESHOLD = 1.0
-_MIN_THRESHOLD_GAP = 0.01
 _VALID_TAG_EXPORT_MODES = {"canonical", "interface", "selected"}
 _LOCALE_PATTERN = re.compile(r"^[a-z]{2,3}(?:-[A-Z]{2})?$")
 _METADATA_LANGUAGE_CODES = ("en", "de", "fr", "it")
@@ -113,8 +108,6 @@ class SettingsModel(QObject):
         self._ai_enabled: bool = False
         self._tagging_enabled: bool = False
         self._proposal_threshold: float = _DEFAULT_PROPOSAL_THRESHOLD
-        self._auto_accept_enabled: bool = False
-        self._auto_accept_threshold: float = _DEFAULT_AUTO_ACCEPT_THRESHOLD
         self._show_raw_tag_candidates: bool = False
         self._threshold_calibration: str = _THRESHOLD_CALIBRATION
         self._metadata_language: str = "en"
@@ -210,51 +203,9 @@ class SettingsModel(QObject):
     @Slot(float)
     def setProposalThreshold(self, value: float) -> None:
         proposal = self._clamp(value, _MIN_THRESHOLD, _MAX_PROPOSAL_THRESHOLD)
-        auto_accept = max(
-            self._auto_accept_threshold,
-            min(_MAX_THRESHOLD, proposal + _MIN_THRESHOLD_GAP),
-        )
-        if (
-            self._proposal_threshold == proposal
-            and self._auto_accept_threshold == auto_accept
-        ):
+        if self._proposal_threshold == proposal:
             return
         self._proposal_threshold = proposal
-        self._auto_accept_threshold = auto_accept
-        self.taggingSettingsChanged.emit()
-        self._save()
-
-    @Property(bool, notify=taggingSettingsChanged)
-    def autoAcceptEnabled(self) -> bool:
-        return self._auto_accept_enabled
-
-    @property
-    def auto_accept_enabled(self) -> bool:
-        return self._auto_accept_enabled
-
-    @Slot(bool)
-    def setAutoAcceptEnabled(self, value: bool) -> None:
-        if self._auto_accept_enabled == value:
-            return
-        self._auto_accept_enabled = value
-        self.taggingSettingsChanged.emit()
-        self._save()
-
-    @Property(float, notify=taggingSettingsChanged)
-    def autoAcceptThreshold(self) -> float:
-        return self._auto_accept_threshold
-
-    @property
-    def auto_accept_threshold(self) -> float:
-        return self._auto_accept_threshold
-
-    @Slot(float)
-    def setAutoAcceptThreshold(self, value: float) -> None:
-        minimum = min(_MAX_THRESHOLD, self._proposal_threshold + _MIN_THRESHOLD_GAP)
-        threshold = self._clamp(value, minimum, _MAX_THRESHOLD)
-        if self._auto_accept_threshold == threshold:
-            return
-        self._auto_accept_threshold = threshold
         self.taggingSettingsChanged.emit()
         self._save()
 
@@ -570,23 +521,13 @@ class SettingsModel(QObject):
                     _MIN_THRESHOLD,
                     _MAX_PROPOSAL_THRESHOLD,
                 )
-            if isinstance(data.get("autoAcceptEnabled"), bool):
-                self._auto_accept_enabled = data["autoAcceptEnabled"]
-            if isinstance(data.get("autoAcceptThreshold"), (int, float)):
-                self._auto_accept_threshold = self._clamp(
-                    data["autoAcceptThreshold"],
-                    _MIN_THRESHOLD,
-                    _MAX_THRESHOLD,
-                )
             if isinstance(data.get("showRawTagCandidates"), bool):
                 self._show_raw_tag_candidates = data["showRawTagCandidates"]
             if (
                 migrate_thresholds
                 and self._proposal_threshold == _LEGACY_PROPOSAL_THRESHOLD
-                and self._auto_accept_threshold == _LEGACY_AUTO_ACCEPT_THRESHOLD
             ):
                 self._proposal_threshold = _DEFAULT_PROPOSAL_THRESHOLD
-                self._auto_accept_threshold = _DEFAULT_AUTO_ACCEPT_THRESHOLD
             if (
                 isinstance(data.get("metadataLanguage"), str)
                 and data["metadataLanguage"] in REQUIRED_VOCABULARY_LOCALES
@@ -602,13 +543,6 @@ class SettingsModel(QObject):
                         if _LOCALE_PATTERN.fullmatch(str(locale)) is not None
                     }
                 )
-            self._auto_accept_threshold = max(
-                self._auto_accept_threshold,
-                min(
-                    _MAX_THRESHOLD,
-                    self._proposal_threshold + _MIN_THRESHOLD_GAP,
-                ),
-            )
             if isinstance(data.get("jsonExportPretty"), bool):
                 self._json_pretty = data["jsonExportPretty"]
             if data.get("jsonExportIndentStyle") in _VALID_INDENT_STYLES:
@@ -639,8 +573,6 @@ class SettingsModel(QObject):
                         "taggingEnabled": self._tagging_enabled,
                         "proposalThreshold": self._proposal_threshold,
                         "proposalThresholdCalibration": self._threshold_calibration,
-                        "autoAcceptEnabled": self._auto_accept_enabled,
-                        "autoAcceptThreshold": self._auto_accept_threshold,
                         "showRawTagCandidates": self._show_raw_tag_candidates,
                         "metadataLanguage": self._metadata_language,
                         "tagExportMode": self._tag_export_mode,

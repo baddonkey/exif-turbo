@@ -336,6 +336,7 @@ ApplicationWindow {
     readonly property string _previewCurrentFile:  controller ? controller.previewCurrentFile : ""
     readonly property string _unlockError:         controller ? controller.unlockError        : ""
     readonly property string _statusText:          controller ? controller.statusText         : ""
+    readonly property string _statusFolderName:    controller ? controller.statusFolderName   : ""
     readonly property int    _indexCurrent:        controller ? controller.indexCurrent       : 0
     readonly property int    _indexTotal:          controller ? controller.indexTotal         : 0
     readonly property string _indexCurrentFile:    controller ? controller.indexCurrentFile   : ""
@@ -368,6 +369,11 @@ ApplicationWindow {
     readonly property string _searchError:        controller ? controller.searchError         : ""
     readonly property string _appVersion:         controller ? controller.appVersion          : ""
     readonly property bool   _isBusy:             controller ? controller.isBusy             : false
+    readonly property bool   _isRefreshingTags:   controller ? controller.isRefreshingTags   : false
+    readonly property bool   _isAiScanning:       controller ? controller.isAiScanning       : false
+    readonly property bool   _folderOperationActive: _isIndexing || _isBuildingThumbs
+                                                   || _isRefreshingTags || _isBuildingPreviews
+                                                   || _isAiScanning
     readonly property bool   _isSearching:        controller ? controller.isSearching        : false
     readonly property bool   _aiFeatureAvailable: settingsModel ? settingsModel.aiFeatureAvailable : false
     readonly property string _busyLabel:          controller ? controller.busyLabel          : ""
@@ -379,6 +385,7 @@ ApplicationWindow {
     readonly property double _dateFrom:   controller ? controller.dateFrom   : -1
     readonly property double _dateTo:     controller ? controller.dateTo     : -1
     readonly property string _yearCounts: controller ? controller.yearCounts : "[]"
+    readonly property bool _isLoadingYearCounts: controller ? controller.isLoadingYearCounts : false
     readonly property var    _years: {
         try { return JSON.parse(_yearCounts) } catch(e) { return [] }
     }
@@ -1102,7 +1109,7 @@ ApplicationWindow {
         id: busyOverlay
         anchors.fill: parent
         z: 60
-        visible: _isBusy
+        visible: _isBusy && !_isRefreshingTags
         color: Qt.rgba(0, 0, 0, 0.45)
 
         // Swallow all mouse/touch events so the UI is fully blocked
@@ -1875,8 +1882,9 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         readonly property bool _hasYears: root._years.length > 0
                         readonly property bool _filterActive: root._dateFrom !== -1 || root._dateTo !== -1
-                        implicitHeight: _hasYears ? contentRowLayout.implicitHeight + 8 : 0
-                        visible: _hasYears
+                        implicitHeight: (_hasYears || root._isLoadingYearCounts)
+                                        ? contentRowLayout.implicitHeight + 8 : 0
+                        visible: _hasYears || root._isLoadingYearCounts
                         color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.04)
 
                         // Tooltip for the whole filter strip (non-blocking).
@@ -1914,6 +1922,23 @@ ApplicationWindow {
                             id: contentRowLayout
                             anchors { top: parent.top; left: parent.left; right: parent.right; leftMargin: 8; rightMargin: 8; topMargin: 4 }
                             spacing: 8
+
+                            BusyIndicator {
+                                objectName: "timelineLoadingIndicator"
+                                Layout.alignment: Qt.AlignTop
+                                Layout.preferredWidth: 22
+                                Layout.preferredHeight: 22
+                                running: root._isLoadingYearCounts
+                                visible: running
+                            }
+
+                            Label {
+                                Layout.alignment: Qt.AlignTop
+                                visible: root._isLoadingYearCounts && !dateFilterRow._hasYears
+                                text: qsTr("Loading timeline...")
+                                font.pixelSize: 10
+                                opacity: 0.65
+                            }
 
                             // ── Mini histogram ────────────────────────────
                             Flow {
@@ -5046,42 +5071,39 @@ ApplicationWindow {
         visible: !_isLocked
         color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.06)
 
-        // Pulsing blue dot — visible only while indexing
-        Rectangle {
-            id: indexingDot
+        Label {
+            id: statusFolderLabel
             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-            width: 8; height: 8
-            radius: 4
-            color: root._accentColor
-            visible: _isIndexing
+            text: _statusFolderName
+            visible: text.length > 0
+            font.pixelSize: 11
+            font.weight: Font.DemiBold
+            color: _folderOperationActive
+                   ? root._accentColor
+                   : ((controller && controller.statusIsError)
+                      ? Material.color(Material.Red) : Material.foreground)
+            opacity: _folderOperationActive ? 1.0 : 0.7
 
             SequentialAnimation on opacity {
-                running: indexingDot.visible
+                running: statusFolderLabel.visible && _folderOperationActive
                 loops: Animation.Infinite
-                NumberAnimation { to: 0.25; duration: 800; easing.type: Easing.InOutSine }
+                NumberAnimation { to: 0.35; duration: 800; easing.type: Easing.InOutSine }
                 NumberAnimation { to: 1.0;  duration: 800; easing.type: Easing.InOutSine }
             }
         }
 
         Label {
-            id: indexingLabel
-            anchors { left: indexingDot.right; leftMargin: 5; verticalCenter: parent.verticalCenter }
-            text: qsTr("Indexing…")
-            visible: _isIndexing
-            font.pixelSize: 11
-            color: root._accentColor
-        }
-
-        Label {
             id: statusLabel
             anchors {
-                left: _isIndexing ? indexingLabel.right : parent.left
-                leftMargin: _isIndexing ? 10 : 12
+                left: statusFolderLabel.visible ? statusFolderLabel.right : parent.left
+                leftMargin: statusFolderLabel.visible ? 0 : 12
                 right: clearStatusButton.visible ? clearStatusButton.left : parent.right
                 rightMargin: clearStatusButton.visible ? 6 : 12
                 verticalCenter: parent.verticalCenter
             }
-            text: _statusText
+            text: statusFolderLabel.visible
+                ? _statusText.substring(_statusFolderName.length)
+                : _statusText
             elide: Text.ElideRight
             font.pixelSize: 11
             color: (controller && controller.statusIsError)

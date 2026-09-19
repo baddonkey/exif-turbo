@@ -137,6 +137,23 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Select Folder to Manage": "Ordner zur Verwaltung ausw\u00e4hlen",
         "Managed Folders": "Verwaltete Ordner",
         "Add Folder": "Ordner hinzuf\u00fcgen",
+        "Basic": "Einfach",
+        "Expert": "Experte",
+        "Scan": "Scannen",
+        "Scan All": "Alle scannen",
+        "Full Scan": "Vollst\u00e4ndiger Scan",
+        "AI Full Scan": "Vollst\u00e4ndiger AI-Scan",
+        "Cancel AI Full Scan": "Vollst\u00e4ndigen AI-Scan abbrechen",
+        "Cancel the running AI full scan":
+            "Den laufenden vollst\u00e4ndigen AI-Scan abbrechen",
+        "Rescan, refresh tags, build previews, and run AI-Scan":
+            "Neu indizieren, Tags aktualisieren, Vorschauen erstellen und AI-Scan ausf\u00fchren",
+        "Scan, refresh tags, build previews, and run AI-Scan for all enabled folders":
+            "Alle aktivierten Ordner scannen, Tags aktualisieren, Vorschauen erstellen und AI-Scan ausf\u00fchren",
+        "Full rescan, refresh tags, clear and rebuild previews, and run AI Full Rescan":
+            "Vollst\u00e4ndig neu indizieren, Tags aktualisieren, Vorschauen leeren und neu erstellen sowie AI vollst\u00e4ndig neu indizieren",
+        "Fully rescan, refresh tags, rebuild previews, and rebuild AI data for all enabled folders":
+            "Alle aktivierten Ordner vollst\u00e4ndig neu indizieren, Tags aktualisieren, Vorschauen und AI-Daten neu erstellen",
         "Rescan All": "Alle erneut indizieren",
         "Incrementally re-index all enabled folders": "Alle aktivierten Ordner inkrementell neu indizieren",
         "Full Rescan All": "Alle vollst\u00e4ndig neu indizieren",
@@ -166,6 +183,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Remove \"%1\" and delete all its indexed images from the database?":
             "\u201e%1\u201c entfernen und alle indizierten Bilder aus der Datenbank l\u00f6schen?",
         # ── Python status strings ────────────────────────────────────────────
+        "Wait for the current folder operation to finish.":
+            "Warten Sie, bis der aktuelle Ordnervorgang abgeschlossen ist.",
         "Folder already tracked: {}": "Ordner bereits verfolgt: {}",
         "Indexing {}\u2026": "Indizierung von {}\u2026",
         "Indexed {} images": "{} Bilder indiziert",
@@ -452,6 +471,23 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Select Folder to Manage": "S\u00e9lectionner un dossier \u00e0 g\u00e9rer",
         "Managed Folders": "Dossiers g\u00e9r\u00e9s",
         "Add Folder": "Ajouter un dossier",
+        "Basic": "Simple",
+        "Expert": "Expert",
+        "Scan": "Analyser",
+        "Scan All": "Tout analyser",
+        "Full Scan": "Analyse compl\u00e8te",
+        "AI Full Scan": "Analyse IA compl\u00e8te",
+        "Cancel AI Full Scan": "Annuler l\u2019analyse IA compl\u00e8te",
+        "Cancel the running AI full scan":
+            "Annuler l\u2019analyse IA compl\u00e8te en cours",
+        "Rescan, refresh tags, build previews, and run AI-Scan":
+            "R\u00e9indexer, actualiser les tags, cr\u00e9er les aper\u00e7us et lancer l'analyse IA",
+        "Scan, refresh tags, build previews, and run AI-Scan for all enabled folders":
+            "Analyser tous les dossiers activ\u00e9s, actualiser les tags, cr\u00e9er les aper\u00e7us et lancer l'analyse IA",
+        "Full rescan, refresh tags, clear and rebuild previews, and run AI Full Rescan":
+            "R\u00e9indexer compl\u00e8tement, actualiser les tags, effacer et recr\u00e9er les aper\u00e7us et reconstruire les donn\u00e9es IA",
+        "Fully rescan, refresh tags, rebuild previews, and rebuild AI data for all enabled folders":
+            "R\u00e9indexer compl\u00e8tement tous les dossiers activ\u00e9s, actualiser les tags et reconstruire les aper\u00e7us et donn\u00e9es IA",
         "Rescan All": "R\u00e9indexer tout",
         "Incrementally re-index all enabled folders":
             "R\u00e9indexer de mani\u00e8re incr\u00e9mentielle tous les dossiers activ\u00e9s",
@@ -482,6 +518,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Remove \"%1\" and delete all its indexed images from the database?":
             "Supprimer \u00ab\u00a0%1\u00a0\u00bb et toutes ses images index\u00e9es de la base de donn\u00e9es\u00a0?",
         # ── Python status strings ────────────────────────────────────────────
+        "Wait for the current folder operation to finish.":
+            "Attendez la fin de l'op\u00e9ration en cours sur le dossier.",
         "Folder already tracked: {}": "Dossier d\u00e9j\u00e0 suivi\u00a0: {}",
         "Indexing {}\u2026": "Indexation de {}\u2026",
         "Indexed {} images": "{} images index\u00e9es",
@@ -774,6 +812,23 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Select Folder to Manage": "Seleziona cartella da gestire",
         "Managed Folders": "Cartelle gestite",
         "Add Folder": "Aggiungi cartella",
+        "Basic": "Base",
+        "Expert": "Esperto",
+        "Scan": "Scansiona",
+        "Scan All": "Scansiona tutto",
+        "Full Scan": "Scansione completa",
+        "AI Full Scan": "Scansione AI completa",
+        "Cancel AI Full Scan": "Annulla scansione AI completa",
+        "Cancel the running AI full scan":
+            "Annulla la scansione AI completa in corso",
+        "Rescan, refresh tags, build previews, and run AI-Scan":
+            "Reindicizza, aggiorna i tag, crea le anteprime ed esegui AI-Scan",
+        "Scan, refresh tags, build previews, and run AI-Scan for all enabled folders":
+            "Scansiona tutte le cartelle abilitate, aggiorna i tag, crea le anteprime ed esegui AI-Scan",
+        "Full rescan, refresh tags, clear and rebuild previews, and run AI Full Rescan":
+            "Reindicizza completamente, aggiorna i tag, cancella e ricrea le anteprime ed esegui la reindicizzazione AI completa",
+        "Fully rescan, refresh tags, rebuild previews, and rebuild AI data for all enabled folders":
+            "Reindicizza completamente tutte le cartelle abilitate, aggiorna i tag e ricrea anteprime e dati AI",
         "Rescan All": "Reindicizza tutto",
         "Incrementally re-index all enabled folders":
             "Reindicizza in modo incrementale tutte le cartelle abilitate",
@@ -806,6 +861,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Remove \"%1\" and delete all its indexed images from the database?":
             "Rimuovere \u00ab%1\u00bb ed eliminare tutte le sue immagini indicizzate dal database?",
         # ── Python status strings ────────────────────────────────────────────
+        "Wait for the current folder operation to finish.":
+            "Attendi il completamento dell'operazione corrente sulla cartella.",
         "Folder already tracked: {}": "Cartella gi\u00e0 monitorata: {}",
         "Indexing {}\u2026": "Indicizzazione {}\u2026",
         "Indexed {} images": "{} immagini indicizzate",
@@ -1095,6 +1152,23 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Select Folder to Manage": "Tscherner cartella per manaschar",
         "Managed Folders": "Cartellas manasgiadas",
         "Add Folder": "Agiuntar cartella",
+        "Basic": "Simpel",
+        "Expert": "Expert",
+        "Scan": "Scannar",
+        "Scan All": "Scannar tut",
+        "Full Scan": "Scannada cumplaina",
+        "AI Full Scan": "Scannada AI cumplaina",
+        "Cancel AI Full Scan": "Interrumper la scannada AI cumplaina",
+        "Cancel the running AI full scan":
+            "Interrumper la scannada AI cumplaina en curs",
+        "Rescan, refresh tags, build previews, and run AI-Scan":
+            "Re-indexar, actualisar tags, crear previsualisaziuns ed exequir AI-Scan",
+        "Scan, refresh tags, build previews, and run AI-Scan for all enabled folders":
+            "Scannar tut las cartellas activadas, actualisar tags, crear previsualisaziuns ed exequir AI-Scan",
+        "Full rescan, refresh tags, clear and rebuild previews, and run AI Full Rescan":
+            "Re-indexar cumplettamain, actualisar tags, stizzar e recrear previsualisaziuns ed exequir ina re-indexaziun AI cumplaina",
+        "Fully rescan, refresh tags, rebuild previews, and rebuild AI data for all enabled folders":
+            "Re-indexar cumplettamain tut las cartellas activadas, actualisar tags e recrear previsualisaziuns e datas AI",
         "Rescan All": "Re-indexar tut",
         "Incrementally re-index all enabled folders":
             "Re-indexar incrementalmain tut las cartellas activadas",
@@ -1127,6 +1201,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Remove \"%1\" and delete all its indexed images from the database?":
             "Stizzar \u201e%1\u201c e tuts ses maletgs indexads da la banca da datas?",
         # ── Python status strings ────────────────────────────────────────────
+        "Wait for the current folder operation to finish.":
+            "Spetgai fin che l'operaziun actuala da la cartella saja terminada.",
         "Folder already tracked: {}": "Cartella gia trackata: {}",
         "Indexing {}\u2026": "Indexaziun {}\u2026",
         "Indexed {} images": "{} maletgs indexads",
@@ -1561,8 +1637,6 @@ TRANSLATIONS["de"].update({
     "%1 / %2 images": "%1 / %2 Bilder",
     "AI features are unavailable on this platform": "KI-Funktionen sind auf dieser Plattform nicht verf\u00fcgbar",
     "All accepted and custom tags on each target image will be replaced. This cannot be undone.": "Alle akzeptierten und benutzerdefinierten Tags auf jedem Zielbild werden ersetzt. Dies kann nicht r\u00fcckg\u00e4ngig gemacht werden.",
-    "Auto-accept proposals": "Vorschl\u00e4ge automatisch akzeptieren",
-    "Auto-accept threshold": "Schwellenwert f\u00fcr automatisches Akzeptieren",
     "Build Vectors": "Vektoren erstellen",
     "Choose Derivative Target Folder": "Zielordner f\u00fcr Derivate ausw\u00e4hlen",
     "Choose a folder in Browse first.": "W\u00e4hlen Sie zuerst einen Ordner unter Durchsuchen aus.",
@@ -1615,8 +1689,6 @@ TRANSLATIONS["fr"].update({
     "%1 / %2 images": "%1 / %2 images",
     "AI features are unavailable on this platform": "Les fonctionnalit\u00e9s d\u2019IA ne sont pas disponibles sur cette plateforme",
     "All accepted and custom tags on each target image will be replaced. This cannot be undone.": "Tous les tags accept\u00e9s et personnalis\u00e9s de chaque image cible seront remplac\u00e9s. Cette action est irr\u00e9versible.",
-    "Auto-accept proposals": "Accepter automatiquement les propositions",
-    "Auto-accept threshold": "Seuil d\u2019acceptation automatique",
     "Build Vectors": "Cr\u00e9er les vecteurs",
     "Choose Derivative Target Folder": "Choisir le dossier cible des d\u00e9riv\u00e9s",
     "Choose a folder in Browse first.": "Choisissez d\u2019abord un dossier dans Parcourir.",
@@ -1669,8 +1741,6 @@ TRANSLATIONS["it"].update({
     "%1 / %2 images": "%1 / %2 immagini",
     "AI features are unavailable on this platform": "Le funzionalit\u00e0 IA non sono disponibili su questa piattaforma",
     "All accepted and custom tags on each target image will be replaced. This cannot be undone.": "Tutti i tag accettati e personalizzati di ogni immagine di destinazione verranno sostituiti. Questa operazione non pu\u00f2 essere annullata.",
-    "Auto-accept proposals": "Accetta automaticamente le proposte",
-    "Auto-accept threshold": "Soglia di accettazione automatica",
     "Build Vectors": "Crea vettori",
     "Choose Derivative Target Folder": "Scegli la cartella di destinazione dei derivati",
     "Choose a folder in Browse first.": "Scegli prima una cartella in Sfoglia.",
@@ -1723,8 +1793,6 @@ TRANSLATIONS["rm"].update({
     "%1 / %2 images": "%1 / %2 maletgs",
     "AI features are unavailable on this platform": "Funcziuns dad IA n\u2019\u00e8n betg disponiblas sin questa plattafurma",
     "All accepted and custom tags on each target image will be replaced. This cannot be undone.": "Tut ils tags acceptads e persunalisads sin mintga maletg da destinaziun vegnan remplazzads. Quai na po betg vegnir revoc\u00e0.",
-    "Auto-accept proposals": "Acceptar propostas automaticamain",
-    "Auto-accept threshold": "Limita per acceptar automaticamain",
     "Build Vectors": "Crear vectors",
     "Choose Derivative Target Folder": "Tscherner la cartella da destinaziun per derivats",
     "Choose a folder in Browse first.": "Tscherna l\u2019emprim ina cartella en Sfegliar.",
@@ -1831,6 +1899,150 @@ TRANSLATIONS["rm"].update({
     "Tagging and Controlled Vocabulary": "Chavazzinaziun e vocabular controll\u00e0",
     "Wikidata vectors are current": "Ils vectors Wikidata \u00e8n actuals",
     "Wikidata vectors are required": "Ils vectors Wikidata \u00e8n necessaris",
+})
+
+TRANSLATIONS["de"].update({
+    "{built} / {total} built": "{built} / {total} erstellt",
+    "{cached} / {total} built": "{cached} / {total} erstellt",
+    "{count} images indexed": "{count} Bilder indiziert",
+    "{count} images indexed; {errors} skipped due to errors": "{count} Bilder indiziert; {errors} wegen Fehlern \u00fcbersprungen",
+    "{count} images refreshed": "{count} Bilder aktualisiert",
+    "{count} images refreshed; {errors} sidecars had errors": "{count} Bilder aktualisiert; {errors} Sidecars enthielten Fehler",
+    "{current} / {total}": "{current} / {total}",
+    "{current} found while scanning": "{current} beim Durchsuchen gefunden",
+    "{done} / {total}": "{done} / {total}",
+    "{folder}, {operation}: {detail}": "{folder}, {operation}: {detail}",
+    "{n} cached previews removed": "{n} zwischengespeicherte Vorschauen entfernt",
+    "{n} files could not be processed": "{n} Dateien konnten nicht verarbeitet werden",
+    "{n} images vectorised": "{n} Bilder vektorisiert",
+    "0 / {total}": "0 / {total}",
+    "AI-Scan": "KI-Scan",
+    "Cancel the running preview build first": "Brechen Sie zuerst die laufende Vorschauerstellung ab",
+    "Canceled": "Abgebrochen",
+    "Canceled after {built} / {total}": "Nach {built} / {total} abgebrochen",
+    "Canceled after {cached} / {total}": "Nach {cached} / {total} abgebrochen",
+    "Canceled after {count} images": "Nach {count} Bildern abgebrochen",
+    "Canceled after {n} images": "Nach {n} Bildern abgebrochen",
+    "Canceling...": "Wird abgebrochen...",
+    "Cleaning up cache...": "Cache wird bereinigt...",
+    "Failed: {error}": "Fehlgeschlagen: {error}",
+    "Folder not accessible": "Ordner nicht zug\u00e4nglich",
+    "Previews": "Vorschauen",
+    "Removed": "Entfernt",
+    "Starting...": "Wird gestartet...",
+    "Thumbnails": "Miniaturansichten",
+})
+
+TRANSLATIONS["fr"].update({
+    "{built} / {total} built": "{built} / {total} cr\u00e9\u00e9s",
+    "{cached} / {total} built": "{cached} / {total} cr\u00e9\u00e9s",
+    "{count} images indexed": "{count} images index\u00e9es",
+    "{count} images indexed; {errors} skipped due to errors": "{count} images index\u00e9es ; {errors} ignor\u00e9es en raison d'erreurs",
+    "{count} images refreshed": "{count} images actualis\u00e9es",
+    "{count} images refreshed; {errors} sidecars had errors": "{count} images actualis\u00e9es ; {errors} fichiers annexes comportaient des erreurs",
+    "{current} / {total}": "{current} / {total}",
+    "{current} found while scanning": "{current} trouv\u00e9es pendant l'analyse",
+    "{done} / {total}": "{done} / {total}",
+    "{folder}, {operation}: {detail}": "{folder}, {operation} : {detail}",
+    "{n} cached previews removed": "{n} aper\u00e7us en cache supprim\u00e9s",
+    "{n} files could not be processed": "{n} fichiers n'ont pas pu \u00eatre trait\u00e9s",
+    "{n} images vectorised": "{n} images vectoris\u00e9es",
+    "0 / {total}": "0 / {total}",
+    "AI-Scan": "Analyse IA",
+    "Cancel the running preview build first": "Annulez d'abord la cr\u00e9ation d'aper\u00e7us en cours",
+    "Canceled": "Annul\u00e9",
+    "Canceled after {built} / {total}": "Annul\u00e9 apr\u00e8s {built} / {total}",
+    "Canceled after {cached} / {total}": "Annul\u00e9 apr\u00e8s {cached} / {total}",
+    "Canceled after {count} images": "Annul\u00e9 apr\u00e8s {count} images",
+    "Canceled after {n} images": "Annul\u00e9 apr\u00e8s {n} images",
+    "Canceling...": "Annulation...",
+    "Cleaning up cache...": "Nettoyage du cache...",
+    "Failed: {error}": "\u00c9chec : {error}",
+    "Folder not accessible": "Dossier inaccessible",
+    "Previews": "Aper\u00e7us",
+    "Removed": "Supprim\u00e9",
+    "Starting...": "D\u00e9marrage...",
+    "Thumbnails": "Vignettes",
+})
+
+TRANSLATIONS["it"].update({
+    "{built} / {total} built": "{built} / {total} create",
+    "{cached} / {total} built": "{cached} / {total} create",
+    "{count} images indexed": "{count} immagini indicizzate",
+    "{count} images indexed; {errors} skipped due to errors": "{count} immagini indicizzate; {errors} ignorate a causa di errori",
+    "{count} images refreshed": "{count} immagini aggiornate",
+    "{count} images refreshed; {errors} sidecars had errors": "{count} immagini aggiornate; {errors} file sidecar contenevano errori",
+    "{current} / {total}": "{current} / {total}",
+    "{current} found while scanning": "{current} trovate durante la scansione",
+    "{done} / {total}": "{done} / {total}",
+    "{folder}, {operation}: {detail}": "{folder}, {operation}: {detail}",
+    "{n} cached previews removed": "{n} anteprime nella cache rimosse",
+    "{n} files could not be processed": "Impossibile elaborare {n} file",
+    "{n} images vectorised": "{n} immagini vettorializzate",
+    "0 / {total}": "0 / {total}",
+    "AI-Scan": "Scansione IA",
+    "Cancel the running preview build first": "Annulla prima la creazione delle anteprime in corso",
+    "Canceled": "Annullato",
+    "Canceled after {built} / {total}": "Annullato dopo {built} / {total}",
+    "Canceled after {cached} / {total}": "Annullato dopo {cached} / {total}",
+    "Canceled after {count} images": "Annullato dopo {count} immagini",
+    "Canceled after {n} images": "Annullato dopo {n} immagini",
+    "Canceling...": "Annullamento...",
+    "Cleaning up cache...": "Pulizia della cache...",
+    "Failed: {error}": "Operazione non riuscita: {error}",
+    "Folder not accessible": "Cartella non accessibile",
+    "Previews": "Anteprime",
+    "Removed": "Rimosso",
+    "Starting...": "Avvio...",
+    "Thumbnails": "Miniature",
+})
+
+TRANSLATIONS["rm"].update({
+    "{built} / {total} built": "{built} / {total} creads",
+    "{cached} / {total} built": "{cached} / {total} creads",
+    "{count} images indexed": "{count} maletgs indexads",
+    "{count} images indexed; {errors} skipped due to errors": "{count} maletgs indexads; {errors} sursiglids pervia d'errurs",
+    "{count} images refreshed": "{count} maletgs actualisads",
+    "{count} images refreshed; {errors} sidecars had errors": "{count} maletgs actualisads; {errors} sidecars avevan errurs",
+    "{current} / {total}": "{current} / {total}",
+    "{current} found while scanning": "{current} chattads durant la tschertga",
+    "{done} / {total}": "{done} / {total}",
+    "{folder}, {operation}: {detail}": "{folder}, {operation}: {detail}",
+    "{n} cached previews removed": "{n} previstas memorisadas allontanadas",
+    "{n} files could not be processed": "{n} datotecas na pudevan betg vegnir elavuradas",
+    "{n} images vectorised": "{n} maletgs vectorisads",
+    "0 / {total}": "0 / {total}",
+    "AI-Scan": "Scan IA",
+    "Cancel the running preview build first": "Interrumper l'emprim la creaziun da previstas activa",
+    "Canceled": "Interrut",
+    "Canceled after {built} / {total}": "Interrut suenter {built} / {total}",
+    "Canceled after {cached} / {total}": "Interrut suenter {cached} / {total}",
+    "Canceled after {count} images": "Interrut suenter {count} maletgs",
+    "Canceled after {n} images": "Interrut suenter {n} maletgs",
+    "Canceling...": "Vegn interrut...",
+    "Cleaning up cache...": "Cache vegn nettegi\u00e0...",
+    "Failed: {error}": "Betg reuss\u00ec: {error}",
+    "Folder not accessible": "Ordinatur betg accessibel",
+    "Previews": "Previstas",
+    "Removed": "Allontan\u00e0",
+    "Starting...": "Vegn inizi\u00e0...",
+    "Thumbnails": "Miniaturas",
+})
+
+TRANSLATIONS["de"].update({
+    "Loading timeline...": "Zeitleiste wird geladen...",
+})
+
+TRANSLATIONS["fr"].update({
+    "Loading timeline...": "Chargement de la chronologie...",
+})
+
+TRANSLATIONS["it"].update({
+    "Loading timeline...": "Caricamento della cronologia...",
+})
+
+TRANSLATIONS["rm"].update({
+    "Loading timeline...": "La cronologia vegn chargiada...",
 })
 
 

@@ -24,7 +24,8 @@ Output files:
     03_search_eagle.png      -- search results for "eagle"
     04_search_milky_way.png  -- search results for "milky way"
     05_browse_tab.png        -- browse tab (folder tree navigation)
-    06_indexed_folders.png   -- indexed folders management tab
+    06_indexed_folders_basic.png  -- indexed folders in Basic mode
+    06_indexed_folders_expert.png -- indexed folders in Expert mode
     07_folder_filter.png     -- folder filter popup (Schlösser, Sky, Wildlife)
     08_gps_location_bar.png  -- GPS location bar (image with GPS coordinates selected)
     09_ai_search_mode.png    -- Search tab in AI mode (EXIF/AI toggle + precision picker)
@@ -89,7 +90,8 @@ _STEPS = [
     "03_search_eagle",
     "04_search_milky_way",
     "05_browse_tab",
-    "06_indexed_folders",
+    "06_indexed_folders_basic",
+    "06_indexed_folders_expert",
     "07_folder_filter",
     "08_gps_location_bar",
     "10_tagging_drawer",
@@ -444,9 +446,21 @@ def _run_gui() -> None:
         print("  Indexed Folders tab -- waiting for view to settle ...")
         QTimer.singleShot(1000, step_5_folders)
 
-    # -- Step 5: indexed folders tab ------------------------------------------
+    # -- Step 5: indexed folders tab, Basic mode ------------------------------
     def step_5_folders() -> None:
-        _grab(root, "06_indexed_folders")
+        from PySide6.QtCore import QObject
+        folders_panel = root.findChild(QObject, "foldersPanel")
+        if folders_panel is None:
+            raise RuntimeError("FoldersPanel not found")
+        folders_panel.setProperty("expertMode", False)
+        _grab(root, "06_indexed_folders_basic")
+        folders_panel.setProperty("expertMode", True)
+        print("  Indexed Folders Expert mode -- waiting for view to settle ...")
+        QTimer.singleShot(750, step_5_folders_expert)
+
+    # -- Step 5a: indexed folders tab, Expert mode ----------------------------
+    def step_5_folders_expert() -> None:
+        _grab(root, "06_indexed_folders_expert")
         switch_tab(0)
         ctrl.search("")
         # Select Schlösser filter so its results appear in the background

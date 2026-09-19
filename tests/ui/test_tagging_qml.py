@@ -50,8 +50,6 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
         "setTaggingEnabled(",
         "setMetadataLanguage(",
         "setProposalThreshold(",
-        "setAutoAcceptEnabled(",
-        "setAutoAcceptThreshold(",
         "generateDerivativesForCurrentResults(",
         "generateDerivativesForMarked(",
         "cancelDerivativeExport(",
@@ -109,6 +107,8 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
     assert "removeConceptFromMarked" not in drawer_source
     assert "generateMarkedTagProposals" not in drawer_source
     assert "autoAcceptMarkedTagProposals" not in drawer_source
+    assert 'objectName: "autoAcceptSwitch"' not in source
+    assert 'objectName: "autoAcceptThresholdSpinBox"' not in source
     assert "generateDerivativesForMarked" not in drawer_source
     assert "function onCurrentResultRowChanged()" in drawer_source
     assert "onOpened: {" in drawer_source

@@ -41,7 +41,6 @@ class ProposalGenerationResult:
     image_path: str
     status: ProposalGenerationStatus
     proposals: tuple[TagProposal, ...] = ()
-    auto_candidates: tuple[TagProposal, ...] = ()
 
 
 @dataclass(frozen=True)

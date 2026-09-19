@@ -294,7 +294,11 @@ def test_app_controller_ai_full_rescan_starts_force_scan(tmp_path: Path) -> None
         FolderListModel(),
     )
     controller._folder_repo = SimpleNamespace(
-        get_by_id=lambda folder_id: SimpleNamespace(id=folder_id, path="C:/photos"),
+        get_by_id=lambda folder_id: SimpleNamespace(
+            id=folder_id,
+            path="C:/photos",
+            display_name="Holiday Photos",
+        ),
         close=lambda: None,
     )
     class _FakeSignal:
@@ -344,9 +348,43 @@ def test_app_controller_ai_full_rescan_starts_force_scan(tmp_path: Path) -> None
     assert worker.started is True
     assert controller.isAiScanning is True
     assert controller.aiScanFolderId == 7
+    assert controller.aiScanFolderName == "Holiday Photos"
     assert controller.aiScanIsFullRescan is True
 
     controller.close()
+
+
+@pytest.mark.parametrize(
+    ("handler_name", "arguments"),
+    (
+        ("_on_ai_scan_finished", (600, 0)),
+        ("_on_ai_scan_failed", ("model failed",)),
+        ("_on_ai_scan_canceled", (600,)),
+    ),
+)
+def test_app_controller_ai_scan_stops_resets_progress_to_idle(
+    bare_controller: AppController,
+    handler_name: str,
+    arguments: tuple[object, ...],
+) -> None:
+    # Arrange
+    bare_controller._is_ai_scanning = True
+    bare_controller._ai_scan_folder_id = 7
+    bare_controller._ai_scan_folder_name = "Holiday Photos"
+    bare_controller._ai_scan_is_full_rescan = True
+    bare_controller._ai_scan_current = 600
+    bare_controller._ai_scan_total = 1000
+    bare_controller._ai_scan_current_file = "C:/photos/image.jpg"
+
+    # Act
+    getattr(bare_controller, handler_name)(*arguments)
+
+    # Assert
+    assert bare_controller.isAiScanning is False
+    assert bare_controller.aiScanFolderName == ""
+    assert bare_controller.aiScanCurrent == 0
+    assert bare_controller.aiScanTotal == 0
+    assert bare_controller.aiScanCurrentFile == ""
 
 
 def test_refresh_sidecars_for_folder_starts_folder_maintenance(
@@ -380,6 +418,174 @@ def test_refresh_sidecars_for_folder_starts_folder_maintenance(
 
     # Assert
     assert calls == [("refresh_sidecars", 7)]
+
+
+def test_scan_folder_runs_basic_incremental_workflow_without_ai(
+    bare_controller: AppController,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    folder = SimpleNamespace(id=7, enabled=True)
+    bare_controller._folder_repo = SimpleNamespace(
+        get_by_id=lambda _folder_id: folder,
+        close=lambda: None,
+    )
+    calls: list[tuple[str, int, bool | None]] = []
+    monkeypatch.setattr(
+        bare_controller,
+        "_start_managed_folder_indexing",
+        lambda current, *, force: calls.append(("scan", current.id, force)),
+    )
+    monkeypatch.setattr(
+        bare_controller,
+        "refreshSidecarsForFolder",
+        lambda folder_id: calls.append(("tags", folder_id, None)),
+    )
+    monkeypatch.setattr(
+        bare_controller,
+        "buildPreviewsForFolder",
+        lambda folder_id: calls.append(("previews", folder_id, None)),
+    )
+
+    # Act
+    bare_controller.scanFolder(7)
+    bare_controller._advance_folder_workflow()
+    bare_controller._advance_folder_workflow()
+    bare_controller._advance_folder_workflow()
+
+    # Assert
+    assert calls == [
+        ("scan", 7, False),
+        ("tags", 7, None),
+        ("previews", 7, None),
+    ]
+    assert bare_controller.folderWorkflowRunning is False
+
+
+def test_full_rescan_all_runs_full_workflow_for_each_enabled_folder(
+    bare_controller: AppController,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    folders = {
+        folder_id: SimpleNamespace(id=folder_id, enabled=True)
+        for folder_id in (7, 8)
+    }
+    bare_controller._folder_repo = SimpleNamespace(
+        get_enabled_folders=lambda: list(folders.values()),
+        get_by_id=folders.get,
+        close=lambda: None,
+    )
+    bare_controller._ai_enabled = True
+    calls: list[tuple[str, int, bool | None]] = []
+    monkeypatch.setattr(
+        bare_controller,
+        "_start_managed_folder_indexing",
+        lambda current, *, force: calls.append(("scan", current.id, force)),
+    )
+    monkeypatch.setattr(
+        bare_controller,
+        "refreshSidecarsForFolder",
+        lambda folder_id: calls.append(("tags", folder_id, None)),
+    )
+    monkeypatch.setattr(
+        bare_controller,
+        "_clear_previews_for_folder",
+        lambda folder_id: (
+            calls.append(("clear", folder_id, None)) or True
+        ),
+    )
+    monkeypatch.setattr(
+        bare_controller,
+        "buildPreviewsForFolder",
+        lambda folder_id: calls.append(("previews", folder_id, None)),
+    )
+    monkeypatch.setattr(
+        bare_controller,
+        "_start_ai_scan",
+        lambda folder_id, *, force_rebuild: calls.append(
+            ("ai", folder_id, force_rebuild)
+        ),
+    )
+
+    # Act
+    bare_controller.fullRescanAllFolders()
+    for _stage in range(4):
+        bare_controller._advance_folder_workflow()
+
+    # Assert
+    assert calls == [
+        ("scan", 7, True),
+        ("tags", 7, None),
+        ("clear", 7, None),
+        ("previews", 7, None),
+        ("ai", 7, True),
+        ("scan", 8, True),
+    ]
+    assert bare_controller.folderWorkflowRunning is True
+
+
+def test_full_scan_preview_clear_failure_advances_to_next_folder(
+    bare_controller: AppController,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    folders = {
+        folder_id: SimpleNamespace(id=folder_id, enabled=True)
+        for folder_id in (7, 8)
+    }
+    bare_controller._folder_repo = SimpleNamespace(
+        get_by_id=folders.get,
+        close=lambda: None,
+    )
+    calls: list[tuple[int, bool]] = []
+    monkeypatch.setattr(
+        bare_controller,
+        "_start_managed_folder_indexing",
+        lambda folder, *, force: calls.append((folder.id, force)),
+    )
+    monkeypatch.setattr(
+        bare_controller,
+        "refreshSidecarsForFolder",
+        lambda _folder_id: None,
+    )
+    monkeypatch.setattr(
+        bare_controller,
+        "_clear_previews_for_folder",
+        lambda _folder_id: False,
+    )
+    bare_controller._queue_folder_workflows([7, 8], force=True)
+    bare_controller._advance_folder_workflow()
+
+    # Act
+    bare_controller._advance_folder_workflow()
+
+    # Assert
+    assert calls == [(7, True), (8, True)]
+    assert bare_controller._active_folder_workflow == (8, True)
+
+
+def test_remove_folder_during_indexing_is_rejected(
+    bare_controller: AppController,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    bare_controller._repo = SimpleNamespace(close=lambda: None)
+    bare_controller._folder_repo = SimpleNamespace(close=lambda: None)
+    bare_controller._is_indexing = True
+    calls: list[str] = []
+    monkeypatch.setattr(
+        bare_controller,
+        "_start_maintenance_op",
+        lambda *_args, **_kwargs: calls.append("remove"),
+    )
+
+    # Act
+    bare_controller.removeIndexedFolder(7)
+
+    # Assert
+    assert calls == []
+    assert "current folder operation" in bare_controller.statusText
 
 
 def test_ai_search_empty_without_filters_uses_normal_search_pipeline(
@@ -503,6 +709,170 @@ def test_clearStatus_with_status_message_clears_text_and_error_flag(
     # Assert
     assert bare_controller.statusText == ""
     assert bare_controller.statusIsError is False
+
+
+def test_folder_operation_status_formats_folder_operation_and_detail(
+    bare_controller: AppController,
+) -> None:
+    # Arrange / Act
+    bare_controller._set_folder_operation_status(
+        "Holiday Photos", "Previews", "2 / 2 built"
+    )
+
+    # Assert
+    assert bare_controller.statusText == "Holiday Photos, Previews: 2 / 2 built"
+    assert bare_controller.statusFolderName == "Holiday Photos"
+
+
+def test_regular_status_clears_folder_name_context(
+    bare_controller: AppController,
+) -> None:
+    # Arrange
+    bare_controller._set_folder_operation_status(
+        "Holiday Photos", "Previews", "2 / 2 built"
+    )
+
+    # Act
+    bare_controller._set_status("Folder list reloaded.")
+
+    # Assert
+    assert bare_controller.statusText == "Folder list reloaded."
+    assert bare_controller.statusFolderName == ""
+
+
+def test_year_counts_finished_latest_request_clears_loading_state(
+    bare_controller: AppController,
+) -> None:
+    # Arrange
+    bare_controller._year_counts_worker = SimpleNamespace(_serial=7)
+    bare_controller._year_counts_loading_serial = 7
+    bare_controller._set_year_counts_loading(True)
+
+    # Act
+    bare_controller._on_year_counts_finished()
+
+    # Assert
+    assert bare_controller.isLoadingYearCounts is False
+
+
+def test_year_counts_finished_with_queued_request_keeps_loading_state(
+    bare_controller: AppController,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    scheduled: list[int] = []
+    bare_controller._year_counts_worker = SimpleNamespace(_serial=7)
+    bare_controller._pending_year_counts_serial = 8
+    bare_controller._year_counts_loading_serial = 8
+    bare_controller._set_year_counts_loading(True)
+    monkeypatch.setattr(
+        bare_controller,
+        "_schedule_year_counts_reload",
+        lambda serial: scheduled.append(serial),
+    )
+
+    # Act
+    bare_controller._on_year_counts_finished()
+
+    # Assert
+    assert bare_controller.isLoadingYearCounts is True
+    assert scheduled == [8]
+
+
+def test_index_progress_with_folder_context_updates_standard_status(
+    bare_controller: AppController,
+) -> None:
+    # Arrange
+    bare_controller._scanning_folder_name = "Holiday Photos"
+    bare_controller._last_progress_update = 0.0
+
+    # Act
+    bare_controller._on_index_progress(2, 8, "C:/photos/two.jpg")
+
+    # Assert
+    assert bare_controller.statusText == "Holiday Photos, Indexing: 2 / 8"
+
+
+def test_preview_completion_with_folder_context_updates_standard_status(
+    bare_controller: AppController,
+) -> None:
+    # Arrange
+    bare_controller._preview_build_folder_id = 0
+    bare_controller._preview_build_folder_name = "Holiday Photos"
+
+    # Act
+    bare_controller._on_preview_done(2, 2)
+
+    # Assert
+    assert bare_controller.statusText == "Holiday Photos, Previews: 2 / 2 built"
+
+
+def test_ai_scan_failure_with_folder_context_updates_standard_error_status(
+    bare_controller: AppController,
+) -> None:
+    # Arrange
+    bare_controller._ai_scan_folder_name = "Holiday Photos"
+
+    # Act
+    bare_controller._on_ai_scan_failed("model unavailable")
+
+    # Assert
+    assert bare_controller.statusText == (
+        "Holiday Photos, AI-Scan: Failed: model unavailable"
+    )
+    assert bare_controller.statusIsError is True
+
+
+def test_maintenance_progress_with_folder_context_updates_standard_status(
+    bare_controller: AppController,
+) -> None:
+    # Arrange
+    bare_controller._maint_folder_name = "Holiday Photos"
+    bare_controller._maint_status_operation = "Refresh Tags"
+
+    # Act
+    bare_controller._on_maint_progress(4, 10, "Refreshing")
+
+    # Assert
+    assert bare_controller.statusText == "Holiday Photos, Refresh Tags: 4 / 10"
+    assert bare_controller.isRefreshingTags is False
+
+
+def test_refresh_tags_activity_exposes_folder_progress_and_current_file(
+    bare_controller: AppController,
+) -> None:
+    # Arrange
+    bare_controller._maint_operation = "refresh_sidecars"
+    bare_controller._maint_folder_name = "Holiday Photos"
+    bare_controller._maint_status_operation = "Refresh Tags"
+
+    # Act
+    bare_controller._on_maint_progress(4, 10, "C:/photos/four.jpg")
+
+    # Assert
+    assert bare_controller.isRefreshingTags is True
+    assert bare_controller.refreshTagsFolderName == "Holiday Photos"
+    assert bare_controller.refreshTagsCurrent == 4
+    assert bare_controller.refreshTagsTotal == 10
+    assert bare_controller.refreshTagsCurrentFile == "C:/photos/four.jpg"
+
+
+def test_cancel_refresh_tags_cancels_active_sidecar_worker(
+    bare_controller: AppController,
+) -> None:
+    # Arrange
+    canceled: list[bool] = []
+    bare_controller._maint_operation = "refresh_sidecars"
+    bare_controller._maint_worker = SimpleNamespace(
+        cancel=lambda: canceled.append(True)
+    )
+
+    # Act
+    bare_controller.cancelRefreshTags()
+    bare_controller._maint_worker = None
+
+    # Assert
+    assert canceled == [True]
 
 
 def test_search_with_existing_status_clears_notification(

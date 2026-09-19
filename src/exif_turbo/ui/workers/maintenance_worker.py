@@ -180,8 +180,8 @@ class MaintenanceWorker(QThread):
             self.cancelable.emit(True)
             self._emit_progress(0, total, message, force=True)
 
-            def on_progress(done: int, count: int, _path: str) -> None:
-                self._emit_progress(done, count, message)
+            def on_progress(done: int, count: int, path: str) -> None:
+                self._emit_progress(done, count, path)
 
             legacy_snapshot_path = tgm_snapshot_path(self._db_path)
             result = SidecarSynchronizer(

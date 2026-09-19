@@ -23,7 +23,8 @@ under the [CC0 1.0 Universal Public Domain
 Dedication](https://creativecommons.org/publicdomain/zero/1.0/). Attribution is
 provided voluntarily.
 
-`01_lock_screen.png`, `06_indexed_folders.png`, and `11_tagging_settings.png`
-contain no third-party photographs. Except for the photograph-bearing
-composites identified above, exif-turbo interface material is covered by the
-project's [MIT License](../../LICENSE).
+`01_lock_screen.png`, `06_indexed_folders_basic.png`,
+`06_indexed_folders_expert.png`, and `11_tagging_settings.png` contain no
+third-party photographs. Except for the photograph-bearing composites
+identified above, exif-turbo interface material is covered by the project's
+[MIT License](../../LICENSE).

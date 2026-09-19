@@ -122,26 +122,6 @@ ColumnLayout {
         }
         Label { text: "%"; opacity: 0.6 }
 
-        Label { text: qsTr("Auto-accept proposals"); font.pixelSize: 12 }
-        Switch {
-            id: autoAcceptSwitch
-            objectName: "autoAcceptSwitch"
-            checked: appSettings ? appSettings.autoAcceptEnabled : false
-            onToggled: appSettings.setAutoAcceptEnabled(checked)
-        }
-        Item { width: 1; height: 1 }
-
-        Label { text: qsTr("Auto-accept threshold"); font.pixelSize: 12; enabled: autoAcceptSwitch.checked }
-        SpinBox {
-            objectName: "autoAcceptThresholdSpinBox"
-            from: proposalThresholdSpinBox.value + 1
-            to: 100
-            value: appSettings ? Math.round(appSettings.autoAcceptThreshold * 100) : 32
-            editable: false
-            enabled: autoAcceptSwitch.checked
-            onValueModified: appSettings.setAutoAcceptThreshold(value / 100.0)
-        }
-        Label { text: "%"; opacity: 0.6; enabled: autoAcceptSwitch.checked }
     }
 
     RowLayout {

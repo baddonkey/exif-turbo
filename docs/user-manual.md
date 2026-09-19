@@ -138,7 +138,9 @@ application version, a brief description of the application, and the licence (MI
 
 Click the **Indexed Folders** tab to manage which directories are scanned.
 
-![Indexed Folders tab](screenshots/06_indexed_folders.png)
+![Indexed Folders tab in Basic mode](screenshots/06_indexed_folders_basic.png)
+
+*Screenshot contains no third-party photographs.*
 
 ### Adding a folder
 
@@ -148,19 +150,25 @@ Click the **Indexed Folders** tab to manage which directories are scanned.
 3. The folder is immediately queued for scanning — its status changes to **QUEUED**
    then **SCANNING** once the worker starts.
 
-The header bar also provides **Rescan All** (incrementally re-index all enabled
-folders) and **Full Rescan All** (force re-extract EXIF for every file in all
-enabled folders).
+The header bar provides a **Basic / Expert** mode selector. **Basic** is the
+default and keeps each folder row focused on the two complete workflows most
+people need. **Expert** exposes each operation separately. The selected mode
+applies to the Indexed Folders view only.
+
+The header **Scan** and **Full Scan** buttons run the corresponding complete
+workflow for every enabled folder, one folder at a time. The row buttons with
+the same labels apply only to that folder.
 
 ### Starting an index scan
 
-Click **Rescan** next to a folder (or **Rescan All** to queue all enabled folders).
-The folder status changes to **SCANNING** and the progress panel appears in the
-bottom-right corner of the tab.
+In Basic mode, click **Scan** next to a folder to incrementally re-index it,
+refresh its sidecar tags, build missing previews, and run an incremental AI scan
+when AI features are enabled. The folder status changes to **SCANNING** and the
+progress panel appears in the bottom-right corner of the tab.
 
-Use **Full Rescan** (or **Full Rescan All**) to force every file to be
-re-processed even if its modification time has not changed. This is useful after
-updating ExifTool or if you suspect the index is out of date.
+Use **Full Scan** to force every file to be re-processed, refresh sidecar tags,
+clear and rebuild previews, and rebuild AI data when enabled. This is useful
+after updating ExifTool or if you suspect any derived data is out of date.
 
 When rescanning a single folder, only the records belonging to that folder are
 updated or removed. Images indexed from other folders are not affected.
@@ -190,18 +198,22 @@ deleting it or its index data. Hovering the switch shows the tooltip *"Folder
 is included in search results"* (when on) or *"Folder is excluded from search
 results"* (when off).
 
-### Per-folder actions
+### Expert actions
 
-Each row exposes the following buttons on the right:
+Switch to **Expert** to expose the individual operations on each row:
+
+![Indexed Folders tab in Expert mode](screenshots/06_indexed_folders_expert.png)
+
+*Screenshot contains no third-party photographs.*
 
 | Button | Action |
 |--------|--------|
-| **Rescan** | Incrementally re-index this folder (only files whose modification time changed). |
-| **Full Rescan** | Force re-extract EXIF for every file in this folder. |
-| **Refresh Tags** | Force re-read sidecar tag files for this folder's indexed images without re-extracting EXIF or rebuilding previews. Newly added and changed sidecars update the tag/search cache; deleted sidecars remove their sidecar-managed tags from the cache. Malformed sidecars are left untouched and reported as errors. The operation shows progress and can be canceled. |
+| **Scan** | Incrementally re-index this folder (only files whose modification time changed). |
+| **Full Scan** | Force re-extract EXIF for every file in this folder. |
+| **Refresh Tags** | Force re-read sidecar tag files for this folder's indexed images without re-extracting EXIF or rebuilding previews. Newly added and changed sidecars update the tag/search cache; deleted sidecars remove their sidecar-managed tags from the cache. Malformed sidecars are left untouched and reported as errors. The operation appears in the persistent activity panel and can be canceled there. |
 | **Build Previews** | Render preview-cache JPEGs for every image in this folder. While the build is running on this folder the same button reads **Cancel Previews**. Disabled while another folder's preview build is in progress. |
 | **AI-Scan** | Build missing CLIP vector embeddings for this folder only (incremental semantic-index build). While running, the same button reads **Cancel AI-Scan**. Visible only when AI features are enabled in Settings. |
-| **AI Full Rescan** | Rebuild every CLIP vector embedding for this folder from scratch. While running, the same button reads **Cancel AI Full Rescan**. Visible only when AI features are enabled. |
+| **AI Full Scan** | Rebuild every CLIP vector embedding for this folder from scratch. While running, the same button reads **Cancel AI Full Scan**. Visible only when AI features are enabled. |
 | **Clear Previews** | Delete all cached previews for this folder. Hidden (kept invisible for layout alignment) when nothing is cached. A confirmation dialog asks *"Delete N cached preview(s) for \"<folder>\"? Thumbnails are unaffected."* |
 | **Remove** | Remove the folder and delete all its indexed images. A **Remove Folder** confirmation dialog asks before deletion. The original files on disk are not touched. The removal then runs on a background worker behind the modal **bulk-op progress overlay** (see [section 9](#9-marking-images--bulk-actions)), which reports each sub-step — *"Clearing preview cache…"* (cancelable, with an `X / Y` count) followed by *"Deleting index entries…"*. |
 
@@ -209,19 +221,25 @@ Each row exposes the following buttons on the right:
 
 ## 5. Indexing Progress
 
-While scanning, a non-blocking progress panel appears in the bottom-right corner
-of the **Indexed Folders** tab. The same panel is reused for the two background
-phases that may follow indexing — **thumbnail building** and **preview
-building** — so it can show three different titles:
+The bottom of the **Indexed Folders** tab contains five persistent activity
+columns: **Indexing**, **Thumbnails**, **Refresh Tags**, **Previews**, and
+**AI-Scan**. Each
+column shows its own operation independently. When a column is idle, its bar
+is empty and its status reads **Idle**.
 
 - **"Indexing folder N of M"** / **"Indexing"** — file-indexing phase. Shown
   while the indexer is processing folders from the queue.
-- **"Building Thumbnails"** — thumbnail-cache phase, started automatically
+- **"Thumbnails"** — thumbnail-cache phase, started automatically
   after indexing finishes.
-- **"Building Previews"** — preview-cache phase, started by the **Build
+- **"Refresh Tags"** — sidecar-tag refresh phase, started directly in Expert
+  mode or after indexing in a Basic workflow. It runs in this activity column
+  without opening the modal bulk-operation overlay.
+- **"Previews"** — preview-cache phase, started by the **Build
   Previews** button on a folder row.
+- **"AI-Scan"** — CLIP image-vector phase, started directly in Expert mode or
+  as the final phase of a Basic workflow.
 
-The panel always contains:
+Each active column contains:
 
 - **Progress bar** — indeterminate while the total is still being computed,
   then a percentage once it is known.
@@ -231,15 +249,19 @@ The panel always contains:
   phases before the total is known; then `n / total files` (indexing) or
   `n / total images` (thumbnails and previews).
 - **Current file** — name of the file being processed.
-- **Cancel button** — labelled **Cancel Indexing**, **Cancel Thumbnails**,
-  or **Cancel Previews** depending on the phase. While an indexing or thumbnail
+- **Cancel button** — stops that operation. While an indexing or thumbnail
   cancel is in flight the label changes to **"Canceling…"** and the button is
   disabled until the worker has stopped.
 
-Across **all tabs** the **status bar** at the very bottom of the window shows a
-pulsing blue dot and the text **Indexing…** during the file-indexing phase, so
-you always know the indexer is running even when you are working in Search or
-Browse. The dot is not shown during the separate thumbnail-building phase. The
+While AI scanning is active, the affected folder row also shows a spinner and
+an **AI-Scan** or **AI Full Scan** badge. Its normal folder status returns when
+the operation stops.
+
+Across **all tabs**, folder-operation messages in the **status bar** begin with
+the indexed folder name. While indexing, refreshing tags, building thumbnails
+or previews, or running AI-Scan, that folder name pulses in the accent colour
+so the active folder remains visible even when you are working in Search or
+Browse. There is no separate activity dot or redundant **Indexing…** label. The
 status bar also shows brief event messages to its right (such as "Indexed 42
 images" after a scan completes).
 
@@ -312,12 +334,12 @@ In AI mode:
   - **Broad**: most permissive (score >= 0.18)
 
 AI search requires CLIP vectors to exist for the target images.
-Build them with **AI-Scan** (or **AI Full Rescan**) in the
+Build them with **AI-Scan** (or **AI Full Scan**) in the
 **Indexed Folders** tab.
 
 AI vector indexes are tied to the model that created them. If the application
 reports missing or incompatible AI index metadata after an upgrade, run
-**AI Full Rescan** before using AI search or tag proposals.
+**AI Full Scan** before using AI search or tag proposals.
 
 Note for macOS Intel users: AI features are unavailable on macOS Intel (x86_64)
 targets and are shown disabled in **Settings**. This is due to PyTorch support
@@ -408,7 +430,8 @@ the next time you open the application.
 Whenever at least one indexed image has a known capture date a **year histogram**
 appears below the format chips in the Search tab. Each bar represents one
 calendar year; its height is proportional to the number of matching images taken
-in that year relative to the busiest year.
+in that year relative to the busiest year. A small spinner appears in this area
+while the timeline counts are loading or refreshing.
 
 | Action | Effect |
 |--------|--------|
@@ -911,7 +934,7 @@ model assets require network access on first AI use unless they are already
 cached; proposal generation then works offline. Proposals require:
 
 1. **AI Features** enabled in Settings. This is unavailable on macOS Intel.
-2. Image CLIP vectors built separately with **AI-Scan** or **AI Full Rescan**
+2. Image CLIP vectors built separately with **AI-Scan** or **AI Full Scan**
    for the relevant indexed folder.
 3. A separate Wikidata term-vector index built with **Build Vectors** under
   **Tagging and Controlled Vocabulary**.
@@ -919,7 +942,7 @@ cached; proposal generation then works offline. Proposals require:
 The image FAISS index remains image-only; Wikidata concepts are stored in a
 separate FAISS index. Image-vector schema v2 stores five views per image: the
 full image and four overlapping corner crops. Existing image indexes require
-**AI Full Rescan** because incremental AI-Scan cannot reconstruct missing crop
+**AI Full Scan** because incremental AI-Scan cannot reconstruct missing crop
 vectors. Term-vector schema v3 stores separate English, German, French, and
 Italian prompt rows for every QID. A bundled snapshot or prompt change makes
 term vectors stale and requires **Rebuild Vectors**, but does not require
@@ -930,11 +953,9 @@ views and the QID's four locale prompts. Proposal generation never scans
 original images implicitly: a missing image vector is reported as requiring
 an AI scan.
 
-The proposal threshold defaults to **0.20**. Optional auto-accept is off by
-default and uses the stricter **0.28** threshold. The auto-accept threshold is
-always kept at least 0.01 above the proposal threshold. Scores are model- and
-dataset-dependent similarities, not calibrated probabilities; review results
-before enabling automatic acceptance.
+The proposal threshold defaults to **0.20**. Scores are model- and
+dataset-dependent similarities, not calibrated probabilities. Proposals are
+always review-only and become tags only after explicit user acceptance.
 
 ### Tagged derivatives
 
@@ -983,7 +1004,7 @@ place, while undecided suggestions are discarded.
 thumbnail and preview caches, and the per-database controlled-term vector
 index. It deliberately does not traverse source folders to delete adjacent
 sidecars. The separate image AI index files are not explicitly deleted by
-reset; use **AI Full Rescan** after rebuilding the image index when a clean
+reset; use **AI Full Scan** after rebuilding the image index when a clean
 semantic index is required. Re-add and scan folders to synchronize sidecars,
 then rebuild Wikidata vectors before generating proposals.
 
@@ -1003,12 +1024,10 @@ checksum. There is no vocabulary or translation-pack installer. **Build
 Vectors** / **Rebuild Vectors** creates the separate CLIP Wikidata term index
 and is enabled only when AI is available and on.
 
-**Proposal threshold** defaults to 20%. **Auto-accept proposals** is off by
-default; when enabled, **Auto-accept threshold** defaults to 28% and must remain
-strictly above the proposal threshold. **Developer diagnostics: show raw top
-20 candidates** bypasses the proposal threshold only for manual proposal
-generation. It displays the winning image view and prompt locale alongside
-each decimal cosine-similarity score; auto-accept remains thresholded.
+**Proposal threshold** defaults to 20%. **Developer diagnostics: show raw top
+20 candidates** bypasses the proposal threshold for proposal generation. It
+displays the winning image view and prompt locale alongside each decimal
+cosine-similarity score. Every proposal still requires explicit acceptance.
 
 ### Worker Threads
 
@@ -1146,7 +1165,7 @@ button and shows a *"This step cannot be canceled…"* notice until it finishes.
 > folders and run a full rescan to rebuild the index. Adjacent tagging sidecars
 > are not deleted; rescanning imports them again. Rebuild Wikidata proposal
 > vectors when needed. Existing image AI vector files are not
-> explicitly deleted; run **AI Full Rescan** when you need to rebuild them.
+> explicitly deleted; run **AI Full Scan** when you need to rebuild them.
 
 The **Reset Database…** button is disabled while indexing is in progress.
 
@@ -1184,7 +1203,7 @@ database, any interrupted scans are automatically resumed.
 
 **Q: The search finds nothing even though I can see files in the folder.**  
 A: The files must be indexed first. Go to the **Indexed Folders** tab, add the
-folder, and click **Rescan**.
+folder, and click **Scan**.
 
 **Q: Does exif-turbo modify my image files?**  
 A: Tagging, indexing, and derivative generation never modify originals.

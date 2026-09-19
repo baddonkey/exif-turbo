@@ -12,8 +12,6 @@ from ..data.sidecar_sync_state import SidecarSyncState
 from ..models.image_sidecar import ImageSidecar, SidecarSource, normalize_free_tag
 from ..models.image_tag import ImageTag, SidecarValidationError, TagProvenance
 from ..models.tag_proposal import (
-    ProposalBatchResult,
-    ProposalGenerationResult,
     TagProposal,
     TagProposalStatus,
 )
@@ -415,29 +413,6 @@ class TaggingService:
             cancel_check=cancel_check,
         )
 
-    def accept_auto_candidates(
-        self,
-        batch: ProposalBatchResult,
-        *,
-        on_progress: BulkProgress | None = None,
-        cancel_check: Callable[[], bool] | None = None,
-    ) -> BulkTagResult:
-        results = batch.results
-        items: list[BulkTagItemResult] = []
-        for index, generation in enumerate(results):
-            if cancel_check is not None and cancel_check():
-                return BulkTagResult(tuple(items), True)
-            if not generation.auto_candidates:
-                item = BulkTagItemResult(
-                    generation.image_path, BulkTagStatus.SKIPPED
-                )
-            else:
-                item = self._apply_auto_generation(generation)
-            items.append(item)
-            if on_progress is not None:
-                on_progress(index + 1, len(results), item)
-        return BulkTagResult(tuple(items), batch.cancelled)
-
     def get_marked_tagging_state(
         self,
         *,
@@ -585,41 +560,6 @@ class TaggingService:
         if not isinstance(metadata, dict):
             return ()
         return extract_embedded_keyword_labels(metadata)
-
-    def _apply_auto_generation(
-        self,
-        generation: ProposalGenerationResult,
-    ) -> BulkTagItemResult:
-        try:
-            timestamp = self._timestamp()
-            proposals_by_concept = {
-                proposal.concept_id: proposal
-                for proposal in generation.auto_candidates
-            }
-            additions = tuple(
-                self._build_proposal_tag(proposal, timestamp)
-                for proposal in proposals_by_concept.values()
-            )
-            result = self._apply_tag_changes(
-                generation.image_path,
-                additions=additions,
-                accepted_proposals=tuple(
-                    (proposal.concept_id, proposal.provider_fingerprint)
-                    for proposal in proposals_by_concept.values()
-                ),
-            )
-            status = (
-                BulkTagStatus.SUCCEEDED if result.changed else BulkTagStatus.SKIPPED
-            )
-            return BulkTagItemResult(generation.image_path, status)
-        except TaggingConflictError as exc:
-            return BulkTagItemResult(
-                generation.image_path, BulkTagStatus.CONFLICTED, str(exc)
-            )
-        except Exception as exc:  # noqa: BLE001
-            return BulkTagItemResult(
-                generation.image_path, BulkTagStatus.FAILED, str(exc)
-            )
 
     def _bulk_apply(
         self,

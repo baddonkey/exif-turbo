@@ -887,7 +887,7 @@ def test_app_controller_raw_proposals_disable_score_threshold(
     )
 
     # Act
-    controller._start_proposals([str(image_path)], auto_accept=False)
+    controller._start_proposals([str(image_path)])
 
     # Assert
     assert FakeProposalWorker.instances[0].options["threshold"] == float("-inf")

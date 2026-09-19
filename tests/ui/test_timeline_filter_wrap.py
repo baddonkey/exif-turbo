@@ -276,3 +276,14 @@ class TestTimelineFilterWrap:
                 f"original single-row height ({_ORIGINAL_SINGLE_ROW_HEIGHT} px).  "
                 f"With {len(_YEARS)} year bars the Flow must wrap to multiple rows."
             )
+
+
+def test_timeline_filter_shows_loading_indicator_while_counts_load() -> None:
+    # Arrange
+    source = _QML_PATH.read_text(encoding="utf-8")
+
+    # Act / Assert
+    assert 'objectName: "timelineLoadingIndicator"' in source
+    assert "running: root._isLoadingYearCounts" in source
+    assert "visible: _hasYears || root._isLoadingYearCounts" in source
+    assert 'text: qsTr("Loading timeline...")' in source

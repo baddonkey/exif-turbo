@@ -108,6 +108,120 @@ def _switch_to_folders_tab(root: QObject, qtbot: QtBot) -> None:
     qtbot.wait(200)
 
 
+def test_folders_panel_defaults_to_basic_and_can_show_expert_actions(
+    qtbot: QtBot,
+    scrollbar_window: tuple[
+        AppController, FolderListModel, QQmlApplicationEngine, Path
+    ],
+) -> None:
+    # Arrange
+    _controller, _folder_model, engine, _tmp_path = scrollbar_window
+    root = engine.rootObjects()[0]
+    _switch_to_folders_tab(root, qtbot)
+    panel = root.findChild(QObject, "foldersPanel")
+    basic_mode = root.findChild(QObject, "basicModeButton")
+    expert_mode = root.findChild(QObject, "expertModeButton")
+    assert panel is not None
+    assert basic_mode is not None
+    assert expert_mode is not None
+
+    # Act / Assert
+    assert panel.property("expertMode") is False
+    assert basic_mode.property("checked") is True
+    assert expert_mode.property("checked") is False
+
+    panel.setProperty("expertMode", True)
+    qtbot.wait(50)
+
+    assert basic_mode.property("checked") is False
+    assert expert_mode.property("checked") is True
+
+
+def test_folder_row_ai_scan_running_has_folder_scoped_indicator() -> None:
+    # Arrange
+    source = (_QML_PATH.parent / "FoldersPanel.qml").read_text(encoding="utf-8")
+
+    # Act / Assert
+    assert "controller.aiScanFolderId === model.folderId" in source
+    assert "running: folderDelegate.aiScanningThisFolder" in source
+    assert 'qsTr("AI-Scan")' in source
+    assert 'qsTr("AI Full Scan")' in source
+    assert "folderDelegate.aiScanningThisFolder" in source
+
+
+def test_folders_progress_bars_idle_display_zero() -> None:
+    # Arrange
+    source = (_QML_PATH.parent / "FoldersPanel.qml").read_text(encoding="utf-8")
+
+    # Act / Assert
+    assert "value: active ? current : 0" in source
+
+
+def test_ai_scan_progress_matches_other_activity_blocks() -> None:
+    # Arrange
+    source = (_QML_PATH.parent / "FoldersPanel.qml").read_text(encoding="utf-8")
+
+    # Act / Assert
+    assert 'title: qsTr("AI-Scan")' in source
+    assert "progressPrefix: controller ? controller.aiScanFolderName" not in source
+    assert 'progressPrefix + ": "' in source
+    assert "elide: Text.ElideMiddle" in source
+
+
+def test_refresh_tags_uses_activity_block_without_busy_overlay() -> None:
+    # Arrange
+    folders_source = (_QML_PATH.parent / "FoldersPanel.qml").read_text(
+        encoding="utf-8"
+    )
+    main_source = _QML_PATH.read_text(encoding="utf-8")
+
+    # Act / Assert
+    assert 'title: qsTr("Refresh Tags")' in folders_source
+    assert "active: controller ? controller.isRefreshingTags" in folders_source
+    assert "current: controller ? controller.refreshTagsCurrent" in folders_source
+    assert "total: controller ? controller.refreshTagsTotal" in folders_source
+    assert "currentFile: controller ? controller.refreshTagsCurrentFile" in folders_source
+    assert "progressPrefix: controller ? controller.refreshTagsFolderName" in folders_source
+    assert "onCancelRequested: controller.cancelRefreshTags()" in folders_source
+    assert "visible: _isBusy && !_isRefreshingTags" in main_source
+
+
+def test_status_bar_glows_folder_name_without_indexing_bullet() -> None:
+    # Arrange
+    source = _QML_PATH.read_text(encoding="utf-8")
+
+    # Act / Assert
+    assert "id: indexingDot" not in source
+    assert "id: indexingLabel" not in source
+    assert "id: statusFolderLabel" in source
+    assert "text: _statusFolderName" in source
+    assert "running: statusFolderLabel.visible && _folderOperationActive" in source
+    assert "_statusText.substring(_statusFolderName.length)" in source
+
+
+def test_folders_basic_toolbar_uses_concise_scan_labels() -> None:
+    # Arrange
+    source = (_QML_PATH.parent / "FoldersPanel.qml").read_text(encoding="utf-8")
+
+    # Act / Assert
+    assert 'text: qsTr("Scan All")' not in source
+    assert 'text: qsTr("Full Rescan All")' not in source
+    assert 'text: qsTr("Scan")' in source
+    assert 'text: qsTr("Full Scan")' in source
+
+
+def test_folders_expert_actions_use_scan_labels() -> None:
+    # Arrange
+    source = (_QML_PATH.parent / "FoldersPanel.qml").read_text(encoding="utf-8")
+
+    # Act / Assert
+    assert 'text: qsTr("Rescan")' not in source
+    assert 'text: qsTr("Full Rescan")' not in source
+    assert 'qsTr("AI Full Rescan")' not in source
+    assert 'qsTr("AI Full Scan")' in source
+    assert 'qsTr("Cancel AI Full Scan")' in source
+
+
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 

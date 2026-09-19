@@ -199,8 +199,9 @@ Mandatory attribution per the license:
 Full per-file attribution is listed in
 [tests/sample-data/ATTRIBUTION.md](tests/sample-data/ATTRIBUTION.md).
 
-`01_lock_screen.png`, `06_indexed_folders.png`, and `11_tagging_settings.png`
-contain no third-party photographs.
+`01_lock_screen.png`, `06_indexed_folders_basic.png`,
+`06_indexed_folders_expert.png`, and `11_tagging_settings.png` contain no
+third-party photographs.
 
 ---
 
