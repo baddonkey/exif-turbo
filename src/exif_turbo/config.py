@@ -13,6 +13,11 @@ def default_db_path() -> Path:
     return Path.home() / ".exif-turbo" / "data" / "index" / "index.db"
 
 
+def gpu_runtime_dir(backend: str) -> Path:
+    """Shared (not per-database) directory for an on-demand GPU accelerator runtime."""
+    return Path.home() / ".exif-turbo" / "gpu-runtime" / backend
+
+
 def db_path_for_name(name: str) -> Path:
     """Resolve a bare database name to its canonical location.
 

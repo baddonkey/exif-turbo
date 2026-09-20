@@ -152,6 +152,8 @@ class AiIndexerService:
         """Encode text in bounded batches as normalized float32 rows."""
         import torch  # noqa: PLC0415
 
+        from ..utils import ai_device  # noqa: PLC0415
+
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
         if not texts:
@@ -160,15 +162,36 @@ class AiIndexerService:
         tokenizer = self._get_tokenizer()
         batches: list[np.ndarray] = []
         for start in range(0, len(texts), batch_size):
+            batch_texts = texts[start : start + batch_size]
+            # GPU acceleration is opt-in and off by default — when disabled this
+            # takes the exact same code path as before device support existed.
+            if ai_device.is_gpu_enabled():
+                device = ai_device.resolve_device()
+                if device.type != "cpu":
+                    try:
+                        self._model.to(device)  # type: ignore[union-attr]
+                        with torch.no_grad():
+                            tokens = tokenizer(batch_texts).to(device)
+                            encoded = self._model.encode_text(tokens).float()  # type: ignore[union-attr]
+                        vectors = np.asarray(encoded.cpu().numpy(), dtype=np.float32)
+                        batches.append(self._normalize_text_vectors(vectors))
+                        continue
+                    except Exception as exc:  # noqa: BLE001
+                        ai_device.mark_gpu_failed(exc)
+                        self._model.to("cpu")  # type: ignore[union-attr]
             with torch.no_grad():
-                tokens = tokenizer(texts[start : start + batch_size])
-                encoded = self._model.encode_text(tokens).float().numpy()  # type: ignore[union-attr]
-            vectors = np.asarray(encoded, dtype=np.float32)
-            norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-            if np.any(norms == 0):
-                raise ValueError("CLIP returned a zero-length text vector")
-            batches.append(np.ascontiguousarray(vectors / norms, dtype=np.float32))
+                tokens = tokenizer(batch_texts)
+                encoded = self._model.encode_text(tokens).float()  # type: ignore[union-attr]
+            vectors = np.asarray(encoded.numpy(), dtype=np.float32)
+            batches.append(self._normalize_text_vectors(vectors))
         return np.concatenate(batches, axis=0)
+
+    @staticmethod
+    def _normalize_text_vectors(vectors: "np.ndarray") -> "np.ndarray":
+        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+        if np.any(norms == 0):
+            raise ValueError("CLIP returned a zero-length text vector")
+        return np.ascontiguousarray(vectors / norms, dtype=np.float32)
 
     # ── Internals ─────────────────────────────────────────────────────────
 
@@ -314,6 +337,8 @@ class AiIndexerService:
         """Return view embeddings and image/row identities for *paths*."""
         import torch  # noqa: PLC0415
 
+        from ..utils import ai_device  # noqa: PLC0415
+
         tensors = []
         successful: List[str] = []
         row_paths: List[str] = []
@@ -347,6 +372,20 @@ class AiIndexerService:
         encoded_batches: list[np.ndarray] = []
         for start in range(0, len(tensors), _BATCH_SIZE):
             batch = torch.stack(tensors[start : start + _BATCH_SIZE])
+            # GPU acceleration is opt-in and off by default — when disabled this
+            # takes the exact same code path as before device support existed.
+            if ai_device.is_gpu_enabled():
+                device = ai_device.resolve_device()
+                if device.type != "cpu":
+                    try:
+                        self._model.to(device)  # type: ignore[union-attr]
+                        with torch.no_grad():
+                            vecs = self._model.encode_image(batch.to(device)).float()  # type: ignore[union-attr]
+                        encoded_batches.append(np.asarray(vecs.cpu().numpy(), dtype=np.float32))
+                        continue
+                    except Exception as exc:  # noqa: BLE001
+                        ai_device.mark_gpu_failed(exc)
+                        self._model.to("cpu")  # type: ignore[union-attr]
             with torch.no_grad():
                 vecs = self._model.encode_image(batch).float()  # type: ignore[union-attr]
             encoded_batches.append(np.asarray(vecs.numpy(), dtype=np.float32))
