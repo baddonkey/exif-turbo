@@ -14,13 +14,16 @@ Usage::
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 import gzip
 from io import BytesIO
 import logging
+import os
 from pathlib import Path
 import ssl
+import sys
 import threading
-from typing import TYPE_CHECKING, Callable, List, Optional, Tuple
+from typing import TYPE_CHECKING, Callable, Iterator, List, Optional, Tuple
 import urllib.request
 
 import numpy as np
@@ -53,7 +56,30 @@ _BPE_VOCAB_URLS = (
 _cached_model = None
 _cached_preprocess = None
 _cached_profile_identifier: str | None = None
+_cached_tokenizer = None
+_cached_tokenizer_profile_identifier: str | None = None
+_model_asset_lock = threading.RLock()
 _open_clip_import_lock = threading.Lock()
+
+
+@contextmanager
+def _huggingface_offline() -> Iterator[None]:
+    previous_value = os.environ.get("HF_HUB_OFFLINE")
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    constants = sys.modules.get("huggingface_hub.constants")
+    if constants is not None:
+        constants.HF_HUB_OFFLINE = True
+    try:
+        yield
+    finally:
+        if previous_value is None:
+            os.environ.pop("HF_HUB_OFFLINE", None)
+        else:
+            os.environ["HF_HUB_OFFLINE"] = previous_value
+        constants = sys.modules.get("huggingface_hub.constants")
+        if constants is not None:
+            effective_value = previous_value or os.environ.get("TRANSFORMERS_OFFLINE", "")
+            constants.HF_HUB_OFFLINE = effective_value.upper() in {"1", "ON", "YES", "TRUE"}
 
 
 class AiIndexerService:
@@ -199,46 +225,84 @@ class AiIndexerService:
         global _cached_model, _cached_preprocess, _cached_profile_identifier
         if self._model is not None:
             return
-        if _cached_model is not None and _cached_profile_identifier in (
-            None,
-            self._profile.identifier,
-        ):
-            self._model = _cached_model
-            self._preprocess = _cached_preprocess
-            return
-        import torch  # noqa: PLC0415
+        with _model_asset_lock:
+            if _cached_model is not None and _cached_profile_identifier in (
+                None,
+                self._profile.identifier,
+            ):
+                self._model = _cached_model
+                self._preprocess = _cached_preprocess
+                return
+            import torch  # noqa: F401, PLC0415
 
-        open_clip = self._import_open_clip()
-
-        _log.debug(
-            "Loading CLIP model %s (%s)",
-            self._profile.model_name,
-            self._profile.pretrained,
-        )
-        model_kwargs: dict[str, str] = {"cache_dir": str(self._cache_dir)}
-        if self._profile.pretrained:
-            model_kwargs["pretrained"] = self._profile.pretrained
-        model, _, preprocess = open_clip.create_model_and_transforms(
-            self._profile.model_ref,
-            **model_kwargs,
-        )
-        model.eval()
-        _cached_model = model
-        _cached_preprocess = preprocess
-        _cached_profile_identifier = self._profile.identifier
-        self._model = model
-        self._preprocess = preprocess
-        _log.debug("CLIP model loaded.")
+            _log.debug(
+                "Loading CLIP model %s (%s)",
+                self._profile.model_name,
+                self._profile.pretrained,
+            )
+            model_kwargs: dict[str, str] = {"cache_dir": str(self._cache_dir)}
+            if self._profile.pretrained:
+                model_kwargs["pretrained"] = self._profile.pretrained
+            try:
+                with _huggingface_offline():
+                    open_clip = self._import_open_clip()
+                    model, _, preprocess = open_clip.create_model_and_transforms(
+                        self._profile.model_ref,
+                        **model_kwargs,
+                    )
+            except (FileNotFoundError, OSError, RuntimeError, ValueError):
+                _log.info(
+                    "AI model %s is not fully cached; allowing one online acquisition",
+                    self._profile.identifier,
+                )
+                open_clip = self._import_open_clip()
+                model, _, preprocess = open_clip.create_model_and_transforms(
+                    self._profile.model_ref,
+                    **model_kwargs,
+                )
+            model.eval()
+            _cached_model = model
+            _cached_preprocess = preprocess
+            _cached_profile_identifier = self._profile.identifier
+            self._model = model
+            self._preprocess = preprocess
+            _log.debug("CLIP model loaded.")
 
     def _get_tokenizer(self):
+        global _cached_tokenizer, _cached_tokenizer_profile_identifier
         if self._tokenizer is not None:
             return self._tokenizer
 
-        open_clip = self._import_open_clip()
-        self._tokenizer = open_clip.get_tokenizer(
-            self._profile.model_ref,
-            cache_dir=str(self._cache_dir),
-        )
+        with _model_asset_lock:
+            if _cached_tokenizer is None or _cached_tokenizer_profile_identifier not in (
+                None,
+                self._profile.identifier,
+            ):
+                open_clip = self._import_open_clip()
+                tokenizer_kwargs = {"cache_dir": str(self._cache_dir)}
+                if self._profile.requires_legacy_bpe:
+                    _cached_tokenizer = open_clip.get_tokenizer(
+                        self._profile.model_ref,
+                        **tokenizer_kwargs,
+                    )
+                else:
+                    try:
+                        with _huggingface_offline():
+                            _cached_tokenizer = open_clip.get_tokenizer(
+                                self._profile.model_ref,
+                                **tokenizer_kwargs,
+                            )
+                    except (FileNotFoundError, OSError, RuntimeError, ValueError):
+                        _log.info(
+                            "AI tokenizer %s is not fully cached; allowing one online acquisition",
+                            self._profile.identifier,
+                        )
+                        _cached_tokenizer = open_clip.get_tokenizer(
+                            self._profile.model_ref,
+                            **tokenizer_kwargs,
+                        )
+                _cached_tokenizer_profile_identifier = self._profile.identifier
+            self._tokenizer = _cached_tokenizer
         return self._tokenizer
 
     def _import_open_clip(self):
