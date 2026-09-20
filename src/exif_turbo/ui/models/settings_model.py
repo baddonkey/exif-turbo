@@ -12,12 +12,14 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from exif_turbo.i18n import _, apply_language, available_languages, current_theme, set_theme
 from exif_turbo.models.vocabulary import REQUIRED_VOCABULARY_LOCALES
+from exif_turbo.utils import ai_device
 from exif_turbo.utils.json_export import JsonExportFormat
 from exif_turbo.utils.preview_render import (
     DEFAULT_VIPS_ALLOWED_EXTENSIONS,
     configure_vips_allowed_extensions,
     normalize_vips_extension,
 )
+from exif_turbo.ui.workers.gpu_backend_install_worker import GpuBackendInstallWorker
 
 
 _CPU_COUNT = os.cpu_count() or 2
@@ -92,6 +94,10 @@ class SettingsModel(QObject):
     libvipsExtensionsChanged = Signal()
     sortByChanged = Signal()
     aiEnabledChanged = Signal()
+    gpuAccelerationEnabledChanged = Signal()
+    gpuBackendStateChanged = Signal()
+    gpuInstallProgressChanged = Signal()
+    gpuInstallFinished = Signal(bool, str)
     taggingSettingsChanged = Signal()
     jsonExportFormatChanged = Signal()
 
@@ -106,6 +112,12 @@ class SettingsModel(QObject):
         self._libvips_extensions: List[str] = list(DEFAULT_VIPS_ALLOWED_EXTENSIONS)
         self._sort_by: str = _DEFAULT_SORT
         self._ai_enabled: bool = False
+        self._gpu_acceleration_enabled: bool = False
+        self._gpu_consent_backends: set[str] = set()
+        self._gpu_install_worker: GpuBackendInstallWorker | None = None
+        self._gpu_install_in_progress: bool = False
+        self._gpu_install_status: str = ""
+        self._gpu_restart_required: bool = False
         self._tagging_enabled: bool = False
         self._proposal_threshold: float = _DEFAULT_PROPOSAL_THRESHOLD
         self._show_raw_tag_candidates: bool = False
@@ -173,6 +185,136 @@ class SettingsModel(QObject):
         self._ai_enabled = value
         self.aiEnabledChanged.emit()
         self._save()
+
+    # ── GPU acceleration (experimental) ───────────────────────────────────────
+
+    @Property(bool, notify=gpuAccelerationEnabledChanged)
+    def gpuAccelerationEnabled(self) -> bool:
+        return self._gpu_acceleration_enabled
+
+    @Property(bool, notify=gpuBackendStateChanged)
+    def gpuBackendAvailable(self) -> bool:
+        return ai_device.is_gpu_available()
+
+    @Property(str, notify=gpuBackendStateChanged)
+    def gpuBackendName(self) -> str:
+        return ai_device.backend_display_name(ai_device.detect_backend())
+
+    @Property(bool, notify=gpuBackendStateChanged)
+    def gpuRuntimeInstalled(self) -> bool:
+        backend = ai_device.downloadable_backend_for_platform()
+        return bool(backend and ai_device.is_gpu_runtime_installed(backend))
+
+    @Property(str, notify=gpuBackendStateChanged)
+    def gpuRuntimeBackend(self) -> str:
+        return ai_device.downloadable_backend_for_platform() or ""
+
+    @Property(bool, notify=gpuBackendStateChanged)
+    def gpuRestartRequired(self) -> bool:
+        return self._gpu_restart_required
+
+    @Slot(bool)
+    def setGpuAccelerationEnabled(self, value: bool) -> None:
+        if value and not (_AI_FEATURE_SUPPORTED and ai_device.is_gpu_available()):
+            return
+        if self._gpu_acceleration_enabled == value:
+            return
+        self._gpu_acceleration_enabled = value
+        ai_device.set_gpu_enabled(value)
+        self.gpuAccelerationEnabledChanged.emit()
+        self._save()
+
+    @Slot(str)
+    def removeGpuRuntime(self, backend: str) -> None:
+        """Uninstall a downloaded accelerator runtime and revert to CPU."""
+        self.setGpuAccelerationEnabled(False)
+        ai_device.remove_gpu_runtime(backend)
+        self._gpu_restart_required = False
+        self._gpu_consent_backends.discard(backend)
+        self._save()
+        self.gpuBackendStateChanged.emit()
+
+    @Property(str, notify=gpuBackendStateChanged)
+    def gpuInstallableBackend(self) -> str:
+        """The one downloadable backend relevant to this OS, or "" if none
+
+        (e.g. macOS needs no download; MPS already works out of the box)."""
+        if ai_device.is_gpu_available() or self.gpuRuntimeInstalled:
+            return ""  # a no-download backend is already usable
+        return ai_device.downloadable_backend_for_platform() or ""
+
+    @Slot(str, result="QVariant")
+    def gpuBackendMetadata(self, backend: str):
+        """Consent-screen metadata for *backend* — name/source/size/license/risk."""
+        info = ai_device.backend_info(backend)
+        if info is None:
+            return {}
+        return {
+            "displayName": info.display_name,
+            "supported": info.supported,
+            "unsupportedReason": info.unsupported_reason,
+            "indexUrl": info.index_url,
+            "sizeMb": info.size_mb,
+            "licenseName": info.license_name,
+            "licenseUrl": info.license_url,
+            "riskNote": info.risk_note,
+        }
+
+    @Slot(str, result=bool)
+    def hasGpuConsent(self, backend: str) -> bool:
+        return backend in self._gpu_consent_backends
+
+    @Slot(str)
+    def recordGpuConsent(self, backend: str) -> None:
+        self._gpu_consent_backends.add(backend)
+        self._save()
+
+    @Property(bool, notify=gpuInstallProgressChanged)
+    def gpuInstallInProgress(self) -> bool:
+        return self._gpu_install_in_progress
+
+    @Property(str, notify=gpuInstallProgressChanged)
+    def gpuInstallStatusText(self) -> str:
+        return self._gpu_install_status
+
+    @Slot(str)
+    def startGpuBackendInstall(self, backend: str) -> None:
+        """Download and install *backend* in the background (requires consent)."""
+        if self._gpu_install_in_progress or backend not in self._gpu_consent_backends:
+            return
+        self._gpu_install_in_progress = True
+        self._gpu_install_status = _("Starting download...")
+        self.gpuInstallProgressChanged.emit()
+        worker = GpuBackendInstallWorker(backend)
+        worker.progress.connect(self._on_gpu_install_progress)
+        worker.finished.connect(lambda ok, msg: self._on_gpu_install_finished(backend, ok, msg))
+        self._gpu_install_worker = worker
+        worker.start()
+
+    @Slot()
+    def cancelGpuBackendInstall(self) -> None:
+        if self._gpu_install_worker is not None:
+            self._gpu_install_worker.cancel()
+
+    def _on_gpu_install_progress(self, line: str) -> None:
+        self._gpu_install_status = line
+        self.gpuInstallProgressChanged.emit()
+
+    def _on_gpu_install_finished(self, backend: str, success: bool, message: str) -> None:
+        self._gpu_install_in_progress = False
+        self._gpu_install_worker = None
+        if success:
+            # torch may already be imported in this process (module imports
+            # are cached) — the newly-downloaded build only takes effect after
+            # a restart, even though the files are now on disk and the
+            # setting will show as available on next launch.
+            self._gpu_restart_required = True
+            self._gpu_install_status = _("Installed — restart exif-turbo to enable GPU acceleration.")
+        else:
+            self._gpu_install_status = message
+        self.gpuInstallProgressChanged.emit()
+        self.gpuBackendStateChanged.emit()
+        self.gpuInstallFinished.emit(success, message)
 
     # ── Tagging ───────────────────────────────────────────────────────────────
 
@@ -513,6 +655,17 @@ class SettingsModel(QObject):
                 apply_language(self._language)
             if isinstance(data.get("aiEnabled"), bool):
                 self._ai_enabled = data["aiEnabled"] and _AI_FEATURE_SUPPORTED
+            if isinstance(data.get("gpuAccelerationEnabled"), bool):
+                self._gpu_acceleration_enabled = (
+                    data["gpuAccelerationEnabled"]
+                    and _AI_FEATURE_SUPPORTED
+                    and ai_device.is_gpu_available()
+                )
+            ai_device.set_gpu_enabled(self._gpu_acceleration_enabled)
+            if isinstance(data.get("gpuConsentBackends"), list):
+                self._gpu_consent_backends = {
+                    str(b) for b in data["gpuConsentBackends"] if isinstance(b, str)
+                }
             if isinstance(data.get("taggingEnabled"), bool):
                 self._tagging_enabled = data["taggingEnabled"]
             if isinstance(data.get("proposalThreshold"), (int, float)):
@@ -570,6 +723,8 @@ class SettingsModel(QObject):
                         "sortBy": self._sort_by,
                         "language": self._language,
                         "aiEnabled": self._ai_enabled,
+                        "gpuAccelerationEnabled": self._gpu_acceleration_enabled,
+                        "gpuConsentBackends": sorted(self._gpu_consent_backends),
                         "taggingEnabled": self._tagging_enabled,
                         "proposalThreshold": self._proposal_threshold,
                         "proposalThresholdCalibration": self._threshold_calibration,

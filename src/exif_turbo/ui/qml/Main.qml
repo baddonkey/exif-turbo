@@ -4820,6 +4820,100 @@ ApplicationWindow {
                         }
                     }
 
+                    // ── GPU Acceleration (experimental) ────────────────────
+                    Label {
+                        visible: _aiFeatureAvailable
+                        text: qsTr("GPU Acceleration (experimental)")
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                        Layout.bottomMargin: 6
+                    }
+                    Label {
+                        visible: _aiFeatureAvailable
+                        text: settingsModel && settingsModel.gpuBackendAvailable
+                            ? qsTr("Use %1 to speed up AI-Scan and AI search on this machine.").arg(settingsModel.gpuBackendName)
+                            : (settingsModel && settingsModel.gpuRestartRequired
+                                ? qsTr("GPU support is installed. Restart exif-turbo to enable it.")
+                            : (settingsModel && settingsModel.gpuRuntimeInstalled
+                                ? qsTr("The GPU runtime is installed, but no compatible GPU or driver was detected. AI features will run on CPU.")
+                            : (settingsModel && settingsModel.gpuInstallableBackend
+                                ? qsTr("No GPU backend installed yet — an optional download can add %1 support.")
+                                    .arg(settingsModel.gpuBackendMetadata(settingsModel.gpuInstallableBackend).displayName || "")
+                                : qsTr("No supported GPU backend detected on this machine — AI-Scan runs on CPU."))))
+                        font.pixelSize: 12
+                        opacity: 0.6
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 12
+                    }
+                    RowLayout {
+                        spacing: 12
+                        Layout.bottomMargin: 28
+                        visible: _aiFeatureAvailable && settingsModel && settingsModel.gpuBackendAvailable
+                        enabled: aiEnabledSwitch.checked
+
+                        Switch {
+                            id: gpuAccelerationSwitch
+                            checked: settingsModel ? settingsModel.gpuAccelerationEnabled : false
+                            onToggled: settingsModel.setGpuAccelerationEnabled(checked)
+                        }
+
+                        Label {
+                            text: gpuAccelerationSwitch.checked
+                                ? qsTr("Enabled (%1)").arg(settingsModel.gpuBackendName)
+                                : qsTr("Disabled")
+                            font.pixelSize: 13
+                            opacity: 0.8
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                    RowLayout {
+                        spacing: 12
+                        Layout.bottomMargin: 28
+                        visible: _aiFeatureAvailable && settingsModel && !settingsModel.gpuBackendAvailable
+                            && settingsModel.gpuInstallableBackend !== ""
+                        enabled: aiEnabledSwitch.checked
+
+                        Button {
+                            text: qsTr("Install %1...").arg(
+                                settingsModel ? (settingsModel.gpuBackendMetadata(settingsModel.gpuInstallableBackend).displayName || "") : "")
+                            onClicked: {
+                                gpuBackendConsentDialog.openFor(settingsModel.gpuInstallableBackend)
+                            }
+                        }
+                    }
+                    RowLayout {
+                        spacing: 12
+                        Layout.bottomMargin: 28
+                        visible: _aiFeatureAvailable && settingsModel && !settingsModel.gpuBackendAvailable
+                            && settingsModel.gpuRestartRequired
+
+                        Label {
+                            text: qsTr("Installed — restart required")
+                            font.pixelSize: 13
+                            opacity: 0.8
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                    RowLayout {
+                        spacing: 12
+                        Layout.bottomMargin: 28
+                        visible: _aiFeatureAvailable && settingsModel && !settingsModel.gpuBackendAvailable
+                            && settingsModel.gpuRuntimeInstalled && !settingsModel.gpuRestartRequired
+
+                        Label {
+                            text: qsTr("Installed — unavailable")
+                            font.pixelSize: 13
+                            opacity: 0.8
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        Button {
+                            text: qsTr("Remove GPU runtime")
+                            onClicked: settingsModel.removeGpuRuntime(settingsModel.gpuRuntimeBackend)
+                        }
+                    }
+
                     Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
 
                     // ── Change password ───────────────────────────────────
@@ -5063,6 +5157,12 @@ ApplicationWindow {
             wrapMode: Text.WordWrap
             text: passwordChangedDialog.message
         }
+    }
+
+    // ── GPU backend install consent dialog ────────────────────────────────
+    GpuBackendConsentDialog {
+        id: gpuBackendConsentDialog
+        appSettings: settingsModel
     }
 
     // ── Status bar ────────────────────────────────────────────────────────
