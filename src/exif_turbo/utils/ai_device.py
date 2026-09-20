@@ -144,13 +144,48 @@ def is_gpu_enabled() -> bool:
 def downloadable_backend_for_platform() -> Optional[str]:
     """Return the one downloadable backend key relevant to this OS, if any.
 
-    NVIDIA CUDA is offered on both Windows and Linux (AMD's Windows path,
-    DirectML, is unsupported — see module docstring). ROCm is Linux-only.
+    Only offer a vendor-specific runtime when its hardware can be detected.
+    AMD's Windows path, DirectML, is unsupported — see module docstring.
     macOS needs no downloadable backend (MPS already works out of the box).
     """
-    if _platform.system() == "Darwin":
+    system = _platform.system()
+    if system == "Darwin":
         return None
-    return "cuda"
+    if _has_nvidia_gpu():
+        return "cuda"
+    if system == "Linux" and _has_amd_gpu():
+        return "rocm"
+    return None
+
+
+def _has_nvidia_gpu() -> bool:
+    executable = shutil.which("nvidia-smi")
+    if executable is None:
+        return False
+    try:
+        result = subprocess.run(
+            [executable, "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def _has_amd_gpu() -> bool:
+    executable = shutil.which("lspci")
+    if executable is None:
+        return False
+    try:
+        result = subprocess.run(
+            [executable], capture_output=True, text=True, timeout=5,
+        )
+    except OSError:
+        return False
+    output = result.stdout.lower()
+    return result.returncode == 0 and "amd" in output and "vga" in output
 
 
 def _ensure_runtime_on_path() -> None:
@@ -259,15 +294,30 @@ def remove_gpu_runtime(backend: str) -> None:
 
 
 def _pip_available() -> bool:
+    command = _python_command()
+    if command is None:
+        return False
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "pip", "--version"],
+            [*command, "-m", "pip", "--version"],
             capture_output=True,
             timeout=15,
         )
         return result.returncode == 0
     except Exception:  # noqa: BLE001
         return False
+
+
+def _python_command() -> Optional[list[str]]:
+    """Return a command that can run pip outside a frozen application."""
+    if not getattr(sys, "frozen", False):
+        return [sys.executable]
+    for executable_name in ("python", "python3"):
+        executable = shutil.which(executable_name)
+        if executable is not None:
+            return [executable]
+    launcher = shutil.which("py")
+    return [launcher, "-3"] if launcher is not None else None
 
 
 def install_gpu_backend(
@@ -293,7 +343,7 @@ def install_gpu_backend(
         return False, info.unsupported_reason or f"Backend '{backend}' is not supported."
     if not _pip_available():
         return False, (
-            "pip is not available in this Python environment — cannot "
+            "A Python interpreter with pip is not available — cannot "
             "install GPU packages automatically. This is a known limitation "
             "of frozen desktop builds; see project plan."
         )
@@ -305,8 +355,12 @@ def install_gpu_backend(
         tempfile.mkdtemp(prefix=f".{backend}-install-", dir=str(parent_dir))
     )
 
+    python_command = _python_command()
+    if python_command is None:
+        shutil.rmtree(staging_dir, ignore_errors=True)
+        return False, "A Python interpreter with pip is not available."
     cmd = [
-        sys.executable, "-m", "pip", "install",
+        *python_command, "-m", "pip", "install",
         "--target", str(staging_dir),
         "--index-url", info.index_url,
         "--upgrade",

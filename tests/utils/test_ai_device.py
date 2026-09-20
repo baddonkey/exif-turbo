@@ -158,9 +158,52 @@ def test_downloadable_backend_for_platform_is_cuda_on_windows(
 ) -> None:
     # Arrange
     monkeypatch.setattr(ai_device._platform, "system", lambda: "Windows")
+    monkeypatch.setattr(ai_device, "_has_nvidia_gpu", lambda: True)
 
     # Act / Assert
     assert ai_device.downloadable_backend_for_platform() == "cuda"
+
+
+def test_downloadable_backend_for_platform_is_none_on_windows_without_nvidia(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    monkeypatch.setattr(ai_device._platform, "system", lambda: "Windows")
+    monkeypatch.setattr(ai_device, "_has_nvidia_gpu", lambda: False)
+
+    # Act / Assert
+    assert ai_device.downloadable_backend_for_platform() is None
+
+
+def test_python_command_uses_external_interpreter_when_frozen(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    monkeypatch.setattr(ai_device.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(
+        ai_device.shutil, "which",
+        lambda name: "C:/Python/python.exe" if name == "python" else None,
+    )
+
+    # Act
+    command = ai_device._python_command()
+
+    # Assert
+    assert command == ["C:/Python/python.exe"]
+
+
+def test_python_command_is_none_for_frozen_app_without_python(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    monkeypatch.setattr(ai_device.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(ai_device.shutil, "which", lambda _name: None)
+
+    # Act
+    command = ai_device._python_command()
+
+    # Assert
+    assert command is None
 
 
 def test_install_gpu_backend_rejects_unsupported_backend() -> None:
