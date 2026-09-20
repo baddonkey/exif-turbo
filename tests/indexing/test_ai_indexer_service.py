@@ -5,6 +5,7 @@ import builtins
 from contextlib import nullcontext
 import gzip
 from io import BytesIO
+import os
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -489,6 +490,58 @@ def test_ai_indexer_service_encode_texts_batches_and_normalizes_float32(
     assert service._tokenizer.call_count == 2
 
 
+def test_ai_indexer_service_encode_text_reuses_tokenizer_across_services(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    first_service = AiIndexerService(repo)
+    second_service = AiIndexerService(repo)
+    fake_model = MagicMock()
+    fake_model.encode_text.return_value = _FakeTensor(_fake_vec().reshape(1, -1))
+    fake_tokenizer = MagicMock(return_value="TOKENS")
+    offline_values: list[str | None] = []
+
+    def _get_tokenizer(*args, **kwargs):  # type: ignore[no-untyped-def]
+        offline_values.append(os.environ.get("HF_HUB_OFFLINE"))
+        return fake_tokenizer
+
+    fake_open_clip = SimpleNamespace(
+        get_tokenizer=MagicMock(side_effect=_get_tokenizer),
+    )
+    monkeypatch.setitem(sys.modules, "open_clip", fake_open_clip)
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(no_grad=nullcontext))
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_model",
+        fake_model,
+    )
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_preprocess",
+        MagicMock(),
+    )
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_tokenizer",
+        None,
+    )
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_tokenizer_profile_identifier",
+        None,
+    )
+
+    # Act
+    first_service.encode_text("forest")
+    second_service.encode_text("mountain")
+
+    # Assert
+    fake_open_clip.get_tokenizer.assert_called_once_with(
+        DEFAULT_AI_MODEL_PROFILE.model_ref,
+        cache_dir=str(tmp_path / "open_clip"),
+    )
+    assert offline_values == ["1"]
+    assert "HF_HUB_OFFLINE" not in os.environ
+
+
 def test_ai_indexer_service_model_load_uses_repo_storage_cache_dir(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -500,10 +553,14 @@ def test_ai_indexer_service_model_load_uses_repo_storage_cache_dir(
     fake_model = MagicMock()
     fake_model.eval = MagicMock()
     fake_preprocess = MagicMock()
+    offline_values: list[str | None] = []
+
+    def _create_model(*args, **kwargs):  # type: ignore[no-untyped-def]
+        offline_values.append(os.environ.get("HF_HUB_OFFLINE"))
+        return fake_model, MagicMock(), fake_preprocess
+
     fake_open_clip = SimpleNamespace(
-        create_model_and_transforms=MagicMock(
-            return_value=(fake_model, MagicMock(), fake_preprocess)
-        )
+        create_model_and_transforms=MagicMock(side_effect=_create_model)
     )
 
     monkeypatch.setitem(sys.modules, "open_clip", fake_open_clip)
@@ -528,6 +585,8 @@ def test_ai_indexer_service_model_load_uses_repo_storage_cache_dir(
     assert fake_open_clip.create_model_and_transforms.call_args.kwargs["cache_dir"] == str(
         tmp_path / "open_clip"
     )
+    assert offline_values == ["1"]
+    assert "HF_HUB_OFFLINE" not in os.environ
 
 
 def test_ai_indexer_service_model_load_imports_open_clip_with_user_bpe_fallback(
