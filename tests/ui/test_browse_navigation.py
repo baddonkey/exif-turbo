@@ -1135,6 +1135,40 @@ def browse_navigation_window(
 
 
 class TestBrowseNavigationQml:
+    def test_search_to_browse_scrolls_selected_folder_into_view(
+        self,
+        qtbot: QtBot,
+        browse_navigation_window: tuple[AppController, SearchListModel, QQmlApplicationEngine, object],
+    ) -> None:
+        # Arrange — load a long folder tree, leave it scrolled at the top, and
+        # select a folder that is initially below the visible viewport.
+        controller, _, _, root = browse_navigation_window
+        tab_bar = root.findChild(QQuickItem, "mainTabBar")
+        tree = root.findChild(QQuickItem, "browseTreeList")
+        assert tab_bar is not None
+        assert tree is not None
+
+        folder_tree = [
+            {"path": f"/folder_{index}", "name": f"folder_{index}", "depth": 0, "count": 1}
+            for index in range(80)
+        ]
+        controller._folder_tree = json.dumps(folder_tree)  # type: ignore[attr-defined]
+        controller._folder_tree_dirty = False  # type: ignore[attr-defined]
+        controller.folderTreeChanged.emit()
+        tab_bar.setProperty("currentIndex", 1)
+        qtbot.wait(100)
+        tree.setProperty("contentY", 0.0)
+        target_path = "/folder_75"
+
+        # Act — this is the same folder-selection signal emitted by
+        # controller.browseFolder() during Search -> Browse navigation.
+        controller._folder_filter = target_path  # type: ignore[attr-defined]
+        controller.folderFilterChanged.emit()
+        qtbot.wait(100)
+
+        # Assert — the selected folder is brought into the visible tree.
+        assert float(tree.property("contentY")) > 0.0
+
     def test_entering_browse_tab_does_not_start_blocking_folder_reload(
         self,
         qtbot: QtBot,
