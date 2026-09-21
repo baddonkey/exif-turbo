@@ -203,6 +203,9 @@ ApplicationWindow {
         function onFolderTreeChanged() {
             root._scrollBrowseTreeToFolder()
         }
+        function onFolderFilterChanged() {
+            root._scrollBrowseTreeToFolder()
+        }
         // Called after every search finishes (Browse folder load or Search tab restore).
         // Called after every search finishes (Browse folder load or Search tab restore).
         function onLoadedResultsChanged() {
