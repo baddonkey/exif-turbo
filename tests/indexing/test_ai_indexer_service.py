@@ -589,6 +589,38 @@ def test_ai_indexer_service_model_load_uses_repo_storage_cache_dir(
     assert "HF_HUB_OFFLINE" not in os.environ
 
 
+def test_ai_indexer_service_model_load_routes_global_hf_cache_to_app_cache_dir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    import huggingface_hub.constants as hf_constants
+
+    repo = _make_repo(tmp_path)
+    service = AiIndexerService(repo)
+    original_cache = hf_constants.HF_HUB_CACHE
+    seen_caches: list[str] = []
+
+    def _create_model(*args, **kwargs):  # type: ignore[no-untyped-def]
+        seen_caches.append(hf_constants.HF_HUB_CACHE)
+        return MagicMock(), MagicMock(), MagicMock()
+
+    fake_open_clip = SimpleNamespace(
+        create_model_and_transforms=MagicMock(side_effect=_create_model)
+    )
+    monkeypatch.setitem(sys.modules, "open_clip", fake_open_clip)
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace())
+    monkeypatch.setattr("exif_turbo.indexing.ai_indexer_service._cached_model", None)
+    monkeypatch.setattr("exif_turbo.indexing.ai_indexer_service._cached_preprocess", None)
+
+    # Act
+    service._ensure_model_loaded()
+
+    # Assert
+    assert seen_caches == [str(tmp_path / "open_clip")]
+    assert hf_constants.HF_HUB_CACHE == original_cache
+
+
 def test_ai_indexer_service_model_load_imports_open_clip_with_user_bpe_fallback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

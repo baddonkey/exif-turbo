@@ -102,6 +102,70 @@ def test_detect_backend_unsupported_cuda_probe_returns_cpu_without_warning(
     assert caught == []
 
 
+def test_detect_backend_cuda_build_without_device_disables_stream_capture_probe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    def _crashing_probe() -> bool:
+        raise AssertionError("native CUDA query must not run without a device")
+
+    fake_cuda = SimpleNamespace(
+        is_available=lambda: False,
+        is_current_stream_capturing=_crashing_probe,
+    )
+    fake_torch = SimpleNamespace(
+        cuda=fake_cuda,
+        backends=SimpleNamespace(mps=None),
+        version=SimpleNamespace(cuda="13.0", hip=None),
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    # Act
+    backend = ai_device.detect_backend()
+
+    # Assert
+    assert backend == "cpu"
+    assert fake_cuda.is_current_stream_capturing() is False
+
+
+def test_ensure_runtime_on_path_without_nvidia_gpu_skips_cuda_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    (tmp_path / "cuda").mkdir()
+    (tmp_path / "cuda" / ".installed").write_text("")
+    monkeypatch.setattr(ai_device, "gpu_runtime_dir", lambda backend: tmp_path / backend)
+    monkeypatch.setattr(ai_device, "_has_nvidia_gpu", lambda: False)
+    monkeypatch.setattr(ai_device, "_paths_synced", False)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+
+    # Act
+    ai_device._ensure_runtime_on_path()
+
+    # Assert
+    assert str(tmp_path / "cuda") not in sys.path
+
+
+def test_ensure_runtime_on_path_with_nvidia_gpu_prepends_cuda_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    (tmp_path / "cuda").mkdir()
+    (tmp_path / "cuda" / ".installed").write_text("")
+    monkeypatch.setattr(ai_device, "gpu_runtime_dir", lambda backend: tmp_path / backend)
+    monkeypatch.setattr(ai_device, "_has_nvidia_gpu", lambda: True)
+    monkeypatch.setattr(ai_device, "_paths_synced", False)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+
+    # Act
+    ai_device._ensure_runtime_on_path()
+
+    # Assert
+    assert sys.path[0] == str(tmp_path / "cuda")
+
+
 def test_remove_gpu_runtime_is_a_noop_for_backends_that_are_never_downloaded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
