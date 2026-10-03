@@ -27,6 +27,20 @@ def _ensure_standard_streams() -> None:
 
 _ensure_standard_streams()
 
+
+def _preload_triton() -> None:
+    """Initialize Triton's LLVM before Linux WebEngine loads competing symbols."""
+    if not sys.platform.startswith("linux"):
+        return
+    try:
+        import triton._C.libtriton  # noqa: F401, PLC0415
+    except ModuleNotFoundError as exc:
+        if exc.name not in {"triton", "triton._C", "triton._C.libtriton"}:
+            raise
+
+
+_preload_triton()
+
 from exif_turbo.ui.app_main import main
 from exif_turbo.ui.models.exif_list_model import ExifListModel
 from exif_turbo.ui.models.search_list_model import SearchListModel
