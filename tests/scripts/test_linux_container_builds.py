@@ -33,3 +33,14 @@ def test_rpm_spec_explicitly_collects_qt_webengine_binary_payload() -> None:
     assert "collect_all('PySide6.QtWebEngineCore')" in source
     assert "collect_all('PySide6.QtWebEngineQuick')" in source
     assert "binaries=_wec_bins + _weq_bins" in source
+
+
+def test_torchvision_hook_collects_native_ops_extension() -> None:
+    # Arrange
+    hook_path = _REPO_ROOT / "hooks" / "hook-torchvision.py"
+
+    # Act
+    source = hook_path.read_text(encoding="utf-8")
+
+    # Assert
+    assert "torchvision._C" in source
