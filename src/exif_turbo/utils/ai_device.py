@@ -200,6 +200,12 @@ def _ensure_runtime_on_path() -> None:
     for backend in ("cuda", "rocm"):
         runtime_dir = gpu_runtime_dir(backend)
         if (runtime_dir / _INSTALLED_MARKER).is_file():
+            if backend == "cuda" and not _has_nvidia_gpu():
+                # A CUDA torch build without a usable NVIDIA driver crashes
+                # natively (access violation) in some CUDA queries, so keep
+                # using the bundled CPU torch instead.
+                _log.info("Ignoring installed CUDA runtime: no NVIDIA GPU detected")
+                continue
             path_str = str(runtime_dir)
             if path_str not in sys.path:
                 sys.path.insert(0, path_str)
@@ -219,6 +225,8 @@ def detect_backend() -> str:
             category=UserWarning,
         )
         cuda_available = torch.cuda.is_available()
+    if not cuda_available:
+        _disable_cuda_stream_capture_probe(torch)
     if cuda_available:
         # A ROCm-built torch also reports itself via torch.cuda.* (HIP is
         # exposed through the same CUDA-shaped API); disambiguate via
@@ -230,6 +238,21 @@ def detect_backend() -> str:
     if mps is not None and mps.is_available():
         return "mps"
     return "cpu"
+
+
+def _disable_cuda_stream_capture_probe(torch) -> None:  # type: ignore[no-untyped-def]
+    """Make ``torch.cuda.is_current_stream_capturing`` safe without a CUDA device.
+
+    ``transformers`` calls it on every XLM-R forward pass. On a CUDA torch
+    build whose driver/device is unusable it raises an access violation that
+    kills the process; with no usable device nothing can be capturing anyway.
+    """
+    version = getattr(torch, "version", None)
+    if not getattr(version, "cuda", None) and not getattr(version, "hip", None):
+        return
+    cuda = getattr(torch, "cuda", None)
+    if cuda is not None and hasattr(cuda, "is_current_stream_capturing"):
+        cuda.is_current_stream_capturing = lambda: False
 
 
 def resolve_device():

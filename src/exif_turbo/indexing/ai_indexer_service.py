@@ -82,6 +82,27 @@ def _huggingface_offline() -> Iterator[None]:
             constants.HF_HUB_OFFLINE = effective_value.upper() in {"1", "ON", "YES", "TRUE"}
 
 
+@contextmanager
+def _huggingface_cache(cache_dir: Path) -> Iterator[None]:
+    """Route Hugging Face downloads that ignore ``cache_dir`` into *cache_dir*.
+
+    OpenCLIP loads the XLM-R text-tower config via ``AutoConfig.from_pretrained``
+    without forwarding ``cache_dir``, so that file would otherwise land in the
+    global ``~/.cache/huggingface`` and be missing for offline loads.
+    """
+    try:
+        import huggingface_hub.constants as constants  # noqa: PLC0415
+    except ImportError:
+        yield
+        return
+    previous_value = constants.HF_HUB_CACHE
+    constants.HF_HUB_CACHE = str(cache_dir)
+    try:
+        yield
+    finally:
+        constants.HF_HUB_CACHE = previous_value
+
+
 class AiIndexerService:
     """Encode images with CLIP and persist their embeddings."""
 
@@ -244,7 +265,7 @@ class AiIndexerService:
             if self._profile.pretrained:
                 model_kwargs["pretrained"] = self._profile.pretrained
             try:
-                with _huggingface_offline():
+                with _huggingface_cache(self._cache_dir), _huggingface_offline():
                     open_clip = self._import_open_clip()
                     model, _, preprocess = open_clip.create_model_and_transforms(
                         self._profile.model_ref,
@@ -255,11 +276,12 @@ class AiIndexerService:
                     "AI model %s is not fully cached; allowing one online acquisition",
                     self._profile.identifier,
                 )
-                open_clip = self._import_open_clip()
-                model, _, preprocess = open_clip.create_model_and_transforms(
-                    self._profile.model_ref,
-                    **model_kwargs,
-                )
+                with _huggingface_cache(self._cache_dir):
+                    open_clip = self._import_open_clip()
+                    model, _, preprocess = open_clip.create_model_and_transforms(
+                        self._profile.model_ref,
+                        **model_kwargs,
+                    )
             model.eval()
             _cached_model = model
             _cached_preprocess = preprocess
@@ -287,7 +309,7 @@ class AiIndexerService:
                     )
                 else:
                     try:
-                        with _huggingface_offline():
+                        with _huggingface_cache(self._cache_dir), _huggingface_offline():
                             _cached_tokenizer = open_clip.get_tokenizer(
                                 self._profile.model_ref,
                                 **tokenizer_kwargs,
@@ -297,10 +319,11 @@ class AiIndexerService:
                             "AI tokenizer %s is not fully cached; allowing one online acquisition",
                             self._profile.identifier,
                         )
-                        _cached_tokenizer = open_clip.get_tokenizer(
-                            self._profile.model_ref,
-                            **tokenizer_kwargs,
-                        )
+                        with _huggingface_cache(self._cache_dir):
+                            _cached_tokenizer = open_clip.get_tokenizer(
+                                self._profile.model_ref,
+                                **tokenizer_kwargs,
+                            )
                 _cached_tokenizer_profile_identifier = self._profile.identifier
             self._tokenizer = _cached_tokenizer
         return self._tokenizer
