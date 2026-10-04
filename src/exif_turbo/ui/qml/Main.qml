@@ -1307,7 +1307,8 @@ ApplicationWindow {
     // ── Search tab ───────────────────────────────────────────────────────
     SplitView {
         id: mainSplit
-        anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; bottom: parent.bottom }
+        objectName: "searchContentViewport"
+        anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; rightMargin: taggingDrawer.width * taggingDrawer.position; bottom: parent.bottom }
         visible: !_isLocked && mainTabBar.currentIndex === 0
         orientation: Qt.Vertical
         handle: Rectangle {
@@ -3068,7 +3069,8 @@ ApplicationWindow {
     // ── Browse tab ───────────────────────────────────────────────────────
     SplitView {
         id: browseSplit
-        anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; bottom: parent.bottom }
+        objectName: "browseContentViewport"
+        anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; rightMargin: taggingDrawer.width * taggingDrawer.position; bottom: parent.bottom }
         visible: !_isLocked && mainTabBar.currentIndex === 1
         orientation: Qt.Horizontal
 
