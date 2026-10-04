@@ -30,7 +30,7 @@ These packages are required at runtime by the application.
 | [faiss-cpu](https://pypi.org/project/faiss-cpu/) | AI vector search index — stores and queries CLIP embeddings for AI-based image search using an inner-product FAISS index | MIT | https://github.com/facebookresearch/faiss |
 | [open-clip-torch](https://pypi.org/project/open-clip-torch/) | AI search and AI indexing — loads the CLIP model/tokenizer used to embed images and text; downloads its runtime cache into the per-database user folder under `~/.exif-turbo/data/<db-stem>/open_clip/` | MIT | https://github.com/mlfoundations/open_clip |
 | [transformers](https://pypi.org/project/transformers/) | Loads the XLM-R text encoder and tokenizer used by the multilingual OpenCLIP model | Apache-2.0 | https://github.com/huggingface/transformers |
-| [sentencepiece](https://pypi.org/project/sentencepiece/) | Tokenizes multilingual XLM-R text for AI search and controlled-vocabulary vector generation | Apache-2.0 | https://github.com/google/sentencepiece |
+| [sentencepiece](https://pypi.org/project/sentencepiece/) | Tokenizes multilingual XLM-R text for AI image search | Apache-2.0 | https://github.com/google/sentencepiece |
 
 The `pyvips-binary` wheel contains dynamically loaded, separate shared-library
 files built by [libvips-packaging](https://github.com/kleisauke/libvips-packaging).
@@ -50,36 +50,11 @@ AI use and cached in the per-database user folder under
 
 | Asset | Used for | License | URL |
 |-------|----------|---------|-----|
-| LAION CLIP ViT-B/32 XLM-R checkpoint and tokenizer (`laion/CLIP-ViT-B-32-xlm-roberta-base-laion5B-s13B-b90k`) | Multilingual image/text retrieval and controlled-vocabulary proposal vectors; trained with LAION-5B | MIT (model card declaration) | https://huggingface.co/laion/CLIP-ViT-B-32-xlm-roberta-base-laion5B-s13B-b90k |
+| LAION CLIP ViT-B/32 XLM-R checkpoint and tokenizer (`laion/CLIP-ViT-B-32-xlm-roberta-base-laion5B-s13B-b90k`) | Multilingual image/text retrieval for AI image search; trained with LAION-5B | MIT (model card declaration) | https://huggingface.co/laion/CLIP-ViT-B-32-xlm-roberta-base-laion5B-s13B-b90k |
 
 > **CLIP attribution:** The multilingual checkpoint is loaded through OpenCLIP
 > and its model card requests citation of OpenAI CLIP, OpenCLIP, and LAION-5B.
 > Runtime downloads are not bundled with exif-turbo.
-
----
-
-## Bundled Controlled Vocabulary
-
-exif-turbo bundles an offline, curated 8,339-concept visual subset of Wikidata:
-an 8,200-concept reviewed base plus 139 qualified concepts carrying Library of
-Congress TGM identifiers through Wikidata property `P5160`. It is not an
-exhaustive vocabulary. Every included concept carries intrinsic preferred
-labels and aliases for English, German, French, and Italian. Runtime tagging,
-FTS, export, and QID proposal lookup do not contact Wikidata and do not install
-a separate localization pack.
-
-| Asset | Used for | Terms / status | URL |
-|-------|----------|----------------|-----|
-| Curated Wikidata visual-concept snapshot (8,339-concept v2) | Bundled QIDs, categories, and `en/de/fr/it` preferred labels/aliases for offline controlled tagging and proposal vectors | CC0 1.0 | https://www.wikidata.org/ |
-
-The bundled artifact records source-dump and manifest SHA-256 checksums for
-reproducibility. Wikidata structured data is available under
-[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
-
-Library of Congress TGM parsers and repositories remain for legacy sidecars
-and maintenance tooling. No TGM snapshot or translation pack is installed by
-the current user interface; existing user-provided legacy data retains its
-original terms and provenance obligations.
 
 ---
 
@@ -199,18 +174,16 @@ Mandatory attribution per the license:
 Full per-file attribution is listed in
 [tests/sample-data/ATTRIBUTION.md](tests/sample-data/ATTRIBUTION.md).
 
-`01_lock_screen.png`, `06_indexed_folders_basic.png`,
-`06_indexed_folders_expert.png`, and `11_tagging_settings.png` contain no
-third-party photographs.
+`01_lock_screen.png`, `06_indexed_folders_basic.png`, and
+`06_indexed_folders_expert.png` contain no third-party photographs.
 
 ---
 
 ## GPS Screenshot Image Credit
 
-The GPS location bar and tagging-drawer screenshots
-(`docs/screenshots/08_gps_location_bar.png` and
-`docs/screenshots/10_tagging_drawer.png`) use a photograph of the Xenakis UPIC
-system published on
+The GPS location bar screenshot
+(`docs/screenshots/08_gps_location_bar.png`) uses a photograph of the Xenakis
+UPIC system published on
 [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Xenakis_UPIC_system_computer_unit_2.jpg)
 under the [Creative Commons CC0 1.0 Universal Public Domain Dedication](https://creativecommons.org/publicdomain/zero/1.0/).
 

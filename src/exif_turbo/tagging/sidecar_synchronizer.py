@@ -1,19 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import logging
 from pathlib import Path
 from typing import Callable, Iterable
 
 from ..data.image_index_repository import ImageIndexRepository
 from ..models.image_tag import SidecarValidationError
-from .accepted_tag_alias_resolver import AcceptedTagAliasResolver
-from .controlled_vocabulary_repository import ControlledVocabularyRepository
 from .sidecar_repository import (
     FilesystemSidecarRepository,
     SidecarReadError,
 )
-from .tgm_snapshot_repository import TgmSnapshotRepository
 
 _log = logging.getLogger(__name__)
 
@@ -29,17 +26,10 @@ class SidecarSynchronizer:
         self,
         image_repository: ImageIndexRepository,
         sidecar_repository: FilesystemSidecarRepository | None = None,
-        *,
-        vocabulary_repository: ControlledVocabularyRepository | None = None,
-        tgm_repository: TgmSnapshotRepository | None = None,
     ) -> None:
         self._image_repository = image_repository
         self._sidecar_repository = (
             sidecar_repository or FilesystemSidecarRepository()
-        )
-        self._alias_resolver = AcceptedTagAliasResolver(
-            vocabulary_repository=vocabulary_repository,
-            tgm_repository=tgm_repository,
         )
 
     def synchronize(
@@ -74,7 +64,7 @@ class SidecarSynchronizer:
 
         if observed is None:
             if cached is not None:
-                self._image_repository.clear_accepted_tags_and_sidecar_state(
+                self._image_repository.clear_custom_tags_and_sidecar_state(
                     str(image_path)
                 )
             return True
@@ -92,7 +82,7 @@ class SidecarSynchronizer:
             loaded = self._sidecar_repository.read(image_path)
             if loaded is None:
                 if cached is not None:
-                    self._image_repository.clear_accepted_tags_and_sidecar_state(
+                    self._image_repository.clear_custom_tags_and_sidecar_state(
                         str(image_path)
                     )
                 return True
@@ -101,17 +91,23 @@ class SidecarSynchronizer:
                     "source.filename must match the original image filename",
                     loaded.revision,
                 )
-            self._image_repository.replace_accepted_tags_and_sidecar_state(
+            sidecar = loaded.sidecar
+            revision = loaded.revision
+            if sidecar.tags:
+                sidecar = replace(sidecar, tags=())
+                revision = self._sidecar_repository.write(
+                    image_path,
+                    sidecar,
+                    expected_revision=loaded.revision,
+                )
+            self._image_repository.replace_custom_tags_and_sidecar_state(
                 str(image_path),
-                loaded.sidecar,
+                sidecar,
                 sidecar_path=str(sidecar_path),
-                sidecar_mtime_ns=loaded.revision.mtime_ns,
-                sidecar_size=loaded.revision.size,
-                sidecar_checksum=loaded.revision.sha256,
+                sidecar_mtime_ns=revision.mtime_ns,
+                sidecar_size=revision.size,
+                sidecar_checksum=revision.sha256,
                 sync_status="synced",
-                aliases=self._alias_resolver.resolve(
-                    tag.concept_id for tag in loaded.sidecar.tags
-                ),
             )
             return True
         except SidecarReadError as exc:

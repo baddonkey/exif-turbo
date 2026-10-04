@@ -8,40 +8,18 @@ import pytest
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.models.image_sidecar import ImageSidecar, SidecarSource
 from exif_turbo.models.image_tag import ImageTag, TagProvenance
-from exif_turbo.models.tag_proposal import (
-    ProposalBatchResult,
-    ProposalGenerationResult,
-    ProposalGenerationStatus,
-    TagProposal,
-    TagProposalStatus,
-)
-from exif_turbo.models.tgm import TgmCategory, TgmConcept, TgmSnapshot, TgmSourceFormat
-from exif_turbo.models.vocabulary import (
-    LocalizedVocabularyTerms,
-    VocabularyCategory,
-    VocabularyConcept,
-    VocabularySnapshot,
-)
 from exif_turbo.tagging.sidecar_repository import (
     FilesystemSidecarRepository,
     SidecarRevision,
 )
-from exif_turbo.tagging.composite_vocabulary_repository import (
-    CompositeVocabularyRepository,
-)
 from exif_turbo.tagging.tagging_service import (
     BulkTagStatus,
     CopyTagsMode,
-    TagMembership,
     TaggingConflictError,
     TaggingFreeTagError,
     TaggingPartialFailure,
     TaggingService,
     TaggingSidecarError,
-)
-from exif_turbo.tagging.tgm_snapshot_repository import TgmSnapshotRepository
-from exif_turbo.tagging.vocabulary_snapshot_repository import (
-    VocabularySnapshotRepository,
 )
 
 
@@ -50,7 +28,6 @@ NOW = datetime(2026, 8, 9, 12, 30, tzinfo=UTC)
 
 def _service(
     tmp_path: Path,
-    vocabulary_repository: VocabularySnapshotRepository | None = None,
 ) -> tuple[TaggingService, ImageIndexRepository, Path]:
     image_path = tmp_path / "photo.jpg"
     image_path.write_bytes(b"original image bytes")
@@ -64,88 +41,15 @@ def _service(
         {},
         "",
     )
-    snapshot_repository = TgmSnapshotRepository(tmp_path / "tgm.json.gz")
-    snapshot_repository.activate(
-        TgmSnapshot(
-            concepts=(
-                TgmConcept(
-                    concept_id="loc-tgm:tgm000001",
-                    tnr="tgm000001",
-                    label="Deer",
-                    categories=(TgmCategory.SUBJECT, TgmCategory.GENRE_FORMAT),
-                    aliases=("Cervidae",),
-                ),
-                TgmConcept(
-                    concept_id="loc-tgm:tgm000002",
-                    tnr="tgm000002",
-                    label="Photographs",
-                    categories=(TgmCategory.GENRE_FORMAT,),
-                    aliases=("Photos",),
-                ),
-            ),
-            diagnostics=(),
-            source_url="https://example.test/tgm.xml",
-            source_format=TgmSourceFormat.XML,
-            distribution_date=None,
-            imported_at=NOW,
-            raw_sha256="snapshot-checksum",
-            raw_size_bytes=100,
-        )
-    )
     return (
         TaggingService(
             image_repository,
             FilesystemSidecarRepository(),
-            snapshot_repository,
             clock=lambda: NOW,
-            vocabulary_repository=vocabulary_repository,
         ),
         image_repository,
         image_path,
     )
-
-
-def _vocabulary_repository(tmp_path: Path) -> VocabularySnapshotRepository:
-    repository = VocabularySnapshotRepository(tmp_path / "wikidata.json.gz")
-    repository.activate(
-        VocabularySnapshot(
-            concepts=(
-                VocabularyConcept(
-                    concept_id="wikidata:Q42",
-                    category=VocabularyCategory.SUBJECT,
-                    canonical_label="Douglas Adams",
-                    localized_terms=(
-                        LocalizedVocabularyTerms("en", "Douglas Adams"),
-                        LocalizedVocabularyTerms(
-                            "de",
-                            "Englischer Schriftsteller",
-                            aliases=("Englischer Autor",),
-                        ),
-                        LocalizedVocabularyTerms(
-                            "fr",
-                            "Ecrivain britannique",
-                            aliases=("Auteur anglais",),
-                        ),
-                        LocalizedVocabularyTerms(
-                            "it",
-                            "Autore britannico",
-                            aliases=("Scrittore inglese",),
-                        ),
-                    ),
-                    source_uri="https://www.wikidata.org/entity/Q42",
-                    license_id="CC0-1.0",
-                ),
-            ),
-            version=7,
-            created_at=NOW,
-            source_name="Wikidata",
-            source_dump_uri="file:///offline/wikidata.json",
-            source_dump_sha256="a" * 64,
-            manifest_sha256="b" * 64,
-            license_id="CC0-1.0",
-        )
-    )
-    return repository
 
 
 def _add_indexed_image(
@@ -184,107 +88,6 @@ def test_tagging_service_embedded_exclusions_persist_in_sidecar(
     assert loaded.sidecar.exclude_all_embedded_tags is True
 
 
-def test_tagging_service_add_alias_creates_canonical_sidecar_and_cache(
-    tmp_path: Path,
-) -> None:
-    # Arrange
-    service, image_repository, image_path = _service(tmp_path)
-    original_stat = image_path.stat()
-    original_bytes = image_path.read_bytes()
-
-    # Act
-    result = service.add_concept(str(image_path), "Cervidae")
-
-    # Assert
-    loaded = FilesystemSidecarRepository().read(image_path)
-    assert result.changed is True
-    assert loaded is not None
-    assert loaded.sidecar.tags[0].concept_id == "loc-tgm:tgm000001"
-    assert loaded.sidecar.tags[0].label == "Deer"
-    assert loaded.sidecar.tags[0].category == "subject"
-    assert loaded.sidecar.tags[0].extra["tgm_categories"] == [
-        "subject",
-        "genre_format",
-    ]
-    assert image_repository.get_accepted_tags(str(image_path)) == loaded.sidecar.tags
-    assert image_repository.count_images("Cervidae") == 1
-    assert image_path.read_bytes() == original_bytes
-    assert image_path.stat().st_mtime_ns == original_stat.st_mtime_ns
-
-
-def test_tagging_service_promotes_v1_only_when_adding_wikidata(
-    tmp_path: Path,
-) -> None:
-    # Arrange
-    service, _image_repository, image_path = _service(
-        tmp_path,
-        _vocabulary_repository(tmp_path),
-    )
-
-    # Act
-    free_tag_result = service.add_free_tag(str(image_path), "Family")
-    tgm_result = service.add_concept(str(image_path), "Deer")
-    wikidata_result = service.add_concept(str(image_path), "wikidata:Q42")
-
-    # Assert
-    assert free_tag_result.sidecar.schema_version == 1
-    assert tgm_result.sidecar.schema_version == 1
-    assert wikidata_result.sidecar.schema_version == 2
-
-
-def test_tagging_service_wikidata_add_and_remove_preserves_v2_provenance(
-    tmp_path: Path,
-) -> None:
-    # Arrange
-    service, image_repository, image_path = _service(
-        tmp_path,
-        _vocabulary_repository(tmp_path),
-    )
-
-    # Act
-    added = service.add_concept(str(image_path), "wikidata:Q42")
-    removed = service.remove_concept(str(image_path), "wikidata:Q42")
-
-    # Assert
-    tag = added.sidecar.tags[0]
-    assert tag.concept_id == "wikidata:Q42"
-    assert tag.label == "Douglas Adams"
-    assert tag.category == "subject"
-    assert tag.vocabulary == "wikidata"
-    assert tag.provenance.vocabulary_checksum == f"sha256:{'b' * 64}"
-    assert tag.provenance.extra == {
-        "concept_source_uri": "https://www.wikidata.org/entity/Q42",
-        "license_id": "CC0-1.0",
-        "snapshot_version": 7,
-        "source_name": "Wikidata",
-    }
-    assert removed.changed is True
-    assert removed.sidecar.tags == ()
-    assert removed.sidecar.schema_version == 2
-    assert image_repository.get_accepted_tags(str(image_path)) == ()
-
-
-def test_tagging_service_wikidata_add_indexes_required_locale_aliases(
-    tmp_path: Path,
-) -> None:
-    # Arrange
-    service, image_repository, image_path = _service(
-        tmp_path,
-        _vocabulary_repository(tmp_path),
-    )
-
-    # Act
-    service.add_concept(str(image_path), "wikidata:Q42")
-
-    # Assert
-    assert image_repository.count_images('"Englischer Schriftsteller"') == 1
-    assert image_repository.count_images('"Englischer Autor"') == 1
-    assert image_repository.count_images('"Ecrivain britannique"') == 1
-    assert image_repository.count_images('"Auteur anglais"') == 1
-    assert image_repository.count_images('"Autore britannico"') == 1
-    assert image_repository.count_images('"Scrittore inglese"') == 1
-
-
 def test_tagging_service_db_failure_leaves_sidecar_and_raises_partial_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -297,38 +100,27 @@ def test_tagging_service_db_failure_leaves_sidecar_and_raises_partial_failure(
 
     monkeypatch.setattr(
         image_repository,
-        "replace_accepted_tags_and_sidecar_state",
+        "replace_custom_tags_and_sidecar_state",
         fail_cache_update,
     )
 
     # Act / Assert
     with pytest.raises(TaggingPartialFailure, match="database unavailable"):
-        service.add_concept(str(image_path), "loc-tgm:tgm000001")
+        service.add_free_tag(str(image_path), "Family")
     loaded = FilesystemSidecarRepository().read(image_path)
     assert loaded is not None
-    assert [tag.label for tag in loaded.sidecar.tags] == ["Deer"]
+    assert loaded.sidecar.free_tags == ("Family",)
     cache_state = image_repository.get_sidecar_sync_state(str(image_path))
     assert cache_state is not None
     assert cache_state.sync_status == "error"
 
 
-def test_tagging_service_add_and_remove_preserve_unknown_fields_and_other_tags(
+def test_tagging_service_custom_tag_mutations_preserve_unknown_fields(
     tmp_path: Path,
 ) -> None:
     # Arrange
     service, _, image_path = _service(tmp_path)
     sidecars = FilesystemSidecarRepository()
-    existing_tag = ImageTag(
-        concept_id="loc-tgm:tgm000002",
-        label="Photographs",
-        category="genre_format",
-        provenance=TagProvenance(
-            method="manual",
-            accepted_at="2026-08-01T00:00:00Z",
-            vocabulary_checksum="sha256:old",
-        ),
-        extra={"tag_extension": "preserved"},
-    )
     sidecars.write(
         image_path,
         ImageSidecar(
@@ -339,31 +131,30 @@ def test_tagging_service_add_and_remove_preserve_unknown_fields_and_other_tags(
                 extra={"source_extension": 1},
             ),
             updated_at="2026-08-01T00:00:00Z",
-            tags=(existing_tag,),
+            free_tags=("Existing",),
             extra={"top_extension": {"enabled": True}},
         ),
         expected_revision=None,
     )
 
     # Act
-    service.add_concept(str(image_path), "Deer")
-    service.remove_concept(str(image_path), "loc-tgm:tgm000001")
+    service.add_free_tag(str(image_path), "New")
+    service.remove_free_tag(str(image_path), "new")
 
     # Assert
     loaded = sidecars.read(image_path)
     assert loaded is not None
-    assert loaded.sidecar.tags == (existing_tag,)
+    assert loaded.sidecar.tags == ()
+    assert loaded.sidecar.free_tags == ("Existing",)
     assert loaded.sidecar.extra == {"top_extension": {"enabled": True}}
     assert loaded.sidecar.source.extra == {"source_extension": 1}
 
 
-def test_tagging_service_add_and_remove_free_tag_preserves_tgm_and_catalog(
+def test_tagging_service_add_and_remove_free_tag_updates_catalog(
     tmp_path: Path,
 ) -> None:
     # Arrange
     service, image_repository, image_path = _service(tmp_path)
-    service.add_concept(str(image_path), "Deer")
-
     # Act
     added = service.add_free_tag(str(image_path), " Family ")
     removed = service.remove_free_tag(str(image_path), "family")
@@ -371,10 +162,9 @@ def test_tagging_service_add_and_remove_free_tag_preserves_tgm_and_catalog(
     # Assert
     assert added.sidecar.free_tags == ("Family",)
     assert removed.sidecar.free_tags == ()
-    assert len(removed.sidecar.tags) == 1
+    assert removed.sidecar.tags == ()
     assert image_repository.get_free_tags(str(image_path)) == ()
     assert image_repository.search_free_tags("fam") == ("Family",)
-    assert image_repository.count_images("Deer") == 1
     assert image_repository.count_images("Family") == 0
 
 
@@ -399,9 +189,8 @@ def test_tagging_service_copy_tags_add_merges_deduplicates_and_excludes_source(
     # Arrange
     service, image_repository, source_path = _service(tmp_path)
     target_path = _add_indexed_image(image_repository, tmp_path, "target.jpg")
-    service.add_concept(str(source_path), "Deer")
     service.add_free_tag(str(source_path), "Family")
-    service.add_concept(str(target_path), "Photographs")
+    service.add_free_tag(str(source_path), "Vacation")
     service.add_free_tag(str(target_path), "family")
     service.add_free_tag(str(target_path), "Archive")
 
@@ -417,8 +206,8 @@ def test_tagging_service_copy_tags_add_merges_deduplicates_and_excludes_source(
     assert result.succeeded_count == 1
     assert len(result.items) == 1
     assert target is not None
-    assert {tag.label for tag in target.tags} == {"Deer", "Photographs"}
-    assert set(target.free_tags) == {"Family", "Archive"}
+    assert target.tags == ()
+    assert set(target.free_tags) == {"Family", "Archive", "Vacation"}
     assert service.get_image_tagging_state(str(source_path)).sidecar is not None
 
 
@@ -462,7 +251,6 @@ def test_tagging_service_copy_tags_replace_preserves_target_sidecar_metadata(
     # Arrange
     service, image_repository, source_path = _service(tmp_path)
     target_path = _add_indexed_image(image_repository, tmp_path, "target.jpg")
-    service.add_concept(str(source_path), "Deer")
     service.add_free_tag(str(source_path), "Family")
     service.set_embedded_tag_excluded(str(source_path), "Private", True)
     service.set_embedded_tag_excluded(str(source_path), "Source only", True)
@@ -516,7 +304,7 @@ def test_tagging_service_copy_tags_replace_preserves_target_sidecar_metadata(
     loaded = FilesystemSidecarRepository().read(target_path)
     assert target.status is BulkTagStatus.SUCCEEDED
     assert loaded is not None
-    assert [tag.label for tag in loaded.sidecar.tags] == ["Deer"]
+    assert loaded.sidecar.tags == ()
     assert loaded.sidecar.free_tags == ("Family",)
     assert loaded.sidecar.excluded_embedded_tags == ("Private",)
     assert loaded.sidecar.exclude_all_embedded_tags is False
@@ -552,89 +340,6 @@ def test_tagging_service_add_blank_free_tag_raises_typed_error(
         service.add_free_tag(str(image_path), "   ")
 
 
-def test_tagging_service_accept_proposal_uses_clip_provenance_without_pending_cache(
-    tmp_path: Path,
-) -> None:
-    # Arrange
-    service, image_repository, image_path = _service(tmp_path)
-    proposal = _proposal(str(image_path), "loc-tgm:tgm000001", "Deer", 0.91)
-
-    # Act
-    result = service.accept_proposal(proposal)
-
-    # Assert
-    assert result.sidecar.tags[0].provenance.method == "clip"
-    assert result.sidecar.tags[0].provenance.confidence == 0.91
-    assert image_repository.get_proposals(str(image_path)) == ()
-
-
-def test_tagging_service_accept_public_figure_uses_identity_snapshot_provenance(
-    tmp_path: Path,
-) -> None:
-    # Arrange
-    generic = _vocabulary_repository(tmp_path)
-    identities = VocabularySnapshotRepository(tmp_path / "public-figures.json.gz")
-    identities.activate(
-        VocabularySnapshot(
-            concepts=(
-                VocabularyConcept(
-                    concept_id="wikidata:Q43274",
-                    category=VocabularyCategory.SUBJECT,
-                    canonical_label="Charles III",
-                    localized_terms=tuple(
-                        LocalizedVocabularyTerms(locale, "Charles III")
-                        for locale in ("en", "de", "fr", "it")
-                    ),
-                    source_uri="https://www.wikidata.org/entity/Q43274",
-                    license_id="CC0-1.0",
-                ),
-            ),
-            version=1,
-            created_at=NOW,
-            source_name="Wikidata public figures",
-            source_dump_uri="file:///offline/public-figures.jsonl",
-            source_dump_sha256="c" * 64,
-            manifest_sha256="d" * 64,
-            license_id="CC0-1.0",
-        )
-    )
-    service, _image_repository, image_path = _service(
-        tmp_path,
-        CompositeVocabularyRepository(generic, identities),  # type: ignore[arg-type]
-    )
-    proposal = _proposal(
-        str(image_path), "wikidata:Q43274", "Charles III", 0.84
-    )
-
-    # Act
-    result = service.accept_proposal(proposal)
-
-    # Assert
-    tag = result.sidecar.tags[0]
-    assert tag.concept_id == "wikidata:Q43274"
-    assert tag.label == "Charles III"
-    assert tag.provenance.vocabulary_checksum == f"sha256:{'d' * 64}"
-    assert tag.provenance.extra["source_name"] == "Wikidata public figures"
-
-
-def test_tagging_service_reject_proposal_does_not_write_sidecar(
-    tmp_path: Path,
-) -> None:
-    # Arrange
-    service, image_repository, image_path = _service(tmp_path)
-    proposal = _proposal(str(image_path), "loc-tgm:tgm000001", "Deer", 0.91)
-
-    # Act
-    service.reject_proposal(proposal)
-
-    # Assert
-    assert not FilesystemSidecarRepository.sidecar_path(image_path).exists()
-    rejected = image_repository.get_proposals(
-        str(image_path), status=TagProposalStatus.REJECTED
-    )
-    assert rejected == (proposal.__class__(**{**proposal.__dict__, "status": TagProposalStatus.REJECTED}),)
-
-
 def test_tagging_service_malformed_sidecar_fails_without_replacement(
     tmp_path: Path,
 ) -> None:
@@ -646,7 +351,7 @@ def test_tagging_service_malformed_sidecar_fails_without_replacement(
 
     # Act / Assert
     with pytest.raises(TaggingSidecarError, match="invalid sidecar JSON"):
-        service.add_concept(str(image_path), "Deer")
+        service.add_free_tag(str(image_path), "Family")
     assert sidecar_path.read_bytes() == malformed
 
 
@@ -664,28 +369,29 @@ class _ConflictingSidecarRepository(FilesystemSidecarRepository):
 def test_tagging_service_external_edit_is_typed_conflict(tmp_path: Path) -> None:
     # Arrange
     service, image_repository, image_path = _service(tmp_path)
-    service.add_concept(str(image_path), "Photographs")
+    service.add_free_tag(str(image_path), "Existing")
     conflicting_service = TaggingService(
         image_repository,
         _ConflictingSidecarRepository(),
-        service._tgm_repository,
         clock=lambda: NOW,
     )
 
     # Act / Assert
     with pytest.raises(TaggingConflictError, match="changed externally"):
-        conflicting_service.add_concept(str(image_path), "Deer")
+        conflicting_service.add_free_tag(str(image_path), "Family")
 
 
 
-def test_tagging_service_bulk_mixed_results_and_cancellation_retain_completion(
+def test_tagging_service_copy_cancellation_retains_completed_targets(
     tmp_path: Path,
 ) -> None:
     # Arrange
     service, image_repository, first_path = _service(tmp_path)
-    second_path = _add_image(image_repository, tmp_path / "second.jpg")
-    third_path = _add_image(image_repository, tmp_path / "third.jpg")
-    service.add_concept(str(first_path), "Deer")
+    second_path = _add_indexed_image(image_repository, tmp_path, "second.jpg")
+    third_path = _add_indexed_image(image_repository, tmp_path, "third.jpg")
+    fourth_path = _add_indexed_image(image_repository, tmp_path, "fourth.jpg")
+    service.add_free_tag(str(first_path), "Family")
+    service.add_free_tag(str(second_path), "Family")
     progress: list[str] = []
     checks = 0
 
@@ -695,9 +401,10 @@ def test_tagging_service_bulk_mixed_results_and_cancellation_retain_completion(
         return checks > 2
 
     # Act
-    result = service.add_concept_to_paths(
-        (str(first_path), str(second_path), str(third_path)),
-        "Deer",
+    result = service.copy_tags_to_paths(
+        str(first_path),
+        (str(second_path), str(third_path), str(fourth_path)),
+        CopyTagsMode.ADD,
         on_progress=lambda _done, _total, item: progress.append(item.image_path),
         cancel_check=cancel_after_two,
     )
@@ -708,107 +415,8 @@ def test_tagging_service_bulk_mixed_results_and_cancellation_retain_completion(
         BulkTagStatus.SUCCEEDED,
     ]
     assert result.cancelled is True
-    assert progress == [str(first_path), str(second_path)]
-    assert not FilesystemSidecarRepository.sidecar_path(third_path).exists()
+    assert progress == [str(second_path), str(third_path)]
+    assert service.get_image_tagging_state(str(third_path)).free_tags == ("Family",)
+    assert not FilesystemSidecarRepository.sidecar_path(fourth_path).exists()
 
 
-def test_tagging_service_bulk_remove_missing_is_skipped_and_failure_is_retained(
-    tmp_path: Path,
-) -> None:
-    # Arrange
-    service, image_repository, first_path = _service(tmp_path)
-    second_path = _add_image(image_repository, tmp_path / "second.jpg")
-    service.add_concept(str(first_path), "Deer")
-
-    # Act
-    result = service.remove_concept_from_paths(
-        (str(first_path), str(second_path), str(tmp_path / "missing.jpg")),
-        "loc-tgm:tgm000001",
-    )
-
-    # Assert
-    assert [item.status for item in result.items] == [
-        BulkTagStatus.SUCCEEDED,
-        BulkTagStatus.SKIPPED,
-        BulkTagStatus.FAILED,
-    ]
-    assert result.succeeded_count == 1
-    assert result.skipped_count == 1
-    assert result.failed_count == 1
-
-
-def test_tagging_service_marked_aggregate_reports_all_and_some(tmp_path: Path) -> None:
-    # Arrange
-    service, image_repository, first_path = _service(tmp_path)
-    second_path = _add_image(image_repository, tmp_path / "second.jpg")
-    service.add_concept(str(first_path), "Deer")
-    service.add_concept(str(second_path), "Deer")
-    service.add_concept(str(first_path), "Photographs")
-    image_repository.mark_images((str(first_path), str(second_path)), True)
-
-    # Act
-    aggregate = service.get_marked_tagging_state(
-        restrict_to_enabled_folders=False
-    )
-
-    # Assert
-    assert aggregate.total_marked == 2
-    assert aggregate.tagged_marked == 2
-    assert {
-        item.concept.label: (item.count, item.membership)
-        for item in aggregate.concepts
-    } == {
-        "Deer": (2, TagMembership.ALL),
-        "Photographs": (1, TagMembership.SOME),
-    }
-
-
-def test_tagging_service_marked_aggregate_counts_untagged_images(
-    tmp_path: Path,
-) -> None:
-    # Arrange
-    service, image_repository, first_path = _service(tmp_path)
-    second_path = _add_image(image_repository, tmp_path / "second.jpg")
-    service.add_concept(str(first_path), "Deer")
-    image_repository.mark_images((str(first_path), str(second_path)), True)
-
-    # Act
-    aggregate = service.get_marked_tagging_state(
-        restrict_to_enabled_folders=False
-    )
-
-    # Assert
-    assert aggregate.total_marked == 2
-    assert aggregate.tagged_marked == 1
-
-
-def _proposal(
-    image_path: str,
-    concept_id: str,
-    label: str,
-    score: float,
-) -> TagProposal:
-    return TagProposal(
-        image_path=image_path,
-        concept_id=concept_id,
-        label=label,
-        category="subject",
-        provider_fingerprint="provider-fingerprint",
-        score=score,
-        rank=1,
-        provider_model="ViT-B-32:openai",
-    )
-
-
-def _add_image(repository: ImageIndexRepository, image_path: Path) -> Path:
-    image_path.write_bytes(b"another original")
-    image_stat = image_path.stat()
-    repository.upsert_image(
-        str(image_path),
-        image_path.name,
-        image_stat.st_mtime,
-        image_stat.st_size,
-        {},
-        "",
-    )
-    return image_path

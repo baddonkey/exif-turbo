@@ -20,6 +20,9 @@ from PySide6.QtQml import QQmlApplicationEngine
 from pytestqt.qtbot import QtBot
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
+from exif_turbo.models.image_sidecar import ImageSidecar, SidecarSource
+from exif_turbo.models.image_tag import ImageTag, TagProvenance
+from exif_turbo.tagging.sidecar_repository import FilesystemSidecarRepository
 from exif_turbo.ui.models.exif_list_model import ExifListModel
 from exif_turbo.ui.models.folder_list_model import FolderListModel
 from exif_turbo.ui.models.search_list_model import SearchListModel
@@ -139,6 +142,67 @@ def test_unlock_shows_all_images(
     assert not controller.isLocked
     assert controller.totalResults == 5
     assert search_model.rowCount() == 5
+
+
+def test_unlock_migrates_controlled_tags_before_initial_search(
+    qtbot: QtBot,
+    window: tuple[AppController, SearchListModel],
+) -> None:
+    # Arrange
+    controller, search_model = window
+    db_path = controller._db_path
+    image_path = db_path.parent / "images" / _CAMERAS[0][0]
+    sidecar_repository = FilesystemSidecarRepository()
+    sidecar = ImageSidecar(
+        source=SidecarSource(filename=image_path.name),
+        updated_at="2026-08-09T12:30:00Z",
+        schema_version=2,
+        tags=(
+            ImageTag(
+                concept_id="wikidata:Q42",
+                label="Douglas Adams",
+                vocabulary="wikidata",
+                category="subject",
+                provenance=TagProvenance(
+                    method="manual",
+                    accepted_at="2026-08-09T12:30:00Z",
+                    vocabulary_checksum=f"sha256:{'a' * 64}",
+                ),
+            ),
+        ),
+        free_tags=("Family",),
+    )
+    revision = sidecar_repository.write(image_path, sidecar, expected_revision=None)
+    repo = ImageIndexRepository(db_path, key="")
+    with repo.conn:
+        repo.conn.execute(
+            "DELETE FROM completed_migrations WHERE name = ?",
+            ("custom-only-tagging-v1",),
+        )
+    repo.replace_custom_tags_and_sidecar_state(
+        str(image_path),
+        sidecar,
+        sidecar_path=str(sidecar_repository.sidecar_path(image_path)),
+        sidecar_mtime_ns=revision.mtime_ns,
+        sidecar_size=revision.size,
+        sidecar_checksum=revision.sha256,
+        sync_status="synced",
+    )
+    repo.close()
+
+    # Act
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
+        controller.unlock("")
+
+    # Assert
+    loaded = sidecar_repository.read(image_path)
+    assert loaded is not None
+    assert loaded.sidecar.tags == ()
+    assert loaded.sidecar.free_tags == ("Family",)
+    assert controller.totalResults == 5
+    assert search_model.rowCount() == 5
+    assert controller._repo is not None
+    assert controller._repo.get_free_tags(str(image_path)) == ("Family",)
 
 
 def test_search_canon_returns_two_results(

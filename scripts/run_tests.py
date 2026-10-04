@@ -2,16 +2,14 @@
 
 The UI test suite initializes QtWebEngine and spawns background ``QThread``
 workers (``IndexWorker`` / ``ThumbWorker``) that touch SQLCipher/OpenSSL
-state.  When enough UI tests accumulate in a single interpreter, leaked
-native threads race process teardown and abort with SIGABRT (Windows exit
-codes 0xC0000005 / 0xC0000409) — an intermittent crash that is *not* a
-Python assertion failure.
+state. When many UI tests accumulate in one interpreter, leaked native threads
+can race process teardown and abort with SIGABRT on Windows.
 
 Windows has no ``fork``, so ``pytest --forked`` is unavailable.  Instead we
 isolate by process:
 
 * all non-UI tests run in one pytest process, and
-* each UI test *file* runs in its own pytest process.
+* each UI test file runs in its own pytest process.
 
 Every child inherits this process's stdout/stderr (no capture pipe), so a
 leaked native thread cannot deadlock a parent waiting for EOF, and per-test
@@ -32,11 +30,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TESTS_DIR = REPO_ROOT / "tests"
 UI_DIR = TESTS_DIR / "ui"
-HEAVY_TEST_FILES = (
-    TESTS_DIR / "tagging" / "test_bundled_vocabulary.py",
-)
-
-
 def _run_pytest(targets: list[str], extra: list[str]) -> int:
     """Run pytest as an isolated subprocess, inheriting this console."""
     cmd = [sys.executable, "-m", "pytest", "-p", "no:cacheprovider", *targets, *extra]
@@ -50,21 +43,12 @@ def main(argv: list[str]) -> int:
 
     results: list[tuple[str, int]] = []
 
-    # 1) Everything except UI and memory-heavy release tests in one process.
-    aggregate_ignores = [
-        f"--ignore={path.as_posix()}"
-        for path in (UI_DIR, *HEAVY_TEST_FILES)
-    ]
+    # 1) Everything except UI tests in one process.
+    aggregate_ignores = [f"--ignore={UI_DIR.as_posix()}"]
     rc = _run_pytest(["tests", *aggregate_ignores], extra)
     results.append(("non-ui", rc))
 
-    # 2) Release regeneration tests need a low-memory parent process.
-    for heavy_test_file in HEAVY_TEST_FILES:
-        rel = heavy_test_file.relative_to(REPO_ROOT).as_posix()
-        rc = _run_pytest([rel], extra)
-        results.append((rel, rc))
-
-    # 3) Each UI test file in its own process so native state can't accumulate.
+    # 2) Each UI test file in its own process so native state can't accumulate.
     ui_files = sorted(p for p in UI_DIR.glob("test_*.py"))
     for ui_file in ui_files:
         rel = ui_file.relative_to(REPO_ROOT).as_posix()

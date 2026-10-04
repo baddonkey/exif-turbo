@@ -14,10 +14,8 @@ _log = logging.getLogger(__name__)
 
 from ..data.image_index_repository import ImageIndexRepository
 from ..models.indexed_image import IndexedImage
+from ..tagging.custom_tag_migration import CustomTagMigrationService
 from ..tagging.sidecar_synchronizer import SidecarSynchronizer
-from ..tagging.composite_vocabulary_repository import (
-    bundled_controlled_vocabulary_repository,
-)
 from .exif_metadata_extractor import ExifMetadataExtractor
 from .image_finder import ImageFinder
 from .metadata_extractor import MetadataExtractor
@@ -183,10 +181,7 @@ class IndexerService:
         self.repo = repo
         self.extractor = extractor or ExifMetadataExtractor()
         self.finder = finder or ImageFinder()
-        self.sidecar_synchronizer = sidecar_synchronizer or SidecarSynchronizer(
-            repo,
-            vocabulary_repository=bundled_controlled_vocabulary_repository(),
-        )
+        self.sidecar_synchronizer = sidecar_synchronizer or SidecarSynchronizer(repo)
 
     def build_index(
         self,
@@ -204,6 +199,17 @@ class IndexerService:
         canceled = False
         scan_total = 0
         discovered_sidecar_images: set[str] = set()
+
+        def _migration_progress(done: int, total: int, path: str) -> None:
+            if on_progress is not None and total > 0:
+                on_progress(done, -total, Path(path))
+
+        migration = CustomTagMigrationService(self.repo).migrate(
+            cancel_check=cancel_check,
+            on_progress=_migration_progress if on_progress is not None else None,
+        )
+        if migration.canceled:
+            return 0, 0
 
         if force:
             # Wipe only the rows that belong to the folders being rescanned.

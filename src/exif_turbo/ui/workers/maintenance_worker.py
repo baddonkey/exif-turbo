@@ -25,13 +25,9 @@ from PySide6.QtCore import QThread, Signal
 
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
-from ...config import tgm_snapshot_path
 from ...i18n import _
+from ...tagging.custom_tag_migration import CustomTagMigrationService
 from ...tagging.sidecar_synchronizer import SidecarSynchronizer
-from ...tagging.tgm_snapshot_repository import TgmSnapshotRepository
-from ...tagging.composite_vocabulary_repository import (
-    bundled_controlled_vocabulary_repository,
-)
 from ...utils.preview_cache import expected_preview_filenames, preview_dir
 from ._macos_activity import AppNapAssertion
 
@@ -75,6 +71,7 @@ class MaintenanceWorker(QThread):
         self._last_emit = 0.0
         self.sidecar_image_count = 0
         self.sidecar_error_count = 0
+        self.controlled_tag_data_cleared = False
 
     # ------------------------------------------------------------------
     def cancel(self) -> None:
@@ -102,6 +99,8 @@ class MaintenanceWorker(QThread):
                 self._run_reset_database()
             elif self._operation == "refresh_sidecars":
                 self._run_refresh_sidecars()
+            elif self._operation == "remove_controlled_tags":
+                self._run_remove_controlled_tags()
             else:
                 self.failed.emit(f"Unknown operation: {self._operation!r}")
         except Exception as exc:  # noqa: BLE001
@@ -156,7 +155,6 @@ class MaintenanceWorker(QThread):
             self._emit_progress(0, 0, _("Deleting index rows\u2026"), force=True)
             repo.clear_all_rows()
             folder_repo.clear_all()
-            shutil.rmtree(tgm_snapshot_path(self._db_path).parent, ignore_errors=True)
 
             # Phase 3 — reclaim disk space (cannot be canceled).
             self._emit_progress(0, 0, _("Vacuuming database\u2026"), force=True)
@@ -195,16 +193,7 @@ class MaintenanceWorker(QThread):
             def on_progress(done: int, count: int, path: str) -> None:
                 self._emit_progress(done, count, path)
 
-            legacy_snapshot_path = tgm_snapshot_path(self._db_path)
-            result = SidecarSynchronizer(
-                repo,
-                vocabulary_repository=bundled_controlled_vocabulary_repository(),
-                tgm_repository=(
-                    TgmSnapshotRepository(legacy_snapshot_path)
-                    if legacy_snapshot_path.exists()
-                    else None
-                ),
-            ).synchronize(
+            result = SidecarSynchronizer(repo).synchronize(
                 image_paths,
                 cancel_check=self._is_canceled,
                 on_progress=on_progress,
@@ -216,6 +205,30 @@ class MaintenanceWorker(QThread):
             else:
                 self._emit_progress(total, total, message, force=True)
                 self.finished.emit()
+        finally:
+            repo.close()
+
+    def _run_remove_controlled_tags(self) -> None:
+        repo = ImageIndexRepository(self._db_path, key=self._key)
+        try:
+            message = _("Removing legacy tags")
+            self.cancelable.emit(False)
+            self._emit_progress(0, 0, message, force=True)
+            result = CustomTagMigrationService(repo).migrate(
+                on_progress=lambda done, total, path: self._emit_progress(
+                    done, total, path
+                )
+            )
+            self.sidecar_image_count = result.images_scanned
+            self.sidecar_error_count = len(result.errors)
+            self.controlled_tag_data_cleared = result.database_cleared
+            if not self.controlled_tag_data_cleared:
+                self.failed.emit("Controlled-tag migration did not complete")
+                return
+            self._emit_progress(
+                result.images_scanned, result.images_scanned, message, force=True
+            )
+            self.finished.emit()
         finally:
             repo.close()
 

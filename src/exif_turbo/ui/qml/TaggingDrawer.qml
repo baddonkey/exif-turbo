@@ -20,10 +20,7 @@ Drawer {
     property bool browseMode: false
     property bool showFreeTagSuggestions: false
     readonly property bool hasSelection: appController && appController.currentResultRow >= 0
-    readonly property bool locallyBusy: appController && (
-        appController.isTgmUpdating
-        || appController.isGeneratingTagProposals
-        || appController.isTaggingBulk)
+    readonly property bool locallyBusy: appController && appController.isTaggingBulk
 
     onBrowseModeChanged: copyTarget.currentIndex = 0
 
@@ -39,7 +36,7 @@ Drawer {
 
         Label {
             width: Math.min(340, replaceTagsDialog.availableWidth)
-            text: qsTr("All accepted and custom tags on each target image will be replaced. This cannot be undone.")
+            text: qsTr("All custom tags on each target image will be replaced. This cannot be undone.")
             wrapMode: Text.WordWrap
         }
     }
@@ -48,16 +45,10 @@ Drawer {
         open()
         if (appController && appController.freeTaggingAvailable)
             Qt.callLater(function() {
-                if (appController.taggingAvailable)
-                    tgmSearchField.forceActiveFocus()
-                else
-                    freeTagField.forceActiveFocus()
+                freeTagField.forceActiveFocus()
             })
     }
 
-    onOpened: {
-        proposalGenerationTimer.restart()
-    }
     onClosed: showFreeTagSuggestions = false
 
     function addFreeTag(label) {
@@ -72,38 +63,9 @@ Drawer {
     Connections {
         target: appController
         function onCurrentResultRowChanged() {
-            if (drawer.opened) {
-                proposalGenerationTimer.restart()
-                if (drawer.showFreeTagSuggestions)
-                    appController.searchFreeTags(freeTagField.text)
-            }
+            if (drawer.opened && drawer.showFreeTagSuggestions)
+                appController.searchFreeTags(freeTagField.text)
         }
-    }
-
-    Timer {
-        id: proposalGenerationTimer
-        interval: 100
-        repeat: false
-        onTriggered: {
-            if (!drawer.opened || !drawer.hasSelection || !appController.taggingProposalAvailable)
-                return
-            if (appController.isGeneratingTagProposals) {
-                restart()
-                return
-            }
-            appController.generateSelectedTagProposals()
-        }
-    }
-
-    function applyCurrentSearchResult() {
-        if (!appController || tgmResults.count === 0)
-            return
-        var item = tgmResults.itemAtIndex(Math.max(0, tgmResults.currentIndex))
-        if (!item)
-            item = tgmResults.itemAtIndex(0)
-        if (!item)
-            return
-        appController.addSelectedTgmConcept(item.conceptReference)
     }
 
     background: Rectangle {
@@ -363,262 +325,9 @@ Drawer {
                 }
 
                 ColumnLayout {
-                    visible: appController && appController.taggingAvailable
+                    visible: appController && appController.freeTaggingAvailable
                     Layout.fillWidth: true
                     spacing: 0
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Layout.margins: 14
-                        spacing: 8
-
-                        Label { text: qsTr("Add a Wikidata term"); font.pixelSize: 13; font.weight: Font.DemiBold }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
-                            TextField {
-                                id: tgmSearchField
-                                objectName: "tgmSearchField"
-                                Layout.fillWidth: true
-                                placeholderText: qsTr("Search terms and aliases")
-                                enabled: drawer.hasSelection
-                                onTextChanged: tgmSearchTimer.restart()
-                                Keys.onReturnPressed: drawer.applyCurrentSearchResult()
-                                Keys.onDownPressed: {
-                                    if (tgmResults.count > 0) {
-                                        tgmResults.currentIndex = Math.min(tgmResults.count - 1, tgmResults.currentIndex + 1)
-                                        tgmResults.forceActiveFocus()
-                                    }
-                                }
-                            }
-                            Button {
-                                objectName: "addTgmTermButton"
-                                text: qsTr("Add")
-                                enabled: drawer.hasSelection && tgmResults.count > 0
-                                onClicked: drawer.applyCurrentSearchResult()
-                                ToolTip.text: qsTr("Add to current image")
-                                ToolTip.visible: hovered
-                            }
-                        }
-
-                        Timer {
-                            id: tgmSearchTimer
-                            interval: 250
-                            repeat: false
-                            onTriggered: appController.searchTgm(tgmSearchField.text.trim())
-                        }
-
-                        ListView {
-                            id: tgmResults
-                            objectName: "tgmSearchResults"
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: Math.min(contentHeight, 180)
-                            Layout.maximumHeight: 180
-                            visible: count > 0
-                            clip: true
-                            model: appController ? appController.tgmSearchModel : null
-                            currentIndex: count > 0 ? 0 : -1
-                            keyNavigationWraps: true
-                            Keys.onReturnPressed: drawer.applyCurrentSearchResult()
-                            ScrollBar.vertical: ScrollBar {}
-
-                            delegate: ItemDelegate {
-                                required property int index
-                                required property string conceptId
-                                required property string label
-                                required property string canonicalLabel
-                                required property var categories
-                                required property var aliases
-                                property string conceptReference: conceptId
-                                width: tgmResults.width
-                                height: 48
-                                highlighted: ListView.isCurrentItem
-                                onPressed: tgmResults.currentIndex = index
-                                onClicked: selectResultTimer.restart()
-                                onDoubleClicked: {
-                                    selectResultTimer.stop()
-                                    appController.addSelectedTgmConcept(conceptReference)
-                                }
-                                Timer {
-                                    id: selectResultTimer
-                                    interval: Qt.styleHints.mouseDoubleClickInterval
-                                    repeat: false
-                                    onTriggered: tgmSearchField.text = label
-                                }
-                                contentItem: ColumnLayout {
-                                    spacing: 1
-                                    Label { Layout.fillWidth: true; text: label; elide: Text.ElideRight; font.pixelSize: 12 }
-                                    Label {
-                                        Layout.fillWidth: true
-                                        text: [canonicalLabel !== label ? canonicalLabel : "", categories.join(" / "), aliases.length ? aliases.join(", ") : ""].filter(Boolean).join("  |  ")
-                                        elide: Text.ElideRight
-                                        font.pixelSize: 10
-                                        opacity: 0.55
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Layout.margins: 14
-                        spacing: 7
-                        Label { text: qsTr("Tags on current image"); font.pixelSize: 13; font.weight: Font.DemiBold }
-                        Label {
-                            visible: !drawer.hasSelection
-                            text: qsTr("Select an image to review its tags.")
-                            opacity: 0.55
-                            wrapMode: Text.WordWrap
-                            Layout.fillWidth: true
-                        }
-                        Label {
-                            visible: drawer.hasSelection && acceptedTagsList.count === 0
-                            text: qsTr("This image has no accepted tags yet.")
-                            opacity: 0.55
-                            wrapMode: Text.WordWrap
-                            Layout.fillWidth: true
-                        }
-                        ListView {
-                            id: acceptedTagsList
-                            objectName: "acceptedTagsList"
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: Math.min(contentHeight, 168)
-                            visible: drawer.hasSelection
-                            interactive: contentHeight > height
-                            clip: true
-                            model: appController ? appController.acceptedTagsModel : null
-                            delegate: RowLayout {
-                                required property string conceptId
-                                required property string label
-                                required property string canonicalLabel
-                                required property string category
-                                required property string method
-                                required property string providerModel
-                                width: acceptedTagsList.width
-                                height: 36
-                                spacing: 7
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 0
-                                    Label { Layout.fillWidth: true; text: label; elide: Text.ElideRight; font.pixelSize: 12 }
-                                    Label { visible: canonicalLabel !== label; Layout.fillWidth: true; text: canonicalLabel + " · Wikidata"; elide: Text.ElideRight; font.pixelSize: 9; opacity: 0.5 }
-                                }
-                                Label { text: category; font.pixelSize: 9; opacity: 0.5 }
-                                Label { text: providerModel || method; font.pixelSize: 9; opacity: 0.5; elide: Text.ElideRight; Layout.maximumWidth: 90 }
-                                ToolButton {
-                                    text: "\u2212"
-                                    implicitWidth: 30; implicitHeight: 30
-                                    onClicked: appController.removeSelectedTgmConcept(conceptId)
-                                    ToolTip.text: qsTr("Remove from selected image")
-                                    ToolTip.visible: hovered
-                                }
-                            }
-                        }
-                    }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Layout.margins: 14
-                        spacing: 8
-                        Label { text: qsTr("Tag proposals"); font.pixelSize: 13; font.weight: Font.DemiBold }
-                        Label {
-                            visible: !appController.taggingProposalAvailable
-                            Layout.fillWidth: true
-                            wrapMode: Text.WordWrap
-                            opacity: 0.6
-                            text: !appController.aiEnabled
-                                ? qsTr("Enable AI features to generate proposals.")
-                                : qsTr("Build Wikidata vectors to generate proposals.")
-                        }
-                        Button {
-                            visible: !appController.taggingProposalAvailable && appController.aiEnabled
-                            text: qsTr("Build Wikidata Vectors")
-                            enabled: !appController.isTgmUpdating
-                            onClicked: appController.rebuildTgmVectors()
-                        }
-                        Button {
-                            text: qsTr("Generate for current image")
-                            enabled: drawer.hasSelection && appController.taggingProposalAvailable
-                                && !appController.isGeneratingTagProposals
-                            onClicked: appController.generateSelectedTagProposals()
-                        }
-                        ListView {
-                            id: proposalsList
-                            objectName: "pendingProposalsList"
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: Math.min(contentHeight, 190)
-                            interactive: contentHeight > height
-                            clip: true
-                            boundsBehavior: Flickable.StopAtBounds
-                            model: appController ? appController.pendingProposalsModel : null
-                            ScrollBar.vertical: ScrollBar {
-                                id: proposalsScrollBar
-                                objectName: "tagProposalsScrollBar"
-                                policy: ScrollBar.AsNeeded
-                                active: proposalsList.contentHeight > proposalsList.height
-                            }
-                            delegate: RowLayout {
-                                required property string conceptId
-                                required property string label
-                                required property string canonicalLabel
-                                required property string category
-                                required property real score
-                                required property string provider
-                                required property string providerFingerprint
-                                required property string winningView
-                                required property string winningLocale
-                                width: proposalsList.width
-                                    - (proposalsScrollBar.visible ? proposalsScrollBar.width : 0)
-                                height: 44
-                                spacing: 6
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 0
-                                    Label { Layout.fillWidth: true; text: label; elide: Text.ElideRight; font.pixelSize: 12 }
-                                    Label {
-                                        Layout.fillWidth: true
-                                        text: [
-                                            canonicalLabel !== label ? canonicalLabel : "",
-                                            category,
-                                            provider,
-                                            appSettings && appSettings.showRawTagCandidates
-                                                ? winningView + " / " + winningLocale
-                                                : ""
-                                        ].filter(Boolean).join("  |  ")
-                                        elide: Text.ElideRight
-                                        font.pixelSize: 9
-                                        opacity: 0.5
-                                    }
-                                }
-                                Label {
-                                    text: score.toFixed(3)
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
-                                    ToolTip.text: qsTr("Cosine similarity")
-                                    ToolTip.visible: scoreMouse.containsMouse
-                                    MouseArea { id: scoreMouse; anchors.fill: parent; hoverEnabled: true }
-                                }
-                                ToolButton {
-                                    text: "\u2713"
-                                    enabled: !appController.isGeneratingTagProposals
-                                    onClicked: appController.acceptSelectedProposal(conceptId, providerFingerprint)
-                                    ToolTip.text: qsTr("Accept proposal")
-                                    ToolTip.visible: hovered
-                                }
-                                ToolButton {
-                                    text: "\u2715"
-                                    enabled: !appController.isGeneratingTagProposals
-                                    onClicked: appController.rejectSelectedProposal(conceptId, providerFingerprint)
-                                    ToolTip.text: qsTr("Reject proposal")
-                                    ToolTip.visible: hovered
-                                }
-                            }
-                        }
-                    }
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor }
 
@@ -713,30 +422,20 @@ Drawer {
                     ProgressBar {
                         Layout.fillWidth: true
                         from: 0
-                        to: Math.max(1, appController.isTgmUpdating ? appController.tgmUpdateTotal
-                            : appController.isTaggingBulk ? appController.taggingBulkTotal
-                            : appController.proposalGenerationTotal)
-                        value: appController.isTgmUpdating ? appController.tgmUpdateCurrent
-                            : appController.isTaggingBulk ? appController.taggingBulkCurrent
-                            : appController.proposalGenerationCurrent
+                        to: Math.max(1, appController.taggingBulkTotal)
+                        value: appController.taggingBulkCurrent
                         indeterminate: to <= 1
                     }
                     RowLayout {
                         Layout.fillWidth: true
                         Label {
                             Layout.fillWidth: true
-                            text: appController.isTgmUpdating ? qsTr("Building Wikidata vectors")
-                                : appController.isTaggingBulk ? qsTr("Copying tags")
-                                : qsTr("Generating proposals")
+                            text: qsTr("Copying tags")
                             font.pixelSize: 11
                         }
                         Button {
                             text: qsTr("Cancel")
-                            onClicked: {
-                                if (appController.isTgmUpdating) appController.cancelTgmOperation()
-                                else if (appController.isTaggingBulk) appController.cancelBulkTagging()
-                                else appController.cancelTagProposalGeneration()
-                            }
+                            onClicked: appController.cancelBulkTagging()
                         }
                     }
                 }
@@ -744,8 +443,8 @@ Drawer {
                 Label {
                     Layout.fillWidth: true
                     Layout.leftMargin: 14; Layout.rightMargin: 14; Layout.bottomMargin: 10
-                    visible: appController && (appController.selectedTaggingError || appController.tgmUpdateError || appController.proposalGenerationError)
-                    text: appController.selectedTaggingError || appController.tgmUpdateError || appController.proposalGenerationError
+                    visible: appController && appController.selectedTaggingError !== ""
+                    text: appController.selectedTaggingError
                     color: Material.color(Material.Red)
                     wrapMode: Text.WordWrap
                     font.pixelSize: 11

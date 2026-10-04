@@ -13,7 +13,6 @@ import pytest
 from PIL import Image
 from pytestqt.qtbot import QtBot
 
-from exif_turbo.config import tgm_snapshot_path
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.data.indexed_folder_repository import IndexedFolderRepository
 from exif_turbo.models.image_sidecar import ImageSidecar, SidecarSource
@@ -175,33 +174,6 @@ def test_reset_database_flags_db_phase_not_cancelable(
     assert flags == [True, False]
 
 
-def test_reset_database_same_stem_preserves_other_database_tgm(
-    qtbot: QtBot,
-    tmp_path: Path,
-) -> None:
-    # Arrange
-    application_db = tmp_path / "application" / "index" / "index.db"
-    temporary_db = tmp_path / "test-run" / "index.db"
-    application_db.parent.mkdir(parents=True)
-    temporary_db.parent.mkdir(parents=True)
-    ImageIndexRepository(application_db, key="").close()
-    ImageIndexRepository(temporary_db, key="").close()
-    application_snapshot = tgm_snapshot_path(application_db)
-    application_snapshot.parent.mkdir(parents=True)
-    application_snapshot.write_bytes(b"persistent TGM")
-    temporary_snapshot = tgm_snapshot_path(temporary_db)
-    temporary_snapshot.parent.mkdir(parents=True)
-    temporary_snapshot.write_bytes(b"temporary TGM")
-    worker = MaintenanceWorker(temporary_db, "", "reset_database")
-
-    # Act
-    worker.run()
-
-    # Assert
-    assert application_snapshot.read_bytes() == b"persistent TGM"
-    assert not temporary_snapshot.exists()
-
-
 def test_refresh_sidecars_indexed_folder_updates_search_tags(
     qtbot: QtBot,
     folder_db: tuple[Path, Path, int, str],
@@ -239,8 +211,10 @@ def test_refresh_sidecars_indexed_folder_updates_search_tags(
         folder_path=folder_path,
     )
     finished: list[bool] = []
+    errors: list[str] = []
     progress: list[tuple[int, int]] = []
     worker.finished.connect(lambda: finished.append(True))
+    worker.failed.connect(errors.append)
     worker.progress.connect(
         lambda done, total, _message: progress.append((done, total))
     )
@@ -252,6 +226,7 @@ def test_refresh_sidecars_indexed_folder_updates_search_tags(
     repo = ImageIndexRepository(db_path, key="")
     search_count = repo.count_images("Travel")
     repo.close()
+    assert errors == []
     assert finished == [True]
     assert worker.sidecar_error_count == 0
     assert search_count == 1
@@ -369,6 +344,75 @@ def test_refresh_sidecars_malformed_file_reports_error_and_finishes(
     # Assert
     assert finished == [True]
     assert worker.sidecar_error_count == 1
+
+
+def test_remove_controlled_tags_cleans_sidecar_and_preserves_custom_tags(
+    qtbot: QtBot,
+    folder_db: tuple[Path, Path, int, str],
+) -> None:
+    # Arrange
+    db_path, image_dir, _folder_id, _folder_path = folder_db
+    image_path = image_dir / "a.jpg"
+    sidecar_repository = FilesystemSidecarRepository()
+    sidecar = ImageSidecar(
+        source=SidecarSource(filename=image_path.name),
+        updated_at="2026-08-09T12:30:00Z",
+        schema_version=2,
+        tags=(
+            ImageTag(
+                concept_id="wikidata:Q42",
+                label="Douglas Adams",
+                vocabulary="wikidata",
+                category="subject",
+                provenance=TagProvenance(
+                    method="manual",
+                    accepted_at="2026-08-09T12:30:00Z",
+                    vocabulary_checksum=f"sha256:{'a' * 64}",
+                ),
+            ),
+        ),
+        free_tags=("Family",),
+        excluded_embedded_tags=("Camera",),
+    )
+    revision = sidecar_repository.write(image_path, sidecar, expected_revision=None)
+    repo = ImageIndexRepository(db_path, key="")
+    repo.replace_custom_tags_and_sidecar_state(
+        str(image_path),
+        sidecar,
+        sidecar_path=str(sidecar_repository.sidecar_path(image_path)),
+        sidecar_mtime_ns=revision.mtime_ns,
+        sidecar_size=revision.size,
+        sidecar_checksum=revision.sha256,
+        sync_status="synced",
+    )
+    repo.close()
+    worker = MaintenanceWorker(db_path, "", "remove_controlled_tags")
+    finished: list[bool] = []
+    errors: list[str] = []
+    worker.finished.connect(lambda: finished.append(True))
+    worker.failed.connect(errors.append)
+
+    # Act
+    worker.run()
+
+    # Assert
+    loaded = sidecar_repository.read(image_path)
+    assert loaded is not None
+    repo = ImageIndexRepository(db_path, key="")
+    free_tags = repo.get_free_tags(str(image_path))
+    family_matches = repo.count_images("Family")
+    migration_completed = repo.migration_completed(
+        "custom-only-tagging-v1"
+    )
+    repo.close()
+    assert finished == [True]
+    assert errors == []
+    assert loaded.sidecar.tags == ()
+    assert loaded.sidecar.free_tags == ("Family",)
+    assert loaded.sidecar.excluded_embedded_tags == ("Camera",)
+    assert free_tags == ("Family",)
+    assert family_matches == 1
+    assert migration_completed is True
 
 
 def test_unknown_operation_emits_failed(qtbot: QtBot, tmp_path: Path) -> None:

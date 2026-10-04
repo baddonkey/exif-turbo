@@ -6,22 +6,12 @@ from typing import Iterable, Mapping
 
 from PySide6.QtCore import QThread, Signal
 
-from ...config import (
-    tgm_localization_pack_path,
-    tgm_snapshot_path,
-)
 from ...data.image_index_repository import ImageIndexRepository
 from ...tagging.derivative_export_service import (
     DerivativeExportItemResult,
     DerivativeExportResult,
     DerivativeExportService,
     MetadataWriter,
-)
-from ...tagging.tgm_localization_repository import TgmLocalizationRepository
-from ...tagging.tgm_localization_service import TgmLocalizationService
-from ...tagging.tgm_snapshot_repository import TgmSnapshotRepository
-from ...tagging.composite_vocabulary_repository import (
-    bundled_controlled_vocabulary_repository,
 )
 
 
@@ -48,9 +38,6 @@ class DerivativeExportWorker(QThread):
         date_from: int | None = None,
         date_to: int | None = None,
         metadata_writer: MetadataWriter | None = None,
-        tag_export_mode: str = "canonical",
-        interface_locale: str = "en",
-        selected_locales: tuple[str, ...] = (),
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -67,9 +54,6 @@ class DerivativeExportWorker(QThread):
         self._date_from = date_from
         self._date_to = date_to
         self._metadata_writer = metadata_writer
-        self._tag_export_mode = tag_export_mode
-        self._interface_locale = interface_locale
-        self._selected_locales = selected_locales
         self._cancel_event = threading.Event()
         self.result: DerivativeExportResult | None = None
 
@@ -80,24 +64,7 @@ class DerivativeExportWorker(QThread):
         repository: ImageIndexRepository | None = None
         try:
             repository = ImageIndexRepository(self._db_path, key=self._key)
-            localization_service = None
-            if (
-                tgm_snapshot_path(self._db_path).exists()
-                and tgm_localization_pack_path(self._db_path).exists()
-            ):
-                localization_service = TgmLocalizationService(
-                    TgmSnapshotRepository(tgm_snapshot_path(self._db_path)),
-                    TgmLocalizationRepository(tgm_localization_pack_path(self._db_path)),
-                )
-            service = DerivativeExportService(
-                repository,
-                self._metadata_writer,
-                localization_service=localization_service,
-                vocabulary_repository=bundled_controlled_vocabulary_repository(),
-                tag_export_mode=self._tag_export_mode,
-                interface_locale=self._interface_locale,
-                selected_locales=self._selected_locales,
-            )
+            service = DerivativeExportService(repository, self._metadata_writer)
             image_paths = self._image_paths
             if image_paths is None and self._matching_results:
                 image_paths = repository.get_matching_paths(

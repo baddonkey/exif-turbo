@@ -4764,12 +4764,10 @@ ApplicationWindow {
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
 
-                    TaggingSettings {
+                    CustomTaggingSettings {
                         id: taggingSettingsSection
                         appController: controller
                         appSettings: settingsModel
-                        aiFeatureAvailable: root._aiFeatureAvailable
-                        aiEnabled: root._aiEnabled
                         Layout.bottomMargin: 28
                     }
 

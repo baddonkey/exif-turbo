@@ -20,6 +20,7 @@ from exif_turbo.indexing.indexer_service import IndexerService
 from exif_turbo.indexing.metadata_extractor import MetadataExtractor
 from exif_turbo.models.image_sidecar import ImageSidecar, SidecarSource
 from exif_turbo.models.image_tag import ImageTag, TagProvenance
+from exif_turbo.tagging.custom_tag_migration import CustomTagMigrationService
 from exif_turbo.tagging.sidecar_repository import FilesystemSidecarRepository
 
 
@@ -56,18 +57,7 @@ def _write_sidecar(
     sidecar = ImageSidecar(
         source=SidecarSource(filename=source_filename or image_path.name),
         updated_at="2026-08-09T12:30:00Z",
-        tags=(
-            ImageTag(
-                concept_id="loc-tgm:tgm000001",
-                label=label,
-                category="subject",
-                provenance=TagProvenance(
-                    method="manual",
-                    accepted_at="2026-08-09T12:30:00Z",
-                    vocabulary_checksum="sha256:abc123",
-                ),
-            ),
-        ),
+        free_tags=(label,),
     )
     loaded = repository.read(image_path)
     expected_revision = None if loaded is None else loaded.revision
@@ -202,7 +192,7 @@ def test_build_index_created_sidecar_becomes_searchable_on_unchanged_rescan(
     assert (image_folder / "archive.photo.jpg.sidecar.json").exists()
 
 
-def test_build_index_changed_sidecar_replaces_searchable_tags(
+def test_build_index_changed_sidecar_replaces_searchable_free_tags(
     repo: ImageIndexRepository, image_folder: Path
 ) -> None:
     # Arrange
@@ -221,7 +211,50 @@ def test_build_index_changed_sidecar_replaces_searchable_tags(
     assert len(repo.search_images("New coastal term", limit=10, offset=0)) == 1
 
 
-def test_build_index_deleted_sidecar_clears_tag_search_and_preserves_exif_search(
+def test_build_index_migrates_legacy_sidecar_before_unchanged_scan(
+    repo: ImageIndexRepository, image_folder: Path
+) -> None:
+    # Arrange
+    image_path = _make_jpeg(image_folder / "photo.jpg")
+    stat = image_path.stat()
+    repo.upsert_image(str(image_path), image_path.name, stat.st_mtime, stat.st_size, {}, "")
+    FilesystemSidecarRepository().write(
+        image_path,
+        ImageSidecar(
+            source=SidecarSource(filename=image_path.name),
+            updated_at="2026-08-09T12:30:00Z",
+            tags=(
+                ImageTag(
+                    concept_id="loc-tgm:tgm000001",
+                    label="Legacy controlled tag",
+                    category="subject",
+                    provenance=TagProvenance(
+                        method="manual",
+                        accepted_at="2026-08-09T12:30:00Z",
+                        vocabulary_checksum="sha256:legacy",
+                    ),
+                ),
+            ),
+            free_tags=("Family",),
+        ),
+        expected_revision=None,
+    )
+    service = IndexerService(repo, extractor=_FakeExtractor())
+
+    # Act
+    service.build_index([image_folder])
+
+    # Assert
+    loaded = FilesystemSidecarRepository().read(image_path)
+    assert loaded is not None
+    assert loaded.sidecar.tags == ()
+    assert loaded.sidecar.free_tags == ("Family",)
+    assert repo.search_images("Legacy controlled tag", limit=10, offset=0) == []
+    assert len(repo.search_images("Family", limit=10, offset=0)) == 1
+    assert repo.migration_completed(CustomTagMigrationService.MIGRATION_NAME)
+
+
+def test_build_index_deleted_sidecar_clears_free_tag_search_and_preserves_exif_search(
     repo: ImageIndexRepository, image_folder: Path
 ) -> None:
     # Arrange
@@ -294,7 +327,7 @@ def test_build_index_deleted_sidecar_reports_stale_sidecar_cleanup(
     assert repo.search_images("Deleted sidecar tag", limit=10, offset=0) == []
 
 
-def test_build_index_malformed_sidecar_preserves_tags_and_records_error(
+def test_build_index_malformed_sidecar_preserves_free_tags_and_records_error(
     repo: ImageIndexRepository, image_folder: Path
 ) -> None:
     # Arrange

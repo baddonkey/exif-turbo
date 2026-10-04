@@ -20,7 +20,7 @@ thumbnails and previews extracted from the embedded thumbnail or a frame at
 7. [Browsing by Folder](#7-browsing-by-folder)
 8. [Viewing Metadata and EXIF Tags](#8-viewing-metadata-and-exif-tags)
 9. [Marking Images & Bulk Actions](#9-marking-images--bulk-actions)
-10. [Tagging with Wikidata](#10-tagging-with-wikidata)
+10. [Custom Tags and Derivatives](#10-custom-tags-and-derivatives)
 11. [Settings](#11-settings)
 12. [Keyboard Shortcuts](#12-keyboard-shortcuts)
 13. [FAQ](#13-faq)
@@ -339,7 +339,7 @@ Build them with **AI-Scan** (or **AI Full Scan**) in the
 
 AI vector indexes are tied to the model that created them. If the application
 reports missing or incompatible AI index metadata after an upgrade, run
-**AI Full Scan** before using AI search or tag proposals.
+**AI Full Scan** before using AI search.
 
 Note for macOS Intel users: AI features are unavailable on macOS Intel (x86_64)
 targets and are shown disabled in **Settings**. This is due to PyTorch support
@@ -826,158 +826,89 @@ shown in full and never truncated.
 
 ---
 
-## 10. Tagging with Wikidata
+## 10. Custom Tags and Derivatives
 
-Tagging uses a bundled, curated 8,339-concept visual vocabulary from Wikidata
-without writing metadata into the original image. Its reviewed 8,200-concept
-base is extended with qualified concepts linked to the Library of Congress
-TGM. It is disabled by default for each database; enable it under **Settings → Tagging and Controlled Vocabulary**.
-The snapshot is available fully offline and requires no vocabulary or
-translation-pack installation. It is a controlled visual vocabulary, not an
-exhaustive copy of Wikidata.
-
-Every bundled concept has intrinsic preferred labels and aliases for exactly
-English, German, French, and Italian. The snapshot records its source dump and
-manifest checksums and is distributed under Wikidata's CC0 terms. New accepted
-QIDs are written in sidecar schema v2. Existing schema-v1 `loc-tgm` tags remain
-readable and retain their canonical-label and old localization-overlay fallback
-for display and export; the legacy TGM importer and parsers remain maintenance
-tooling, not a user-facing download workflow.
+Tagging is optional for each database. Enable **Custom Tags** in Settings, then
+open the drawer from Search or Browse with the tag button or **Ctrl+T**. Add
+your own labels, reuse remembered labels, and control which embedded keywords
+are included in derivative copies. There are no vocabulary lookups or AI tag
+suggestions. AI image search and AI-Scan are separate features.
 
 ### Sidecars and search
 
-The first tagging change for `photo.jpg`, including an embedded-tag exclusion,
-creates `photo.jpg.sidecar.json` beside the image. Sidecars are deterministic
-UTF-8 JSON and are the authoritative store for accepted tags and derivative
-exclusions. They are plain text: SQLCipher database encryption
-does **not** encrypt them, so they inherit the source folder's permissions and
-backup policy. Tagging never changes the original image's bytes or timestamp.
+The first tagging change for `photo.jpg` creates `photo.jpg.sidecar.json` beside
+the image. Sidecars are deterministic UTF-8 JSON and the authoritative store for
+custom tags and derivative exclusions. They are plain text: SQLCipher database
+encryption does **not** encrypt them, so they inherit the source folder's
+permissions and backup policy. Tagging never changes the original image's bytes
+or timestamp.
 
-Each accepted Wikidata term stores a qualified ID such as `wikidata:Q4421`, its
-canonical English label, subject or genre/form category, and acceptance
-provenance in schema v2. Custom tags are stored separately in the same sidecar
-as normalized text labels. Legacy `loc-tgm:tgmNNNNNN` records are preserved.
+Custom labels are copied into the encrypted database's reusable tag catalog and
+FTS5 cache. Search uses the normal EXIF query box and syntax. Folder scans and
+**Refresh Tags** synchronize new, changed, and deleted sidecars without
+re-extracting EXIF. Malformed sidecars are reported and left untouched.
 
-Accepted canonical labels, qualified IDs, categories, vocabulary identity,
-all bundled localized preferred labels/aliases, legacy aliases when available,
-and custom labels are copied
-into the encrypted database's FTS5 cache. Search uses the normal EXIF query box
-and syntax; undecided and rejected proposals are not searchable. A regular or
-full image scan synchronizes new, changed, or deleted sidecars even when the
-original image stamp did not change. Malformed sidecars are reported and left
-untouched.
+On the first unlock after upgrading, EXIF Turbo removes old accepted vocabulary
+tags from sidecars and purges their database caches. Custom tags, embedded-tag
+exclusions, unknown sidecar fields, and original images are preserved. A
+malformed or externally changed sidecar is left intact and cleanup retries on a
+later unlock.
 
-Move or rename a sidecar together with its image. Version 1 does not infer an
+Move or rename a sidecar together with its image. EXIF Turbo does not infer an
 external rename. Removing an image or indexed folder clears only database
-cache rows; it does not delete a sidecar. Deleting a sidecar removes its
-accepted tags from FTS after the next synchronization.
+cache rows; it does not delete a sidecar. Deleting a sidecar removes its custom
+tags from FTS after the next synchronization.
 
 ### Tagging drawer
 
 From the **Search** or **Browse** tab, click the tag button at the upper right
 or press **Ctrl+T**. The non-modal drawer contains these controls:
 
-![Current-image tagging drawer](screenshots/10_tagging_drawer.png)
-
-*Photo: [Xenakis UPIC system computer unit](https://commons.wikimedia.org/wiki/File:Xenakis_UPIC_system_computer_unit_2.jpg) by 1904.CC (Manuel Schmalstieg), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), via Wikimedia Commons. Scaled/cropped in the UI; attribution is voluntary.*
-
-- **Existing image tags** lists keywords already embedded in the original
+- **Existing image keywords** lists keywords already embedded in the original
   image's XMP or IPTC metadata. Select individual tags to exclude them from
   derivatives, or select **Ignore all existing tags**. These choices are saved
   in the image sidecar. They never change the source image.
-- **Add a Wikidata term** searches preferred labels and aliases in the selected
-  metadata language after a short delay.
-  Select a result and click **Add** to apply it to the focused image. **Enter**
-  accepts the highlighted result, and **Down** moves through results.
-- **Tags on current image** shows the focused image's canonical tags,
-  category, and provenance. The minus button removes a tag from that image.
 - **Custom tags** accepts a new label with **Enter** or **Add**. Previously used
   labels are remembered for the current database and appear as suggestions;
   click one to reuse the same spelling. Removing a custom tag from an image
   does not remove it from the remembered list. Custom tags do not require AI.
-- **Tag proposals** generates suggestions automatically when the drawer opens
-  and whenever the focused image changes. Each row shows its score and provider
-  and has accept and reject buttons. **Generate for current image** refreshes
-  them manually. Undecided suggestions are kept only for the current selection
-  and are not restored after restart. Rejected proposals remain suppressed for
-  the current Wikidata snapshot, prompt, and model fingerprint.
-- **Final derivative tags** remains visible in the fixed footer. It previews
-  the sorted, deduplicated union of included embedded keywords and accepted
-  controlled/custom additions that a derivative will receive.
-- **Copy tags to other images** copies the focused image's accepted controlled
-  and custom tags and its embedded-tag ignore settings to a selected target
-  set. Individual ignore entries are copied only when that embedded tag exists
-  on the target. Choose **Marked images**, **Current search results** (the
-  complete result set, including unloaded pages), or **Current folder** while
-  browsing. **Add** keeps each target's existing tags and ignore settings and
-  adds the source values. **Replace** substitutes the target's controlled tags,
-  custom tags, and ignore settings and requires confirmation. The focused
-  source image is always excluded. Progress, cancellation, and a completion
-  summary are shown in the drawer.
+- **Tags on current image** lists custom tags assigned to the focused image. Use
+  the remove button to remove a tag from that image; the remembered suggestion
+  remains available.
+- **Final derivative keywords** previews the deduplicated custom tags and
+  included embedded keywords that a derivative will receive.
+- **Copy Tags** copies custom tags and embedded-keyword exclusions to **Marked
+  images**, **Current search results** (including unloaded pages), or **Current
+  folder** while browsing. Individual exclusions transfer only when the same
+  embedded keyword exists on the target. **Add** merges tags and exclusions;
+  **Replace** substitutes the target's custom tags and exclusion settings and
+  requires confirmation. The focused source image is always excluded.
+  Progress and cancellation are available while the copy runs.
 
-Long-running vector and proposal operations show progress and a **Cancel** button.
-Derivative generation starts from the **Action** menu; the drawer footer is
-only a read-only preview.
+Derivative generation starts from the **Action** menu. The drawer footer is a
+read-only preview.
 
 ### Marks and bulk scopes
 
-Direct add, remove, and proposal-review controls edit only the focused image.
-The drawer's **Copy Tags** action can use the persistent marked set as a bulk
-target, while marks also remain available as a derivative scope. Press
+Custom-tag add and remove edit only the focused image. The drawer's **Copy
+Tags** action can use the persistent marked set as a bulk target, while marks
+also remain available as a derivative scope. Press
 **Space** to toggle the focused image's mark, then choose **Marked images** in
 Copy Tags or use **Action → Generate Tagged Derivatives for Marked Images…**.
-
-### CLIP proposal prerequisites
-
-Manual Wikidata search and tagging do not require AI or network access. CLIP
-model assets require network access on first AI use unless they are already
-cached; proposal generation then works offline. Proposals require:
-
-1. **AI Features** enabled in Settings. This is unavailable on macOS Intel.
-2. Image CLIP vectors built separately with **AI-Scan** or **AI Full Scan**
-   for the relevant indexed folder.
-3. A separate Wikidata term-vector index built with **Build Vectors** under
-  **Tagging and Controlled Vocabulary**.
-
-The image FAISS index remains image-only; Wikidata concepts are stored in a
-separate FAISS index. Image-vector schema v2 stores five views per image: the
-full image and four overlapping corner crops. Existing image indexes require
-**AI Full Scan** because incremental AI-Scan cannot reconstruct missing crop
-vectors. Term-vector schema v3 stores separate English, German, French, and
-Italian prompt rows for every QID. A bundled snapshot or prompt change makes
-term vectors stale and requires **Rebuild Vectors**, but does not require
-rebuilding image vectors.
-
-The displayed score is the maximum cosine similarity across the image's five
-views and the QID's four locale prompts. Proposal generation never scans
-original images implicitly: a missing image vector is reported as requiring
-an AI scan.
-
-The proposal threshold defaults to **0.20**. Scores are model- and
-dataset-dependent similarities, not calibrated probabilities. Proposals are
-always review-only and become tags only after explicit user acceptance.
 
 ### Tagged derivatives
 
 Use **Action → Generate Tagged Derivatives for Current Results…** to process
 the complete current result set, including pages not yet loaded into the view,
 or **Action → Generate Tagged Derivatives for Marked Images…** to process the
-marked set. Only images with accepted tags produce copies. The chosen output
-root must be outside every indexed source root. The exporter:
-
-Under **Settings → Tagging and Controlled Vocabulary**, choose a **Metadata
-language** independently from the interface language. It controls Wikidata
-lookup, display, and interface-mode export. Canonical mode emits canonical
-English; metadata-language mode emits that locale's intrinsic preferred label;
-selected mode emits deduplicated preferred labels for selected `en`, `de`,
-`fr`, and `it` locales. Custom tags and preserved embedded keywords are never
-translated. Legacy `loc-tgm` tags retain canonical fallback and old overlay
-behavior.
+marked set. Only images with custom tags or included embedded keywords produce
+copies. The chosen output root must be outside every indexed source root. The
+exporter:
 
 - preserves each source format and relative source folder tree;
 - adds collision-safe top-level labels when marks span multiple indexed roots;
 - skips untagged images and existing destination files without overwriting;
-- merges existing embedded keywords with accepted controlled and custom labels,
+- merges existing embedded keywords with custom tags,
   removes case-insensitive duplicates, and writes the result to **XMP Subject**
   and **IPTC Keywords** on a temporary copy;
 - reads the copied file immediately before writing so non-excluded keywords
@@ -994,19 +925,15 @@ failures and the source remains unchanged.
 
 ### Lifecycle and reset
 
-Disabling tagging hides the workbench but does not delete sidecars, rejected
-proposal decisions, legacy TGM data, or cached accepted tags.
-Already synchronized tags remain searchable. Closing the app requests
-cancellation of running tagging workers; completed item-level writes remain in
-place, while undecided suggestions are discarded.
+Disabling tagging hides the workbench but does not delete sidecars or custom
+tags. Closing the app requests cancellation of running workers; completed
+sidecar writes remain in place.
 
-**Reset Database** clears image/tag/proposal rows, marks, indexed folders,
-thumbnail and preview caches, and the per-database controlled-term vector
-index. It deliberately does not traverse source folders to delete adjacent
-sidecars. The separate image AI index files are not explicitly deleted by
-reset; use **AI Full Scan** after rebuilding the image index when a clean
-semantic index is required. Re-add and scan folders to synchronize sidecars,
-then rebuild Wikidata vectors before generating proposals.
+**Reset Database** clears indexed images, marks, indexed folders, and thumbnail
+and preview caches. It deliberately does not traverse source folders to delete
+adjacent sidecars. The separate image AI index files are not explicitly deleted
+by reset; use **AI Full Scan** after rebuilding the image index when a clean
+semantic index is required. Re-add and scan folders to synchronize sidecars.
 
 ---
 
@@ -1014,20 +941,11 @@ then rebuild Wikidata vectors before generating proposals.
 
 Click the **Settings** tab to configure application behaviour.
 
-### Tagging and Controlled Vocabulary
+### Custom Tagging
 
-![Tagging and Controlled Vocabulary settings](screenshots/11_tagging_settings.png)
-
-**Enable tagging for this database** controls the drawer UI. The section shows
-the bundled Wikidata snapshot's subject and genre/form counts, date, and
-checksum. There is no vocabulary or translation-pack installer. **Build
-Vectors** / **Rebuild Vectors** creates the separate CLIP Wikidata term index
-and is enabled only when AI is available and on.
-
-**Proposal threshold** defaults to 20%. **Developer diagnostics: show raw top
-20 candidates** bypasses the proposal threshold for proposal generation. It
-displays the winning image view and prompt locale alongside each decimal
-cosine-similarity score. Every proposal still requires explicit acceptance.
+The custom-tagging switch enables or disables the tagging drawer for this
+database. It does not affect AI image search or AI-Scan. Previously used custom
+labels remain available as suggestions while tagging is enabled.
 
 ### Worker Threads
 
@@ -1088,9 +1006,7 @@ The theme changes immediately.
 ### Language
 
 Select the application display language from the dropdown. A restart is
-required for that change to take full effect. This does not change controlled
-vocabulary lookup or metadata export language; configure those separately
-under **Tagging and Controlled Vocabulary**.
+required for that change to take full effect.
 
 ### ExifTool
 
@@ -1148,8 +1064,6 @@ Click **OK** to confirm. This permanently:
 - Deletes all indexed images from the database
 - Removes all indexed folder records
 - Wipes the thumbnail and preview cache on disk
-- Removes the per-database controlled-vocabulary term-vector index and legacy
-  TGM compatibility snapshot
 
 The database is vacuumed and checkpointed immediately, so the database file
 shrinks to near-zero on disk straight away.
@@ -1163,8 +1077,8 @@ button and shows a *"This step cannot be canceled…"* notice until it finishes.
 
 > **This action cannot be undone.** After a reset you will need to re-add your
 > folders and run a full rescan to rebuild the index. Adjacent tagging sidecars
-> are not deleted; rescanning imports them again. Rebuild Wikidata proposal
-> vectors when needed. Existing image AI vector files are not
+> are not deleted; rescanning synchronizes their custom tags again. Existing
+> image AI vector files are not
 > explicitly deleted; run **AI Full Scan** when you need to rebuild them.
 
 The **Reset Database…** button is disabled while indexing is in progress.

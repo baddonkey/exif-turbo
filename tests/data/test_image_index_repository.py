@@ -7,7 +7,6 @@ import pytest
 import sqlcipher3
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
-from exif_turbo.models.tag_proposal import TagProposal, TagProposalKind, TagProposalStatus
 from tests.conftest import make_jpeg, make_png
 
 
@@ -79,77 +78,6 @@ def test_count_images_after_insert_returns_correct_count(repo: ImageIndexReposit
     repo.commit()
 
     assert repo.count_images("") == 5
-
-
-def test_repository_reopen_removes_legacy_pending_proposals_only(
-    tmp_path: Path,
-) -> None:
-    # Arrange
-    db_path = tmp_path / "proposals.db"
-    image_path = str(make_jpeg(tmp_path / "photo.jpg"))
-    repo = ImageIndexRepository(db_path, key="")
-    repo.upsert_image(image_path, "photo.jpg", 1.0, 100, {}, "photo jpg")
-    image_id = int(
-        repo.conn.execute(
-            "SELECT id FROM images WHERE path = ?", (image_path,)
-        ).fetchone()[0]
-    )
-    for concept_id, status in (
-        ("loc-tgm:tgm000001", "pending"),
-        ("loc-tgm:tgm000002", "rejected"),
-    ):
-        repo.conn.execute(
-            """
-            INSERT INTO image_tag_proposals (
-                image_id, concept_id, provider_fingerprint, canonical_label,
-                category, score, rank, status, provider_model
-            ) VALUES (?, ?, 'provider-a', ?, 'subject', 0.8, 1, ?, 'clip')
-            """,
-            (image_id, concept_id, concept_id, status),
-        )
-    repo.commit()
-    repo.close()
-
-    # Act
-    reopened = ImageIndexRepository(db_path, key="")
-    statuses = [
-        str(row[0])
-        for row in reopened.conn.execute(
-            "SELECT status FROM image_tag_proposals ORDER BY status"
-        ).fetchall()
-    ]
-    reopened.close()
-
-    # Assert
-    assert statuses == ["rejected"]
-
-
-def test_rejected_public_figure_proposal_round_trip_preserves_kind(
-    repo: ImageIndexRepository,
-    tmp_path: Path,
-) -> None:
-    # Arrange
-    image_path = str(make_jpeg(tmp_path / "person.jpg"))
-    repo.upsert_image(image_path, "person.jpg", 1.0, 100, {}, "person jpg")
-    repo.commit()
-    proposal = TagProposal(
-        image_path=image_path,
-        concept_id="wikidata:Q42",
-        label="Douglas Adams",
-        category="subject",
-        provider_fingerprint="public-figures-v1",
-        score=0.8,
-        rank=1,
-        kind=TagProposalKind.PUBLIC_FIGURE,
-    )
-
-    # Act
-    repo.record_rejected_proposal(proposal)
-    loaded = repo.get_proposals(image_path, status=TagProposalStatus.REJECTED)
-
-    # Assert
-    assert len(loaded) == 1
-    assert loaded[0].kind is TagProposalKind.PUBLIC_FIGURE
 
 
 def test_find_image_offset_path_filter_returns_sorted_offset(repo: ImageIndexRepository, tmp_path: Path) -> None:
