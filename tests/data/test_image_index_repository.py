@@ -787,3 +787,54 @@ def test_bulk_mark_images_returns_zero_for_no_match(repo: ImageIndexRepository, 
     # Assert
     assert affected == []
     assert repo.get_marked_paths() == []
+
+
+# ── pixel counts ─────────────────────────────────────────────────────────────
+
+
+def test_get_image_pixel_counts_for_paths_returns_only_requested_paths(
+    repo: ImageIndexRepository,
+) -> None:
+    # Arrange
+    dims = {"File:ImageWidth": "6000", "File:ImageHeight": "4000"}
+    repo.upsert_image("/photos/a.tif", "a.tif", 1.0, 100, dims, "a")
+    repo.upsert_image("/photos/b.tif", "b.tif", 1.0, 100, dims, "b")
+    repo.commit()
+
+    # Act
+    counts = repo.get_image_pixel_counts_for_paths(["/photos/b.tif"])
+
+    # Assert
+    assert counts == {"/photos/b.tif": 24_000_000}
+
+
+def test_get_image_pixel_counts_for_paths_more_than_one_chunk_returns_all(
+    repo: ImageIndexRepository,
+) -> None:
+    # Arrange
+    dims = {"File:ImageWidth": "10", "File:ImageHeight": "20"}
+    paths = [f"/photos/img{i}.jpg" for i in range(1_201)]
+    for path in paths:
+        repo.upsert_image(path, Path(path).name, 1.0, 100, dims, path)
+    repo.commit()
+
+    # Act
+    counts = repo.get_image_pixel_counts_for_paths(paths)
+
+    # Assert
+    assert len(counts) == len(paths)
+    assert set(counts.values()) == {200}
+
+
+def test_get_image_pixel_counts_for_paths_without_dimensions_omits_path(
+    repo: ImageIndexRepository,
+) -> None:
+    # Arrange
+    repo.upsert_image("/photos/c.jpg", "c.jpg", 1.0, 100, {"Make": "Canon"}, "c")
+    repo.commit()
+
+    # Act
+    counts = repo.get_image_pixel_counts_for_paths(["/photos/c.jpg", "/photos/missing.jpg"])
+
+    # Assert
+    assert counts == {}

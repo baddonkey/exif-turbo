@@ -1874,26 +1874,29 @@ class ImageIndexRepository:
                     result[path] = px
         return result
 
-    def get_enabled_image_pixel_counts(self) -> dict[str, int]:
-        """Return {path: pixel_count} for images in enabled folders.
+    def get_image_pixel_counts_for_paths(
+        self, paths: Iterable[str]
+    ) -> dict[str, int]:
+        """Return {path: pixel_count} for the given *paths* only.
 
-        Uses File:ImageWidth/Height (and fallback keys) from the stored
-        exiftool metadata so thumbnail/preview workers can skip the
-        file-probe step.
+        Lets callers that need dimensions for a small subset (e.g. images
+        still missing a thumbnail) avoid parsing metadata for the whole
+        library.
         """
-        cur = self.conn.execute("SELECT COUNT(*) FROM image_folders")
-        if cur.fetchone()[0] == 0:
-            return self._get_pixel_counts_query(
-                "SELECT path, metadata_json FROM images"
+        result: dict[str, int] = {}
+        unique_paths = list(dict.fromkeys(paths))
+        chunk_size = 500
+        for start in range(0, len(unique_paths), chunk_size):
+            chunk = unique_paths[start:start + chunk_size]
+            placeholders = ",".join("?" * len(chunk))
+            result.update(
+                self._get_pixel_counts_query(
+                    "SELECT path, metadata_json FROM images "
+                    f"WHERE path IN ({placeholders})",
+                    tuple(chunk),
+                )
             )
-        return self._get_pixel_counts_query(
-            "SELECT i.path, i.metadata_json FROM images i "
-            "WHERE EXISTS ("
-            "  SELECT 1 FROM image_folders imf "
-            "  JOIN indexed_folders f ON f.id = imf.folder_id "
-            "  WHERE imf.image_id = i.id AND f.enabled = 1"
-            ")"
-        )
+        return result
 
     def get_folder_image_pixel_counts(self, folder_id: int) -> dict[str, int]:
         """Return {path: pixel_count} for images in *folder_id*."""

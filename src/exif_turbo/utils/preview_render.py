@@ -3,8 +3,8 @@ on-demand QML preview provider.
 
 Both call sites need the same logic:
 
-- read the file bytes up-front so the codec decodes from memory (CPython
-  releases the GIL during ``ReadFile()``, keeping Qt's event loop alive),
+- stream the file from disk (no full in-memory copy) and route large
+  sources through libvips, which shrinks on load,
 - use Pillow's ``draft()`` mode for JPEG so libjpeg subsamples on the way
   out (up to 8\u00d7 faster decode for large camera JPEGs),
 - prefer the embedded JPEG thumbnail of RAW files (rawpy.extract_thumb),
@@ -41,7 +41,7 @@ try:  # pragma: no cover - optional dep, tested separately
 except ImportError:  # pragma: no cover
     _RAWPY_AVAILABLE = False
 
-# pyvips is initialised lazily — only when a >100 MP image is first encountered.
+# pyvips is initialised lazily — only when a large image is first encountered.
 # Eager initialisation at module-import time starts libvips's internal thread pool
 # before Qt's event loop is established, which triggers a GLib/Qt conflict on
 # macOS: a libvips thread calls abort() during Qt event processing (observed in
@@ -188,6 +188,29 @@ def _call_with_timeout(fn, *args, timeout_s: float = _DECODE_TIMEOUT_S):  # type
 # route through libvips, which streams the source and only decodes the tiles
 # needed to produce the target size.
 MAX_PREVIEW_SOURCE_PX = 100_000_000
+# Sources above this size are decoded with libvips (when the extension is
+# allowed) instead of Pillow.  Pillow decodes every source pixel before
+# downscaling — a 90 MP 16-bit TIFF needs ~0.5 GB per worker — whereas
+# libvips shrinks on load.  Below MAX_PREVIEW_SOURCE_PX, Pillow remains the
+# fallback when libvips is unavailable, not allowed, or fails.
+VIPS_ROUTE_SOURCE_PX = 24_000_000
+
+
+def _should_route_to_vips(path: str, pixel_count: int) -> bool:
+    return (
+        pixel_count > VIPS_ROUTE_SOURCE_PX
+        and _vips_extension_allowed(path)
+        and _ensure_pyvips()
+    )
+
+
+def _try_load_vips(path: str, target: tuple[int, int]) -> Image.Image | None:
+    """Return a libvips thumbnail, or ``None`` so the caller can use Pillow."""
+    try:
+        return _load_vips(path, target)
+    except Exception:  # noqa: BLE001 — Pillow fallback handles the file
+        _log.debug("libvips decode failed for %r — falling back to Pillow", path, exc_info=True)
+        return None
 
 
 def render_preview(
@@ -247,42 +270,46 @@ def _load_standard(
                 f"preview source too large: {path!r} ({pixel_count} px)"
             )
         # probe failed and pyvips unavailable — fall through to PIL attempt
+    elif _should_route_to_vips(path, pixel_count):
+        vips_img = _try_load_vips(path, target)
+        if vips_img is not None:
+            return vips_img
 
-    # Normal path: read into BytesIO so the codec decodes from memory
-    # (CPython releases the GIL during ReadFile(), keeping Qt's event loop alive).
-    with open(path, "rb") as f:
-        data = f.read()
-    buf = io.BytesIO(data)
-    try:
-        img = Image.open(buf)
-    except UnidentifiedImageError:
-        with _TRUNCATED_LOCK:
-            ImageFile.LOAD_TRUNCATED_IMAGES = True
-            try:
-                buf.seek(0)
-                img = Image.open(buf)
-            finally:
-                ImageFile.LOAD_TRUNCATED_IMAGES = False
-    # Check mode before draft/load: draft("RGB") silently corrupts I;16 and
-    # similar non-standard modes, making them appear as "RGB" after load()
-    # with incorrect pixel values.  Route to pyvips while we still know the
-    # real mode.
-    if img.mode not in {"RGB", "RGBA", "L", "LA", "P"}:
-        _log.debug("Non-standard Pillow mode %r for %r — retrying with pyvips", img.mode, path)
-        if _ensure_pyvips():
-            return _load_vips(path, target)
-        img = img.convert("RGB")  # pyvips unavailable — best-effort fallback
-    img.draft("RGB", target)
-    with warnings.catch_warnings(record=True) as _decode_warnings:
-        warnings.simplefilter("always")
-        img.load()
-    if any("code not yet in table" in str(w.message) for w in _decode_warnings):
-        # Pillow encountered a TIFF compression codec it doesn't support
-        # (e.g. old-style JPEG-in-TIFF, codec 6).  It returns blank/white
-        # pixel data instead of raising — fall back to pyvips (libtiff).
-        _log.debug("Pillow TIFF unsupported codec (%r) — retrying with pyvips", path)
-        if _ensure_pyvips():
-            return _load_vips(path, target)
+    # Stream from an open file handle rather than copying the whole file into
+    # memory first.  A file object (not a path) also keeps Pillow from
+    # memory-mapping the source, which would SIGBUS if a removable drive
+    # disappears mid-decode.
+    with open(path, "rb") as fh:
+        try:
+            img = Image.open(fh)
+        except UnidentifiedImageError:
+            with _TRUNCATED_LOCK:
+                ImageFile.LOAD_TRUNCATED_IMAGES = True
+                try:
+                    fh.seek(0)
+                    img = Image.open(fh)
+                finally:
+                    ImageFile.LOAD_TRUNCATED_IMAGES = False
+        # Check mode before draft/load: draft("RGB") silently corrupts I;16 and
+        # similar non-standard modes, making them appear as "RGB" after load()
+        # with incorrect pixel values.  Route to pyvips while we still know the
+        # real mode.
+        if img.mode not in {"RGB", "RGBA", "L", "LA", "P"}:
+            _log.debug("Non-standard Pillow mode %r for %r — retrying with pyvips", img.mode, path)
+            if _ensure_pyvips():
+                return _load_vips(path, target)
+            img = img.convert("RGB")  # pyvips unavailable — best-effort fallback
+        img.draft("RGB", target)
+        with warnings.catch_warnings(record=True) as _decode_warnings:
+            warnings.simplefilter("always")
+            img.load()
+        if any("code not yet in table" in str(w.message) for w in _decode_warnings):
+            # Pillow encountered a TIFF compression codec it doesn't support
+            # (e.g. old-style JPEG-in-TIFF, codec 6).  It returns blank/white
+            # pixel data instead of raising — fall back to pyvips (libtiff).
+            _log.debug("Pillow TIFF unsupported codec (%r) — retrying with pyvips", path)
+            if _ensure_pyvips():
+                return _load_vips(path, target)
     img = ImageOps.exif_transpose(img)
     img.thumbnail(target, Image.LANCZOS)
     return img

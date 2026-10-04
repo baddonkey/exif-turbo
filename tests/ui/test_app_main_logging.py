@@ -61,3 +61,19 @@ def test_configure_third_party_logging_hides_faiss_loader_info() -> None:
         assert logger.isEnabledFor(logging.INFO) is False
     finally:
         logger.setLevel(original_level)
+
+def test_configure_third_party_logging_hides_pyvips_info() -> None:
+    # Arrange
+    logger = logging.getLogger("pyvips")
+    original_level = logger.level
+
+    try:
+        # Act
+        logger.setLevel(logging.NOTSET)
+        _configure_third_party_logging()
+
+        # Assert
+        assert logger.isEnabledFor(logging.INFO) is False
+        assert logger.isEnabledFor(logging.WARNING) is True
+    finally:
+        logger.setLevel(original_level)
