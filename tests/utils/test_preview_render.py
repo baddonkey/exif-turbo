@@ -229,3 +229,96 @@ def test_ensure_pyvips_enables_untrusted_block_before_initialization(
     assert available is True
     assert os.environ["VIPS_BLOCK_UNTRUSTED"] == "1"
 
+
+
+def test_render_preview_mid_size_allowed_extension_uses_vips(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    import exif_turbo.utils.preview_render as preview_render
+
+    src = tmp_path / "pano.tif"
+    src.write_bytes(b"not-a-real-image")
+    expected = Image.new("RGB", (128, 64))
+    vips_calls: list[str] = []
+
+    def fake_load_vips(path: str, _target: tuple[int, int]) -> Image.Image:
+        vips_calls.append(path)
+        return expected
+
+    monkeypatch.setattr(preview_render, "_PYVIPS_AVAILABLE", True)
+    monkeypatch.setattr(preview_render, "_load_vips", fake_load_vips)
+
+    # Act
+    result = render_preview(
+        str(src), 128, known_pixel_count=preview_render.VIPS_ROUTE_SOURCE_PX + 1
+    )
+
+    # Assert
+    assert vips_calls == [str(src)]
+    assert result is expected
+
+
+def test_render_preview_mid_size_disallowed_extension_uses_pillow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    import exif_turbo.utils.preview_render as preview_render
+
+    src = tmp_path / "scan.bmp"
+    Image.new("RGB", (40, 20), "blue").save(src, "BMP")
+
+    def fail_load_vips(*_args: object) -> Image.Image:
+        raise AssertionError("libvips must not be used for disallowed extensions")
+
+    monkeypatch.setattr(preview_render, "_PYVIPS_AVAILABLE", True)
+    monkeypatch.setattr(preview_render, "_load_vips", fail_load_vips)
+
+    # Act
+    result = render_preview(
+        str(src), 128, known_pixel_count=preview_render.VIPS_ROUTE_SOURCE_PX + 1
+    )
+
+    # Assert
+    assert result.size == (40, 20)
+
+
+def test_render_preview_mid_size_vips_failure_falls_back_to_pillow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    import exif_turbo.utils.preview_render as preview_render
+
+    src = tmp_path / "photo.png"
+    Image.new("RGB", (40, 20), "green").save(src, "PNG")
+
+    def broken_load_vips(*_args: object) -> Image.Image:
+        raise RuntimeError("libvips loader blocked")
+
+    monkeypatch.setattr(preview_render, "_PYVIPS_AVAILABLE", True)
+    monkeypatch.setattr(preview_render, "_load_vips", broken_load_vips)
+
+    # Act
+    result = render_preview(
+        str(src), 128, known_pixel_count=preview_render.VIPS_ROUTE_SOURCE_PX + 1
+    )
+
+    # Assert
+    assert result.size == (40, 20)
+    assert result.getpixel((0, 0)) == (0, 128, 0)
+
+
+def test_render_preview_small_image_decodes_with_pillow_and_closes_file(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    src = tmp_path / "small.png"
+    Image.new("RGB", (300, 150), "red").save(src, "PNG")
+
+    # Act
+    result = render_preview(str(src), 100)
+    src.unlink()  # fails on Windows if the handle leaked; harmless elsewhere
+
+    # Assert
+    assert result.size == (100, 50)
+    assert result.getpixel((0, 0)) == (255, 0, 0)

@@ -84,6 +84,7 @@ from ...utils.preview_cache import (
     preview_dir,
 )
 from ...utils.json_export import JsonExportFormat
+from ...utils.process_memory import current_rss_bytes
 from ...utils.thumb_cache import thumb_cache_name_from_stamp
 from ..models.checked_filter_proxy_model import CheckedFilterProxyModel
 from ..models.accepted_tag_list_model import AcceptedTagListModel
@@ -465,6 +466,11 @@ class AppController(QObject):
         self._preview_delay_timer.setSingleShot(True)
         self._preview_delay_timer.setInterval(150)
         self._preview_delay_timer.timeout.connect(self._load_pending_preview)
+        # Timer: log process memory every 30 s while background work runs, so
+        # a memory blow-up can be traced from the log even if the OS kills us.
+        self._memory_log_timer = QTimer(self)
+        self._memory_log_timer.setInterval(30_000)
+        self._memory_log_timer.timeout.connect(self._log_memory_usage)
         self._last_progress_update: float = 0.0
         self._last_thumb_progress_update: float = 0.0
 
@@ -3186,6 +3192,29 @@ class AppController(QObject):
         # scan to complete. ThumbWorker is capped at _MAX_THUMB_WORKERS threads
         # to limit GIL pressure during the scan phase on Windows.
         self._thumb_batch_timer.start()
+        self._start_memory_logging()
+
+    def _start_memory_logging(self) -> None:
+        if not self._memory_log_timer.isActive():
+            self._log_memory_usage()
+            self._memory_log_timer.start()
+
+    def _log_memory_usage(self) -> None:
+        active = {
+            "indexing": self._is_indexing,
+            "thumbnails": self._is_building_thumbs,
+            "previews": self._is_building_previews,
+            "ai": self._is_ai_scanning,
+        }
+        if not any(active.values()):
+            self._memory_log_timer.stop()
+            return
+        rss = current_rss_bytes()
+        if rss is None:
+            self._memory_log_timer.stop()
+            return
+        running = ", ".join(name for name, on in active.items() if on)
+        _log.info("Memory: RSS %.0f MB (active: %s)", rss / (1024 * 1024), running)
 
     def _on_managed_folder_index_done(self, count: int, error_count: int = 0) -> None:
         self._thumb_batch_timer.stop()
@@ -3404,6 +3433,7 @@ class AppController(QObject):
         self._preview_worker.canceled.connect(self._on_preview_canceled)
         self._preview_worker.oversized.connect(self._on_preview_oversized)
         self._is_building_previews = True
+        self._start_memory_logging()
         self._preview_build_folder_id = folder_id
         folder = self._folder_repo.get_by_id(folder_id) if self._folder_repo else None
         self._preview_build_folder_name = folder.display_name if folder is not None else ""
@@ -3461,6 +3491,7 @@ class AppController(QObject):
         self._ai_scan_worker.failed.connect(self._on_ai_scan_failed)
         self._ai_scan_worker.canceled.connect(self._on_ai_scan_canceled)
         self._is_ai_scanning = True
+        self._start_memory_logging()
         self._ai_scan_folder_id = folder_id
         self._ai_scan_folder_name = folder.display_name
         self._ai_scan_is_full_rescan = force_rebuild
@@ -5232,6 +5263,7 @@ class AppController(QObject):
         # appear to generate only after indexing finishes.
         self._thumb_worker.start(QThread.Priority.LowPriority)
         self._thumb_refresh_timer.start()
+        self._start_memory_logging()
 
     def _load_pending_preview(self) -> None:
         """Fire the full preview load after the debounce delay."""

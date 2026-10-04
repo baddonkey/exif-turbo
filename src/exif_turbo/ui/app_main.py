@@ -59,6 +59,8 @@ def _qt_message_handler(msg_type: QtMsgType, _context: object, message: str) -> 
 
 def _configure_third_party_logging() -> None:
     logging.getLogger("faiss.loader").setLevel(logging.WARNING)
+    # libvips logs ~20 INFO lines per thumbnailed image, drowning useful output.
+    logging.getLogger("pyvips").setLevel(logging.WARNING)
 
 
 def _ensure_pyside6_dll_search_path() -> None:

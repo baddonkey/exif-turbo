@@ -31,7 +31,7 @@ from PySide6.QtCore import QThread, Signal
 
 from ...data.image_index_repository import ImageIndexRepository
 from ...indexing.image_utils import RAW_EXTENSIONS, VIDEO_EXTENSIONS, orient_raw_thumb
-from ...utils.preview_render import MAX_PREVIEW_SOURCE_PX, render_preview
+from ...utils.preview_render import VIPS_ROUTE_SOURCE_PX, render_preview
 from ...utils.thumb_cache import thumb_cache_name_from_stamp, thumb_cache_path
 from ...utils.thumb_crypto import ThumbCrypto
 from ...utils.video_frame import extract_video_frame
@@ -120,22 +120,24 @@ def _open_image(path: str, known_pixel_count: int | None = None) -> Image.Image:
         except Exception:  # noqa: BLE001
             pass
         pixel_count = _w * _h
-    if pixel_count > MAX_PREVIEW_SOURCE_PX:
-        # render_preview routes through pyvips for large images and returns a
-        # Pillow Image already scaled to _THUMB_SIZE; the .thumbnail() call in
-        # build_thumb becomes a no-op.  RuntimeError (oversized beyond vips cap)
-        # propagates to build_thumb which writes a .skip sentinel.
+    if pixel_count > VIPS_ROUTE_SOURCE_PX:
+        # render_preview routes large sources through pyvips (shrink-on-load)
+        # and returns a Pillow Image already scaled to _THUMB_SIZE; the
+        # .thumbnail() call in build_thumb becomes a no-op.  RuntimeError
+        # (oversized beyond vips cap) propagates to build_thumb which writes a
+        # .skip sentinel.
         return render_preview(path, _THUMB_SIZE[0], known_pixel_count=known_pixel_count)
-    with open(path, "rb") as f:
-        data = f.read()
-    buf = io.BytesIO(data)
-    img = Image.open(buf)
-    # Check mode before load() — I;16 and similar non-standard modes must be
-    # routed through pyvips.  Pillow's convert("RGB") on I;16 produces all-white
-    # output due to a 32-bit signed integer bit-shift bug.
-    if img.mode not in ("RGB", "RGBA", "L", "LA", "P"):
-        return render_preview(path, _THUMB_SIZE[0], known_pixel_count=known_pixel_count)
-    img.load()
+    # Stream from an open file handle instead of copying the whole file into
+    # memory; a file object also prevents Pillow from memory-mapping it.
+    with open(path, "rb") as fh:
+        img = Image.open(fh)
+        # Check mode before load() — I;16 and similar non-standard modes must be
+        # routed through pyvips.  Pillow's convert("RGB") on I;16 produces all-white
+        # output due to a 32-bit signed integer bit-shift bug.
+        if img.mode not in ("RGB", "RGBA", "L", "LA", "P"):
+            return render_preview(path, _THUMB_SIZE[0], known_pixel_count=known_pixel_count)
+        img.draft("RGB", _THUMB_SIZE)
+        img.load()
     img = ImageOps.exif_transpose(img)
     return img
 
@@ -177,14 +179,15 @@ class ThumbWorker(QThread):
     def run(self) -> None:
         _nap = AppNapAssertion("Building image thumbnails")
         try:
-            # Read paths, stamps, and pixel counts from the DB on this
-            # background thread — keeps the main thread free so QML can paint
-            # thumbnails immediately.  Pixel counts (w*h from exiftool metadata)
-            # let the probe-before-decode step be skipped entirely.
+            # Read paths and stamps from the DB on this background thread —
+            # keeps the main thread free so QML can paint thumbnails
+            # immediately.  Pixel counts are loaded later, only for images
+            # that still need a thumbnail.
             repo = ImageIndexRepository(self._db_path, key=self._key)
-            stamps = repo.get_enabled_stamps()
-            pixel_counts = repo.get_enabled_image_pixel_counts()
-            repo.close()
+            try:
+                stamps = repo.get_enabled_stamps()
+            finally:
+                repo.close()
 
             if self._cancel_event.is_set():
                 self.canceled.emit(0, 0)
@@ -238,6 +241,18 @@ class ThumbWorker(QThread):
             )
             paths = [p for p in stamps if _expected_cache_name(p) not in existing]
             missing_total = len(paths)
+
+            # Pixel counts (w*h from exiftool metadata) let the
+            # probe-before-decode step be skipped.  Parsing metadata JSON for
+            # the whole library on every restart is expensive in memory, so
+            # only images that still need a thumbnail are looked up.
+            pixel_counts: dict[str, int] = {}
+            if paths:
+                repo = ImageIndexRepository(self._db_path, key=self._key)
+                try:
+                    pixel_counts = repo.get_image_pixel_counts_for_paths(paths)
+                finally:
+                    repo.close()
 
             # Announce: 0 out of missing_total thumbnails built yet.
             # Only counts images that actually need building — so a rescan
