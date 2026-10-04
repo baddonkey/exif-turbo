@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QUrl
+from PySide6.QtCore import QMetaObject, QObject, Qt, QUrl
 from PySide6.QtQml import QQmlApplicationEngine
-from PySide6.QtQuick import QQuickItem
+from PySide6.QtQuick import QQuickItem, QQuickWindow
 from pytestqt.qtbot import QtBot
 
 from exif_turbo.ui.models.checked_filter_proxy_model import CheckedFilterProxyModel
@@ -113,7 +113,7 @@ def test_tagging_qml_contract_keeps_custom_tagging_and_removes_vocabulary_sugges
     assert 'objectName: "tagProposalsScrollBar"' not in drawer_source
 
 
-def test_main_qml_with_tagging_workbench_loads(
+def test_main_qml_tagging_drawer_pushes_content_aside(
     qtbot: QtBot,
     tmp_path: Path,
 ) -> None:
@@ -147,11 +147,49 @@ def test_main_qml_with_tagging_workbench_loads(
     # Act
     engine.load(QUrl.fromLocalFile(str(_QML_DIR / "Main.qml")))
     qtbot.waitUntil(lambda: bool(engine.rootObjects()), timeout=5_000)
-    root = engine.rootObjects()[0]
+    root: QQuickWindow = engine.rootObjects()[0]  # type: ignore[assignment]
+    root.setWidth(1200)
+    root.setHeight(800)
+    root.show()
+    qtbot.waitExposed(root, timeout=3_000)
+
+    drawer = root.findChild(QObject, "taggingDrawer")
+    search_viewport = root.findChild(QQuickItem, "searchContentViewport")
+    browse_viewport = root.findChild(QQuickItem, "browseContentViewport")
+    tab_bar = root.findChild(QQuickItem, "mainTabBar")
+    assert drawer is not None
+    assert search_viewport is not None
+    assert browse_viewport is not None
+    assert tab_bar is not None
+
+    def assert_viewports_track_drawer() -> None:
+        drawer_left = root.width() - float(drawer.property("width")) * float(
+            drawer.property("position")
+        )
+        for viewport in (search_viewport, browse_viewport):
+            viewport_right = viewport.x() + viewport.width()
+            assert abs(viewport_right - drawer_left) < 1.5
 
     # Assert
+    for tab_index in (0, 1):
+        tab_bar.setProperty("currentIndex", tab_index)
+        qtbot.waitUntil(lambda: float(drawer.property("position")) < 0.001, timeout=3_000)
+        assert_viewports_track_drawer()
+
+        QMetaObject.invokeMethod(drawer, "openAndFocus", Qt.ConnectionType.DirectConnection)
+        qtbot.waitUntil(
+            lambda: 0.1 < float(drawer.property("position")) < 0.9,
+            timeout=3_000,
+        )
+        assert_viewports_track_drawer()
+        qtbot.waitUntil(lambda: float(drawer.property("position")) > 0.999, timeout=3_000)
+        assert_viewports_track_drawer()
+
+        QMetaObject.invokeMethod(drawer, "close", Qt.ConnectionType.DirectConnection)
+        qtbot.waitUntil(lambda: float(drawer.property("position")) < 0.001, timeout=3_000)
+        assert_viewports_track_drawer()
+
     assert root.findChild(QQuickItem, "taggingWorkbenchButton") is not None
-    assert root.findChild(QObject, "taggingDrawer") is not None
     assert root.findChild(QQuickItem, "taggingEnabledSwitch") is not None
     assert root.findChild(QQuickItem, "tagProposalsScrollBar") is None
     assert root.findChild(QQuickItem, "freeTagField") is not None
