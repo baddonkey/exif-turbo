@@ -5,7 +5,6 @@ from typing import Iterable, Sequence
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.models.image_sidecar import ImageSidecar, SidecarSource
-from exif_turbo.models.image_tag import ImageTag, TagProvenance
 from exif_turbo.tagging.sidecar_repository import FilesystemSidecarRepository
 from exif_turbo.ui.workers.derivative_export_worker import DerivativeExportWorker
 
@@ -44,7 +43,7 @@ def _index_tagged_image(
     revision = FilesystemSidecarRepository().write(
         image_path, sidecar, expected_revision=None
     )
-    repository.replace_accepted_tags_and_sidecar_state(
+    repository.replace_custom_tags_and_sidecar_state(
         str(image_path),
         sidecar,
         sidecar_path=f"{image_path}.sidecar.json",
@@ -69,23 +68,12 @@ def test_derivative_export_worker_emits_result_and_progress(tmp_path: Path) -> N
     sidecar = ImageSidecar(
         source=SidecarSource(filename=image_path.name),
         updated_at="2026-08-09T12:00:00Z",
-        tags=(
-            ImageTag(
-                concept_id="loc-tgm:tgm000001",
-                label="Deer",
-                category="subject",
-                provenance=TagProvenance(
-                    method="manual",
-                    accepted_at="2026-08-09T12:00:00Z",
-                    vocabulary_checksum="sha256:tgm",
-                ),
-            ),
-        ),
+        free_tags=("Deer",),
     )
     revision = FilesystemSidecarRepository().write(
         image_path, sidecar, expected_revision=None
     )
-    repository.replace_accepted_tags_and_sidecar_state(
+    repository.replace_custom_tags_and_sidecar_state(
         str(image_path),
         sidecar,
         sidecar_path=f"{image_path}.sidecar.json",

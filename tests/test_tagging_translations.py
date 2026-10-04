@@ -26,7 +26,7 @@ def _qml_messages(filename: str) -> set[str]:
 
 _TAGGING_MESSAGES = (
     _qml_messages("TaggingDrawer.qml")
-    | _qml_messages("TaggingSettings.qml")
+    | _qml_messages("CustomTaggingSettings.qml")
     | {
         "%1 / %2 images",
         "Choose Derivative Target Folder",
@@ -40,15 +40,14 @@ _TAGGING_MESSAGES = (
         "Choose a folder in Browse first.",
         "Choose a valid copy target.",
         "Copied tags to {} image(s). Unchanged: {}. Problems: {}.",
-        "Added to {} image(s). Already tagged: {}. Problems: {}.",
-        "Removed from {} image(s). Already absent: {}. Problems: {}.",
         "Canceled. {}",
         "Created derivative: {}",
         "Created 1 derivative.",
         "Created {} derivatives in {}.",
         "Created {} derivatives.",
         "No derivatives were created.",
-        "{} image(s) had no accepted tags.",
+        "{} image(s) had no tags.",
+        "Removing legacy tags",
         "{} destination file(s) already existed.",
         "{} derivative(s) failed.",
         "First failure ({}): {}",
@@ -91,7 +90,7 @@ def test_tagging_population_source_supported_locale_has_all_qml_messages(
     # Arrange
     translations = TRANSLATIONS[language]
     qml_messages = _qml_messages("TaggingDrawer.qml") | _qml_messages(
-        "TaggingSettings.qml"
+        "CustomTaggingSettings.qml"
     )
 
     # Act

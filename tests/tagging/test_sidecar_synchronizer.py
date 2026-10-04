@@ -1,26 +1,16 @@
 from __future__ import annotations
 
 import os
-from datetime import UTC, datetime
 from pathlib import Path
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.models.image_sidecar import ImageSidecar, SidecarSource
 from exif_turbo.models.image_tag import ImageTag, TagProvenance
-from exif_turbo.models.vocabulary import (
-    LocalizedVocabularyTerms,
-    VocabularyCategory,
-    VocabularyConcept,
-    VocabularySnapshot,
-)
 from exif_turbo.tagging.sidecar_repository import (
     FilesystemSidecarRepository,
     LoadedSidecar,
 )
 from exif_turbo.tagging.sidecar_synchronizer import SidecarSynchronizer
-from exif_turbo.tagging.vocabulary_snapshot_repository import (
-    VocabularySnapshotRepository,
-)
 
 
 class _TrackingSidecarRepository(FilesystemSidecarRepository):
@@ -50,43 +40,6 @@ def _sidecar(filename: str) -> ImageSidecar:
         ),
         free_tags=("Family",),
     )
-
-
-def _vocabulary_repository(tmp_path: Path) -> VocabularySnapshotRepository:
-    repository = VocabularySnapshotRepository(tmp_path / "wikidata.json.gz")
-    repository.activate(
-        VocabularySnapshot(
-            concepts=(
-                VocabularyConcept(
-                    concept_id="wikidata:Q42",
-                    category=VocabularyCategory.SUBJECT,
-                    canonical_label="Douglas Adams",
-                    localized_terms=(
-                        LocalizedVocabularyTerms("en", "Douglas Adams"),
-                        LocalizedVocabularyTerms(
-                            "de", "Englischer Schriftsteller", aliases=("Autor",)
-                        ),
-                        LocalizedVocabularyTerms(
-                            "fr", "Ecrivain anglais", aliases=("Auteur",)
-                        ),
-                        LocalizedVocabularyTerms(
-                            "it", "Scrittore inglese", aliases=("Autore",)
-                        ),
-                    ),
-                    source_uri="https://www.wikidata.org/entity/Q42",
-                    license_id="CC0-1.0",
-                ),
-            ),
-            version=1,
-            created_at=datetime(2026, 8, 23, tzinfo=UTC),
-            source_name="Wikidata",
-            source_dump_uri="file:///offline/wikidata.json",
-            source_dump_sha256="a" * 64,
-            manifest_sha256="b" * 64,
-            license_id="CC0-1.0",
-        )
-    )
-    return repository
 
 
 def test_synchronize_unchanged_sidecar_skips_second_parse(tmp_path: Path) -> None:
@@ -174,7 +127,7 @@ def test_synchronize_force_rereads_same_stamp_external_edit(
     image_repository.close()
 
 
-def test_synchronize_wikidata_sidecar_indexes_required_locale_labels(
+def test_synchronize_legacy_tag_sidecar_removes_tags_and_preserves_free_tags(
     tmp_path: Path,
 ) -> None:
     # Arrange
@@ -204,24 +157,23 @@ def test_synchronize_wikidata_sidecar_indexes_required_locale_labels(
                     ),
                 ),
             ),
+            free_tags=("Family",),
+            excluded_embedded_tags=("Camera",),
         ),
         expected_revision=None,
     )
-    synchronizer = SidecarSynchronizer(
-        image_repository,
-        sidecar_repository,
-        vocabulary_repository=_vocabulary_repository(tmp_path),
-    )
+    synchronizer = SidecarSynchronizer(image_repository, sidecar_repository)
 
     # Act
     result = synchronizer.synchronize([str(image_path)], force=True)
 
     # Assert
     assert result.error_count == 0
-    assert image_repository.count_images('"Englischer Schriftsteller"') == 1
-    assert image_repository.count_images('"Ecrivain anglais"') == 1
-    assert image_repository.count_images('"Scrittore inglese"') == 1
-    assert image_repository.count_images("Autor") == 1
-    assert image_repository.count_images("Auteur") == 1
-    assert image_repository.count_images("Autore") == 1
+    loaded = sidecar_repository.read(image_path)
+    assert loaded is not None
+    assert loaded.sidecar.tags == ()
+    assert loaded.sidecar.free_tags == ("Family",)
+    assert loaded.sidecar.excluded_embedded_tags == ("Camera",)
+    assert image_repository.get_free_tags(str(image_path)) == ("Family",)
+    assert image_repository.count_images("Family") == 1
     image_repository.close()

@@ -6,11 +6,9 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
-from ...config import tgm_snapshot_path
 from ...data.image_index_repository import ImageIndexRepository
 from ...tagging.sidecar_repository import FilesystemSidecarRepository
 from ...tagging.tagging_service import CopyTagsMode, TaggingService
-from ...tagging.tgm_snapshot_repository import TgmSnapshotRepository
 
 
 class CopyTagsWorker(QThread):
@@ -72,11 +70,7 @@ class CopyTagsWorker(QThread):
                         date_from=self._date_from,
                         date_to=self._date_to,
                     )
-            result = TaggingService(
-                image_repository,
-                FilesystemSidecarRepository(),
-                TgmSnapshotRepository(tgm_snapshot_path(self._db_path)),
-            ).copy_tags_to_paths(
+            result = TaggingService(image_repository, FilesystemSidecarRepository()).copy_tags_to_paths(
                 self._source_image_path,
                 image_paths,
                 self._mode,

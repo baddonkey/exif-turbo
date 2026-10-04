@@ -80,10 +80,9 @@ are distributed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/
 | `docs/screenshots/07_folder_filter.png` | `schweiz/Schlösser/001 Chateau de Chillon and Dents du Midi Photo by Giles Laurent.jpg` |
 | `docs/screenshots/09_ai_search_mode.png` | `schweiz/Schlösser/001 Chateau de Chillon and Dents du Midi Photo by Giles Laurent.jpg` |
 | `docs/screenshots/08_gps_location_bar.png` | `gps/Xenakis_UPIC_system_computer_unit_2.jpg` (CC0) |
-| `docs/screenshots/10_tagging_drawer.png` | `gps/Xenakis_UPIC_system_computer_unit_2.jpg` (CC0) |
 
 `01_lock_screen.png`, `06_indexed_folders_basic.png`,
-`06_indexed_folders_expert.png`, and `11_tagging_settings.png` contain no
+`06_indexed_folders_expert.png` contains no
 third-party photographs.
 
 ---

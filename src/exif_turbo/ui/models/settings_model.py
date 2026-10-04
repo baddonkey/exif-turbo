@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import platform
-import re
 import sys
 from pathlib import Path
 from typing import List
@@ -11,7 +10,6 @@ from typing import List
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from exif_turbo.i18n import _, apply_language, available_languages, current_theme, set_theme
-from exif_turbo.models.vocabulary import REQUIRED_VOCABULARY_LOCALES
 from exif_turbo.utils import ai_device
 from exif_turbo.utils.json_export import JsonExportFormat
 from exif_turbo.utils.preview_render import (
@@ -64,18 +62,6 @@ _IS_MACOS_INTEL = sys.platform == "darwin" and platform.machine().lower() in {"x
 _AI_FEATURE_SUPPORTED = not _IS_MACOS_INTEL
 _AI_UNAVAILABLE_REASON = _("PyTorch is not available on macOS Intel for Python 3.13+.")
 
-# Provisional XLM-R CLIP cosine-similarity policy for review-only proposals.
-_DEFAULT_PROPOSAL_THRESHOLD = 0.20
-_LEGACY_PROPOSAL_THRESHOLD = 0.24
-_THRESHOLD_CALIBRATION = "openclip-xlm-r-b32-laion5b-v1"
-_MIN_THRESHOLD = 0.0
-_MAX_PROPOSAL_THRESHOLD = 0.99
-_VALID_TAG_EXPORT_MODES = {"canonical", "interface", "selected"}
-_LOCALE_PATTERN = re.compile(r"^[a-z]{2,3}(?:-[A-Z]{2})?$")
-_METADATA_LANGUAGE_CODES = ("en", "de", "fr", "it")
-assert frozenset(_METADATA_LANGUAGE_CODES) == REQUIRED_VOCABULARY_LOCALES
-
-
 class SettingsModel(QObject):
     """Persistent settings stored per-database as JSON.
 
@@ -119,12 +105,6 @@ class SettingsModel(QObject):
         self._gpu_install_status: str = ""
         self._gpu_restart_required: bool = False
         self._tagging_enabled: bool = False
-        self._proposal_threshold: float = _DEFAULT_PROPOSAL_THRESHOLD
-        self._show_raw_tag_candidates: bool = False
-        self._threshold_calibration: str = _THRESHOLD_CALIBRATION
-        self._metadata_language: str = "en"
-        self._tag_export_mode: str = "canonical"
-        self._tag_export_languages: List[str] = ["en"]
         self._json_pretty: bool = _DEFAULT_JSON_PRETTY
         self._json_indent_style: str = _DEFAULT_JSON_INDENT_STYLE
         self._json_indent_size: int = _DEFAULT_JSON_INDENT_SIZE
@@ -334,103 +314,6 @@ class SettingsModel(QObject):
         self.taggingSettingsChanged.emit()
         self._save()
 
-    @Property(float, notify=taggingSettingsChanged)
-    def proposalThreshold(self) -> float:
-        return self._proposal_threshold
-
-    @property
-    def proposal_threshold(self) -> float:
-        return self._proposal_threshold
-
-    @Slot(float)
-    def setProposalThreshold(self, value: float) -> None:
-        proposal = self._clamp(value, _MIN_THRESHOLD, _MAX_PROPOSAL_THRESHOLD)
-        if self._proposal_threshold == proposal:
-            return
-        self._proposal_threshold = proposal
-        self.taggingSettingsChanged.emit()
-        self._save()
-
-    @Property(bool, notify=taggingSettingsChanged)
-    def showRawTagCandidates(self) -> bool:
-        return self._show_raw_tag_candidates
-
-    @property
-    def show_raw_tag_candidates(self) -> bool:
-        return self._show_raw_tag_candidates
-
-    @Slot(bool)
-    def setShowRawTagCandidates(self, value: bool) -> None:
-        if self._show_raw_tag_candidates == value:
-            return
-        self._show_raw_tag_candidates = value
-        self.taggingSettingsChanged.emit()
-        self._save()
-
-    @Property(str, notify=taggingSettingsChanged)
-    def metadataLanguage(self) -> str:
-        return self._metadata_language
-
-    @Property("QVariantList", constant=True)
-    def metadataLanguageCodes(self) -> list[str]:
-        return list(_METADATA_LANGUAGE_CODES)
-
-    @property
-    def metadata_language(self) -> str:
-        return self._metadata_language
-
-    @Slot(str)
-    def setMetadataLanguage(self, value: str) -> None:
-        if value not in REQUIRED_VOCABULARY_LOCALES or value == self._metadata_language:
-            return
-        self._metadata_language = value
-        self.taggingSettingsChanged.emit()
-        self._save()
-
-    @Property(str, notify=taggingSettingsChanged)
-    def tagExportMode(self) -> str:
-        return self._tag_export_mode
-
-    @property
-    def tag_export_mode(self) -> str:
-        return self._tag_export_mode
-
-    @Slot(str)
-    def setTagExportMode(self, value: str) -> None:
-        if value not in _VALID_TAG_EXPORT_MODES or value == self._tag_export_mode:
-            return
-        self._tag_export_mode = value
-        self.taggingSettingsChanged.emit()
-        self._save()
-
-    @Property("QVariantList", notify=taggingSettingsChanged)
-    def tagExportLanguages(self) -> List[str]:
-        return list(self._tag_export_languages)
-
-    @property
-    def tag_export_languages(self) -> tuple[str, ...]:
-        return tuple(self._tag_export_languages)
-
-    @Slot(str, bool)
-    def setTagExportLanguageEnabled(self, locale: str, enabled: bool) -> None:
-        if _LOCALE_PATTERN.fullmatch(locale) is None:
-            return
-        updated = list(self._tag_export_languages)
-        if enabled and locale not in updated:
-            updated.append(locale)
-        elif not enabled and locale in updated:
-            updated.remove(locale)
-        updated.sort()
-        if updated == self._tag_export_languages:
-            return
-        self._tag_export_languages = updated
-        self.taggingSettingsChanged.emit()
-        self._save()
-
-    @staticmethod
-    def _clamp(value: float, minimum: float, maximum: float) -> float:
-        return max(minimum, min(maximum, float(value)))
-
     @Property("QVariantList", notify=blacklistChanged)
     def blacklist(self) -> List[str]:
         return list(self._blacklist)
@@ -634,7 +517,6 @@ class SettingsModel(QObject):
             return
         try:
             data = json.loads(self._path.read_text(encoding="utf-8"))
-            migrate_thresholds = data.get("proposalThresholdCalibration") != _THRESHOLD_CALIBRATION
             if isinstance(data.get("workerCount"), int):
                 self._worker_count = max(_MIN_WORKERS, min(_MAX_WORKERS, data["workerCount"]))
             if isinstance(data.get("blacklist"), list):
@@ -668,34 +550,6 @@ class SettingsModel(QObject):
                 }
             if isinstance(data.get("taggingEnabled"), bool):
                 self._tagging_enabled = data["taggingEnabled"]
-            if isinstance(data.get("proposalThreshold"), (int, float)):
-                self._proposal_threshold = self._clamp(
-                    data["proposalThreshold"],
-                    _MIN_THRESHOLD,
-                    _MAX_PROPOSAL_THRESHOLD,
-                )
-            if isinstance(data.get("showRawTagCandidates"), bool):
-                self._show_raw_tag_candidates = data["showRawTagCandidates"]
-            if (
-                migrate_thresholds
-                and self._proposal_threshold == _LEGACY_PROPOSAL_THRESHOLD
-            ):
-                self._proposal_threshold = _DEFAULT_PROPOSAL_THRESHOLD
-            if (
-                isinstance(data.get("metadataLanguage"), str)
-                and data["metadataLanguage"] in REQUIRED_VOCABULARY_LOCALES
-            ):
-                self._metadata_language = data["metadataLanguage"]
-            if data.get("tagExportMode") in _VALID_TAG_EXPORT_MODES:
-                self._tag_export_mode = str(data["tagExportMode"])
-            if isinstance(data.get("tagExportLanguages"), list):
-                self._tag_export_languages = sorted(
-                    {
-                        str(locale)
-                        for locale in data["tagExportLanguages"]
-                        if _LOCALE_PATTERN.fullmatch(str(locale)) is not None
-                    }
-                )
             if isinstance(data.get("jsonExportPretty"), bool):
                 self._json_pretty = data["jsonExportPretty"]
             if data.get("jsonExportIndentStyle") in _VALID_INDENT_STYLES:
@@ -705,8 +559,6 @@ class SettingsModel(QObject):
                     _MIN_JSON_INDENT_SIZE,
                     min(_MAX_JSON_INDENT_SIZE, data["jsonExportIndentSize"]),
                 )
-            if migrate_thresholds:
-                self._save()
         except Exception:
             pass  # corrupt/missing file — use defaults
 
@@ -726,12 +578,6 @@ class SettingsModel(QObject):
                         "gpuAccelerationEnabled": self._gpu_acceleration_enabled,
                         "gpuConsentBackends": sorted(self._gpu_consent_backends),
                         "taggingEnabled": self._tagging_enabled,
-                        "proposalThreshold": self._proposal_threshold,
-                        "proposalThresholdCalibration": self._threshold_calibration,
-                        "showRawTagCandidates": self._show_raw_tag_candidates,
-                        "metadataLanguage": self._metadata_language,
-                        "tagExportMode": self._tag_export_mode,
-                        "tagExportLanguages": self._tag_export_languages,
                         "jsonExportPretty": self._json_pretty,
                         "jsonExportIndentStyle": self._json_indent_style,
                         "jsonExportIndentSize": self._json_indent_size,

@@ -74,58 +74,6 @@ def settings_path(db_path: Path) -> Path:
     return database_data_dir(db_path) / "settings.json"
 
 
-def bundled_vocabulary_path() -> Path:
-    """Bundled offline Wikidata controlled-vocabulary snapshot."""
-    return Path(__file__).resolve().parent / "assets" / "wikidata-vocabulary-v2.json.gz"
-
-
-def bundled_public_figure_vocabulary_path() -> Path:
-    """Bundled offline Wikidata public-figure snapshot."""
-    return Path(__file__).resolve().parent / "assets" / "wikidata-public-figures-v1.json.gz"
-
-
-def tgm_snapshot_path(db_path: Path) -> Path:
-    """Active normalized TGM snapshot for the given database."""
-    return database_data_dir(db_path) / "tgm" / "tgm-snapshot.json.gz"
-
-
-def tgm_localization_pack_path(db_path: Path) -> Path:
-    """Active independently sourced TGM localization overlay."""
-    return tgm_snapshot_path(db_path).parent / "tgm-localizations.json.gz"
-
-
-def tgm_work_dir(db_path: Path) -> Path:
-    """Temporary managed-update workspace for the given database."""
-    return tgm_snapshot_path(db_path).parent / "work"
-
-
-def tgm_term_index_path(db_path: Path) -> Path:
-    """FAISS index containing TGM concept text vectors."""
-    return tgm_snapshot_path(db_path).parent / "tgm_terms.faiss"
-
-
-def tgm_concept_map_path(db_path: Path) -> Path:
-    """FAISS row-to-concept map for the TGM term index."""
-    return tgm_snapshot_path(db_path).parent / "tgm_concept_map.json"
-
-
-def tgm_vector_metadata_path(db_path: Path) -> Path:
-    """Fingerprint and integrity metadata for the TGM term index."""
-    return tgm_snapshot_path(db_path).parent / "tgm_vector_metadata.json"
-
-
-def public_figure_term_index_path(db_path: Path) -> Path:
-    return tgm_snapshot_path(db_path).parent / "public_figure_terms.faiss"
-
-
-def public_figure_concept_map_path(db_path: Path) -> Path:
-    return tgm_snapshot_path(db_path).parent / "public_figure_concept_map.json"
-
-
-def public_figure_vector_metadata_path(db_path: Path) -> Path:
-    return tgm_snapshot_path(db_path).parent / "public_figure_vector_metadata.json"
-
-
 def _env_bool(name: str, default: bool) -> bool:
     value = os.getenv(name)
     if value is None:

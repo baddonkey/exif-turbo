@@ -20,36 +20,26 @@ from exif_turbo.ui.view_models.app_controller import AppController
 _QML_DIR = Path(__file__).resolve().parents[2] / "src" / "exif_turbo" / "ui" / "qml"
 
 
-def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
+def test_tagging_qml_contract_keeps_custom_tagging_and_removes_vocabulary_suggestions() -> None:
     # Arrange
     drawer_source = (_QML_DIR / "TaggingDrawer.qml").read_text(encoding="utf-8")
+    settings_source = (_QML_DIR / "CustomTaggingSettings.qml").read_text(encoding="utf-8")
     source = "\n".join(
         path.read_text(encoding="utf-8")
         for path in (
             _QML_DIR / "Main.qml",
             _QML_DIR / "TaggingDrawer.qml",
-            _QML_DIR / "TaggingSettings.qml",
+            _QML_DIR / "CustomTaggingSettings.qml",
         )
     )
     required_bindings = {
         'objectName: "taggingWorkbenchButton"',
         'objectName: "taggingDrawer"',
         'sequence: "Ctrl+T"',
-        "searchTgm(",
-        "addSelectedTgmConcept(",
-        "removeSelectedTgmConcept(",
         "addSelectedFreeTag(",
         "removeSelectedFreeTag(",
         "searchFreeTags(",
-        "acceptSelectedProposal(",
-        "rejectSelectedProposal(",
-        "generateSelectedTagProposals(",
-        "rebuildTgmVectors(",
-        "cancelTgmOperation(",
-        "cancelTagProposalGeneration(",
         "setTaggingEnabled(",
-        "setMetadataLanguage(",
-        "setProposalThreshold(",
         "generateDerivativesForCurrentResults(",
         "generateDerivativesForMarked(",
         "cancelDerivativeExport(",
@@ -62,13 +52,11 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
 
     # Assert
     assert missing == []
-    assert 'objectName: "addTgmTermButton"' in source
-    assert 'objectName: "metadataLanguageCombo"' in source
-    assert "Bundled Wikidata snapshot" in source
-    assert "Metadata language (independent of interface)" in source
-    assert "Install TGM" not in source
-    assert "Update TGM" not in source
-    assert "Install Translation Pack" not in source
+    assert 'objectName: "taggingEnabledSwitch"' in settings_source
+    assert 'text: qsTr("Custom Tagging")' in settings_source
+    assert "Wikidata" not in source
+    assert "TGM" not in source
+    assert "proposal" not in source.lower()
     assert 'objectName: "addFreeTagButton"' in source
     assert 'objectName: "freeTagSuggestions"' in source
     assert 'objectName: "currentFreeTags"' in source
@@ -87,7 +75,6 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
     assert "appController.embeddedTagsModel" in source
     assert "appController.derivativeTagsModel" in source
     assert 'text: qsTr("Custom tags")' in drawer_source
-    assert 'text: qsTr("Tags on current image")' in drawer_source
     assert 'objectName: "copyTagsTarget"' in drawer_source
     assert "onBrowseModeChanged: copyTarget.currentIndex = 0" in drawer_source
     assert 'objectName: "copyTagsAddMode"' in drawer_source
@@ -100,7 +87,7 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
     assert 'value: "marked"' in drawer_source
     assert "Marked images" in drawer_source
     assert drawer_source.index('objectName: "copyTagsTarget"') > drawer_source.index(
-        'objectName: "pendingProposalsList"'
+        'objectName: "currentFreeTags"'
     )
     assert "markedMode" not in drawer_source
     assert "applyConceptToMarked" not in drawer_source
@@ -111,8 +98,6 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
     assert 'objectName: "autoAcceptThresholdSpinBox"' not in source
     assert "generateDerivativesForMarked" not in drawer_source
     assert "function onCurrentResultRowChanged()" in drawer_source
-    assert "onOpened: {" in drawer_source
-    assert "proposalGenerationTimer.restart()" in drawer_source
     assert "property bool showFreeTagSuggestions: false" in drawer_source
     assert "onTextEdited: {" in drawer_source
     assert "drawer.showFreeTagSuggestions = true" in drawer_source
@@ -120,18 +105,12 @@ def test_tagging_qml_contract_contains_required_controls_and_slots() -> None:
     assert "showFreeTagSuggestions = false" in drawer_source
     assert "visible: drawer.showFreeTagSuggestions && count > 0" in drawer_source
     assert "onPressed: drawer.addFreeTag(label)" in drawer_source
-    assert "required property int index" in drawer_source
-    assert "onClicked: selectResultTimer.restart()" in drawer_source
-    assert "selectResultTimer.stop()" in drawer_source
-    assert "interval: Qt.styleHints.mouseDoubleClickInterval" in drawer_source
-    assert "onTriggered: tgmSearchField.text = label" in drawer_source
-    assert "appController.generateSelectedTagProposals()" in drawer_source
+    assert "required property string label" in drawer_source
     assert "Generate Tagged Derivatives for Current &Results..." in source
     assert "Generate Tagged Derivatives for &Marked Images" in source
     assert "FolderDialog {" in source
     assert 'property string scope: "results"' in source
-    assert 'objectName: "tagProposalsScrollBar"' in drawer_source
-    assert "active: proposalsList.contentHeight > proposalsList.height" in drawer_source
+    assert 'objectName: "tagProposalsScrollBar"' not in drawer_source
 
 
 def test_main_qml_with_tagging_workbench_loads(
@@ -174,7 +153,7 @@ def test_main_qml_with_tagging_workbench_loads(
     assert root.findChild(QQuickItem, "taggingWorkbenchButton") is not None
     assert root.findChild(QObject, "taggingDrawer") is not None
     assert root.findChild(QQuickItem, "taggingEnabledSwitch") is not None
-    assert root.findChild(QQuickItem, "tagProposalsScrollBar") is not None
+    assert root.findChild(QQuickItem, "tagProposalsScrollBar") is None
     assert root.findChild(QQuickItem, "freeTagField") is not None
     assert root.findChild(QQuickItem, "addFreeTagButton") is not None
     assert root.findChild(QQuickItem, "freeTagSuggestions") is not None

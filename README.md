@@ -11,10 +11,6 @@ Fully generated using VS Code Copilot.
 
 *Photo: [Chateau de Chillon and Dents du Midi](https://commons.wikimedia.org/wiki/File:001_Chateau_de_Chillon_and_Dents_du_Midi_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
 
-![exif-turbo tagging drawer](docs/screenshots/10_tagging_drawer.png)
-
-*Photo: [Xenakis UPIC system computer unit](https://commons.wikimedia.org/wiki/File:Xenakis_UPIC_system_computer_unit_2.jpg) by 1904.CC (Manuel Schmalstieg), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), via Wikimedia Commons. Scaled/cropped in the UI; attribution is voluntary.*
-
 📖 **[User Manual](docs/user-manual.md)** ([PDF](docs/user-manual.pdf)) — full feature reference, keyboard shortcuts, and screenshots.
 
 ## Features
@@ -22,12 +18,11 @@ Fully generated using VS Code Copilot.
 - **Video indexing** — MP4, MOV, AVI, MKV, WMV, M4V, MTS, M2TS, 3GP, WebM, FLV are indexed alongside still images; thumbnails and previews are decoded via PyAV/FFmpeg (embedded thumbnail when present, otherwise a frame at 1/3 of duration); rotation from the `tkhd` display matrix keeps portrait clips upright.
 - **AI semantic search (CLIP)** — switch the Search bar from **EXIF** to **AI** mode to search by natural-language intent (for example, "golden eagle over mountain lake") instead of exact metadata tokens. A precision picker controls match strictness: **Fine** (>= 0.22), **Normal** (>= 0.20), **Broad** (>= 0.18).
 - **AI-Scan and AI Full Rescan (per folder)** — in **Indexed Folders**, build missing CLIP embeddings for one folder with **AI-Scan**, or rebuild all vectors for that folder with **AI Full Rescan**. Image-vector schema v2 stores the full image plus four corner-crop embeddings; existing indexes require **AI Full Rescan** to upgrade. Vector data is persisted per database (`ai_index.faiss` + `ai_id_map.json`) for fast repeat AI searches.
-- **Non-destructive tagging** — enable tagging per database and open the right-side workbench from Search or Browse with the tag button or **Ctrl+T**. The app ships an offline, curated 8,339-concept visual vocabulary from Wikidata under CC0, with mandatory English, German, French, and Italian labels and aliases. Its reviewed 8,200-concept base is extended with qualified concepts linked to the Library of Congress TGM. Accepted QIDs use sidecar schema v2; custom tags and legacy `loc-tgm` entries remain readable. Originals are never changed, and accepted tags participate in FTS5 search in all four metadata languages.
-- **Current-image tag review** — inspect keywords already embedded in the original and exclude individual keywords, or ignore all embedded keywords, when producing derivatives. Exclusion choices persist in the adjacent sidecar without changing the original. Create custom tags or reuse remembered labels, search Wikidata preferred labels and aliases, and review CLIP proposals generated automatically when the drawer opens or the focused image changes. A fixed footer previews the exact merged, deduplicated keyword set for a derivative. Undecided suggestions are ephemeral; accepted tags and rejected decisions persist.
-- **Copy Tags** — copy the focused image's accepted controlled/custom tags and embedded-tag ignore settings to marked images, every current search result (including unloaded pages), or the current Browse folder. Individual exclusions transfer only when the target contains the same embedded tag. **Add** merges tags and applicable ignore settings; **Replace** confirms before substituting them. The source image is always excluded.
+- **Non-destructive custom tagging** — enable tagging per database and open the right-side workbench from Search or Browse with the tag button or **Ctrl+T**. Add your own labels or reuse remembered tags; the original image is never changed. Tags and embedded-keyword exclusions are stored in an adjacent sidecar, and custom tags participate in FTS5 search.
+- **Current-image tag review** — inspect keywords embedded in the original and exclude individual keywords, or ignore all embedded keywords, when producing derivatives. Exclusion choices persist in the sidecar. A fixed footer previews the merged, deduplicated keywords that a derivative will receive.
+- **Copy Tags** — copy custom tags and embedded-tag exclusions to marked images, every current search result (including unloaded pages), or the current Browse folder. Individual exclusions transfer only when the target contains the same embedded tag. **Add** merges tags and applicable exclusions; **Replace** confirms before substituting them. The source image is always excluded.
 - **Refresh sidecar tags per folder** — **Refresh Tags** on an Indexed Folders row discovers sidecars in one folder walk, then force-rereads only discovered or previously cached sidecars without re-extracting EXIF or rebuilding previews. Added, changed, and deleted sidecars update the tag/search cache; malformed sidecars are left untouched and reported.
-- **Wikidata proposal controls** — the controlled vocabulary is bundled and never contacts Wikidata or needs a vocabulary install, update, or localization pack. Building proposal vectors uses the configured CLIP model, whose assets require network access on first AI use unless already cached; later use works offline. Build the separate term-vector index under **Settings → Tagging and Controlled Vocabulary**. Each QID has independent English, German, French, and Italian prompt vectors; proposal ranking selects the highest cosine similarity across all prompt locales and image views. The proposal threshold defaults to **0.20**. Proposals are always review-only and become tags only after explicit user acceptance.
-- **Tagged derivatives** — copy either every current search result (including unloaded pages) or all marked images to a user-selected folder outside indexed roots while preserving source formats and relative folder trees. Non-excluded embedded keywords are merged with accepted controlled/custom labels, deduplicated case-insensitively, and verified in XMP Subject and IPTC Keywords on each copy. Existing destinations and images without accepted additions are skipped; originals and adjacent sidecars are not copied or modified.
+- **Tagged derivatives** — copy either every current search result (including unloaded pages) or all marked images to a user-selected folder outside indexed roots while preserving source formats and relative folder trees. Non-excluded embedded keywords are merged with custom tags, deduplicated case-insensitively, and verified in XMP Subject and IPTC Keywords on each copy. Existing destinations and images without tags are skipped; originals and adjacent sidecars are not copied or modified.
 - **macOS Intel limitation** — AI features are automatically disabled on macOS Intel (x86_64) targets. The Settings switch is greyed out because PyTorch is not supported there for Python 3.13+.
 - **Recreate Thumbnail / Recreate Preview** — right-click the preview image to rebuild a single thumbnail or preview if it ever looks wrong (e.g. video frame extracted before the rotation fix); the left-grid thumbnail refreshes immediately via a cache-busting URL.
 - **Self-healing cache** — after every folder index run a fast garbage-collection pass deletes orphaned thumbnail and preview files (those whose source image no longer exists in the database). Status bar reports *“Cleaning up cache…”* during the sweep.
@@ -66,18 +61,16 @@ Fully generated using VS Code Copilot.
 
 ## Test suite
 
-522 automated tests across six areas:
+The automated tests cover the following areas:
 
-| Suite | Count | What it covers |
-|-------|-------|----------------|
-| `tests/data/` | 124 | SQLCipher repositories, indexing/search state, marks, sidecar/tag caches, TGM snapshots, AI vectors, exclusions, and rekeying |
-| `tests/indexing/` | 54 | Image/video utilities, metadata extraction and text, AI indexing, scoped rescans, and capture-date resolution |
-| `tests/tagging/` | 69 | Sidecars, synchronization, TGM import/update/search, proposal ranking, custom tags, derivative planning, and verified ExifTool writes |
-| `tests/ui/` | 230 | Controller/workers/models plus live QML coverage for search, browse, settings, tagging, exports, previews, folders, and bulk operations |
-| `tests/utils/` | 43 | Preview/thumbnail cache, encryption, path labels, process helpers, rendering, and video frames |
-| `tests/test_app.py` | 2 | Application entry-point argument handling |
-
-**Total: 522**
+| Suite | What it covers |
+|-------|----------------|
+| `tests/data/` | SQLCipher repositories, indexing/search state, marks, custom-tag sidecars and caches, AI vectors, and rekeying |
+| `tests/indexing/` | Image/video utilities, metadata extraction, AI indexing, scoped rescans, and capture-date resolution |
+| `tests/tagging/` | Custom tags, sidecar synchronization and migration, derivative planning, and verified ExifTool writes |
+| `tests/ui/` | Controllers, workers, models, and QML coverage for search, browse, custom tagging, exports, previews, folders, and bulk operations |
+| `tests/utils/` | Preview/thumbnail cache, encryption, path labels, process helpers, rendering, and video frames |
+| `tests/test_app.py` | Application entry-point argument handling |
 
 ## Requirements
 

@@ -134,7 +134,9 @@ def test_reset_database_leaves_thumb_provider_with_stale_master_key(
     master_key_v1 = thumb_key_path.read_bytes()
 
     # Phase A: let any ThumbWorker started by unlock() finish so it is no
-    # longer racing with our test writes against the cache dir.
+    # longer racing with our test writes against the cache dir. The first
+    # unlock may also run the one-time legacy-tag migration.
+    qtbot.waitUntil(lambda: not ctrl.isBusy, timeout=15_000)
     qtbot.waitUntil(lambda: not ctrl.isBuildingThumbs, timeout=15_000)
 
     # ── Phase A — provider decrypts thumbs encrypted under M1 ───────────────

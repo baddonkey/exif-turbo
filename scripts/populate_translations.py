@@ -1636,7 +1636,7 @@ TRANSLATIONS["rm"].update({
 TRANSLATIONS["de"].update({
     "%1 / %2 images": "%1 / %2 Bilder",
     "AI features are unavailable on this platform": "KI-Funktionen sind auf dieser Plattform nicht verf\u00fcgbar",
-    "All accepted and custom tags on each target image will be replaced. This cannot be undone.": "Alle akzeptierten und benutzerdefinierten Tags auf jedem Zielbild werden ersetzt. Dies kann nicht r\u00fcckg\u00e4ngig gemacht werden.",
+    "All custom tags on each target image will be replaced. This cannot be undone.": "Alle benutzerdefinierten Tags auf jedem Zielbild werden ersetzt. Dies kann nicht r\u00fcckg\u00e4ngig gemacht werden.",
     "Build Vectors": "Vektoren erstellen",
     "Choose Derivative Target Folder": "Zielordner f\u00fcr Derivate ausw\u00e4hlen",
     "Choose a folder in Browse first.": "W\u00e4hlen Sie zuerst einen Ordner unter Durchsuchen aus.",
@@ -1681,14 +1681,15 @@ TRANSLATIONS["de"].update({
     "Tagging and TGM": "Verschlagwortung und TGM",
     "Update TGM": "TGM aktualisieren",
     "{} derivative(s) canceled.": "{} Derivat(e) abgebrochen.",
-    "{} image(s) had no accepted tags.": "{} Bild(er) hatte(n) keine akzeptierten Tags.",
+    "{} image(s) had no tags.": "{} Bild(er) hatten keine Tags.",
+    "Removing legacy tags": "Alte Tags werden entfernt",
     "unknown": "unbekannt",
 })
 
 TRANSLATIONS["fr"].update({
     "%1 / %2 images": "%1 / %2 images",
     "AI features are unavailable on this platform": "Les fonctionnalit\u00e9s d\u2019IA ne sont pas disponibles sur cette plateforme",
-    "All accepted and custom tags on each target image will be replaced. This cannot be undone.": "Tous les tags accept\u00e9s et personnalis\u00e9s de chaque image cible seront remplac\u00e9s. Cette action est irr\u00e9versible.",
+    "All custom tags on each target image will be replaced. This cannot be undone.": "Tous les tags personnalis\u00e9s de chaque image cible seront remplac\u00e9s. Cette action est irr\u00e9versible.",
     "Build Vectors": "Cr\u00e9er les vecteurs",
     "Choose Derivative Target Folder": "Choisir le dossier cible des d\u00e9riv\u00e9s",
     "Choose a folder in Browse first.": "Choisissez d\u2019abord un dossier dans Parcourir.",
@@ -1733,14 +1734,15 @@ TRANSLATIONS["fr"].update({
     "Tagging and TGM": "\u00c9tiquetage et TGM",
     "Update TGM": "Mettre TGM \u00e0 jour",
     "{} derivative(s) canceled.": "{} d\u00e9riv\u00e9(s) annul\u00e9(s).",
-    "{} image(s) had no accepted tags.": "{} image(s) n\u2019avaient aucun tag accept\u00e9.",
+    "{} image(s) had no tags.": "{} image(s) sans tags.",
+    "Removing legacy tags": "Suppression des anciens tags",
     "unknown": "inconnu",
 })
 
 TRANSLATIONS["it"].update({
     "%1 / %2 images": "%1 / %2 immagini",
     "AI features are unavailable on this platform": "Le funzionalit\u00e0 IA non sono disponibili su questa piattaforma",
-    "All accepted and custom tags on each target image will be replaced. This cannot be undone.": "Tutti i tag accettati e personalizzati di ogni immagine di destinazione verranno sostituiti. Questa operazione non pu\u00f2 essere annullata.",
+    "All custom tags on each target image will be replaced. This cannot be undone.": "Tutti i tag personalizzati di ogni immagine di destinazione verranno sostituiti. Questa operazione non pu\u00f2 essere annullata.",
     "Build Vectors": "Crea vettori",
     "Choose Derivative Target Folder": "Scegli la cartella di destinazione dei derivati",
     "Choose a folder in Browse first.": "Scegli prima una cartella in Sfoglia.",
@@ -1785,14 +1787,15 @@ TRANSLATIONS["it"].update({
     "Tagging and TGM": "Tag e TGM",
     "Update TGM": "Aggiorna TGM",
     "{} derivative(s) canceled.": "{} derivato/i annullato/i.",
-    "{} image(s) had no accepted tags.": "{} immagine/i non aveva/no tag accettati.",
+    "{} image(s) had no tags.": "{} immagine/i senza tag.",
+    "Removing legacy tags": "Rimozione dei tag legacy",
     "unknown": "sconosciuto",
 })
 
 TRANSLATIONS["rm"].update({
     "%1 / %2 images": "%1 / %2 maletgs",
     "AI features are unavailable on this platform": "Funcziuns dad IA n\u2019\u00e8n betg disponiblas sin questa plattafurma",
-    "All accepted and custom tags on each target image will be replaced. This cannot be undone.": "Tut ils tags acceptads e persunalisads sin mintga maletg da destinaziun vegnan remplazzads. Quai na po betg vegnir revoc\u00e0.",
+    "All custom tags on each target image will be replaced. This cannot be undone.": "Tut ils tags persunalisads sin mintga maletg da destinaziun vegnan remplazzads. Quai na po betg vegnir revoc\u00e0.",
     "Build Vectors": "Crear vectors",
     "Choose Derivative Target Folder": "Tscherner la cartella da destinaziun per derivats",
     "Choose a folder in Browse first.": "Tscherna l\u2019emprim ina cartella en Sfegliar.",
@@ -1837,7 +1840,8 @@ TRANSLATIONS["rm"].update({
     "Tagging and TGM": "Chavazzinaziun e TGM",
     "Update TGM": "Actualisar TGM",
     "{} derivative(s) canceled.": "{} derivat(s) interrut(s).",
-    "{} image(s) had no accepted tags.": "{} maletg(s) n\u2019aveva(n) nagins tags acceptads.",
+    "{} image(s) had no tags.": "{} maletg(s) senza tags.",
+    "Removing legacy tags": "Ils tags vegls vegnan allontanads",
     "unknown": "nunencunaschent",
 })
 
@@ -1851,7 +1855,7 @@ TRANSLATIONS["de"].update({
     "Export controlled-vocabulary labels": "Bezeichnungen des kontrollierten Vokabulars exportieren",
     "Metadata language (independent of interface)": "Metadatensprache (unabh\u00e4ngig von der Oberfl\u00e4che)",
     "Snapshot date: %1": "Snapshot-Datum: %1",
-    "Tagging and Controlled Vocabulary": "Verschlagwortung und kontrolliertes Vokabular",
+    "Custom Tagging": "Benutzerdefinierte Tags",
     "Wikidata vectors are current": "Wikidata-Vektoren sind aktuell",
     "Wikidata vectors are required": "Wikidata-Vektoren sind erforderlich",
 })
@@ -1866,7 +1870,7 @@ TRANSLATIONS["fr"].update({
     "Export controlled-vocabulary labels": "Exporter les libell\u00e9s du vocabulaire contr\u00f4l\u00e9",
     "Metadata language (independent of interface)": "Langue des m\u00e9tadonn\u00e9es (ind\u00e9pendante de l\u2019interface)",
     "Snapshot date: %1": "Date de l\u2019instantan\u00e9 : %1",
-    "Tagging and Controlled Vocabulary": "\u00c9tiquetage et vocabulaire contr\u00f4l\u00e9",
+    "Custom Tagging": "Tags personnalis\u00e9s",
     "Wikidata vectors are current": "Les vecteurs Wikidata sont \u00e0 jour",
     "Wikidata vectors are required": "Les vecteurs Wikidata sont requis",
 })
@@ -1881,7 +1885,7 @@ TRANSLATIONS["it"].update({
     "Export controlled-vocabulary labels": "Esporta etichette del vocabolario controllato",
     "Metadata language (independent of interface)": "Lingua dei metadati (indipendente dall\u2019interfaccia)",
     "Snapshot date: %1": "Data snapshot: %1",
-    "Tagging and Controlled Vocabulary": "Tag e vocabolario controllato",
+    "Custom Tagging": "Tag personalizzati",
     "Wikidata vectors are current": "I vettori Wikidata sono aggiornati",
     "Wikidata vectors are required": "Sono necessari i vettori Wikidata",
 })
@@ -1896,7 +1900,7 @@ TRANSLATIONS["rm"].update({
     "Export controlled-vocabulary labels": "Exportar denominaziuns dal vocabular controll\u00e0",
     "Metadata language (independent of interface)": "Lingua da las metadatas (independenta da l\u2019interfatscha)",
     "Snapshot date: %1": "Data dal snapshot: %1",
-    "Tagging and Controlled Vocabulary": "Chavazzinaziun e vocabular controll\u00e0",
+    "Custom Tagging": "Tags persunalisads",
     "Wikidata vectors are current": "Ils vectors Wikidata \u00e8n actuals",
     "Wikidata vectors are required": "Ils vectors Wikidata \u00e8n necessaris",
 })
