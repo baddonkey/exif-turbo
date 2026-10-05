@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import subprocess
 import sys
 import warnings
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -237,6 +239,51 @@ def test_downloadable_backend_for_platform_is_none_on_windows_without_nvidia(
 
     # Act / Assert
     assert ai_device.downloadable_backend_for_platform() is None
+
+
+@pytest.mark.parametrize("system", ["Windows", "Linux", "Darwin"])
+def test_has_nvidia_gpu_platform_launch_preserves_detection_and_hides_windows_console(
+    monkeypatch: pytest.MonkeyPatch, system: str,
+) -> None:
+    # Arrange
+    monkeypatch.setattr(ai_device._platform, "system", lambda: system)
+    monkeypatch.setattr(ai_device.shutil, "which", lambda _name: "nvidia-smi")
+    monkeypatch.setattr(subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+    run = Mock(return_value=subprocess.CompletedProcess(
+        args=["nvidia-smi"], returncode=0, stdout="NVIDIA GPU\n",
+    ))
+    monkeypatch.setattr(ai_device.subprocess, "run", run)
+    creationflags = 0x08000000 if system == "Windows" else 0
+
+    # Act
+    detected = ai_device._has_nvidia_gpu()
+
+    # Assert
+    assert detected is True
+    run.assert_called_once_with(
+        ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+        capture_output=True, text=True, timeout=5, creationflags=creationflags,
+    )
+
+
+@pytest.mark.parametrize(
+    ("returncode", "stdout"), [(1, "NVIDIA GPU\n"), (0, ""), (0, " \n")],
+)
+def test_has_nvidia_gpu_unsuccessful_or_empty_output_returns_false(
+    monkeypatch: pytest.MonkeyPatch, returncode: int, stdout: str,
+) -> None:
+    # Arrange
+    monkeypatch.setattr(ai_device.shutil, "which", lambda _name: "nvidia-smi")
+    run = Mock(return_value=subprocess.CompletedProcess(
+        args=["nvidia-smi"], returncode=returncode, stdout=stdout,
+    ))
+    monkeypatch.setattr(ai_device.subprocess, "run", run)
+
+    # Act
+    detected = ai_device._has_nvidia_gpu()
+
+    # Assert
+    assert detected is False
 
 
 def test_python_command_uses_external_interpreter_when_frozen(
