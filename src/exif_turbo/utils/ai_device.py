@@ -163,11 +163,15 @@ def _has_nvidia_gpu() -> bool:
     if executable is None:
         return False
     try:
+        # The GUI's windowed build does not hide consoles spawned by child processes.
         result = subprocess.run(
             [executable, "--query-gpu=name", "--format=csv,noheader"],
             capture_output=True,
             text=True,
             timeout=5,
+            creationflags=(
+                subprocess.CREATE_NO_WINDOW if _platform.system() == "Windows" else 0
+            ),
         )
     except OSError:
         return False
@@ -406,4 +410,3 @@ def install_gpu_backend(
             "that folder manually, then try again."
         )
     return True, f"{info.display_name} installed."
-
