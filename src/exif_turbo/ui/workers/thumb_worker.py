@@ -31,6 +31,7 @@ from PySide6.QtCore import QThread, Signal
 
 from ...data.image_index_repository import ImageIndexRepository
 from ...indexing.image_utils import RAW_EXTENSIONS, VIDEO_EXTENSIONS, orient_raw_thumb
+from ...utils.decode_process import run_decode_process
 from ...utils.preview_render import VIPS_ROUTE_SOURCE_PX, render_preview
 from ...utils.thumb_cache import thumb_cache_name_from_stamp, thumb_cache_path
 from ...utils.thumb_crypto import ThumbCrypto
@@ -51,34 +52,8 @@ _RAW_EXTENSIONS = RAW_EXTENSIONS
 
 _log = logging.getLogger(__name__)
 
-# Per-file timeout for rawpy/PyAV decode calls — mirrors preview_render.py.
-# 300 s is generous enough for a 2 GB RAW file on a slow NAS (~20 MB/s).
+# Per-file timeout for rawpy/PyAV decode subprocesses.
 _DECODE_TIMEOUT_S = 300.0
-
-
-def _call_with_timeout(fn, *args, timeout_s: float = _DECODE_TIMEOUT_S):  # type: ignore[no-untyped-def]
-    """Run *fn*(*args*) in a daemon thread; raise ``TimeoutError`` if it does
-    not finish within *timeout_s* seconds.  The stuck thread is leaked.
-    """
-    result: list = []
-    error: list[BaseException] = []
-
-    def _run() -> None:
-        try:
-            result.append(fn(*args))
-        except Exception as exc:  # noqa: BLE001
-            error.append(exc)
-
-    t = threading.Thread(target=_run, daemon=True, name=f"decode-timeout-{fn.__name__}")
-    t.start()
-    t.join(timeout_s)
-    if t.is_alive():
-        raise TimeoutError(
-            f"Decode of {args[0]!r} timed out after {timeout_s:.0f} s"
-        )
-    if error:
-        raise error[0]
-    return result[0]
 
 
 def _open_image(path: str, known_pixel_count: int | None = None) -> Image.Image:
@@ -140,6 +115,27 @@ def _open_image(path: str, known_pixel_count: int | None = None) -> Image.Image:
         img.load()
     img = ImageOps.exif_transpose(img)
     return img
+
+
+def _decode_thumbnail_source(
+    path: str, known_pixel_count: int | None = None
+) -> Image.Image:
+    extension = Path(path).suffix.lower()
+    if extension in VIDEO_EXTENSIONS:
+        return run_decode_process(
+            "exif_turbo.utils.video_frame",
+            "extract_video_frame",
+            (path, _THUMB_SIZE[0]),
+            timeout_s=_DECODE_TIMEOUT_S,
+        )
+    if extension in _RAW_EXTENSIONS and _RAWPY_AVAILABLE:
+        return run_decode_process(
+            "exif_turbo.utils.preview_render",
+            "_load_raw",
+            (path, _THUMB_SIZE),
+            timeout_s=_DECODE_TIMEOUT_S,
+        )
+    return _open_image(path, known_pixel_count)
 
 
 class ThumbWorker(QThread):
@@ -303,7 +299,7 @@ class ThumbWorker(QThread):
                 else:
                     cache_path_obj = thumb_cache_path(path, self.cache_dir)
                 try:
-                    img = _call_with_timeout(_open_image, path, pixel_counts.get(path))
+                    img = _decode_thumbnail_source(path, pixel_counts.get(path))
                     img.thumbnail(_THUMB_SIZE, Image.LANCZOS)
                     if crypto.is_active:
                         buf = io.BytesIO()

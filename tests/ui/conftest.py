@@ -7,6 +7,8 @@ from PySide6.QtCore import QCoreApplication, QThread
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtWebEngineQuick import QtWebEngineQuick
 
+from exif_turbo.ui.view_models.app_controller import AppController
+
 # Disable the NSProcessInfo App-Nap activity assertion that IndexWorker /
 # ThumbWorker take when they start.  The assertion is a power-management
 # hint with no functional impact, but invoking the Objective-C runtime via
@@ -66,3 +68,15 @@ def _drain_qthreads_after_test() -> None:
             thread.wait(5000)
         except RuntimeError:
             pass
+
+
+@pytest.fixture(autouse=True)
+def _allow_explicit_plaintext_test_databases(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Opt legacy UI fixtures into plaintext explicitly; production defaults closed."""
+    original_init = AppController.__init__
+
+    def _init_with_plaintext_opt_in(self: AppController, *args: object, **kwargs: object) -> None:
+        kwargs.setdefault("allow_plaintext_db", True)
+        original_init(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(AppController, "__init__", _init_with_plaintext_opt_in)

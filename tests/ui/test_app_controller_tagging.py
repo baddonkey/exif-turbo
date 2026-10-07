@@ -42,7 +42,7 @@ def tagging_controller(
     db_path = tmp_path / "images.db"
     image_path = tmp_path / "photo.jpg"
     image_path.write_bytes(b"image")
-    repository = ImageIndexRepository(db_path)
+    repository = ImageIndexRepository(db_path, key="")
     repository.upsert_image(str(image_path), image_path.name, 1.0, 5, {}, "")
     repository.close()
     monkeypatch.setattr(app_controller_module, "get_exiftool_version", lambda: "test")

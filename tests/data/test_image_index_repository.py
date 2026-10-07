@@ -102,6 +102,26 @@ def test_find_image_offset_path_filter_returns_sorted_offset(repo: ImageIndexRep
     assert offset == 1
 
 
+def test_search_images_path_filter_treats_wildcards_as_literal(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange
+    folder = tmp_path / "album_%_2026"
+    wildcard_match = tmp_path / "album_XY_2026"
+    folder.mkdir()
+    wildcard_match.mkdir()
+    expected_path = str(make_jpeg(folder / "inside.jpg"))
+    sibling_path = str(make_jpeg(wildcard_match / "sibling.jpg"))
+    for path in (expected_path, sibling_path):
+        repo.upsert_image(path, Path(path).name, 1.0, 100, {}, Path(path).name)
+
+    # Act
+    rows = repo.search_images("", limit=10, offset=0, path_filter=[str(folder)])
+
+    # Assert
+    assert [row[1] for row in rows] == [expected_path]
+
+
 # ── FTS5 search ───────────────────────────────────────────────────────────────
 
 
@@ -367,6 +387,28 @@ def test_delete_missing_scoped_to_folder_preserves_images_in_other_folders(
     assert rows[0][1] == path_b
 
 
+def test_delete_missing_treats_wildcards_in_folder_as_literal(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange
+    folder = tmp_path / "folder_a"
+    wildcard_match = tmp_path / "folderXa"
+    folder.mkdir()
+    wildcard_match.mkdir()
+    path_inside = str(make_jpeg(folder / "inside.jpg"))
+    path_sibling = str(make_jpeg(wildcard_match / "sibling.jpg"))
+    repo.upsert_image(path_inside, "inside.jpg", 1.0, 100, {}, "inside")
+    repo.upsert_image(path_sibling, "sibling.jpg", 1.0, 100, {}, "sibling")
+    repo.commit()
+
+    # Act
+    repo.delete_missing([], folder_roots=[str(folder)])
+    rows = repo.search_images("", limit=10, offset=0)
+
+    # Assert
+    assert [row[1] for row in rows] == [path_sibling]
+
+
 # ── format counts ─────────────────────────────────────────────────────────────
 
 
@@ -424,7 +466,7 @@ def test_init_db_backfills_ext_for_legacy_rows(tmp_path: Path) -> None:
     conn.close()
 
     # Act
-    repo = ImageIndexRepository(db_path)
+    repo = ImageIndexRepository(db_path, key="")
     counts = dict(repo.get_format_counts())
     ext_row = repo.conn.execute("SELECT ext FROM images WHERE id = 1").fetchone()
     repo.close()

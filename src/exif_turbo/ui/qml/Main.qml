@@ -1020,7 +1020,7 @@ ApplicationWindow {
                         Label {
                             Layout.fillWidth: true
                             visible: _isNewDatabase
-                            text: qsTr("This passphrase encrypts your entire image index. Use at least 12 characters and a mix of letters, numbers, and symbols. There is no way to recover a lost passphrase.")
+                            text: qsTr("This passphrase encrypts your entire image index. Use at least 12 characters. There is no way to recover a lost passphrase.")
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
                             opacity: 0.85
@@ -1057,8 +1057,10 @@ ApplicationWindow {
                         Label {
                             Layout.fillWidth: true
                             text: _unlockError !== "" ? _unlockError
-                                  : (_isNewDatabase && confirmField.text.length > 0 && passwordField.text !== confirmField.text
-                                     ? qsTr("Passphrases do not match") : "")
+                                             : (_isNewDatabase && Array.from(passwordField.text).length > 0 && Array.from(passwordField.text).length < 12
+                                                 ? qsTr("Passphrase must be at least 12 characters.")
+                                                 : (_isNewDatabase && confirmField.text.length > 0 && passwordField.text !== confirmField.text
+                                                     ? qsTr("Passphrases do not match") : ""))
                             color: "#f44336"
                             font.pixelSize: 12
                             visible: text !== ""
@@ -1072,7 +1074,7 @@ ApplicationWindow {
                             implicitHeight: 44
                             font.pixelSize: 14
                             enabled: !_isUnlocking && (_isNewDatabase
-                                     ? (passwordField.text.length >= 1 && passwordField.text === confirmField.text)
+                                     ? (Array.from(passwordField.text).length >= 12 && passwordField.text === confirmField.text)
                                      : passwordField.text.length >= 1)
                             onClicked: _isNewDatabase ? lockOverlay._tryCreate() : controller.unlock(passwordField.text)
                         }
@@ -1099,6 +1101,7 @@ ApplicationWindow {
                 }
 
                 function _tryCreate() {
+                    if (Array.from(passwordField.text).length < 12) return
                     if (passwordField.text !== confirmField.text) return
                     controller.unlock(passwordField.text)
                 }
@@ -5125,6 +5128,11 @@ ApplicationWindow {
                     if (newPwField.text === "") {
                         errorLabel.color = Material.color(Material.Red)
                         errorLabel.text = qsTr("New password must not be empty.")
+                        return
+                    }
+                    if (Array.from(newPwField.text).length < 12) {
+                        errorLabel.color = Material.color(Material.Red)
+                        errorLabel.text = qsTr("Password must be at least 12 characters.")
                         return
                     }
                     if (newPwField.text !== confirmPwField.text) {

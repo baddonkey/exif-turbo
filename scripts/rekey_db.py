@@ -9,37 +9,32 @@ cache.  Run it from the project venv:
 """
 from __future__ import annotations
 
-import binascii
 import getpass
 import sys
 from pathlib import Path
 
 import sqlcipher3
 
+from exif_turbo.data._connection import open_encrypted_connection, rekey_connection
+from exif_turbo.data.password_policy import validate_new_database_password
+
 
 def rekey(db_path: Path, old_password: str, new_password: str) -> None:
-    if not new_password:
-        raise SystemExit("New password must not be empty.")
-    conn = sqlcipher3.connect(str(db_path))
+    validate_new_database_password(new_password)
+    conn = open_encrypted_connection(db_path, old_password)
     try:
-        old_hex = binascii.hexlify(old_password.encode("utf-8")).decode("ascii")
-        new_hex = binascii.hexlify(new_password.encode("utf-8")).decode("ascii")
-        conn.execute(f"PRAGMA key=\"x'{old_hex}'\"")
-        # Verify old key actually opens the DB.
-        conn.execute("SELECT count(*) FROM sqlite_master").fetchone()
         # Switch out of WAL so rekey is not silently no-op'd.
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         conn.execute("PRAGMA journal_mode=DELETE")
-        conn.execute(f"PRAGMA rekey=\"x'{new_hex}'\"")
+        rekey_connection(conn, new_password)
         conn.commit()
         conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("SELECT count(*) FROM sqlite_master").fetchone()
     finally:
         conn.close()
     # Verify by reopening with the new password.
-    conn = sqlcipher3.connect(str(db_path))
+    conn = open_encrypted_connection(db_path, new_password)
     try:
-        new_hex = binascii.hexlify(new_password.encode("utf-8")).decode("ascii")
-        conn.execute(f"PRAGMA key=\"x'{new_hex}'\"")
         conn.execute("SELECT count(*) FROM sqlite_master").fetchone()
     finally:
         conn.close()
@@ -58,7 +53,7 @@ def main() -> None:
         raise SystemExit("New password and confirmation do not match.")
     try:
         rekey(db, old_pw, new_pw)
-    except sqlcipher3.DatabaseError as exc:
+    except (sqlcipher3.DatabaseError, ValueError) as exc:
         print(f"\nFAILED — SQLCipher rejected an operation: {exc}", file=sys.stderr)
         raise SystemExit(2)
     print("\nDatabase successfully rekeyed. The new password now opens the DB.")

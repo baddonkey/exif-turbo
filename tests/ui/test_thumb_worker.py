@@ -46,3 +46,49 @@ def test_open_image_small_source_decodes_from_disk(tmp_path: Path) -> None:
     # Assert
     assert result.size == (64, 32)
     assert result.getpixel((0, 0)) == (255, 0, 0)
+
+
+@pytest.mark.parametrize(
+    ("filename", "module_name", "function_name", "args"),
+    [
+        (
+            "clip.mp4",
+            "exif_turbo.utils.video_frame",
+            "extract_video_frame",
+            lambda path: (path, 144),
+        ),
+        (
+            "raw.cr2",
+            "exif_turbo.utils.preview_render",
+            "_load_raw",
+            lambda path: (path, (144, 144)),
+        ),
+    ],
+)
+def test_decode_thumbnail_source_isolates_native_formats(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    filename: str,
+    module_name: str,
+    function_name: str,
+    args: object,
+) -> None:
+    # Arrange
+    path = str(tmp_path / filename)
+    expected = Image.new("RGB", (20, 10))
+    calls: list[tuple[object, ...]] = []
+
+    def fake_decode(*values: object, **kwargs: object) -> Image.Image:
+        calls.append(values + (kwargs["timeout_s"],))
+        return expected
+
+    monkeypatch.setattr(thumb_worker, "run_decode_process", fake_decode)
+    monkeypatch.setattr(thumb_worker, "_RAWPY_AVAILABLE", True)
+
+    # Act
+    result = thumb_worker._decode_thumbnail_source(path)
+
+    # Assert
+    expected_args = args(path)  # type: ignore[operator]
+    assert result is expected
+    assert calls == [(module_name, function_name, expected_args, 300.0)]

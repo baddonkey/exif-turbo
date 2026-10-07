@@ -13,6 +13,11 @@ def folder_repo(tmp_path: Path) -> IndexedFolderRepository:
     return IndexedFolderRepository(tmp_path / "test.db", key="")
 
 
+def test_new_folder_database_requires_strong_password(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="at least 12 characters"):
+        IndexedFolderRepository(tmp_path / "new.db", key="short")
+
+
 # ── add ───────────────────────────────────────────────────────────────────────
 
 

@@ -33,6 +33,7 @@ from exif_turbo.ui.view_models.app_controller import AppController
 
 # How long to leave the window visible between steps (ms).
 _PAUSE_MS = 700
+_TEST_PASSWORD = "test-controller-passphrase"
 
 _QML_PATH = (
     Path(__file__).resolve().parents[2]
@@ -66,7 +67,7 @@ def demo_db(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
     img_dir = base / "images"
     img_dir.mkdir()
 
-    repo = ImageIndexRepository(base / "demo.db", key="")
+    repo = ImageIndexRepository(base / "demo.db", key=_TEST_PASSWORD)
     for (fname, make, model, date), color in zip(_CAMERAS, _COLORS):
         img_path = img_dir / fname
         Image.new("RGB", (32, 32), color=color).save(str(img_path), format="JPEG")
@@ -135,13 +136,86 @@ def test_unlock_shows_all_images(
 
     # Act
     with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
-        controller.unlock("")
+        controller.unlock(_TEST_PASSWORD)
     qtbot.wait(_PAUSE_MS)
 
     # Assert
     assert not controller.isLocked
     assert controller.totalResults == 5
     assert search_model.rowCount() == 5
+
+
+def test_unlock_rejects_empty_password(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    db_path = tmp_path / "new.db"
+    controller = AppController(
+        db_path,
+        SearchListModel(cache_dir=tmp_path / "thumbs"),
+        ExifListModel(),
+        FolderListModel(),
+        allow_plaintext_db=False,
+    )
+
+    # Act
+    controller.unlock("")
+
+    # Assert
+    assert controller.isLocked
+    assert controller.unlockError != ""
+    assert not db_path.exists()
+    controller.close()
+
+
+def test_do_unlock_rejects_empty_password_directly(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    db_path = tmp_path / "new.db"
+    controller = AppController(
+        db_path,
+        SearchListModel(cache_dir=tmp_path / "thumbs"),
+        ExifListModel(),
+        FolderListModel(),
+        allow_plaintext_db=False,
+    )
+
+    # Act
+    controller._do_unlock("")
+
+    # Assert
+    assert controller.isLocked
+    assert controller.unlockError != ""
+    assert not db_path.exists()
+    controller.close()
+
+
+def test_plaintext_database_requests_new_passphrase(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    db_path = tmp_path / "legacy.db"
+    repository = ImageIndexRepository(db_path, key="")
+    repository.close()
+    controller = AppController(
+        db_path,
+        SearchListModel(cache_dir=tmp_path / "thumbs"),
+        ExifListModel(),
+        FolderListModel(),
+        allow_plaintext_db=False,
+    )
+
+    # Act / Assert
+    assert controller.isNewDatabase
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=5_000):
+        controller.unlock(_TEST_PASSWORD)
+    assert not controller.isLocked
+    assert not controller.isNewDatabase
+    assert not db_path.read_bytes().startswith(b"SQLite format 3\x00")
+    controller.close()
 
 
 def test_unlock_migrates_controlled_tags_before_initial_search(
@@ -173,7 +247,7 @@ def test_unlock_migrates_controlled_tags_before_initial_search(
         free_tags=("Family",),
     )
     revision = sidecar_repository.write(image_path, sidecar, expected_revision=None)
-    repo = ImageIndexRepository(db_path, key="")
+    repo = ImageIndexRepository(db_path, key=_TEST_PASSWORD)
     with repo.conn:
         repo.conn.execute(
             "DELETE FROM completed_migrations WHERE name = ?",
@@ -192,7 +266,7 @@ def test_unlock_migrates_controlled_tags_before_initial_search(
 
     # Act
     with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
-        controller.unlock("")
+        controller.unlock(_TEST_PASSWORD)
 
     # Assert
     loaded = sidecar_repository.read(image_path)
@@ -211,7 +285,7 @@ def test_search_canon_returns_two_results(
 ) -> None:
     # Arrange
     controller, search_model = window
-    controller.unlock("")
+    controller.unlock(_TEST_PASSWORD)
     qtbot.wait(_PAUSE_MS)
 
     # Act
@@ -230,7 +304,7 @@ def test_search_exact_model_name_returns_one_result(
 ) -> None:
     # Arrange
     controller, search_model = window
-    controller.unlock("")
+    controller.unlock(_TEST_PASSWORD)
     qtbot.wait(_PAUSE_MS)
 
     # Act
@@ -249,7 +323,7 @@ def test_clear_search_restores_all_results(
 ) -> None:
     # Arrange — unlock and narrow the results first
     controller, search_model = window
-    controller.unlock("")
+    controller.unlock(_TEST_PASSWORD)
     qtbot.wait(_PAUSE_MS // 2)
     controller.search("Fujifilm")
     qtbot.wait(_PAUSE_MS)
@@ -270,7 +344,7 @@ def test_search_no_match_returns_empty_results(
 ) -> None:
     # Arrange
     controller, search_model = window
-    controller.unlock("")
+    controller.unlock(_TEST_PASSWORD)
     qtbot.wait(_PAUSE_MS)
 
     # Act
@@ -314,7 +388,7 @@ def test_selectResult_thumb_source_updates_synchronously(
 ) -> None:
     # Arrange — unlock so the search model is populated
     with qtbot.waitSignal(bare_controller.totalResultsChanged, timeout=3000):
-        bare_controller.unlock("")
+        bare_controller.unlock(_TEST_PASSWORD)
 
     fired: list[int] = []
     bare_controller.selectedThumbSourceChanged.connect(lambda: fired.append(1))
@@ -688,7 +762,7 @@ def test_selectResult_image_source_is_empty_before_debounce_fires(
 ) -> None:
     # Arrange
     with qtbot.waitSignal(bare_controller.totalResultsChanged, timeout=3000):
-        bare_controller.unlock("")
+        bare_controller.unlock(_TEST_PASSWORD)
 
     # Act — call selectResult but do NOT advance the event loop
     bare_controller.selectResult(0)
@@ -703,7 +777,7 @@ def test_selectResult_image_source_set_after_debounce_fires(
 ) -> None:
     # Arrange
     with qtbot.waitSignal(bare_controller.totalResultsChanged, timeout=3000):
-        bare_controller.unlock("")
+        bare_controller.unlock(_TEST_PASSWORD)
 
     # Act — wait for the debounce timer to fire
     with qtbot.waitSignal(bare_controller.selectedImageSourceChanged, timeout=1000):
@@ -719,7 +793,7 @@ def test_selectResult_rapid_calls_use_last_path(
 ) -> None:
     # Arrange — need at least 2 results
     with qtbot.waitSignal(bare_controller.totalResultsChanged, timeout=3000):
-        bare_controller.unlock("")
+        bare_controller.unlock(_TEST_PASSWORD)
     assert bare_controller.totalResults >= 2
 
     path_1 = bare_controller._search_model.get_path(0)
@@ -750,7 +824,7 @@ def test_clear_details_cancels_pending_preview(
 ) -> None:
     # Arrange — arm the debounce timer without letting it fire
     with qtbot.waitSignal(bare_controller.totalResultsChanged, timeout=3000):
-        bare_controller.unlock("")
+        bare_controller.unlock(_TEST_PASSWORD)
     bare_controller.selectResult(0)
     assert bare_controller._preview_delay_timer.isActive()
 
@@ -949,7 +1023,7 @@ def test_search_with_existing_status_clears_notification(
 ) -> None:
     # Arrange
     with qtbot.waitSignal(bare_controller.totalResultsChanged, timeout=3000):
-        bare_controller.unlock("")
+        bare_controller.unlock(_TEST_PASSWORD)
     bare_controller._set_status("Old message", error=True)
 
     # Act
@@ -990,7 +1064,7 @@ def test_selectResult_with_existing_status_clears_notification(
 ) -> None:
     # Arrange
     with qtbot.waitSignal(bare_controller.totalResultsChanged, timeout=3000):
-        bare_controller.unlock("")
+        bare_controller.unlock(_TEST_PASSWORD)
     bare_controller._set_status("Old message", error=True)
 
     # Act

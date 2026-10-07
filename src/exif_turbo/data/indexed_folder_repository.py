@@ -11,7 +11,7 @@ from ._connection import open_encrypted_connection
 
 
 class IndexedFolderRepository:
-    def __init__(self, db_path: Path, key: str = "") -> None:
+    def __init__(self, db_path: Path, key: str | None = None) -> None:
         self.db_path = db_path
         self.conn = open_encrypted_connection(db_path, key, cache_size_kb=4_000)
         self._init_schema()

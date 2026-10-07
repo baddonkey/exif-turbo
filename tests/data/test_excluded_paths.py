@@ -219,6 +219,33 @@ def test_search_images_fts_restrict_hides_disabled_folder_fts_results(
     assert len(rows) == 0
 
 
+def test_enabled_folder_fallback_treats_wildcards_as_literal(tmp_path: Path) -> None:
+    # Arrange
+    db = ImageIndexRepository(tmp_path / "test.db", key="")
+    folder = tmp_path / "album_%_2026"
+    wildcard_match = tmp_path / "album_XY_2026"
+    folder.mkdir()
+    wildcard_match.mkdir()
+    db.conn.execute(
+        "CREATE TABLE indexed_folders ("
+        "id INTEGER PRIMARY KEY, path TEXT UNIQUE NOT NULL, "
+        "display_name TEXT NOT NULL, enabled INTEGER NOT NULL, "
+        "status TEXT NOT NULL DEFAULT 'pending')"
+    )
+    _insert_folder(db, str(folder), enabled=1)
+    image_path = str(make_jpeg(wildcard_match / "hidden.jpg"))
+    db.upsert_image(image_path, "hidden.jpg", 1.0, 100, {}, "hidden")
+
+    # Act
+    rows = db.search_images(
+        "", limit=10, offset=0, restrict_to_enabled_folders=True
+    )
+    db.close()
+
+    # Assert
+    assert rows == []
+
+
 def test_search_images_parent_disabled_child_enabled_shows_child(
     repo_with_parent_child: ImageIndexRepository,
 ) -> None:

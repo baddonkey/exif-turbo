@@ -125,7 +125,7 @@ def test_preview_worker_writes_encrypted_files_when_keyed(
     _make_jpeg(src)
     db = tmp_path / "test.db"
     cache = tmp_path / "cache"
-    key = "secret"
+    key = "preview-test-passphrase"
 
     # Seed under the encrypted key.
     folder_repo = IndexedFolderRepository(db, key=key)
