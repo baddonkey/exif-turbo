@@ -192,6 +192,32 @@ def test_do_unlock_rejects_empty_password_directly(
     controller.close()
 
 
+def test_plaintext_database_requests_new_passphrase(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    db_path = tmp_path / "legacy.db"
+    repository = ImageIndexRepository(db_path, key="")
+    repository.close()
+    controller = AppController(
+        db_path,
+        SearchListModel(cache_dir=tmp_path / "thumbs"),
+        ExifListModel(),
+        FolderListModel(),
+        allow_plaintext_db=False,
+    )
+
+    # Act / Assert
+    assert controller.isNewDatabase
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=5_000):
+        controller.unlock(_TEST_PASSWORD)
+    assert not controller.isLocked
+    assert not controller.isNewDatabase
+    assert not db_path.read_bytes().startswith(b"SQLite format 3\x00")
+    controller.close()
+
+
 def test_unlock_migrates_controlled_tags_before_initial_search(
     qtbot: QtBot,
     window: tuple[AppController, SearchListModel],

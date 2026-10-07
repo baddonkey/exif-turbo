@@ -92,6 +92,50 @@ def test_legacy_ordinary_key_database_migrates_to_passphrase_mode(
     conn.close()
 
 
+def test_plaintext_database_migrates_to_encrypted_database(tmp_path: Path) -> None:
+    # Arrange — simulate a DB created by the old empty-password path.
+    db_path = tmp_path / "plaintext.db"
+    legacy_repo = ImageIndexRepository(db_path, key="")
+    image_path = str(make_jpeg(tmp_path / "legacy-photo.jpg"))
+    legacy_repo.upsert_image(
+        image_path,
+        "legacy-photo.jpg",
+        1.0,
+        100,
+        {"Make": "Preserved"},
+        "legacy migration keyword",
+    )
+    legacy_repo.conn.execute("CREATE TABLE migration_probe (value TEXT)")
+    legacy_repo.conn.execute("INSERT INTO migration_probe VALUES ('preserved')")
+    legacy_repo.commit()
+    legacy_repo.close()
+    assert db_path.read_bytes().startswith(b"SQLite format 3\x00")
+
+    # Act — opening with a new passphrase migrates the DB in place.
+    repo = ImageIndexRepository(db_path, key=_NEW_PASSWORD)
+    value = repo.conn.execute(
+        "SELECT value FROM migration_probe"
+    ).fetchone()[0]
+    rows = repo.search_images("migration keyword", limit=10, offset=0)
+    image_count = repo.count_images("")
+    repo.close()
+
+    # Assert — data survived, the header is encrypted, and unkeyed reads fail.
+    assert value == "preserved"
+    assert image_count == 1
+    assert rows[0][1] == image_path
+    assert not db_path.read_bytes().startswith(b"SQLite format 3\x00")
+    conn = sqlcipher3.connect(str(db_path))
+    with pytest.raises(sqlcipher3.DatabaseError):
+        conn.execute("SELECT value FROM migration_probe").fetchone()
+    conn.close()
+
+    conn = sqlcipher3.connect(str(db_path))
+    conn.execute(f"PRAGMA key='{_NEW_PASSWORD}'")
+    assert conn.execute("SELECT value FROM migration_probe").fetchone()[0] == "preserved"
+    conn.close()
+
+
 @pytest.mark.parametrize("byte_length", [32, 48])
 def test_new_database_boundary_length_uses_passphrase_kdf(
     tmp_path: Path, byte_length: int

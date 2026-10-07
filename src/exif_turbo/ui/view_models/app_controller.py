@@ -35,6 +35,7 @@ from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication, QImage
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
 from ...data.password_policy import validate_new_database_password
+from ...data._connection import is_plaintext_database
 from ...i18n import _
 from ...indexing.exif_metadata_extractor import get_exiftool_version
 from ...indexing.ai_indexer_service import (
@@ -204,7 +205,7 @@ class AppController(QObject):
         self._status_folder_name = ""
         self._status_is_error = False
         self._is_locked = True
-        self._is_new_database = not db_path.exists()
+        self._is_new_database = not db_path.exists() or is_plaintext_database(db_path)
         self._unlock_error = ""
         self._is_indexing = False
         self._is_building_thumbs = False

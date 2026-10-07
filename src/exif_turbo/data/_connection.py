@@ -13,14 +13,17 @@ Used by :class:`ImageIndexRepository` and :class:`IndexedFolderRepository`.
 from __future__ import annotations
 
 import binascii
+import os
 import re
 from pathlib import Path
 from typing import Iterable
+from uuid import uuid4
 
 import sqlcipher3
 from .password_policy import validate_new_database_password
 
 _HEX_RE = re.compile(r"\A[0-9a-f]+\Z")
+_SQLITE_HEADER = b"SQLite format 3\x00"
 
 
 def _hex_for_pragma(key: str) -> str:
@@ -35,6 +38,60 @@ def _hex_for_pragma(key: str) -> str:
 
 def _passphrase_for_pragma(key: str) -> str:
     return "'" + key.replace("'", "''") + "'"
+
+
+def is_plaintext_database(db_path: Path) -> bool:
+    try:
+        with db_path.open("rb") as database_file:
+            return database_file.read(len(_SQLITE_HEADER)) == _SQLITE_HEADER
+    except FileNotFoundError:
+        return False
+
+
+def _remove_sqlite_sidecars(db_path: Path) -> None:
+    for suffix in ("-wal", "-shm"):
+        Path(f"{db_path}{suffix}").unlink(missing_ok=True)
+
+
+def _migrate_plaintext_database(db_path: Path, key: str) -> None:
+    validate_new_database_password(key)
+    temp_path = db_path.with_name(f".{db_path.name}.{uuid4().hex}.encrypted")
+    conn = sqlcipher3.connect(str(db_path))
+    try:
+        escaped_path = str(temp_path).replace("'", "''")
+        conn.execute(
+            f"ATTACH DATABASE '{escaped_path}' AS encrypted KEY "
+            f"{_passphrase_for_pragma(key)}"
+        )
+        conn.execute("SELECT sqlcipher_export('encrypted')").fetchone()
+        conn.execute("DETACH DATABASE encrypted")
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.execute("PRAGMA journal_mode=DELETE")
+    except BaseException:
+        conn.close()
+        temp_path.unlink(missing_ok=True)
+        _remove_sqlite_sidecars(temp_path)
+        raise
+    conn.close()
+
+    try:
+        verify_conn = sqlcipher3.connect(str(temp_path))
+        try:
+            verify_conn.execute(f"PRAGMA key={_passphrase_for_pragma(key)}")
+            integrity_result = verify_conn.execute(
+                "PRAGMA integrity_check"
+            ).fetchone()
+            if integrity_result != ("ok",):
+                raise RuntimeError("Plaintext database export failed integrity check")
+            verify_conn.execute("SELECT count(*) FROM sqlite_master").fetchone()
+        finally:
+            verify_conn.close()
+
+        _remove_sqlite_sidecars(db_path)
+        os.replace(temp_path, db_path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+        _remove_sqlite_sidecars(temp_path)
 
 
 def open_encrypted_connection(
@@ -56,6 +113,8 @@ def open_encrypted_connection(
     if key and (not db_path.exists() or db_path.stat().st_size == 0):
         validate_new_database_password(key)
     db_path.parent.mkdir(parents=True, exist_ok=True)
+    if key and is_plaintext_database(db_path):
+        _migrate_plaintext_database(db_path, key)
     conn = sqlcipher3.connect(str(db_path))
     try:
         if key:
