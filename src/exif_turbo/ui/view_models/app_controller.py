@@ -34,6 +34,7 @@ from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication, QImage
 
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
+from ...data.password_policy import validate_new_database_password
 from ...i18n import _
 from ...indexing.exif_metadata_extractor import get_exiftool_version
 from ...indexing.ai_indexer_service import (
@@ -184,6 +185,7 @@ class AppController(QObject):
         cache_dir: Path | None = None,
         thumb_provider: "ThumbnailImageProvider | None" = None,
         preview_provider: "PreviewImageProvider | None" = None,
+        allow_plaintext_db: bool = False,
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -191,6 +193,7 @@ class AppController(QObject):
         self._cache_dir = cache_dir
         self._thumb_provider = thumb_provider
         self._preview_provider = preview_provider
+        self._allow_plaintext_db = allow_plaintext_db
         self._repo: ImageIndexRepository | None = None
         self._folder_repo: IndexedFolderRepository | None = None
         self._key = ""
@@ -1293,6 +1296,17 @@ class AppController(QObject):
         """Show the unlock spinner, then run the actual DB open after one paint frame."""
         if self._is_unlocking:
             return
+        if not password and not self._allow_plaintext_db:
+            self._unlock_error = _("Password must not be empty.")
+            self.unlockErrorChanged.emit()
+            return
+        if self._is_new_database:
+            try:
+                validate_new_database_password(password)
+            except ValueError as exc:
+                self._unlock_error = _(str(exc))
+                self.unlockErrorChanged.emit()
+                return
         self._is_unlocking = True
         self._unlock_error = ""
         self.isUnlockingChanged.emit()
@@ -1302,6 +1316,21 @@ class AppController(QObject):
         QTimer.singleShot(50, lambda: self._do_unlock(password))
 
     def _do_unlock(self, password: str) -> None:
+        if not password and not self._allow_plaintext_db:
+            self._unlock_error = _("Password must not be empty.")
+            self._is_unlocking = False
+            self.isUnlockingChanged.emit()
+            self.unlockErrorChanged.emit()
+            return
+        if self._is_new_database and password:
+            try:
+                validate_new_database_password(password)
+            except ValueError as exc:
+                self._unlock_error = _(str(exc))
+                self._is_unlocking = False
+                self.isUnlockingChanged.emit()
+                self.unlockErrorChanged.emit()
+                return
         repo: ImageIndexRepository | None = None
         folder_repo: IndexedFolderRepository | None = None
         try:
@@ -1442,8 +1471,10 @@ class AppController(QObject):
         if old_password != self._key:
             self.passwordChangeFinished.emit(False, _("Current password is incorrect."))
             return
-        if not new_password:
-            self.passwordChangeFinished.emit(False, _("New password must not be empty."))
+        try:
+            validate_new_database_password(new_password)
+        except ValueError as exc:
+            self.passwordChangeFinished.emit(False, _(str(exc)))
             return
         if new_password == old_password:
             self.passwordChangeFinished.emit(

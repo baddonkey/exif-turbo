@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import multiprocessing
 import os
 import sys
+
+multiprocessing.freeze_support()
 
 # ── OpenMP conflict guard (macOS) ─────────────────────────────────────────
 # PyTorch and FAISS each bundle their own libomp.dylib.  On macOS, loading

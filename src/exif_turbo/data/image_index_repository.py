@@ -11,6 +11,7 @@ import sqlcipher3
 
 from ..models.image_sidecar import ImageSidecar
 from ._connection import open_encrypted_connection, rekey_connection
+from .password_policy import validate_new_database_password
 from .sidecar_sync_state import SidecarSyncState
 
 # Width/height key-pairs tried in priority order (exiftool -g1 format).
@@ -40,7 +41,7 @@ def _pixel_count_from_meta(meta_json: str) -> int:
 
 
 class ImageIndexRepository:
-    def __init__(self, db_path: Path, key: str = "") -> None:
+    def __init__(self, db_path: Path, key: str | None = None) -> None:
         self.db_path = db_path
         self.conn = open_encrypted_connection(
             db_path,
@@ -62,8 +63,7 @@ class ImageIndexRepository:
         switch back to WAL.  We also verify the new key is in effect by
         running a query under it before returning.
         """
-        if not new_password:
-            raise ValueError("new_password must not be empty")
+        validate_new_database_password(new_password)
         # Drain & remove the WAL so rekey can rewrite every page.
         self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         self.conn.execute("PRAGMA journal_mode=DELETE")
@@ -181,7 +181,7 @@ class ImageIndexRepository:
                 self.conn.execute(
                     "INSERT OR IGNORE INTO image_folders (image_id, folder_id) "
                     "SELECT i.id, f.id FROM images i, indexed_folders f "
-                    "WHERE i.path LIKE (f.path || ? || '%')",
+                    "WHERE instr(lower(i.path), lower(f.path || ?)) = 1",
                     (os.sep,),
                 )
                 self.conn.commit()
@@ -528,7 +528,7 @@ class ImageIndexRepository:
                         "  WHERE i.path NOT IN (SELECT path FROM _keep_paths)"
                         "  AND i.id NOT IN (SELECT image_id FROM image_folders)"
                         "  AND EXISTS"
-                        "    (SELECT 1 FROM _scan_roots WHERE i.path LIKE prefix || '%')"
+                        "    (SELECT 1 FROM _scan_roots WHERE instr(lower(i.path), lower(prefix)) = 1)"
                         ")"
                     )
                     self.conn.execute(
@@ -536,7 +536,7 @@ class ImageIndexRepository:
                         " WHERE path NOT IN (SELECT path FROM _keep_paths)"
                         " AND id NOT IN (SELECT image_id FROM image_folders)"
                         " AND EXISTS"
-                        "   (SELECT 1 FROM _scan_roots WHERE images.path LIKE prefix || '%')"
+                        "   (SELECT 1 FROM _scan_roots WHERE instr(lower(images.path), lower(prefix)) = 1)"
                     )
                     self.conn.execute("DROP TABLE IF EXISTS _scan_roots")
             elif folder_roots:
@@ -560,14 +560,14 @@ class ImageIndexRepository:
                     "  SELECT i.path FROM images i"
                     "  WHERE i.path NOT IN (SELECT path FROM _keep_paths)"
                     "  AND EXISTS"
-                    "    (SELECT 1 FROM _scan_roots WHERE i.path LIKE prefix || '%')"
+                        "    (SELECT 1 FROM _scan_roots WHERE instr(lower(i.path), lower(prefix)) = 1)"
                     ")"
                 )
                 self.conn.execute(
                     "DELETE FROM images"
                     " WHERE path NOT IN (SELECT path FROM _keep_paths)"
                     " AND EXISTS"
-                    "   (SELECT 1 FROM _scan_roots WHERE images.path LIKE prefix || '%')"
+                        "   (SELECT 1 FROM _scan_roots WHERE instr(lower(images.path), lower(prefix)) = 1)"
                 )
                 self.conn.execute("DROP TABLE IF EXISTS _scan_roots")
             else:
@@ -827,7 +827,7 @@ class ImageIndexRepository:
         "    AND EXISTS ("
         "      SELECT 1 FROM indexed_folders f2"
         "      WHERE f2.enabled = 1"
-        "      AND images.path LIKE (f2.path || '" + os.sep + "' || '%')"
+        "      AND instr(lower(images.path), lower(f2.path || '" + os.sep + "')) = 1"
         "    )"
         "  )"
         ")"
@@ -940,17 +940,7 @@ class ImageIndexRepository:
         order = self._resolve_sort(sort_by)
         ext_clause, ext_args = self._build_ext_clause(ext_filter)
 
-        path_clause = ""
-        path_args: tuple = ()
-        if path_filter:
-            if len(path_filter) == 1:
-                prefix = os.path.normpath(path_filter[0]) + os.sep
-                path_clause = "AND images.path LIKE ?"
-                path_args = (prefix + "%",)
-            else:
-                parts = " OR ".join("images.path LIKE ?" for _ in path_filter)
-                path_clause = f"AND ({parts})"
-                path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
+        path_clause, path_args = self._build_path_clause(path_filter)
 
         date_clause, date_args = self._build_date_clause(date_from, date_to)
         marks_clause = "AND images.marked = 1" if marked_only else ""
@@ -994,17 +984,7 @@ class ImageIndexRepository:
     ) -> int:
         ext_clause, ext_args = self._build_ext_clause(ext_filter)
 
-        path_clause = ""
-        path_args: tuple = ()
-        if path_filter:
-            if len(path_filter) == 1:
-                prefix = os.path.normpath(path_filter[0]) + os.sep
-                path_clause = "AND images.path LIKE ?"
-                path_args = (prefix + "%",)
-            else:
-                parts = " OR ".join("images.path LIKE ?" for _ in path_filter)
-                path_clause = f"AND ({parts})"
-                path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
+        path_clause, path_args = self._build_path_clause(path_filter)
 
         date_clause, date_args = self._build_date_clause(date_from, date_to)
         marks_clause = "AND images.marked = 1" if marked_only else ""
@@ -1099,17 +1079,7 @@ class ImageIndexRepository:
         """Return all paths matching the current filter — no LIMIT."""
         ext_clause, ext_args = self._build_ext_clause(ext_filter)
 
-        path_clause = ""
-        path_args: tuple = ()
-        if path_filter:
-            if len(path_filter) == 1:
-                prefix = os.path.normpath(path_filter[0]) + os.sep
-                path_clause = "AND images.path LIKE ?"
-                path_args = (prefix + "%",)
-            else:
-                parts = " OR ".join("images.path LIKE ?" for _ in path_filter)
-                path_clause = f"AND ({parts})"
-                path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
+        path_clause, path_args = self._build_path_clause(path_filter)
 
         date_clause, date_args = self._build_date_clause(date_from, date_to)
         marks_clause = "AND images.marked = 1" if marked_only else ""
@@ -1147,13 +1117,15 @@ class ImageIndexRepository:
         """Build a SQL clause and args tuple for path prefix filtering."""
         if not path_filter:
             return "", ()
-        if len(path_filter) == 1:
-            prefix = os.path.normpath(path_filter[0]) + os.sep
-            return "AND images.path LIKE ?", (prefix + "%",)
-        parts = " OR ".join("images.path LIKE ?" for _ in path_filter)
+        prefixes = tuple(os.path.normpath(path) + os.sep for path in path_filter)
+        if len(prefixes) == 1:
+            return "AND instr(lower(images.path), lower(?)) = 1", prefixes
+        parts = " OR ".join(
+            "instr(lower(images.path), lower(?)) = 1" for _ in prefixes
+        )
         return (
             f"AND ({parts})",
-            tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter),
+            prefixes,
         )
 
     @staticmethod
@@ -1190,17 +1162,7 @@ class ImageIndexRepository:
         """
         ext_clause, ext_args = self._build_ext_clause(ext_filter)
 
-        path_clause = ""
-        path_args: tuple = ()
-        if path_filter:
-            if len(path_filter) == 1:
-                prefix = os.path.normpath(path_filter[0]) + os.sep
-                path_clause = "AND images.path LIKE ?"
-                path_args = (prefix + "%",)
-            else:
-                parts = " OR ".join("images.path LIKE ?" for _ in path_filter)
-                path_clause = f"AND ({parts})"
-                path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
+        path_clause, path_args = self._build_path_clause(path_filter)
 
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
 
@@ -1246,17 +1208,7 @@ class ImageIndexRepository:
         counts are scoped to the current search context (but never filtered
         by ext — that would be meaningless for a facet).
         """
-        path_clause = ""
-        path_args: tuple = ()
-        if path_filter:
-            if len(path_filter) == 1:
-                prefix = os.path.normpath(path_filter[0]) + os.sep
-                path_clause = "AND images.path LIKE ?"
-                path_args = (prefix + "%",)
-            else:
-                parts = " OR ".join("images.path LIKE ?" for _ in path_filter)
-                path_clause = f"AND ({parts})"
-                path_args = tuple(os.path.normpath(p) + os.sep + "%" for p in path_filter)
+        path_clause, path_args = self._build_path_clause(path_filter)
 
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
         date_clause, date_args = self._build_date_clause(date_from, date_to)
@@ -1369,15 +1321,15 @@ class ImageIndexRepository:
 
     def delete_by_path_prefix(self, folder_path: str) -> None:
         """Remove all images whose path starts with folder_path."""
-        prefix = os.path.normpath(folder_path) + os.sep + "%"
+        prefix = os.path.normpath(folder_path) + os.sep
         with self.conn:
             self.conn.execute(
                 "DELETE FROM images_fts WHERE path IN "
-                "(SELECT path FROM images WHERE path LIKE ?)",
+            "(SELECT path FROM images WHERE instr(lower(path), lower(?)) = 1)",
                 (prefix,),
             )
             self.conn.execute(
-                "DELETE FROM images WHERE path LIKE ?", (prefix,)
+                "DELETE FROM images WHERE instr(lower(path), lower(?)) = 1", (prefix,)
             )
 
     def delete_orphans_under_prefix(self, folder_path: str) -> None:
@@ -1387,19 +1339,19 @@ class ImageIndexRepository:
         child (or other) indexed folder still have rows in image_folders and must
         not be deleted.
         """
-        prefix = os.path.normpath(folder_path) + os.sep + "%"
+        prefix = os.path.normpath(folder_path) + os.sep
         with self.conn:
             self.conn.execute(
                 "DELETE FROM images_fts WHERE path IN ("
                 "  SELECT path FROM images"
-                "  WHERE path LIKE ?"
+                "  WHERE instr(lower(path), lower(?)) = 1"
                 "  AND id NOT IN (SELECT image_id FROM image_folders)"
                 ")",
                 (prefix,),
             )
             self.conn.execute(
                 "DELETE FROM images"
-                " WHERE path LIKE ?"
+                " WHERE instr(lower(path), lower(?)) = 1"
                 " AND id NOT IN (SELECT image_id FROM image_folders)",
                 (prefix,),
             )

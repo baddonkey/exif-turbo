@@ -32,7 +32,7 @@ def _service(
     image_path = tmp_path / "photo.jpg"
     image_path.write_bytes(b"original image bytes")
     image_stat = image_path.stat()
-    image_repository = ImageIndexRepository(tmp_path / "images.db")
+    image_repository = ImageIndexRepository(tmp_path / "images.db", key="")
     image_repository.upsert_image(
         str(image_path),
         image_path.name,

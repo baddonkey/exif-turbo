@@ -72,8 +72,10 @@ def wheel_window(
     exif_model = ExifListModel()
     folder_model = FolderListModel()
     settings_model = SettingsModel(tmp_path / "settings.json")
+    db_path = tmp_path / "test.db"
+    db_path.touch()
     controller = AppController(
-        tmp_path / "test.db", search_model, exif_model, folder_model
+        db_path, search_model, exif_model, folder_model
     )
 
     engine = QQmlApplicationEngine()

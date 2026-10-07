@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from exif_turbo.utils.thumb_crypto import ThumbCrypto, WrongPasswordError
 
@@ -38,6 +40,45 @@ def test_init_creates_thumb_key_file(tmp_path: Path) -> None:
 
     # Assert
     assert (tmp_path / ".thumb_key").exists()
+
+
+def test_new_thumb_key_records_owasp_sha512_work_factor(tmp_path: Path) -> None:
+    # Arrange / Act
+    ThumbCrypto("long-test-passphrase", tmp_path)
+    key_file = (tmp_path / ".thumb_key").read_bytes()
+
+    # Assert
+    assert int.from_bytes(key_file[20:24], "big") == 220_000
+
+
+def test_existing_thumb_key_with_100k_iterations_still_unwraps(
+    tmp_path: Path,
+) -> None:
+    # Arrange — emulate the previous key-file format and work factor.
+    password = "legacy-password"
+    salt = os.urandom(16)
+    nonce = os.urandom(12)
+    master_key = os.urandom(32)
+    wrapper_key = ThumbCrypto._derive_wrapper_key(password, salt, 100_000)
+    wrapped_key = AESGCM(wrapper_key).encrypt(nonce, master_key, None)
+    key_file = (
+        b"ETK1"
+        + salt
+        + (100_000).to_bytes(4, "big")
+        + nonce
+        + wrapped_key
+    )
+    (tmp_path / ".thumb_key").write_bytes(key_file)
+    thumb_nonce = os.urandom(12)
+    thumb = thumb_nonce + AESGCM(master_key).encrypt(
+        thumb_nonce, b"existing thumbnail", None
+    )
+
+    # Act
+    crypto = ThumbCrypto(password, tmp_path)
+
+    # Assert
+    assert crypto.decrypt(thumb) == b"existing thumbnail"
 
 
 # ── persistence across instances ─────────────────────────────────────────────

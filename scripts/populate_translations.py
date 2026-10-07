@@ -40,8 +40,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Create Database": "Datenbank erstellen",
         "Unlock": "Entsperren",
         "Create a passphrase for your new database": "Passwort f\u00fcr neue Datenbank festlegen",
-        "This passphrase encrypts your entire image index. Use at least 12 characters and a mix of letters, numbers, and symbols. There is no way to recover a lost passphrase.":
-            "Dieses Passwort verschl\u00fcsselt den gesamten Bildindex. Verwenden Sie mindestens 12 Zeichen und eine Kombination aus Buchstaben, Ziffern und Sonderzeichen. Ein verlorenes Passwort kann nicht wiederhergestellt werden.",
+        "This passphrase encrypts your entire image index. Use at least 12 characters. There is no way to recover a lost passphrase.":
+            "Dieses Passwort verschl\u00fcsselt den gesamten Bildindex. Verwenden Sie mindestens 12 Zeichen. Ein verlorenes Passwort kann nicht wiederhergestellt werden.",
+        "Passphrase must be at least 12 characters.": "Die Passphrase muss mindestens 12 Zeichen lang sein.",
+        "Password must be at least 12 characters.": "Das Passwort muss mindestens 12 Zeichen lang sein.",
+        "Password must not be empty.": "Das Passwort darf nicht leer sein.",
         "Passphrases do not match": "Passw\u00f6rter stimmen nicht \u00fcberein",
         "Enter the database password to continue": "Datenbankpasswort eingeben, um fortzufahren",
         # ── Progress panel ──────────────────────────────────────────────────
@@ -373,8 +376,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Create Database": "Cr\u00e9er la base de donn\u00e9es",
         "Unlock": "D\u00e9verrouiller",
         "Create a passphrase for your new database": "Cr\u00e9er un mot de passe pour votre nouvelle base de donn\u00e9es",
-        "This passphrase encrypts your entire image index. Use at least 12 characters and a mix of letters, numbers, and symbols. There is no way to recover a lost passphrase.":
-            "Ce mot de passe chiffre l\u2019int\u00e9gralit\u00e9 de votre index d\u2019images. Utilisez au moins 12 caract\u00e8res et un m\u00e9lange de lettres, chiffres et symboles. Il est impossible de r\u00e9cup\u00e9rer un mot de passe perdu.",
+        "This passphrase encrypts your entire image index. Use at least 12 characters. There is no way to recover a lost passphrase.":
+            "Cette phrase secr\u00e8te chiffre tout l\u2019index d\u2019images. Utilisez au moins 12 caract\u00e8res. Une phrase secr\u00e8te perdue ne peut pas \u00eatre r\u00e9cup\u00e9r\u00e9e.",
+        "Passphrase must be at least 12 characters.": "La phrase secr\u00e8te doit comporter au moins 12 caract\u00e8res.",
+        "Password must be at least 12 characters.": "Le mot de passe doit comporter au moins 12 caract\u00e8res.",
+        "Password must not be empty.": "Le mot de passe ne doit pas \u00eatre vide.",
         "Passphrases do not match": "Les mots de passe ne correspondent pas",
         "Enter the database password to continue":
             "Saisir le mot de passe de la base de donn\u00e9es pour continuer",
@@ -711,8 +717,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Create Database": "Crea database",
         "Unlock": "Sblocca",
         "Create a passphrase for your new database": "Crea una passphrase per il tuo nuovo database",
-        "This passphrase encrypts your entire image index. Use at least 12 characters and a mix of letters, numbers, and symbols. There is no way to recover a lost passphrase.":
-            "Questa passphrase cifra l\u2019intero indice delle immagini. Utilizza almeno 12 caratteri e una combinazione di lettere, numeri e simboli. Una passphrase persa non pu\u00f2 essere recuperata.",
+        "This passphrase encrypts your entire image index. Use at least 12 characters. There is no way to recover a lost passphrase.":
+            "Questa passphrase cifra l\u2019intero indice delle immagini. Utilizza almeno 12 caratteri. Una passphrase persa non pu\u00f2 essere recuperata.",
+        "Passphrase must be at least 12 characters.": "La passphrase deve contenere almeno 12 caratteri.",
+        "Password must be at least 12 characters.": "La password deve contenere almeno 12 caratteri.",
+        "Password must not be empty.": "La password non pu\u00f2 essere vuota.",
         "Passphrases do not match": "Le passphrase non corrispondono",
         "Enter the database password to continue":
             "Inserisci la password del database per continuare",
@@ -1054,8 +1063,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "Create Database": "Crear banca da datas",
         "Unlock": "Avrir",
         "Create a passphrase for your new database": "Crear ina pled-clav per la nova banca da datas",
-        "This passphrase encrypts your entire image index. Use at least 12 characters and a mix of letters, numbers, and symbols. There is no way to recover a lost passphrase.":
-            "Questa pled-clav cifrescha l\u2019entir index da maletgs. Duvrai almain 12 caratters ed ina mesadad da lettras, cifras e simbols. Ina pled-clav persa na po betg vegnir recuperada.",
+        "This passphrase encrypts your entire image index. Use at least 12 characters. There is no way to recover a lost passphrase.":
+            "Questa pled-clav cifrescha l\u2019entir index da maletgs. Duvrai almain 12 caratters. Ina pled-clav persa na po betg vegnir recuperada.",
+        "Passphrase must be at least 12 characters.": "La passphrase sto avair almain 12 caracters.",
+        "Password must be at least 12 characters.": "Il pled-clav sto avair almain 12 caracters.",
+        "Password must not be empty.": "Il pled-clav na dastga betg esser vids.",
         "Passphrases do not match": "Las pled-clavs na correspundan betg",
         "Enter the database password to continue":
             "Endatar la pled-clav da la banca da datas per cuntinuar",

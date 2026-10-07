@@ -61,7 +61,7 @@ def test_derivative_export_worker_emits_result_and_progress(tmp_path: Path) -> N
     source_root.mkdir()
     image_path = source_root / "photo.jpg"
     image_path.write_bytes(b"original")
-    repository = ImageIndexRepository(db_path)
+    repository = ImageIndexRepository(db_path, key="")
     repository.upsert_image(
         str(image_path), image_path.name, image_path.stat().st_mtime, image_path.stat().st_size, {}, ""
     )
@@ -117,7 +117,7 @@ def test_derivative_export_worker_matching_results_exports_all_database_rows(
     db_path = tmp_path / "images.db"
     source_root = tmp_path / "source"
     source_root.mkdir()
-    repository = ImageIndexRepository(db_path)
+    repository = ImageIndexRepository(db_path, key="")
     for name in ("first.jpg", "second.jpg"):
         image_path = source_root / name
         image_path.write_bytes(name.encode())

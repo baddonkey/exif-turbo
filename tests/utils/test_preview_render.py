@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from exif_turbo.utils.decode_process import DecodeTimeoutError, run_decode_process
 from exif_turbo.utils.preview_render import (
     DEFAULT_VIPS_ALLOWED_EXTENSIONS,
     MAX_PREVIEW_PX,
@@ -15,6 +16,36 @@ from exif_turbo.utils.preview_render import (
     configure_vips_allowed_extensions,
     render_preview,
 )
+
+
+def test_run_decode_process_image_roundtrip_preserves_pixels() -> None:
+    # Act
+    image = run_decode_process(
+        "PIL.Image", "new", ("RGB", (4, 3), (10, 20, 30)), timeout_s=10
+    )
+
+    # Assert
+    assert image.size == (4, 3)
+    assert image.getpixel((0, 0)) == (10, 20, 30)
+
+
+def test_run_decode_process_timeout_terminates_child() -> None:
+    # Act / Assert
+    with pytest.raises(DecodeTimeoutError) as exc_info:
+        run_decode_process("time", "sleep", (30,), timeout_s=0.2)
+
+    assert not exc_info.value.process_is_alive
+
+
+def test_run_decode_process_preserves_filesystem_error_type(tmp_path: Path) -> None:
+    # Arrange
+    missing_path = str(tmp_path / "missing.bin")
+
+    # Act / Assert
+    with pytest.raises(FileNotFoundError):
+        run_decode_process(
+            "builtins", "open", (missing_path, "rb"), timeout_s=10
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -45,6 +76,37 @@ def test_render_preview_clamps_requested_target_to_max_preview_px(
     # Assert
     assert image.size == (32, 24)
     assert seen_sizes == [(MAX_PREVIEW_PX, MAX_PREVIEW_PX)]
+
+
+def test_render_preview_video_uses_decode_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    import exif_turbo.utils.preview_render as preview_render
+
+    path = tmp_path / "video.mp4"
+    expected = Image.new("RGB", (20, 10))
+    calls: list[tuple[object, ...]] = []
+
+    def fake_decode(*args: object, **kwargs: object) -> Image.Image:
+        calls.append(args + (kwargs["timeout_s"],))
+        return expected
+
+    monkeypatch.setattr(preview_render, "run_decode_process", fake_decode)
+
+    # Act
+    result = render_preview(str(path), 128)
+
+    # Assert
+    assert result is expected
+    assert calls == [
+        (
+            "exif_turbo.utils.video_frame",
+            "extract_video_frame",
+            (str(path), 128),
+            300.0,
+        )
+    ]
 
 
 def test_render_preview_rejects_oversized_source_images(

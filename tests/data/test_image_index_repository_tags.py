@@ -60,14 +60,14 @@ def test_init_db_legacy_fts_migration_preserves_metadata_search_and_is_idempoten
     conn.close()
 
     # Act
-    first_repo = ImageIndexRepository(db_path)
+    first_repo = ImageIndexRepository(db_path, key="")
     first_results = first_repo.search_images("Hasselblad", limit=10, offset=0)
     columns = [
         row[1]
         for row in first_repo.conn.execute("PRAGMA table_info(images_fts)").fetchall()
     ]
     first_repo.close()
-    second_repo = ImageIndexRepository(db_path)
+    second_repo = ImageIndexRepository(db_path, key="")
     second_results = second_repo.search_images("Hasselblad", limit=10, offset=0)
     second_repo.close()
 
