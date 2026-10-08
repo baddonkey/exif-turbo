@@ -1015,6 +1015,24 @@ def test_year_counts_finished_latest_request_clears_loading_state(
     assert bare_controller.isLoadingYearCounts is False
 
 
+def test_year_counts_worker_finished_joins_and_releases_thread(
+    qtbot: QtBot,
+    bare_controller: AppController,
+) -> None:
+    worker = QThread()
+    worker._serial = 1
+    bare_controller._year_counts_worker = worker
+    bare_controller._year_counts_loading_serial = 1
+    worker.started.connect(worker.quit)
+    worker.finished.connect(bare_controller._on_year_counts_finished)
+
+    with qtbot.waitSignal(worker.finished, timeout=5000):
+        worker.start()
+
+    assert bare_controller._year_counts_worker is None
+    assert bare_controller.isLoadingYearCounts is False
+
+
 def test_year_counts_finished_with_queued_request_keeps_loading_state(
     bare_controller: AppController,
     monkeypatch: pytest.MonkeyPatch,

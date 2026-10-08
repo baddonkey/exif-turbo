@@ -70,6 +70,14 @@ pytest --tb=short   # Shorter tracebacks
 
 ### Running the full suite reliably (agent notes)
 
+**Agents: use the `/run-tests` prompt** ([run-tests.prompt.md](prompts/run-tests.prompt.md)).
+It starts `scripts/run_tests_logged.py --detach` and then repeats the 8-second
+`--wait` until the last line is `RUN-STATUS: PASSED|FAILED|RUNNER_DEAD`. The agent
+terminal returns early from commands running longer than ~10 s, so never run the
+full suite as one blocking terminal command. Each run is written to
+`logs/test-runs/<stamp>/` (`summary.txt` lists failed tests and crashed or
+timed-out groups).
+
 The full suite loads QtWebEngine and torch/faiss native libraries. Two hard-won
 rules keep runs from hanging or crashing:
 
@@ -85,26 +93,6 @@ rules keep runs from hanging or crashing:
    a stack dump instead of hanging. The default `timeout = 120` /
    `timeout_method = "thread"` lives in `[tool.pytest.ini_options]`.
 
-Preferred invocation (in-process runner, no shell — avoids PowerShell's stray
-`^U`/`&` control-character corruption that plagues long terminal runs):
-
-```python
-import subprocess, sys, os
-env = dict(os.environ); env["PYTHONUNBUFFERED"] = "1"
-with open("full_run.log", "w", encoding="utf-8") as fh:
-    rc = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
-         "--timeout=120", "--timeout-method=thread"],
-        stdout=fh, stderr=subprocess.STDOUT, env=env, timeout=840,
-    ).returncode
-```
-
-Then read `full_run.log` for results. A clean run is **364 passed, 5 skipped**
-in ~4 min.
-
-`scripts/run_tests.py` is a process-isolated fallback (non-UI in one process,
-each UI test file in its own) for the rare WebEngine native-teardown crash on
-Windows, where `pytest --forked` is unavailable.
 
 **AI tests must never download the CLIP model.** `AiIndexerService` tests mock
 the model by patching the module globals
