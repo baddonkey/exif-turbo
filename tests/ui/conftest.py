@@ -45,7 +45,7 @@ def _drain_qthreads_after_test() -> None:
     import gc
     threads: list[QThread] = []
     for obj in gc.get_objects():
-        if isinstance(obj, QThread):
+        if issubclass(type(obj), QThread):
             try:
                 if obj.isRunning():
                     threads.append(obj)
