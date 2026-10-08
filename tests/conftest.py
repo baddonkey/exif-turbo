@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 # OpenMP conflict guard — see src/exif_turbo/app.py.  torch and faiss each bundle
@@ -54,10 +55,10 @@ def make_png(path: Path, width: int = 8, height: int = 8) -> Path:
     return path
 
 
-@pytest.hookimpl(trylast=True)
+@pytest.hookimpl(wrapper=True, tryfirst=True)
 def pytest_sessionfinish(
     session: pytest.Session, exitstatus: int
-) -> None:
+) -> Iterator[None]:
     """Bypass the Python interpreter teardown to avoid a Qt/WebEngine segfault.
 
     After all tests have finished, the interpreter destroys module-level
@@ -73,6 +74,7 @@ def pytest_sessionfinish(
     Only triggered when QtWebEngine has actually been loaded into the
     process — pure non-UI runs are not affected.
     """
+    yield
     if "PySide6.QtWebEngineCore" not in sys.modules:
         return
     sys.stdout.flush()

@@ -1301,7 +1301,7 @@ class AppController(QObject):
             self._unlock_error = _("Password must not be empty.")
             self.unlockErrorChanged.emit()
             return
-        if self._is_new_database:
+        if self._is_new_database and password:
             try:
                 validate_new_database_password(password)
             except ValueError as exc:
@@ -1317,6 +1317,8 @@ class AppController(QObject):
         QTimer.singleShot(50, lambda: self._do_unlock(password))
 
     def _do_unlock(self, password: str) -> None:
+        if self._app_closing:
+            return
         if not password and not self._allow_plaintext_db:
             self._unlock_error = _("Password must not be empty.")
             self._is_unlocking = False
@@ -2025,6 +2027,7 @@ class AppController(QObject):
         self._set_search_busy_ui(show_busy_ui)
         worker.start()
 
+    @Slot()
     def _on_search_worker_done(self) -> None:
         """Slot connected to QThread.finished (emitted after run() fully exits).
 
@@ -2033,8 +2036,13 @@ class AppController(QObject):
         destroying the QThread wrapper while its C++ run() is still live.
         """
         worker = self.sender()
+        if isinstance(worker, QThread):
+            worker.wait()
         self._finishing_search_workers.discard(worker)  # type: ignore[arg-type]
+        if isinstance(worker, QThread):
+            worker.deleteLater()
 
+    @Slot(list, int, list, int)
     def _on_search_finished(
         self,
         rows: list,
@@ -2042,6 +2050,8 @@ class AppController(QObject):
         format_counts: list,
         serial: int,
     ) -> None:
+        if self._app_closing:
+            return
         ai_facet_paths: list[str] | None = None
         if self.sender() is self._ai_search_worker:
             ai_facet_paths = list(
@@ -2222,6 +2232,8 @@ class AppController(QObject):
 
     def _schedule_year_counts_reload(self, serial: int) -> None:
         """Refresh year counts after the current search result has rendered."""
+        if self._app_closing:
+            return
         self._year_counts_loading_serial = serial
         self._set_year_counts_loading(True)
         if self._results_use_ai_pipeline():
@@ -2271,6 +2283,8 @@ class AppController(QObject):
         _log.debug("Year-count worker failed (serial=%s): %s", serial, error)
 
     def _on_year_counts_finished(self) -> None:
+        if self._app_closing:
+            return
         worker = self._year_counts_worker
         self._year_counts_worker = None
         if self._pending_year_counts_serial:
@@ -2287,7 +2301,10 @@ class AppController(QObject):
         self._is_loading_year_counts = loading
         self.yearCountsLoadingChanged.emit()
 
+    @Slot(str)
     def _on_search_failed(self, error: str) -> None:
+        if self._app_closing:
+            return
         if self.sender() is self._ai_search_worker:
             self._ai_search_worker = None
         old_worker = self._search_worker
@@ -2512,7 +2529,7 @@ class AppController(QObject):
         )
         worker.results_ready.connect(self._on_load_more_finished)
         worker.failed.connect(self._on_load_more_failed)
-        worker.finished.connect(lambda: self._finishing_search_workers.discard(worker))
+        worker.finished.connect(self._on_search_worker_done)
         self._load_more_worker = worker
         self._finishing_search_workers.add(worker)
         worker.start()
@@ -3450,7 +3467,7 @@ class AppController(QObject):
         )
         worker.results_ready.connect(self._on_search_finished)
         worker.failed.connect(self._on_search_failed)
-        worker.finished.connect(lambda: self._finishing_search_workers.discard(worker))
+        worker.finished.connect(self._on_search_worker_done)
         self._ai_search_worker = worker
         self._finishing_search_workers.add(worker)
         self._search_shows_busy_ui = True
@@ -4816,12 +4833,19 @@ class AppController(QObject):
             self._thumb_folder_name = ""
 
     def close(self) -> None:
+        self._app_closing = True
+        self._pending_search_params = None
+        self._pending_year_counts_serial = 0
+        self._scan_queue.clear()
+        self._folder_workflow_queue.clear()
+        for timer in self.findChildren(QTimer):
+            timer.stop()
         # Stop any running background QThread workers before closing the DB
         # connections they may still be using.  Without this, a worker that
         # is mid-flight (e.g. ThumbWorker hashing files) can outlive the
         # repository and crash the process when it next touches the closed
         # connection — observed both on app exit and across pytest fixtures.
-        for worker in (
+        workers = (
             self._thumb_worker,
             self._preview_worker,
             self._index_worker,
@@ -4829,15 +4853,27 @@ class AppController(QObject):
             self._maint_worker,
             self._copy_tags_worker,
             self._derivative_worker,
-        ):
+            self._search_worker,
+            self._year_counts_worker,
+            self._load_more_worker,
+            self._folder_tree_worker,
+            self._ai_scan_worker,
+            self._ai_search_worker,
+            self._bulk_worker,
+            *self._finishing_search_workers,
+        )
+        running_workers: list[QThread] = []
+        for worker in workers:
             if worker is not None and worker.isRunning():
+                running_workers.append(worker)
                 cancel = getattr(worker, "cancel", None)
                 if callable(cancel):
                     cancel()
                 else:
                     worker.requestInterruption()
                 worker.quit()
-                worker.wait(5000)
+        for worker in running_workers:
+            worker.wait()
         self._thumb_worker = None
         self._preview_worker = None
         self._index_worker = None
@@ -4845,6 +4881,14 @@ class AppController(QObject):
         self._maint_worker = None
         self._copy_tags_worker = None
         self._derivative_worker = None
+        self._search_worker = None
+        self._year_counts_worker = None
+        self._load_more_worker = None
+        self._folder_tree_worker = None
+        self._ai_scan_worker = None
+        self._ai_search_worker = None
+        self._bulk_worker = None
+        self._finishing_search_workers.clear()
         self._tagging_service = None
 
         if self._repo is not None:
