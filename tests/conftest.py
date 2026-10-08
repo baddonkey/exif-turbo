@@ -77,6 +77,8 @@ def pytest_sessionfinish(
     yield
     if "PySide6.QtWebEngineCore" not in sys.modules:
         return
+    if sys.platform == "win32":
+        return
     sys.stdout.flush()
     sys.stderr.flush()
     os._exit(exitstatus)

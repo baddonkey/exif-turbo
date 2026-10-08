@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Iterator
 
 import pytest
 from PySide6.QtCore import QCoreApplication, QThread
+from PySide6.QtQuick import QQuickWindow, QSGRendererInterface
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtWebEngineQuick import QtWebEngineQuick
 
@@ -20,6 +22,8 @@ os.environ.setdefault("EXIF_TURBO_DISABLE_APPNAP_ASSERTION", "1")
 
 def pytest_configure(config: pytest.Config) -> None:
     """Called before QApplication is created — required for WebEngine init."""
+    if sys.platform == "win32":
+        QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.Software)
     QQuickStyle.setStyle("Material")
     QtWebEngineQuick.initialize()
 
