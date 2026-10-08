@@ -21,13 +21,11 @@ class CheckedFilterProxyModel(QSortFilterProxyModel):
         if old is not None:
             try:
                 old.dataChanged.disconnect(self._on_source_data_changed)
-                old.modelReset.disconnect(self.invalidateFilter)
             except RuntimeError:
                 pass
         super().setSourceModel(model)
         if model is not None:
             model.dataChanged.connect(self._on_source_data_changed)
-            model.modelReset.connect(self.invalidateFilter)
 
     def _on_source_data_changed(
         self,
@@ -36,7 +34,8 @@ class CheckedFilterProxyModel(QSortFilterProxyModel):
         roles: list[int],
     ) -> None:
         if self._active and SearchListModel.CheckedRole in roles:
-            self.invalidateFilter()
+            self.beginFilterChange()
+            self.endFilterChange(QSortFilterProxyModel.Direction.Rows)
 
     # ── Filter control ────────────────────────────────────────────────────
 
@@ -48,8 +47,9 @@ class CheckedFilterProxyModel(QSortFilterProxyModel):
     def setFilterActive(self, active: bool) -> None:
         if self._active == active:
             return
+        self.beginFilterChange()
         self._active = active
-        self.invalidateFilter()
+        self.endFilterChange(QSortFilterProxyModel.Direction.Rows)
         self.filterActiveChanged.emit()
 
     def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:

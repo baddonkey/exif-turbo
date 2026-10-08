@@ -48,10 +48,7 @@ from ...models.indexed_folder import IndexedFolder
 from ...models.search_result import SearchResult
 from ...tagging.derivative_export_service import (
     extract_embedded_keyword_labels,
-    merge_keyword_labels,
 )
-from ...tagging.sidecar_repository import FilesystemSidecarRepository
-from ...tagging.tagging_service import TaggingService
 from ...tagging.custom_tag_migration import CustomTagMigrationService
 from ...utils.preview_cache import (
     clear_cached_previews_for,
@@ -65,15 +62,14 @@ from ...utils.process_memory import current_rss_bytes
 from ...utils.thumb_cache import thumb_cache_name_from_stamp
 from ..models.checked_filter_proxy_model import CheckedFilterProxyModel
 from ..models.exif_list_model import ExifListModel
-from ..models.embedded_tag_list_model import EmbeddedTagListModel
 from ..models.folder_list_model import FolderListModel
-from ..models.free_tag_list_model import FreeTagListModel
 from ..models.search_list_model import SearchListModel
 from ..models.settings_model import SettingsModel
 from ..workers.ai_scan_worker import AiScanWorker
 from ..workers.ai_search_worker import AiSearchWorker
 from ..workers.bulk_op_worker import BulkOpWorker
 from ..workers.copy_tags_worker import CopyTagsWorker
+from ..workers.derivative_export_worker import DerivativeExportWorker
 from ..workers.derivative_export_worker import DerivativeExportWorker
 from ..workers.folder_tree_worker import FolderTreeWorker
 from ..workers.index_worker import IndexWorker
@@ -84,6 +80,7 @@ from ..workers.search_worker import SearchPageWorker, SearchWorker
 from ..workers.thumb_worker import ThumbWorker
 from ..workers.year_counts_worker import YearCountsWorker
 from ...utils.preview_render import MAX_PREVIEW_PX, render_preview
+from .tagging_controller import TaggingController
 
 _PAGE_SIZE = 50
 _BROWSE_JUMP_PAGE_SIZE = 500
@@ -358,23 +355,24 @@ class AppController(QObject):
         self._password_change_worker: PasswordChangeWorker | None = None
         self._password_change_old: str = ""
         self._password_change_new: str = ""
-        self._tagging_service: TaggingService | None = None
-        self._embedded_tags_model = EmbeddedTagListModel()
-        self._derivative_tags_model = FreeTagListModel()
-        self._embedded_tags: tuple[str, ...] = ()
-        self._excluded_embedded_tags: tuple[str, ...] = ()
-        self._exclude_all_embedded_tags = False
-        self._free_tags_model = FreeTagListModel()
-        self._free_tag_suggestions_model = FreeTagListModel()
-        self._selected_tagging_error = ""
-        self._bulk_tag_operation = False
-        self._bulk_tag_progress = (0, 0)
-        self._bulk_tag_summary = ""
-        self._derivative_operation = False
-        self._derivative_progress = (0, 0)
-        self._derivative_summary = ""
-        self._copy_tags_worker: CopyTagsWorker | None = None
-        self._derivative_worker: DerivativeExportWorker | None = None
+        self._tagging = TaggingController(
+            db_path=db_path,
+            settings=settings,
+            get_key=lambda: self._key,
+            is_locked=lambda: self._is_locked,
+            get_repository=lambda: self._repo,
+            get_folder_repository=lambda: self._folder_repo,
+            selected_path=lambda: self._search_model.get_path(self._current_result_row),
+            refresh_after_mutation=self._refresh_after_tag_mutation,
+            copy_worker_factory=lambda *args, **kwargs: CopyTagsWorker(*args, **kwargs),
+            derivative_worker_factory=lambda *args, **kwargs: DerivativeExportWorker(
+                *args, **kwargs
+            ),
+            parent=self,
+        )
+        self._tagging.taggingStateChanged.connect(self.taggingStateChanged)
+        self._tagging.bulkTagOperationChanged.connect(self.bulkTagOperationChanged)
+        self._tagging.derivativeOperationChanged.connect(self.derivativeOperationChanged)
         # Timer: kick off a batch thumb build while indexing runs. Fires 5 s
         # after indexing begins so the DB has a first batch of rows to process.
         self._thumb_batch_timer = QTimer(self)
@@ -533,67 +531,67 @@ class AppController(QObject):
 
     @Property(bool, notify=taggingStateChanged)
     def taggingEnabled(self) -> bool:
-        return self._settings.tagging_enabled if self._settings else False
+        return self._tagging.tagging_enabled
 
     @Property(bool, notify=taggingStateChanged)
     def freeTaggingAvailable(self) -> bool:
-        return self.taggingEnabled and not self._is_locked
+        return self._tagging.free_tagging_available
 
     @Property(QObject, constant=True)
     def embeddedTagsModel(self) -> QObject:
-        return self._embedded_tags_model
+        return self._tagging.embedded_tags_model
 
     @Property(bool, notify=taggingStateChanged)
     def excludeAllEmbeddedTags(self) -> bool:
-        return self._exclude_all_embedded_tags
+        return self._tagging.exclude_all_embedded_tags
 
     @Property(QObject, constant=True)
     def derivativeTagsModel(self) -> QObject:
-        return self._derivative_tags_model
+        return self._tagging.derivative_tags_model
 
     @Property(QObject, constant=True)
     def freeTagsModel(self) -> QObject:
-        return self._free_tags_model
+        return self._tagging.free_tags_model
 
     @Property(QObject, constant=True)
     def freeTagSuggestionsModel(self) -> QObject:
-        return self._free_tag_suggestions_model
+        return self._tagging.free_tag_suggestions_model
 
     @Property(str, notify=taggingStateChanged)
     def selectedTaggingError(self) -> str:
-        return self._selected_tagging_error
+        return self._tagging.selected_error
 
     @Property(bool, notify=bulkTagOperationChanged)
     def isTaggingBulk(self) -> bool:
-        return self._bulk_tag_operation
+        return self._tagging.is_bulk_operation
 
     @Property(int, notify=bulkTagOperationChanged)
     def taggingBulkCurrent(self) -> int:
-        return self._bulk_tag_progress[0]
+        return self._tagging.bulk_progress[0]
 
     @Property(int, notify=bulkTagOperationChanged)
     def taggingBulkTotal(self) -> int:
-        return self._bulk_tag_progress[1]
+        return self._tagging.bulk_progress[1]
 
     @Property(str, notify=bulkTagOperationChanged)
     def taggingBulkSummary(self) -> str:
-        return self._bulk_tag_summary
+        return self._tagging.bulk_summary
 
     @Property(bool, notify=derivativeOperationChanged)
     def isExportingDerivatives(self) -> bool:
-        return self._derivative_operation
+        return self._tagging.is_derivative_operation
 
     @Property(int, notify=derivativeOperationChanged)
     def derivativeCurrent(self) -> int:
-        return self._derivative_progress[0]
+        return self._tagging.derivative_progress[0]
 
     @Property(int, notify=derivativeOperationChanged)
     def derivativeTotal(self) -> int:
-        return self._derivative_progress[1]
+        return self._tagging.derivative_progress[1]
 
     @Property(str, notify=derivativeOperationChanged)
     def derivativeResultSummary(self) -> str:
-        return self._derivative_summary
+        return self._tagging.derivative_summary
 
     @Property(bool, notify=isCancelingChanged)
     def isCanceling(self) -> bool:
@@ -2285,8 +2283,13 @@ class AppController(QObject):
     def _on_year_counts_finished(self) -> None:
         if self._app_closing:
             return
+        finished_worker = self.sender()
+        if isinstance(finished_worker, QThread):
+            finished_worker.wait()
+            finished_worker.deleteLater()
         worker = self._year_counts_worker
-        self._year_counts_worker = None
+        if not isinstance(finished_worker, QThread) or finished_worker is worker:
+            self._year_counts_worker = None
         if self._pending_year_counts_serial:
             serial = self._pending_year_counts_serial
             self._pending_year_counts_serial = 0
@@ -2461,7 +2464,12 @@ class AppController(QObject):
 
     def _on_folder_tree_finished(self) -> None:
         """Release the worker reference after the thread has fully exited."""
-        self._folder_tree_worker = None
+        worker = self.sender()
+        if isinstance(worker, QThread):
+            worker.wait()
+            worker.deleteLater()
+        if not isinstance(worker, QThread) or worker is self._folder_tree_worker:
+            self._folder_tree_worker = None
 
     def _on_folder_tree_ready(self, json_str: str) -> None:
         self._folder_tree = json_str
@@ -3936,105 +3944,25 @@ class AppController(QObject):
     # ── Tagging application adapter ──────────────────────────────────────────
 
     def _initialize_tagging_services(self) -> None:
-        if self._repo is None:
-            return
-        self._tagging_service = TaggingService(
-            self._repo,
-            FilesystemSidecarRepository(),
-        )
+        self._tagging.initialize(self._repo)
 
     def _clear_tagging_services(self) -> None:
-        self._cancel_tagging_workers(wait=True)
-        self._tagging_service = None
-        self._free_tags_model.set_rows([])
-        self._free_tag_suggestions_model.set_rows([])
-        self._embedded_tags_model.set_rows([])
-        self._derivative_tags_model.set_rows([])
-        self._embedded_tags = ()
-        self._excluded_embedded_tags = ()
-        self._exclude_all_embedded_tags = False
-        self._selected_tagging_error = ""
-        self.taggingStateChanged.emit()
+        self._tagging.clear()
 
     @Slot(bool)
     def setTaggingEnabled(self, enabled: bool) -> None:
-        if self._settings is not None:
-            self._settings.setTaggingEnabled(enabled)
-            self.taggingStateChanged.emit()
+        self._tagging.set_enabled(enabled)
 
     @Slot(str)
     def searchFreeTags(self, query: str) -> None:
-        if self._repo is None or not self.freeTaggingAvailable:
-            self._free_tag_suggestions_model.set_rows([])
-            return
-        try:
-            path = self._search_model.get_path(self._current_result_row)
-            assigned = {
-                tag.casefold()
-                for tag in (() if path is None else self._repo.get_free_tags(path))
-            }
-            self._free_tag_suggestions_model.set_rows(
-                tag
-                for tag in self._repo.search_free_tags(query)
-                if tag.casefold() not in assigned
-            )
-            self._selected_tagging_error = ""
-        except Exception as exc:  # noqa: BLE001
-            self._free_tag_suggestions_model.set_rows([])
-            self._selected_tagging_error = str(exc)
-        self.taggingStateChanged.emit()
+        self._tagging.search_free_tags(query)
 
     @Slot()
     def refreshSelectedTaggingState(self) -> None:
-        self._refresh_selected_tagging_state()
+        self._tagging.refresh_selected_state()
 
     def _refresh_selected_tagging_state(self) -> None:
-        path = self._search_model.get_path(self._current_result_row)
-        if not path or self._tagging_service is None:
-            self._free_tags_model.set_rows([])
-            self._excluded_embedded_tags = ()
-            self._exclude_all_embedded_tags = False
-            self._refresh_embedded_tag_rows()
-            self._derivative_tags_model.set_rows(self._embedded_tags if path else ())
-            return
-        try:
-            state = self._tagging_service.get_image_tagging_state(path)
-            self._free_tags_model.set_rows(state.free_tags)
-            sidecar = state.sidecar
-            self._excluded_embedded_tags = (
-                () if sidecar is None else sidecar.excluded_embedded_tags
-            )
-            self._exclude_all_embedded_tags = (
-                False if sidecar is None else sidecar.exclude_all_embedded_tags
-            )
-            self._refresh_embedded_tag_rows()
-            self._derivative_tags_model.set_rows(
-                merge_keyword_labels(
-                    (),
-                    state.free_tags,
-                    self._included_embedded_tags(),
-                )
-            )
-            self._selected_tagging_error = ""
-        except Exception as exc:  # noqa: BLE001
-            self._free_tags_model.set_rows([])
-            self._derivative_tags_model.set_rows(self._included_embedded_tags())
-            self._selected_tagging_error = str(exc)
-        self.taggingStateChanged.emit()
-
-    def _included_embedded_tags(self) -> tuple[str, ...]:
-        if self._exclude_all_embedded_tags:
-            return ()
-        excluded_keys = {label.casefold() for label in self._excluded_embedded_tags}
-        return tuple(
-            label for label in self._embedded_tags if label.casefold() not in excluded_keys
-        )
-
-    def _refresh_embedded_tag_rows(self) -> None:
-        excluded_keys = {label.casefold() for label in self._excluded_embedded_tags}
-        self._embedded_tags_model.set_rows(
-            (label, label.casefold() in excluded_keys) for label in self._embedded_tags
-        )
+        self._tagging.refresh_selected_state()
 
     @Slot(str)
     def addSelectedFreeTag(self, label: str) -> None:
@@ -4046,50 +3974,17 @@ class AppController(QObject):
 
     @Slot(str, bool)
     def setSelectedEmbeddedTagExcluded(self, label: str, excluded: bool) -> None:
-        path = self._search_model.get_path(self._current_result_row)
-        if path is None or self._tagging_service is None or not self.freeTaggingAvailable:
-            return
-        try:
-            self._tagging_service.set_embedded_tag_excluded(path, label, excluded)
-            self._selected_tagging_error = ""
-            self._refresh_selected_tagging_state()
-        except Exception as exc:  # noqa: BLE001
-            self._selected_tagging_error = str(exc)
-            self.taggingStateChanged.emit()
+        self._tagging.set_embedded_tag_excluded(label, excluded)
 
     @Slot(bool)
     def setExcludeAllSelectedEmbeddedTags(self, excluded: bool) -> None:
-        path = self._search_model.get_path(self._current_result_row)
-        if path is None or self._tagging_service is None or not self.freeTaggingAvailable:
-            return
-        try:
-            self._tagging_service.set_all_embedded_tags_excluded(path, excluded)
-            self._selected_tagging_error = ""
-            self._refresh_selected_tagging_state()
-        except Exception as exc:  # noqa: BLE001
-            self._selected_tagging_error = str(exc)
-            self.taggingStateChanged.emit()
+        self._tagging.set_all_embedded_tags_excluded(excluded)
 
     def _mutate_selected_free_tag(self, label: str, *, remove: bool) -> None:
-        if not self.freeTaggingAvailable:
-            return
-        path = self._search_model.get_path(self._current_result_row)
-        if path is None or self._tagging_service is None:
-            return
-        try:
-            if remove:
-                self._tagging_service.remove_free_tag(path, label)
-            else:
-                self._tagging_service.add_free_tag(path, label)
-            self._selected_tagging_error = ""
-            self._refresh_after_tag_mutation()
-            self.searchFreeTags("")
-        except Exception as exc:  # noqa: BLE001
-            self._selected_tagging_error = str(exc)
-            self.taggingStateChanged.emit()
+        self._tagging.mutate_selected_free_tag(label, remove=remove)
 
     def _refresh_after_tag_mutation(self) -> None:
-        self._refresh_selected_tagging_state()
+        self._tagging.refresh_selected_state()
         if self._current_result_row >= 0:
             index = self._search_model.index(self._current_result_row)
             self._search_model.dataChanged.emit(index, index, [])
@@ -4097,16 +3992,10 @@ class AppController(QObject):
     @Slot(str, str)
     def copySelectedTags(self, target_scope: str, mode: str) -> None:
         source_path = self._search_model.get_path(self._current_result_row)
-        if (
-            source_path is None
-            or not self.freeTaggingAvailable
-            or self._repo is None
-            or self._copy_tags_worker is not None
-        ):
+        if not self._tagging.can_copy_tags(source_path):
             return
         if mode not in {"add", "replace"}:
-            self._bulk_tag_summary = _("Choose whether to add or replace tags.")
-            self.bulkTagOperationChanged.emit()
+            self._tagging.show_copy_error(_("Choose whether to add or replace tags."))
             return
         worker_kwargs: dict[str, object] = {}
         if target_scope == "marked":
@@ -4116,8 +4005,7 @@ class AppController(QObject):
             }
         elif target_scope in {"results", "folder"}:
             if target_scope == "folder" and not self._folder_filter:
-                self._bulk_tag_summary = _("Choose a folder in Browse first.")
-                self.bulkTagOperationChanged.emit()
+                self._tagging.show_copy_error(_("Choose a folder in Browse first."))
                 return
             if self._results_use_ai_pipeline():
                 worker_kwargs = {
@@ -4133,58 +4021,13 @@ class AppController(QObject):
                     "date_to": self._date_to,
                 }
         else:
-            self._bulk_tag_summary = _("Choose a valid copy target.")
-            self.bulkTagOperationChanged.emit()
+            self._tagging.show_copy_error(_("Choose a valid copy target."))
             return
-        worker = CopyTagsWorker(
-            self._db_path,
-            self._key,
-            source_path,
-            mode,
-            **worker_kwargs,
-        )
-        self._copy_tags_worker = worker
-        worker.progress.connect(self._on_bulk_tag_progress)
-        worker.result_ready.connect(self._on_bulk_tag_result)
-        worker.failed.connect(self._on_bulk_tag_failed)
-        worker.canceled.connect(self._on_bulk_tag_result)
-        worker.finished.connect(lambda: self._release_worker("_copy_tags_worker", worker))
-        self._bulk_tag_operation = True
-        self._bulk_tag_progress = (0, 0)
-        self._bulk_tag_summary = ""
-        self.bulkTagOperationChanged.emit()
-        worker.start()
-
-    def _on_bulk_tag_progress(self, done: int, total: int, _item: object) -> None:
-        self._bulk_tag_progress = (done, total)
-        self.bulkTagOperationChanged.emit()
-
-    def _on_bulk_tag_result(self, result: object) -> None:
-        self._bulk_tag_operation = False
-        changed_count = getattr(result, "succeeded_count", 0)
-        unchanged_count = getattr(result, "skipped_count", 0)
-        problem_count = (
-            getattr(result, "conflicted_count", 0)
-            + getattr(result, "failed_count", 0)
-        )
-        summary = _("Copied tags to {} image(s). Unchanged: {}. Problems: {}.").format(
-            changed_count, unchanged_count, problem_count
-        )
-        if getattr(result, "cancelled", False):
-            summary = _("Canceled. {}").format(summary)
-        self._bulk_tag_summary = summary.strip()
-        self._refresh_after_tag_mutation()
-        self.bulkTagOperationChanged.emit()
-
-    def _on_bulk_tag_failed(self, error: str) -> None:
-        self._bulk_tag_operation = False
-        self._bulk_tag_summary = error
-        self.bulkTagOperationChanged.emit()
+        self._tagging.copy_selected_tags(source_path, mode, worker_kwargs)
 
     @Slot()
     def cancelBulkTagging(self) -> None:
-        if self._copy_tags_worker is not None:
-            self._copy_tags_worker.cancel()
+        self._tagging.cancel_bulk_tagging()
 
     @Slot(str)
     def generateDerivativesForMarked(self, output_url: str) -> None:
@@ -4215,121 +4058,17 @@ class AppController(QObject):
         output_url: str,
         **worker_options: object,
     ) -> None:
-        if (
-            not self.freeTaggingAvailable
-            or self._folder_repo is None
-            or self._derivative_worker is not None
-        ):
-            return
-        output_root = Path(QUrl(output_url).toLocalFile())
-        roots = {
-            Path(folder.path): folder.display_name
-            for folder in self._folder_repo.get_all()
-        }
-        worker = DerivativeExportWorker(
-            self._db_path,
-            self._key,
-            roots,
-            output_root,
-            **worker_options,
-        )
-        self._derivative_worker = worker
-        worker.progress.connect(self._on_derivative_progress)
-        worker.result_ready.connect(self._on_derivative_result)
-        worker.canceled.connect(self._on_derivative_result)
-        worker.failed.connect(self._on_derivative_failed)
-        worker.finished.connect(lambda: self._release_worker("_derivative_worker", worker))
-        self._derivative_operation = True
-        self._derivative_summary = ""
-        self.derivativeOperationChanged.emit()
-        worker.start()
-
-    def _on_derivative_progress(self, done: int, total: int, _item: object) -> None:
-        self._derivative_progress = (done, total)
-        self.derivativeOperationChanged.emit()
+        self._tagging.start_derivative_export(output_url, **worker_options)
 
     def _on_derivative_result(self, result: object) -> None:
-        self._derivative_operation = False
-        copied_count = getattr(result, "copied_count", 0)
-        untagged_count = getattr(result, "skipped_untagged_count", 0)
-        existing_count = getattr(result, "skipped_existing_count", 0)
-        failed_count = getattr(result, "failed_count", 0)
-        canceled_count = getattr(result, "canceled_count", 0)
-        items = getattr(result, "items", ())
-        copied_destinations = [
-            str(item.destination)
-            for item in items
-            if getattr(getattr(item, "status", None), "value", None) == "copied"
-        ]
-        parts = []
-        if copied_count == 1 and copied_destinations:
-            parts.append(_("Created derivative: {}").format(copied_destinations[0]))
-        elif copied_count == 1:
-            parts.append(_("Created 1 derivative."))
-        elif copied_count and copied_destinations:
-            common_destination = os.path.commonpath(copied_destinations)
-            parts.append(
-                _("Created {} derivatives in {}.").format(
-                    copied_count, common_destination
-                )
-            )
-        elif copied_count:
-            parts.append(_("Created {} derivatives.").format(copied_count))
-        else:
-            parts.append(_("No derivatives were created."))
-        if untagged_count:
-            parts.append(
-                _("{} image(s) had no tags.").format(untagged_count)
-            )
-        if existing_count:
-            parts.append(
-                _("{} destination file(s) already existed.").format(existing_count)
-            )
-        if failed_count:
-            parts.append(_("{} derivative(s) failed.").format(failed_count))
-            failed_item = next(
-                (
-                    item
-                    for item in items
-                    if getattr(getattr(item, "status", None), "value", None)
-                    == "failed"
-                ),
-                None,
-            )
-            if failed_item is not None:
-                source_name = Path(str(getattr(failed_item, "source", ""))).name
-                detail = str(getattr(failed_item, "message", "") or "unknown error")
-                parts.append(
-                    _("First failure ({}): {}").format(source_name, detail)
-                )
-        if canceled_count:
-            parts.append(_("{} derivative(s) canceled.").format(canceled_count))
-        self._derivative_summary = " ".join(parts)
-        self.derivativeOperationChanged.emit()
-
-    def _on_derivative_failed(self, error: str) -> None:
-        self._derivative_operation = False
-        self._derivative_summary = error
-        self.derivativeOperationChanged.emit()
+        self._tagging.handle_derivative_result(result)
 
     @Slot()
     def cancelDerivativeExport(self) -> None:
-        if self._derivative_worker is not None:
-            self._derivative_worker.cancel()
-
-    def _release_worker(self, attribute: str, worker: QThread) -> None:
-        if getattr(self, attribute) is worker:
-            setattr(self, attribute, None)
+        self._tagging.cancel_derivative_export()
 
     def _cancel_tagging_workers(self, *, wait: bool) -> None:
-        for worker in (
-            self._copy_tags_worker,
-            self._derivative_worker,
-        ):
-            if worker is not None and worker.isRunning():
-                worker.cancel()
-                if wait:
-                    worker.wait(5000)
+        self._tagging.cancel_workers(wait=wait)
 
     @Slot(str)
     def openUrl(self, url: str) -> None:
@@ -4481,11 +4220,7 @@ class AppController(QObject):
             self._geo_wikipedia_url = ""
             self.geoWikipediaUrlChanged.emit()
         self._exif_model.set_rows([])
-        self._embedded_tags = ()
-        self._excluded_embedded_tags = ()
-        self._exclude_all_embedded_tags = False
-        self._embedded_tags_model.set_rows([])
-        self._derivative_tags_model.set_rows([])
+        self._tagging.clear_embedded_tags()
         self._selected_image_source = ""
         self._selected_thumb_source = ""
         self._current_result_row = -1
@@ -4523,9 +4258,9 @@ class AppController(QObject):
         try:
             parsed = json.loads(meta_json)
             if isinstance(parsed, dict):
-                self._embedded_tags = extract_embedded_keyword_labels(parsed)
-                self._refresh_embedded_tag_rows()
-                self._derivative_tags_model.set_rows(self._embedded_tags)
+                self._tagging.set_embedded_tags(
+                    extract_embedded_keyword_labels(parsed)
+                )
                 rows = sorted(
                     [(str(k), str(v)) for k, v in parsed.items()],
                     key=lambda r: r[0].lower(),
@@ -4545,11 +4280,7 @@ class AppController(QObject):
         except Exception:
             pass
         self._exif_model.set_rows([])
-        self._embedded_tags = ()
-        self._excluded_embedded_tags = ()
-        self._exclude_all_embedded_tags = False
-        self._embedded_tags_model.set_rows([])
-        self._derivative_tags_model.set_rows([])
+        self._tagging.clear_embedded_tags()
         if self._geo_location_url:
             self._geo_location_url = ""
             self.geoLocationUrlChanged.emit()
@@ -4851,8 +4582,7 @@ class AppController(QObject):
             self._index_worker,
             self._password_change_worker,
             self._maint_worker,
-            self._copy_tags_worker,
-            self._derivative_worker,
+            *self._tagging.workers,
             self._search_worker,
             self._year_counts_worker,
             self._load_more_worker,
@@ -4879,8 +4609,7 @@ class AppController(QObject):
         self._index_worker = None
         self._password_change_worker = None
         self._maint_worker = None
-        self._copy_tags_worker = None
-        self._derivative_worker = None
+        self._tagging.release_workers()
         self._search_worker = None
         self._year_counts_worker = None
         self._load_more_worker = None
@@ -4889,7 +4618,7 @@ class AppController(QObject):
         self._ai_search_worker = None
         self._bulk_worker = None
         self._finishing_search_workers.clear()
-        self._tagging_service = None
+        self._tagging.close()
 
         if self._repo is not None:
             self._repo.close()
