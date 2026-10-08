@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 
 import pytest
 from PySide6.QtCore import QCoreApplication, QThread
@@ -71,12 +72,17 @@ def _drain_qthreads_after_test() -> None:
 
 
 @pytest.fixture(autouse=True)
-def _allow_explicit_plaintext_test_databases(monkeypatch: pytest.MonkeyPatch) -> None:
+def _allow_explicit_plaintext_test_databases(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Opt legacy UI fixtures into plaintext explicitly; production defaults closed."""
     original_init = AppController.__init__
+    controllers: list[AppController] = []
 
     def _init_with_plaintext_opt_in(self: AppController, *args: object, **kwargs: object) -> None:
         kwargs.setdefault("allow_plaintext_db", True)
         original_init(self, *args, **kwargs)  # type: ignore[arg-type]
+        controllers.append(self)
 
     monkeypatch.setattr(AppController, "__init__", _init_with_plaintext_opt_in)
+    yield
+    for controller in reversed(controllers):
+        controller.close()

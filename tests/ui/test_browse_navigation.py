@@ -984,10 +984,12 @@ class TestBrowseNavigation:
         repo.close()
 
         search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
+        settings = SettingsModel(tmp_path / "settings.json")
+        settings.setSortBy("filename_asc")
         controller = AppController(
             tmp_path / "large.db", search_model,
             ExifListModel(), FolderListModel(),
-            SettingsModel(tmp_path / "settings.json"),
+            settings,
         )
         with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
             controller.unlock("")
@@ -1041,10 +1043,12 @@ class TestBrowseNavigation:
         repo.close()
 
         search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
+        settings = SettingsModel(tmp_path / "settings.json")
+        settings.setSortBy("filename_asc")
         controller = AppController(
             tmp_path / "large_prev.db", search_model,
             ExifListModel(), FolderListModel(),
-            SettingsModel(tmp_path / "settings.json"),
+            settings,
         )
         with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
             controller.unlock("")
@@ -1298,6 +1302,7 @@ class TestBrowseNavigationQml:
         exif_model = ExifListModel()
         folder_model = FolderListModel()
         settings = SettingsModel(tmp_path / "qml-settings.json")
+        settings.setSortBy("filename_asc")
         controller = AppController(
             tmp_path / "large_qml.db",
             search_model,
@@ -1390,6 +1395,7 @@ class TestBrowseNavigationQml:
         exif_model = ExifListModel()
         folder_model = FolderListModel()
         settings = SettingsModel(tmp_path / "qml-search-settings.json")
+        settings.setSortBy("filename_asc")
         controller = AppController(
             tmp_path / "large_qml_search.db",
             search_model,
@@ -1488,6 +1494,7 @@ class TestBrowseNavigationQml:
         exif_model = ExifListModel()
         folder_model = FolderListModel()
         settings = SettingsModel(tmp_path / "qml-ai-settings.json")
+        settings.setSortBy("filename_asc")
         controller = AppController(
             tmp_path / "large_qml_ai.db",
             search_model,
@@ -1614,12 +1621,14 @@ class TestBrowseNavigationQml:
         repo.close()
 
         search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
+        settings = SettingsModel(tmp_path / "mid-jump-settings.json")
+        settings.setSortBy("filename_asc")
         controller = AppController(
             tmp_path / "mid_jump.db",
             search_model,
             ExifListModel(),
             FolderListModel(),
-            SettingsModel(tmp_path / "mid-jump-settings.json"),
+            settings,
         )
         with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
             controller.unlock("")
@@ -1672,6 +1681,7 @@ class TestBrowseNavigationQml:
         exif_model = ExifListModel()
         folder_model = FolderListModel()
         settings = SettingsModel(tmp_path / "qml-downprefetch-settings.json")
+        settings.setSortBy("filename_asc")
         controller = AppController(
             tmp_path / "large_qml_downprefetch.db",
             search_model,
@@ -1772,6 +1782,7 @@ class TestBrowseNavigationQml:
         exif_model = ExifListModel()
         folder_model = FolderListModel()
         settings = SettingsModel(tmp_path / "qml-downkeyprefetch-settings.json")
+        settings.setSortBy("filename_asc")
         controller = AppController(
             tmp_path / "large_qml_downkeyprefetch.db",
             search_model,

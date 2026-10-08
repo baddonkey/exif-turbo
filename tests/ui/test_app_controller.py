@@ -10,12 +10,13 @@ Run with:
 from __future__ import annotations
 
 from pathlib import Path
+from threading import get_ident
 from types import SimpleNamespace
 from typing import Generator
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QThread, QUrl
 from PySide6.QtQml import QQmlApplicationEngine
 from pytestqt.qtbot import QtBot
 
@@ -380,6 +381,123 @@ def bare_controller(
         ctrl._index_worker.wait(3000)
     ctrl.close()
     qtbot.wait(100)
+
+
+@pytest.mark.parametrize(
+    "worker_attribute",
+    ["_search_worker", "_year_counts_worker", "_load_more_worker", "_folder_tree_worker", "_ai_search_worker"],
+)
+def test_close_running_query_worker_stops_thread(
+    qtbot: QtBot,
+    bare_controller: AppController,
+    worker_attribute: str,
+) -> None:
+    worker = QThread()
+    setattr(bare_controller, worker_attribute, worker)
+    with qtbot.waitSignal(worker.started):
+        worker.start()
+
+    bare_controller.close()
+
+    assert not worker.isRunning()
+    assert getattr(bare_controller, worker_attribute) is None
+
+
+def test_close_finishing_search_worker_stops_thread(
+    qtbot: QtBot,
+    bare_controller: AppController,
+) -> None:
+    worker = QThread()
+    bare_controller._finishing_search_workers.add(worker)
+    with qtbot.waitSignal(worker.started):
+        worker.start()
+
+    bare_controller.close()
+
+    assert not worker.isRunning()
+    assert not bare_controller._finishing_search_workers
+
+
+def test_query_worker_finished_deletes_on_gui_thread(
+    qtbot: QtBot,
+    bare_controller: AppController,
+) -> None:
+    worker = QThread()
+    destruction_threads: list[int] = []
+    worker.destroyed.connect(
+        lambda: destruction_threads.append(get_ident())
+    )
+    worker.finished.connect(bare_controller._on_search_worker_done)
+    bare_controller._finishing_search_workers.add(worker)
+    with qtbot.waitSignal(worker.started):
+        worker.start()
+
+    worker.quit()
+    qtbot.waitUntil(lambda: bool(destruction_threads), timeout=5000)
+
+    assert destruction_threads == [get_ident()]
+    assert not bare_controller._finishing_search_workers
+
+
+def test_close_late_search_result_does_not_restart_workers(
+    qtbot: QtBot,
+    bare_controller: AppController,
+) -> None:
+    with qtbot.waitSignal(bare_controller.totalResultsChanged, timeout=5000):
+        bare_controller.unlock(_TEST_PASSWORD)
+    updates: list[bool] = []
+    bare_controller.loadedResultsChanged.connect(lambda: updates.append(True))
+    bare_controller.close()
+
+    bare_controller._on_search_finished([], 0, [], bare_controller._search_serial)
+
+    assert updates == []
+    assert bare_controller._year_counts_worker is None
+
+
+@pytest.mark.parametrize(
+    "callback", ["unlock", "year_counts", "search_failure", "year_counts_finished"]
+)
+def test_close_late_callback_keeps_controller_closed(
+    bare_controller: AppController,
+    callback: str,
+) -> None:
+    updates: list[bool] = []
+    bare_controller.loadedResultsChanged.connect(lambda: updates.append(True))
+    bare_controller._pending_year_counts_serial = 1
+    bare_controller.close()
+
+    if callback == "unlock":
+        bare_controller._do_unlock(_TEST_PASSWORD)
+    elif callback == "year_counts":
+        bare_controller._schedule_year_counts_reload(1)
+    elif callback == "search_failure":
+        bare_controller._on_search_failed("late failure")
+    else:
+        bare_controller._on_year_counts_finished()
+
+    assert bare_controller._repo is None
+    assert bare_controller._year_counts_worker is None
+    assert updates == []
+
+
+def test_unlock_explicit_plaintext_opt_in_opens_database(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    controller = AppController(
+        tmp_path / "plaintext.db",
+        SearchListModel(cache_dir=tmp_path / "thumbs"),
+        ExifListModel(),
+        FolderListModel(),
+        allow_plaintext_db=True,
+    )
+
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
+        controller.unlock("")
+
+    assert not controller.isLocked
+    assert controller.unlockError == ""
 
 
 def test_selectResult_thumb_source_updates_synchronously(
