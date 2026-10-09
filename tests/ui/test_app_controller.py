@@ -16,7 +16,8 @@ from typing import Generator
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import QThread, QUrl
+from PySide6.QtCore import QObject, QThread, QUrl
+from PySide6.QtQuick import QQuickWindow
 from PySide6.QtQml import QQmlApplicationEngine
 from pytestqt.qtbot import QtBot
 
@@ -93,7 +94,7 @@ def demo_db(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
 def window(
     qtbot: QtBot,
     demo_db: tuple[Path, Path],
-) -> Generator[tuple[AppController, SearchListModel], None, None]:
+) -> Generator[tuple[AppController, SearchListModel, QQuickWindow], None, None]:
     """Load the full QML window backed by the demo DB; one fresh window per test."""
     db_path, base = demo_db
 
@@ -117,8 +118,9 @@ def window(
     engine.load(QUrl.fromLocalFile(str(_QML_PATH)))
 
     qtbot.waitUntil(lambda: bool(engine.rootObjects()), timeout=5000)
+    root: QQuickWindow = engine.rootObjects()[0]  # type: ignore[assignment]
 
-    yield controller, search_model
+    yield controller, search_model, root
 
     controller.close()
     engine.deleteLater()
@@ -130,10 +132,10 @@ def window(
 
 def test_unlock_shows_all_images(
     qtbot: QtBot,
-    window: tuple[AppController, SearchListModel],
+    window: tuple[AppController, SearchListModel, QQuickWindow],
 ) -> None:
     # Arrange
-    controller, search_model = window
+    controller, search_model, _ = window
 
     # Act
     with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
@@ -168,6 +170,28 @@ def test_unlock_rejects_empty_password(
     assert controller.unlockError != ""
     assert not db_path.exists()
     controller.close()
+
+
+def test_main_menu_disabled_during_blocking_busy_operation(
+    qtbot: QtBot,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    main_menu = root.findChild(QObject, "mainMenuBar")
+    assert main_menu is not None
+    assert bool(main_menu.property("enabled"))
+
+    # Act
+    controller._is_busy = True
+    controller.isBusyChanged.emit()
+    qtbot.waitUntil(lambda: not bool(main_menu.property("enabled")))
+
+    controller._is_busy = False
+    controller.isBusyChanged.emit()
+
+    # Assert
+    qtbot.waitUntil(lambda: bool(main_menu.property("enabled")))
 
 
 def test_do_unlock_rejects_empty_password_directly(
@@ -221,10 +245,10 @@ def test_plaintext_database_requests_new_passphrase(
 
 def test_unlock_migrates_controlled_tags_before_initial_search(
     qtbot: QtBot,
-    window: tuple[AppController, SearchListModel],
+    window: tuple[AppController, SearchListModel, QQuickWindow],
 ) -> None:
     # Arrange
-    controller, search_model = window
+    controller, search_model, _ = window
     db_path = controller._db_path
     image_path = db_path.parent / "images" / _CAMERAS[0][0]
     sidecar_repository = FilesystemSidecarRepository()
@@ -282,10 +306,10 @@ def test_unlock_migrates_controlled_tags_before_initial_search(
 
 def test_search_canon_returns_two_results(
     qtbot: QtBot,
-    window: tuple[AppController, SearchListModel],
+    window: tuple[AppController, SearchListModel, QQuickWindow],
 ) -> None:
     # Arrange
-    controller, search_model = window
+    controller, search_model, _ = window
     controller.unlock(_TEST_PASSWORD)
     qtbot.wait(_PAUSE_MS)
 
@@ -301,10 +325,10 @@ def test_search_canon_returns_two_results(
 
 def test_search_exact_model_name_returns_one_result(
     qtbot: QtBot,
-    window: tuple[AppController, SearchListModel],
+    window: tuple[AppController, SearchListModel, QQuickWindow],
 ) -> None:
     # Arrange
-    controller, search_model = window
+    controller, search_model, _ = window
     controller.unlock(_TEST_PASSWORD)
     qtbot.wait(_PAUSE_MS)
 
@@ -320,10 +344,10 @@ def test_search_exact_model_name_returns_one_result(
 
 def test_clear_search_restores_all_results(
     qtbot: QtBot,
-    window: tuple[AppController, SearchListModel],
+    window: tuple[AppController, SearchListModel, QQuickWindow],
 ) -> None:
     # Arrange — unlock and narrow the results first
-    controller, search_model = window
+    controller, search_model, _ = window
     controller.unlock(_TEST_PASSWORD)
     qtbot.wait(_PAUSE_MS // 2)
     controller.search("Fujifilm")
@@ -341,10 +365,10 @@ def test_clear_search_restores_all_results(
 
 def test_search_no_match_returns_empty_results(
     qtbot: QtBot,
-    window: tuple[AppController, SearchListModel],
+    window: tuple[AppController, SearchListModel, QQuickWindow],
 ) -> None:
     # Arrange
-    controller, search_model = window
+    controller, search_model, _ = window
     controller.unlock(_TEST_PASSWORD)
     qtbot.wait(_PAUSE_MS)
 
