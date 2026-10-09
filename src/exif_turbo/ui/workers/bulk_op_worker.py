@@ -36,6 +36,7 @@ class BulkOpWorker(QThread):
         *,
         # select_all / deselect_all
         query: str = "",
+        image_paths: List[str] | None = None,
         ext_filter: str = "",
         path_filter: List[str] | None = None,
         restrict_to_enabled_folders: bool = False,
@@ -56,6 +57,7 @@ class BulkOpWorker(QThread):
         self._key = key
         self._operation = operation
         self._query = query
+        self._image_paths = image_paths
         self._ext_filter = ext_filter
         self._path_filter = path_filter
         self._restrict_to_enabled_folders = restrict_to_enabled_folders
@@ -109,16 +111,20 @@ class BulkOpWorker(QThread):
             self.canceled.emit()
             return
         self.progress.emit(0, 0)
-        paths = repo.bulk_mark_images(
-            self._mark_value,
-            query=self._query,
-            ext_filter=self._ext_filter,
-            path_filter=self._path_filter,
-            restrict_to_enabled_folders=self._restrict_to_enabled_folders,
-            marked_only=self._marked_only,
-            date_from=self._date_from,
-            date_to=self._date_to,
-        )
+        if self._image_paths is None:
+            paths = repo.bulk_mark_images(
+                self._mark_value,
+                query=self._query,
+                ext_filter=self._ext_filter,
+                path_filter=self._path_filter,
+                restrict_to_enabled_folders=self._restrict_to_enabled_folders,
+                marked_only=self._marked_only,
+                date_from=self._date_from,
+                date_to=self._date_to,
+            )
+        else:
+            paths = list(self._image_paths)
+            repo.mark_images(paths, self._mark_value)
         self.progress.emit(len(paths), len(paths))
         self.result_paths = paths
         self.finished.emit()

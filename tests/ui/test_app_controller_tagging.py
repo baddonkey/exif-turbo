@@ -224,7 +224,7 @@ def test_tagging_drawer_leaving_search_or_browse_closes_drawer(
     tab_bar = root.findChild(QQuickItem, "mainTabBar")
     assert drawer is not None
     assert tab_bar is not None
-    QMetaObject.invokeMethod(drawer, "openAndFocus", Qt.ConnectionType.DirectConnection)
+    QMetaObject.invokeMethod(drawer, "openTaggingPanel", Qt.ConnectionType.DirectConnection)
     qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=3_000)
 
     # Act / Assert: leave Search.
@@ -232,7 +232,7 @@ def test_tagging_drawer_leaving_search_or_browse_closes_drawer(
     qtbot.waitUntil(lambda: not bool(drawer.property("opened")), timeout=3_000)
 
     # Act / Assert: leave Browse.
-    QMetaObject.invokeMethod(drawer, "openAndFocus", Qt.ConnectionType.DirectConnection)
+    QMetaObject.invokeMethod(drawer, "openTaggingPanel", Qt.ConnectionType.DirectConnection)
     qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=3_000)
     tab_bar.setProperty("currentIndex", 0)
     qtbot.waitUntil(lambda: not bool(drawer.property("opened")), timeout=3_000)
@@ -266,6 +266,176 @@ def test_app_controller_custom_tags_add_remove_and_remain_suggestions(
     assert controller.freeTagsModel.rowCount() == 0
     assert suggestion == "Family"
     assert Path(f"{image_path}.sidecar.json").exists()
+
+
+def test_tagging_panel_opens_unfocused_with_existing_tag_suggestions(
+    qtbot: QtBot,
+    tmp_path: Path,
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, search_model, _db_path, _image_path = tagging_controller
+    controller.addSelectedFreeTag("Family")
+    controller.removeSelectedFreeTag("family")
+    filter_proxy = CheckedFilterProxyModel()
+    filter_proxy.setSourceModel(search_model)
+    controller.set_filter_proxy(filter_proxy)
+
+    engine = QQmlApplicationEngine()
+    engine.addImageProvider("preview", PreviewImageProvider())
+    engine.addImageProvider("raw", RawImageProvider())
+    context = engine.rootContext()
+    context.setContextProperty("controller", controller)
+    context.setContextProperty("searchModel", search_model)
+    context.setContextProperty("filteredSearchModel", filter_proxy)
+    context.setContextProperty("exifModel", ExifListModel())
+    context.setContextProperty("folderListModel", FolderListModel())
+    context.setContextProperty("settingsModel", SettingsModel(tmp_path / "panel-settings.json"))
+    context.setContextProperty("thirdPartyLicensesHtml", "")
+    context.setContextProperty("userManualUrl", "")
+    engine.load(QUrl.fromLocalFile(str(_QML_DIR / "Main.qml")))
+
+    qtbot.waitUntil(lambda: bool(engine.rootObjects()), timeout=5_000)
+    root: QQuickWindow = engine.rootObjects()[0]  # type: ignore[assignment]
+    root.setWidth(1200)
+    root.setHeight(800)
+    root.show()
+    qtbot.waitExposed(root, timeout=3_000)
+
+    drawer = root.findChild(QObject, "taggingDrawer")
+    tag_field = root.findChild(QQuickItem, "freeTagField")
+    suggestions = root.findChild(QQuickItem, "freeTagSuggestions")
+    assert drawer is not None
+    assert tag_field is not None
+    assert suggestions is not None
+
+    # Act
+    QMetaObject.invokeMethod(drawer, "openTaggingPanel", Qt.ConnectionType.DirectConnection)
+    qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=3_000)
+    qtbot.waitUntil(lambda: int(suggestions.property("count")) == 1, timeout=3_000)
+
+    # Assert
+    assert tag_field.property("activeFocus") is False
+    assert int(suggestions.property("count")) == 1
+    assert drawer.property("showFreeTagSuggestions") is False
+    assert suggestions.property("visible") is False
+
+    # Act: focusing the field reveals the already-loaded suggestions.
+    tag_field.forceActiveFocus()
+    qtbot.waitUntil(lambda: bool(suggestions.property("visible")), timeout=1_000)
+
+    # Assert
+    assert int(suggestions.property("count")) == 1
+
+    engine.deleteLater()
+    qtbot.wait(100)
+
+
+def test_tag_remove_button_removes_selected_free_tag(
+    qtbot: QtBot,
+    tmp_path: Path,
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, search_model, _db_path, _image_path = tagging_controller
+    controller.addSelectedFreeTag("Family")
+    filter_proxy = CheckedFilterProxyModel()
+    filter_proxy.setSourceModel(search_model)
+    controller.set_filter_proxy(filter_proxy)
+
+    engine = QQmlApplicationEngine()
+    engine.addImageProvider("preview", PreviewImageProvider())
+    engine.addImageProvider("raw", RawImageProvider())
+    context = engine.rootContext()
+    context.setContextProperty("controller", controller)
+    context.setContextProperty("searchModel", search_model)
+    context.setContextProperty("filteredSearchModel", filter_proxy)
+    context.setContextProperty("exifModel", ExifListModel())
+    context.setContextProperty("folderListModel", FolderListModel())
+    context.setContextProperty("settingsModel", SettingsModel(tmp_path / "settings.json"))
+    context.setContextProperty("thirdPartyLicensesHtml", "")
+    context.setContextProperty("userManualUrl", "")
+    engine.load(QUrl.fromLocalFile(str(_QML_DIR / "Main.qml")))
+
+    qtbot.waitUntil(lambda: bool(engine.rootObjects()), timeout=5_000)
+    root: QQuickWindow = engine.rootObjects()[0]  # type: ignore[assignment]
+    root.setWidth(1200)
+    root.setHeight(800)
+    root.show()
+    qtbot.waitExposed(root, timeout=3_000)
+    root.requestActivate()
+    qtbot.waitUntil(lambda: root.isActive(), timeout=3_000)
+
+    drawer = root.findChild(QObject, "taggingDrawer")
+    current_tags = root.findChild(QQuickItem, "currentFreeTags")
+    assert drawer is not None
+    assert current_tags is not None
+    QMetaObject.invokeMethod(drawer, "openTaggingPanel", Qt.ConnectionType.DirectConnection)
+    qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=3_000)
+    qtbot.waitUntil(lambda: float(drawer.property("position")) > 0.999, timeout=3_000)
+    qtbot.waitUntil(lambda: int(current_tags.property("count")) == 1, timeout=3_000)
+
+    def find_remove_button(item: QQuickItem) -> QQuickItem | None:
+        if item.objectName() == "removeFreeTagButton":
+            return item
+        for child in item.childItems():
+            found = find_remove_button(child)
+            if found is not None:
+                return found
+        return None
+
+    remove_button = find_remove_button(current_tags)
+    assert remove_button is not None
+
+    # Act
+    assert remove_button.width() >= 36
+    assert remove_button.height() >= 36
+    center = remove_button.mapToScene(
+        QPointF(float(remove_button.width()) / 2.0, float(remove_button.height()) / 2.0)
+    )
+    QTest.mouseClick(
+        root,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+        QPoint(round(center.x()), round(center.y())),
+    )
+    qtbot.waitUntil(lambda: int(current_tags.property("count")) == 0, timeout=1_000)
+
+    controller.addSelectedFreeTag("Family")
+    qtbot.waitUntil(lambda: int(current_tags.property("count")) == 1, timeout=1_000)
+    remove_button = find_remove_button(current_tags)
+    assert remove_button is not None
+    remove_mouse_area = next(
+        child
+        for child in remove_button.childItems()
+        if child.objectName() == "removeTagMouseArea"
+    )
+    center = remove_button.mapToScene(
+        QPointF(float(remove_button.width()) / 2.0, float(remove_button.height()) / 2.0)
+    )
+    right_edge = remove_button.mapToScene(
+        QPointF(float(remove_button.width()) - 3.0, float(remove_button.height()) / 2.0)
+    )
+    QTest.mouseMove(root, QPoint(round(center.x()), round(center.y())))
+    qtbot.wait(100)
+    center_hovered = bool(remove_mouse_area.property("containsMouse"))
+    QTest.mouseMove(root, QPoint(round(right_edge.x()), round(right_edge.y())))
+    qtbot.wait(100)
+    edge_hovered = bool(remove_mouse_area.property("containsMouse"))
+    assert center_hovered is True
+    assert edge_hovered is True
+    QTest.mouseClick(
+        root,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+        QPoint(round(right_edge.x()), round(right_edge.y())),
+    )
+
+    # Assert
+    qtbot.waitUntil(lambda: int(current_tags.property("count")) == 0, timeout=1_000)
+
+    engine.deleteLater()
+    qtbot.wait(100)
 
 
 class FakeDerivativeWorker(QObject):

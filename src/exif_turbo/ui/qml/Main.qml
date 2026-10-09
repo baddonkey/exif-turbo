@@ -175,7 +175,7 @@ ApplicationWindow {
     Shortcut {
         sequence: "Ctrl+T"
         enabled: !_isLocked && (mainTabBar.currentIndex === 0 || mainTabBar.currentIndex === 1)
-        onActivated: taggingDrawer.opened ? taggingDrawer.close() : taggingDrawer.openAndFocus()
+        onActivated: taggingDrawer.opened ? taggingDrawer.close() : taggingDrawer.openTaggingPanel()
     }
 
     property bool findBarVisible: false
@@ -1293,7 +1293,7 @@ ApplicationWindow {
         icon.source: "../../assets/tag_icon.svg"
         icon.width: 20
         icon.height: 20
-        onClicked: taggingDrawer.opened ? taggingDrawer.close() : taggingDrawer.openAndFocus()
+        onClicked: taggingDrawer.opened ? taggingDrawer.close() : taggingDrawer.openTaggingPanel()
         ToolTip.text: qsTr("Open tagging (Ctrl+T)")
         ToolTip.visible: hovered
         ToolTip.delay: 400
