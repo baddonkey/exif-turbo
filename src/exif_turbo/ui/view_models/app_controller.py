@@ -924,6 +924,11 @@ class AppController(QObject):
             "select_all",
             _("Selecting all matching images\u2026"),
             mark_value=True,
+            image_paths=(
+                [result.path for result in self._ai_result_cache]
+                if self._is_ai_search_mode
+                else None
+            ),
         )
 
     @Slot()
@@ -1020,6 +1025,7 @@ class AppController(QObject):
         sort_by: str = "path_asc",
         json_format: JsonExportFormat | None = None,
         cache_dir: Path | None = None,
+        image_paths: List[str] | None = None,
     ) -> None:
         """Spawn a BulkOpWorker and show the busy overlay."""
         if self._is_busy:
@@ -1038,6 +1044,7 @@ class AppController(QObject):
             sort_by=sort_by,
             json_format=json_format,
             cache_dir=cache_dir,
+            image_paths=image_paths,
             date_from=self._date_from,
             date_to=self._date_to,
         )

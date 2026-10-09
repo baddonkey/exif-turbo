@@ -41,12 +41,10 @@ Drawer {
         }
     }
 
-    function openAndFocus() {
+    function openTaggingPanel() {
         open()
         if (appController && appController.freeTaggingAvailable)
-            Qt.callLater(function() {
-                freeTagField.forceActiveFocus()
-            })
+            appController.searchFreeTags("")
     }
 
     onClosed: showFreeTagSuggestions = false
@@ -294,24 +292,54 @@ Drawer {
                         clip: true
                         model: appController ? appController.freeTagsModel : null
                         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-                        delegate: RowLayout {
+                        delegate: Item {
                             required property string label
                             width: currentFreeTags.width
                             height: 36
-                            spacing: 7
                             Label {
-                                Layout.fillWidth: true
+                                anchors.left: parent.left
+                                anchors.right: removeFreeTagButton.left
+                                anchors.rightMargin: 7
+                                anchors.verticalCenter: parent.verticalCenter
                                 text: label
                                 elide: Text.ElideRight
                                 font.pixelSize: 12
                             }
                             ToolButton {
+                                id: removeFreeTagButton
+                                objectName: "removeFreeTagButton"
+                                anchors.right: parent.right
+                                anchors.rightMargin: 20
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 36
+                                height: 36
                                 text: "\u2212"
-                                implicitWidth: 30
-                                implicitHeight: 30
+                                hoverEnabled: true
                                 onClicked: appController.removeSelectedFreeTag(label)
-                                ToolTip.text: qsTr("Remove custom tag from selected image")
-                                ToolTip.visible: hovered
+                                Accessible.name: qsTr("Remove custom tag from selected image")
+                                contentItem: Label {
+                                    text: "\u2212"
+                                    font.pixelSize: 18
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                background: Rectangle {
+                                    radius: 4
+                                    color: removeTagMouseArea.containsMouse
+                                        ? Qt.rgba(Material.foreground.r, Material.foreground.g,
+                                                  Material.foreground.b, 0.12)
+                                        : "transparent"
+                                }
+                                MouseArea {
+                                    id: removeTagMouseArea
+                                    objectName: "removeTagMouseArea"
+                                    anchors.fill: parent
+                                    z: 1
+                                    hoverEnabled: true
+                                    acceptedButtons: Qt.LeftButton
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: appController.removeSelectedFreeTag(label)
+                                }
                             }
                         }
                     }

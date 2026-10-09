@@ -60,6 +60,14 @@ def test_tagging_qml_contract_keeps_custom_tagging_and_removes_vocabulary_sugges
     assert 'objectName: "addFreeTagButton"' in source
     assert 'objectName: "freeTagSuggestions"' in source
     assert 'objectName: "currentFreeTags"' in source
+    remove_button_declaration = drawer_source.split(
+        'objectName: "removeFreeTagButton"', 1
+    )[1].split("\n                            }", 1)[0]
+    assert 'Accessible.name: qsTr("Remove custom tag from selected image")' in remove_button_declaration
+    assert "ToolTip" not in remove_button_declaration
+    assert 'text: "\\u2212"' in remove_button_declaration
+    assert "horizontalAlignment: Text.AlignHCenter" in remove_button_declaration
+    assert "verticalAlignment: Text.AlignVCenter" in remove_button_declaration
     assert 'objectName: "embeddedTags"' in source
     assert 'objectName: "excludeAllEmbeddedTagsSwitch"' in drawer_source
     assert "setExcludeAllSelectedEmbeddedTags(checked)" in drawer_source
@@ -176,7 +184,7 @@ def test_main_qml_tagging_drawer_pushes_content_aside(
         qtbot.waitUntil(lambda: float(drawer.property("position")) < 0.001, timeout=3_000)
         assert_viewports_track_drawer()
 
-        QMetaObject.invokeMethod(drawer, "openAndFocus", Qt.ConnectionType.DirectConnection)
+        QMetaObject.invokeMethod(drawer, "openTaggingPanel", Qt.ConnectionType.DirectConnection)
         qtbot.waitUntil(
             lambda: 0.1 < float(drawer.property("position")) < 0.9,
             timeout=3_000,
