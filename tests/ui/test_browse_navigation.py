@@ -1139,6 +1139,50 @@ def browse_navigation_window(
 
 
 class TestBrowseNavigationQml:
+    @pytest.mark.parametrize("cancelable", [True, False])
+    def test_busy_overlay_changing_paths_preserves_panel_geometry(
+        self,
+        qtbot: QtBot,
+        browse_navigation_window: tuple[AppController, SearchListModel, QQmlApplicationEngine, object],
+        cancelable: bool,
+    ) -> None:
+        controller, _, _, root = browse_navigation_window
+        assert isinstance(root, QQuickWindow)
+        pane = root.findChild(QQuickItem, "bulkProgressPane")
+        detail = root.findChild(QQuickItem, "bulkProgressDetail")
+        assert pane is not None
+        assert detail is not None
+        controller._is_busy = True
+        controller.isBusyChanged.emit()
+        controller._on_maint_cancelable(cancelable)
+        assert pane.isVisible()
+        assert not detail.isVisible()
+        paths = [
+            "a.jpg",
+            "/run/media/stefan/bigtank/bigtank-part-01/"
+            "wmc-tank-01-part-01/unlabeled2017(1)/unlabeled2017/000000000691.jpg",
+            "/images/" + "long_filename_" * 40 + ".jpg",
+            "b.jpg",
+        ]
+        geometries: list[tuple[float, float, float, float]] = []
+
+        for done, path in enumerate(paths, start=1):
+            controller._on_maint_progress(done, 162624, path)
+            qtbot.waitUntil(lambda: detail.property("text") == path)
+            for item in pane.findChildren(QQuickItem):
+                item.ensurePolished()
+            pane.ensurePolished()
+            assert detail.property("text") == path
+            assert detail.isVisible()
+            assert detail.height() == pytest.approx(54.0)
+            assert detail.property("paintedHeight") <= detail.height()
+            if len(path) > 256:
+                assert detail.property("truncated") is True
+            geometries.append((pane.width(), pane.height(), pane.x(), pane.y()))
+
+        for geometry in geometries[1:]:
+            assert geometry == pytest.approx(geometries[0], abs=0.1)
+
     def test_search_to_browse_scrolls_selected_folder_into_view(
         self,
         qtbot: QtBot,

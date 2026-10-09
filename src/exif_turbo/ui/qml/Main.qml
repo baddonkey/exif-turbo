@@ -1122,6 +1122,7 @@ ApplicationWindow {
         MouseArea { anchors.fill: parent; hoverEnabled: true }
 
         Pane {
+            objectName: "bulkProgressPane"
             anchors.centerIn: parent
             width: 320
             Material.elevation: 8
@@ -1146,12 +1147,19 @@ ApplicationWindow {
                 }
 
                 Label {
+                    objectName: "bulkProgressDetail"
                     Layout.fillWidth: true
+                    Layout.minimumHeight: 54
+                    Layout.preferredHeight: 54
+                    Layout.maximumHeight: 54
                     visible: _busyDetail.length > 0
                     text: _busyDetail
                     font.pixelSize: 12
                     horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.WordWrap
+                    verticalAlignment: Text.AlignVCenter
+                    wrapMode: Text.WrapAnywhere
+                    maximumLineCount: 3
+                    elide: Text.ElideRight
                     opacity: 0.7
                 }
 
