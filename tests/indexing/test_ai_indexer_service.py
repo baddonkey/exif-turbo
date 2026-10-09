@@ -542,6 +542,45 @@ def test_ai_indexer_service_encode_text_reuses_tokenizer_across_services(
     assert "HF_HUB_OFFLINE" not in os.environ
 
 
+def test_ai_indexer_service_offline_tokenizer_without_vocab_falls_back_online(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    service = AiIndexerService(repo)
+    unk_id = 3
+
+    def _hf_tokenizer(vocab_ids: list[int]):  # type: ignore[no-untyped-def]
+        hf = MagicMock(return_value={"input_ids": vocab_ids})
+        hf.unk_token_id = unk_id
+        return SimpleNamespace(tokenizer=hf)
+
+    empty_vocab = _hf_tokenizer([unk_id, unk_id, unk_id])
+    full_vocab = _hf_tokenizer([10, 11, 12])
+    offline_values: list[str | None] = []
+
+    def _get_tokenizer(*args, **kwargs):  # type: ignore[no-untyped-def]
+        offline = os.environ.get("HF_HUB_OFFLINE")
+        offline_values.append(offline)
+        return empty_vocab if offline == "1" else full_vocab
+
+    fake_open_clip = SimpleNamespace(get_tokenizer=MagicMock(side_effect=_get_tokenizer))
+    monkeypatch.setitem(sys.modules, "open_clip", fake_open_clip)
+    monkeypatch.setattr("exif_turbo.indexing.ai_indexer_service._cached_tokenizer", None)
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_tokenizer_profile_identifier",
+        None,
+    )
+
+    # Act
+    tokenizer = service._get_tokenizer()
+
+    # Assert
+    assert tokenizer is full_vocab
+    assert offline_values == ["1", None]
+
+
 def test_ai_indexer_service_model_load_uses_repo_storage_cache_dir(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
