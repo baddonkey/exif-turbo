@@ -102,15 +102,25 @@ Dialog {
             visible: appSettings && appSettings.gpuInstallInProgress
             indeterminate: true
         }
-        Label {
+        ScrollView {
+            id: gpuInstallStatusScroll
+            objectName: "gpuInstallStatusScroll"
             visible: appSettings && appSettings.gpuInstallStatusText !== ""
-            text: appSettings ? appSettings.gpuInstallStatusText : ""
-            font.pixelSize: 11
-            opacity: 0.7
-            wrapMode: Text.WrapAnywhere
             Layout.fillWidth: true
-            maximumLineCount: 3
-            elide: Text.ElideRight
+            Layout.preferredHeight: Math.min(gpuInstallStatusText.implicitHeight, 120)
+            Layout.maximumHeight: 120
+            clip: true
+            ScrollBar.vertical.policy: ScrollBar.AsNeeded
+
+            Label {
+                id: gpuInstallStatusText
+                objectName: "gpuInstallStatusText"
+                width: gpuInstallStatusScroll.availableWidth
+                text: appSettings ? appSettings.gpuInstallStatusText : ""
+                font.pixelSize: 11
+                opacity: 0.7
+                wrapMode: Text.WrapAnywhere
+            }
         }
 
         RowLayout {

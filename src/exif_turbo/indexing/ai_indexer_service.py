@@ -103,6 +103,21 @@ def _huggingface_cache(cache_dir: Path) -> Iterator[None]:
         constants.HF_HUB_CACHE = previous_value
 
 
+def _check_tokenizer_has_vocab(tokenizer) -> None:
+    """Raise if *tokenizer* maps ordinary words to the unknown token.
+
+    Offline Hugging Face loads with missing vocab files can silently yield an
+    empty-vocab tokenizer, which collapses every text query to the same vector.
+    """
+    hf_tokenizer = getattr(tokenizer, "tokenizer", None)
+    unk_id = getattr(hf_tokenizer, "unk_token_id", None)
+    if hf_tokenizer is None or not isinstance(unk_id, int):
+        return
+    ids = hf_tokenizer("dog car house", add_special_tokens=False)["input_ids"]
+    if not ids or all(token_id == unk_id for token_id in ids):
+        raise ValueError("AI tokenizer vocabulary is missing")
+
+
 class AiIndexerService:
     """Encode images with CLIP and persist their embeddings."""
 
@@ -314,6 +329,7 @@ class AiIndexerService:
                                 self._profile.model_ref,
                                 **tokenizer_kwargs,
                             )
+                        _check_tokenizer_has_vocab(_cached_tokenizer)
                     except (FileNotFoundError, OSError, RuntimeError, ValueError):
                         _log.info(
                             "AI tokenizer %s is not fully cached; allowing one online acquisition",
@@ -324,6 +340,7 @@ class AiIndexerService:
                                 self._profile.model_ref,
                                 **tokenizer_kwargs,
                             )
+                        _check_tokenizer_has_vocab(_cached_tokenizer)
                 _cached_tokenizer_profile_identifier = self._profile.identifier
             self._tokenizer = _cached_tokenizer
         return self._tokenizer
