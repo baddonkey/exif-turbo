@@ -186,6 +186,16 @@ class SettingsModel(QObject):
         return bool(backend and ai_device.is_gpu_runtime_installed(backend))
 
     @Property(str, notify=gpuBackendStateChanged)
+    def gpuRuntimeIssue(self) -> str:
+        unsupported_architectures = ai_device.unsupported_rocm_gpu_architectures()
+        if not unsupported_architectures:
+            return ""
+        return _(
+            "The installed AMD ROCm runtime does not support GPU architecture(s): "
+            "{architectures}. AI features will run on CPU."
+        ).format(architectures=", ".join(unsupported_architectures))
+
+    @Property(str, notify=gpuBackendStateChanged)
     def gpuRuntimeBackend(self) -> str:
         return ai_device.downloadable_backend_for_platform() or ""
 
@@ -588,4 +598,3 @@ class SettingsModel(QObject):
             )
         except Exception:
             pass  # read-only filesystem — silently ignore
-

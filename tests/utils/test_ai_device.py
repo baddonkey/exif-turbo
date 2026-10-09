@@ -136,7 +136,7 @@ def test_ensure_runtime_on_path_without_nvidia_gpu_skips_cuda_runtime(
 ) -> None:
     # Arrange
     (tmp_path / "cuda").mkdir()
-    (tmp_path / "cuda" / ".installed").write_text("")
+    (tmp_path / "cuda" / ".installed").write_text("torch\ntorchvision")
     monkeypatch.setattr(ai_device, "gpu_runtime_dir", lambda backend: tmp_path / backend)
     monkeypatch.setattr(ai_device, "_has_nvidia_gpu", lambda: False)
     monkeypatch.setattr(ai_device, "_paths_synced", False)
@@ -155,7 +155,7 @@ def test_ensure_runtime_on_path_with_nvidia_gpu_prepends_cuda_runtime(
 ) -> None:
     # Arrange
     (tmp_path / "cuda").mkdir()
-    (tmp_path / "cuda" / ".installed").write_text("")
+    (tmp_path / "cuda" / ".installed").write_text("torch\ntorchvision")
     monkeypatch.setattr(ai_device, "gpu_runtime_dir", lambda backend: tmp_path / backend)
     monkeypatch.setattr(ai_device, "_has_nvidia_gpu", lambda: True)
     monkeypatch.setattr(ai_device, "_paths_synced", False)
@@ -166,6 +166,117 @@ def test_ensure_runtime_on_path_with_nvidia_gpu_prepends_cuda_runtime(
 
     # Assert
     assert sys.path[0] == str(tmp_path / "cuda")
+
+
+def test_ensure_runtime_on_path_skips_torch_only_rocm_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    (tmp_path / "rocm").mkdir()
+    (tmp_path / "rocm" / ai_device._INSTALLED_MARKER).write_text(
+        "torch", encoding="utf-8"
+    )
+    monkeypatch.setattr(ai_device, "gpu_runtime_dir", lambda backend: tmp_path / backend)
+    monkeypatch.setattr(ai_device, "_paths_synced", False)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+
+    # Act
+    ai_device._ensure_runtime_on_path()
+
+    # Assert
+    assert str(tmp_path / "rocm") not in sys.path
+
+
+def test_rocm_gpu_architectures_reads_gfx_target_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    nodes_dir = tmp_path / "nodes"
+    cpu_node = nodes_dir / "0"
+    gpu_node = nodes_dir / "1"
+    cpu_node.mkdir(parents=True)
+    gpu_node.mkdir()
+    (cpu_node / "properties").write_text(
+        "gfx_target_version 0\n", encoding="ascii"
+    )
+    (gpu_node / "properties").write_text(
+        "gfx_target_version 90002\n", encoding="ascii"
+    )
+    monkeypatch.setattr(ai_device._platform, "system", lambda: "Linux")
+
+    # Act
+    architectures = ai_device._rocm_gpu_architectures(nodes_dir)
+
+    # Assert
+    assert architectures == {"gfx902"}
+
+
+def test_unsupported_rocm_architecture_matches_installed_tensile_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    runtime_dir = tmp_path / "gpu-runtime" / "rocm"
+    library_dir = runtime_dir / "torch" / "lib" / "rocblas" / "library"
+    library_dir.mkdir(parents=True)
+    (runtime_dir / ai_device._INSTALLED_MARKER).write_text(
+        "torch\ntorchvision", encoding="utf-8"
+    )
+    (library_dir / "TensileLibrary_lazy_gfx1030.dat").touch()
+    monkeypatch.setattr(ai_device, "gpu_runtime_dir", lambda backend: runtime_dir)
+    monkeypatch.setattr(ai_device, "_rocm_gpu_architectures", lambda: {"gfx902"})
+
+    # Act
+    unsupported = ai_device.unsupported_rocm_gpu_architectures()
+
+    # Assert
+    assert unsupported == ("gfx902",)
+
+
+def test_ensure_runtime_on_path_skips_rocm_without_matching_tensile_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    runtime_dir = tmp_path / "gpu-runtime" / "rocm"
+    library_dir = runtime_dir / "torch" / "lib" / "rocblas" / "library"
+    library_dir.mkdir(parents=True)
+    (runtime_dir / ai_device._INSTALLED_MARKER).write_text(
+        "torch\ntorchvision", encoding="utf-8"
+    )
+    (library_dir / "TensileLibrary_lazy_gfx1030.dat").touch()
+    monkeypatch.setattr(ai_device, "gpu_runtime_dir", lambda backend: runtime_dir)
+    monkeypatch.setattr(ai_device, "_rocm_gpu_architectures", lambda: {"gfx902"})
+    monkeypatch.setattr(ai_device, "_paths_synced", False)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+
+    # Act
+    ai_device._ensure_runtime_on_path()
+
+    # Assert
+    assert str(runtime_dir) not in sys.path
+
+
+def test_ensure_runtime_on_path_uses_rocm_with_matching_tensile_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    runtime_dir = tmp_path / "gpu-runtime" / "rocm"
+    library_dir = runtime_dir / "torch" / "lib" / "rocblas" / "library"
+    library_dir.mkdir(parents=True)
+    (runtime_dir / ai_device._INSTALLED_MARKER).write_text(
+        "torch\ntorchvision", encoding="utf-8"
+    )
+    (library_dir / "TensileLibrary_lazy_gfx1030.dat").touch()
+    monkeypatch.setattr(ai_device, "gpu_runtime_dir", lambda backend: runtime_dir)
+    monkeypatch.setattr(ai_device, "_rocm_gpu_architectures", lambda: {"gfx1030"})
+    monkeypatch.setattr(ai_device, "_paths_synced", False)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+
+    # Act
+    ai_device._ensure_runtime_on_path()
+
+    # Assert
+    assert sys.path[0] == str(runtime_dir)
 
 
 def test_remove_gpu_runtime_is_a_noop_for_backends_that_are_never_downloaded(
@@ -355,9 +466,13 @@ def test_install_gpu_backend_succeeds_and_writes_marker(
         def wait(self) -> None:
             pass
 
-    monkeypatch.setattr(
-        ai_device.subprocess, "Popen", lambda *a, **k: _FakeProcess()
-    )
+    pip_invocations: list[tuple[list[str], dict[str, str]]] = []
+
+    def fake_popen(*args, **kwargs):
+        pip_invocations.append((args[0], kwargs["env"]))
+        return _FakeProcess()
+
+    monkeypatch.setattr(ai_device.subprocess, "Popen", fake_popen)
     progress_lines: list[str] = []
 
     # Act
@@ -368,8 +483,20 @@ def test_install_gpu_backend_succeeds_and_writes_marker(
     # Assert
     assert success is True
     assert (runtime_dir / ai_device._INSTALLED_MARKER).is_file()
+    assert (runtime_dir / ai_device._INSTALLED_MARKER).read_text(
+        encoding="utf-8"
+    ).splitlines() == ["torch", "torchvision"]
     assert not list(runtime_dir.parent.glob(".cuda-install-*"))
     assert any("Successfully installed torch" in line for line in progress_lines)
+    assert all(
+        pip_invocations[0][1][variable] == str(runtime_dir.parent)
+        for variable in ("TMPDIR", "TEMP", "TMP")
+    )
+    pip_command = pip_invocations[0][0]
+    assert pip_command[pip_command.index("--index-url") + 1] == (
+        ai_device._BACKEND_INFO["cuda"].index_url
+    )
+    assert pip_command[-2:] == ["torch", "torchvision"]
 
 
 def test_install_gpu_backend_cleans_up_on_pip_failure(
@@ -441,5 +568,20 @@ def test_is_gpu_runtime_installed_checks_marker_for_downloadable_backend(
 
     # Act / Assert
     assert ai_device.is_gpu_runtime_installed("cuda") is False
-    (runtime_dir / ai_device._INSTALLED_MARKER).write_text("torch", encoding="utf-8")
+    (runtime_dir / ai_device._INSTALLED_MARKER).write_text(
+        "torch\ntorchvision", encoding="utf-8"
+    )
     assert ai_device.is_gpu_runtime_installed("cuda") is True
+
+
+def test_is_gpu_runtime_installed_rejects_torch_only_legacy_marker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    runtime_dir = tmp_path / "gpu-runtime" / "rocm"
+    runtime_dir.mkdir(parents=True)
+    (runtime_dir / ai_device._INSTALLED_MARKER).write_text("torch", encoding="utf-8")
+    monkeypatch.setattr(ai_device, "gpu_runtime_dir", lambda backend: runtime_dir)
+
+    # Act / Assert
+    assert ai_device.is_gpu_runtime_installed("rocm") is False

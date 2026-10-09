@@ -30,6 +30,7 @@ picks it up without threading a parameter through every call site.
 from __future__ import annotations
 
 import logging
+import os
 import platform as _platform
 import shutil
 import subprocess
@@ -61,7 +62,7 @@ class BackendInfo:
     unsupported_reason: str = ""
     requires_download: bool = True
     index_url: str = ""
-    package_spec: str = "torch"
+    package_specs: tuple[str, ...] = ("torch",)
     size_mb: int = 0
     license_name: str = ""
     license_url: str = ""
@@ -84,7 +85,7 @@ _BACKEND_INFO: dict[str, BackendInfo] = {
         # fail with "Could not find a version that satisfies the requirement".
         # Re-verify the same way if this ever starts failing again.
         index_url="https://download.pytorch.org/whl/cu130",
-        package_spec="torch",
+        package_specs=("torch", "torchvision"),
         size_mb=3500,
         license_name="PyTorch (BSD-3-Clause) + NVIDIA CUDA runtime libraries (NVIDIA EULA)",
         license_url="https://github.com/pytorch/pytorch/blob/main/LICENSE",
@@ -101,7 +102,7 @@ _BACKEND_INFO: dict[str, BackendInfo] = {
         # is a current-looking snapshot; version-match still needs confirming
         # on an actual Linux box before relying on it.
         index_url="https://download.pytorch.org/whl/rocm6.4",
-        package_spec="torch",
+        package_specs=("torch", "torchvision"),
         size_mb=6000,
         license_name="PyTorch (BSD-3-Clause) + AMD ROCm runtime libraries",
         license_url="https://github.com/pytorch/pytorch/blob/main/LICENSE",
@@ -192,6 +193,51 @@ def _has_amd_gpu() -> bool:
     return result.returncode == 0 and "amd" in output and "vga" in output
 
 
+def _rocm_gpu_architectures(nodes_dir: Path | None = None) -> set[str]:
+    """Read AMD GPU architecture names from the Linux KFD sysfs topology."""
+    if _platform.system() != "Linux":
+        return set()
+
+    architectures: set[str] = set()
+    if nodes_dir is None:
+        nodes_dir = Path("/sys/class/kfd/kfd/topology/nodes")
+    for properties_path in nodes_dir.glob("*/properties"):
+        try:
+            properties = dict(
+                line.split(maxsplit=1)
+                for line in properties_path.read_text(encoding="ascii").splitlines()
+                if " " in line
+            )
+            target_version = int(properties.get("gfx_target_version", "0"))
+        except (OSError, ValueError):
+            continue
+        if target_version <= 0:
+            continue
+        major, remainder = divmod(target_version, 10_000)
+        minor, stepping = divmod(remainder, 100)
+        architectures.add(f"gfx{major}{minor}{stepping}")
+    return architectures
+
+
+def unsupported_rocm_gpu_architectures() -> tuple[str, ...]:
+    """Return detected GPU architectures absent from the installed rocBLAS kernels."""
+    if not _runtime_marker_matches("rocm"):
+        return ()
+    architectures = _rocm_gpu_architectures()
+    if not architectures:
+        return ()
+
+    library_dir = (
+        gpu_runtime_dir("rocm")
+        / "torch" / "lib" / "rocblas" / "library"
+    )
+    supported = {
+        path.name.removeprefix("TensileLibrary_lazy_").removesuffix(".dat")
+        for path in library_dir.glob("TensileLibrary_lazy_gfx*.dat")
+    }
+    return tuple(sorted(architectures - supported))
+
+
 def _ensure_runtime_on_path() -> None:
     """Prepend any previously-downloaded, installed runtime dir to sys.path.
 
@@ -203,7 +249,16 @@ def _ensure_runtime_on_path() -> None:
     _paths_synced = True
     for backend in ("cuda", "rocm"):
         runtime_dir = gpu_runtime_dir(backend)
-        if (runtime_dir / _INSTALLED_MARKER).is_file():
+        if _runtime_marker_matches(backend):
+            if backend == "rocm":
+                unsupported_architectures = unsupported_rocm_gpu_architectures()
+                if unsupported_architectures:
+                    _log.warning(
+                        "Ignoring installed ROCm runtime: no rocBLAS Tensile "
+                        "library for detected GPU architecture(s): %s",
+                        ", ".join(unsupported_architectures),
+                    )
+                    continue
             if backend == "cuda" and not _has_nvidia_gpu():
                 # A CUDA torch build without a usable NVIDIA driver crashes
                 # natively (access violation) in some CUDA queries, so keep
@@ -298,11 +353,23 @@ def backend_info(backend: str) -> Optional[BackendInfo]:
     return _BACKEND_INFO.get(backend)
 
 
+def _runtime_marker_matches(backend: str) -> bool:
+    info = _BACKEND_INFO.get(backend)
+    if info is None:
+        return False
+    marker = gpu_runtime_dir(backend) / _INSTALLED_MARKER
+    try:
+        installed_packages = marker.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return False
+    return installed_packages == list(info.package_specs)
+
+
 def is_gpu_runtime_installed(backend: str) -> bool:
     # cuda can be "installed" either because it was downloaded (marker file)
     # or because the bundled torch already supports it natively — check the
     # marker first since it's cheaper and backend-specific.
-    if (gpu_runtime_dir(backend) / _INSTALLED_MARKER).is_file():
+    if _runtime_marker_matches(backend):
         return True
     if backend in _NO_DOWNLOAD_BACKENDS:
         return detect_backend() == backend
@@ -391,13 +458,20 @@ def install_gpu_backend(
         "--target", str(staging_dir),
         "--index-url", info.index_url,
         "--upgrade",
-        info.package_spec,
+        *info.package_specs,
     ]
     if on_progress:
         on_progress(f"Downloading {info.display_name} components...")
+    pip_env = os.environ.copy()
+    for variable in ("TMPDIR", "TEMP", "TMP"):
+        pip_env[variable] = str(parent_dir)
     try:
         process = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env=pip_env,
         )
     except OSError as exc:
         return False, f"Could not start pip: {exc}"
@@ -420,7 +494,9 @@ def install_gpu_backend(
         shutil.rmtree(staging_dir, ignore_errors=True)
         return False, "Install failed:\n" + "\n".join(tail[-10:])
 
-    (staging_dir / _INSTALLED_MARKER).write_text(info.package_spec, encoding="utf-8")
+    (staging_dir / _INSTALLED_MARKER).write_text(
+        "\n".join(info.package_specs), encoding="utf-8"
+    )
     try:
         if target_dir.exists():
             shutil.rmtree(target_dir)

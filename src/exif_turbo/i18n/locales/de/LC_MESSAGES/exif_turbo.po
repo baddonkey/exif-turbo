@@ -1681,6 +1681,12 @@ msgid ""
 "detected. AI features will run on CPU."
 msgstr ""
 
+#: Python
+msgid ""
+"The installed AMD ROCm runtime does not support GPU architecture(s): "
+"{architectures}. AI features will run on CPU."
+msgstr ""
+
 #: QML
 msgid "Theme"
 msgstr "Design"
@@ -3000,4 +3006,3 @@ msgstr "← Ordner auswählen, um Bilder zu durchsuchen"
 
 #~ msgid "Removing controlled-vocabulary tags"
 #~ msgstr ""
-

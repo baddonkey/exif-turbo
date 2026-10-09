@@ -3,10 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import QObject, QUrl
+from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent
 from pytestqt.qtbot import QtBot
 
 from exif_turbo.ui.models import settings_model as settings_model_module
 from exif_turbo.ui.models.settings_model import SettingsModel
+
+_QML_DIR = Path(__file__).resolve().parents[2] / "src" / "exif_turbo" / "ui" / "qml"
 
 
 def test_gpu_acceleration_defaults_to_disabled(qtbot: QtBot, tmp_path: Path) -> None:
@@ -119,6 +123,25 @@ def test_gpu_installable_backend_is_empty_when_runtime_is_installed(
     # Act / Assert
     assert model.gpuRuntimeInstalled is True
     assert model.gpuInstallableBackend == ""
+
+
+def test_gpu_runtime_issue_reports_unsupported_rocm_architecture(
+    qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    monkeypatch.setattr(
+        settings_model_module.ai_device,
+        "unsupported_rocm_gpu_architectures",
+        lambda: ("gfx902",),
+    )
+    model = SettingsModel(tmp_path / "settings.json")
+
+    # Act
+    issue = model.gpuRuntimeIssue
+
+    # Assert
+    assert "gfx902" in issue
+    assert "run on CPU" in issue
 
 
 def test_gpu_restart_required_is_false_after_reload_when_runtime_is_unavailable(
@@ -235,3 +258,54 @@ def test_start_gpu_backend_install_runs_worker_with_consent(
     assert model.gpuRestartRequired is True
     assert "restart" in model.gpuInstallStatusText.lower()
 
+
+def test_gpu_install_failure_details_are_scrollable(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    # Arrange
+    model = SettingsModel(tmp_path / "settings.json")
+    error = "Install failed:\n" + "\n".join(
+        f"pip diagnostic line {index}: package installation detail"
+        for index in range(12)
+    )
+    model._on_gpu_install_progress(error)
+
+    engine = QQmlApplicationEngine()
+    engine.rootContext().setContextProperty("settingsModel", model)
+    component = QQmlComponent(engine)
+    component.setData(
+        f"""import QtQuick
+import QtQuick.Controls
+import "."
+ApplicationWindow {{
+    width: 800
+    height: 600
+    visible: true
+    GpuBackendConsentDialog {{
+        objectName: "gpuBackendConsentDialog"
+        appSettings: settingsModel
+        Component.onCompleted: openFor("rocm")
+    }}
+}}
+""".encode(),
+        QUrl.fromLocalFile(str(_QML_DIR / "GpuBackendConsentDialogTest.qml")),
+    )
+    window = component.create()
+    assert window is not None
+    qtbot.waitUntil(lambda: bool(window.property("visible")), timeout=1_000)
+    dialog = window.findChild(QObject, "gpuBackendConsentDialog")
+    assert dialog is not None
+    qtbot.waitUntil(lambda: bool(dialog.property("opened")), timeout=1_000)
+    status_scroll = dialog.findChild(QObject, "gpuInstallStatusScroll")
+    status_text = dialog.findChild(QObject, "gpuInstallStatusText")
+
+    # Assert
+    assert status_scroll is not None
+    assert status_text is not None
+    assert bool(status_scroll.property("visible"))
+    assert status_text.property("text") == error
+    assert float(status_scroll.property("contentHeight")) > float(
+        status_scroll.property("height")
+    )
+    window.deleteLater()
+    engine.deleteLater()

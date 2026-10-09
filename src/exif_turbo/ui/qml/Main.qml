@@ -4848,7 +4848,9 @@ ApplicationWindow {
                     }
                     Label {
                         visible: _aiFeatureAvailable
-                        text: settingsModel && settingsModel.gpuBackendAvailable
+                        text: settingsModel && settingsModel.gpuRuntimeIssue
+                            ? settingsModel.gpuRuntimeIssue
+                            : (settingsModel && settingsModel.gpuBackendAvailable
                             ? qsTr("Use %1 to speed up AI-Scan and AI search on this machine.").arg(settingsModel.gpuBackendName)
                             : (settingsModel && settingsModel.gpuRestartRequired
                                 ? qsTr("GPU support is installed. Restart exif-turbo to enable it.")
@@ -4857,7 +4859,7 @@ ApplicationWindow {
                             : (settingsModel && settingsModel.gpuInstallableBackend
                                 ? qsTr("No GPU backend installed yet — an optional download can add %1 support.")
                                     .arg(settingsModel.gpuBackendMetadata(settingsModel.gpuInstallableBackend).displayName || "")
-                                : qsTr("No supported GPU backend detected on this machine — AI-Scan runs on CPU."))))
+                                : qsTr("No supported GPU backend detected on this machine — AI-Scan runs on CPU.")))))
                         font.pixelSize: 12
                         opacity: 0.6
                         wrapMode: Text.WordWrap
