@@ -12,9 +12,11 @@ import urllib.request
 from importlib.metadata import Distribution, PackageNotFoundError, distribution
 from pathlib import Path
 from typing import Sequence
+from urllib.error import HTTPError
 
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
+from packaging.version import Version
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "build" / "license-staged"
@@ -95,6 +97,28 @@ _LIBVIPS_FILES = {
 
 class LicenseStagingError(RuntimeError):
     """Raised when a runtime dependency cannot supply its license text."""
+
+
+def _uses_qt_license_bundle(distribution_name: str) -> bool:
+    canonical_name = canonicalize_name(distribution_name)
+    return canonical_name in _QT_DISTRIBUTIONS or canonical_name.startswith(
+        "pyside6-"
+    )
+
+
+def _qt_source_tags(distribution_version: str) -> tuple[str, ...]:
+    release = Version(distribution_version).release
+    qt_release = ".".join(str(part) for part in release[:3])
+    return tuple(
+        dict.fromkeys(
+            (
+                distribution_version,
+                f"v{distribution_version}",
+                qt_release,
+                f"v{qt_release}",
+            )
+        )
+    )
 
 
 def _declared_runtime_requirements() -> tuple[str, ...]:
@@ -281,17 +305,31 @@ def _qt_license_files(version: str) -> tuple[Path, ...]:
                 and required_text in cached
             ):
                 continue
-        url = (
-            "https://code.qt.io/cgit/pyside/pyside-setup.git/plain/LICENSES/"
-            f"{filename}?h={version}"
-        )
-        try:
-            with urllib.request.urlopen(url, timeout=60) as response:  # noqa: S310
-                contents = response.read()
-        except OSError as exc:
+        contents: bytes | None = None
+        last_not_found: HTTPError | None = None
+        for source_tag in _qt_source_tags(version):
+            url = (
+                "https://code.qt.io/cgit/pyside/pyside-setup.git/plain/LICENSES/"
+                f"{filename}?h={source_tag}"
+            )
+            try:
+                with urllib.request.urlopen(url, timeout=60) as response:  # noqa: S310
+                    contents = response.read()
+                break
+            except HTTPError as exc:
+                if exc.code != 404:
+                    raise LicenseStagingError(
+                        f"could not download Qt {version} license text: {filename}"
+                    ) from exc
+                last_not_found = exc
+            except OSError as exc:
+                raise LicenseStagingError(
+                    f"could not download Qt {version} license text: {filename}"
+                ) from exc
+        if contents is None:
             raise LicenseStagingError(
                 f"could not download Qt {version} license text: {filename}"
-            ) from exc
+            ) from last_not_found
         text = contents.decode("utf-8")
         if (
             len(contents) < minimum_size
@@ -404,9 +442,7 @@ def stage_runtime_licenses(
     package_licenses: list[tuple[Distribution, tuple[Path, ...]]] = []
     for package in packages:
         files = _license_files(package) or _upstream_package_license_files(package)
-        if not files and canonicalize_name(package.metadata["Name"]) not in (
-            _QT_DISTRIBUTIONS
-        ):
+        if not files and not _uses_qt_license_bundle(package.metadata["Name"]):
             raise LicenseStagingError(
                 "runtime distribution has no packaged license file: "
                 f"{package.metadata['Name']} {package.version}"
@@ -459,7 +495,7 @@ def stage_runtime_licenses(
                 f"  python/{package_dir.name}/{item}" for item in copied_names
             )
 
-            if canonical_name in _QT_DISTRIBUTIONS:
+            if _uses_qt_license_bundle(name):
                 qt_dir = staged / "qt" / version
                 if not qt_dir.exists():
                     qt_dir.mkdir(parents=True)
