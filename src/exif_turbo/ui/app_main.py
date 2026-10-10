@@ -13,7 +13,7 @@ from PIL import Image as _PILImage
 # Large panoramas and high-resolution TIFFs legitimately exceed the default.
 _PILImage.MAX_IMAGE_PIXELS = 894_784_850
 
-from PySide6.QtCore import QUrl, QtMsgType, qInstallMessageHandler
+from PySide6.QtCore import QUrl, Qt, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QGuiApplication, QIcon, QImageReader
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtQml import QQmlApplicationEngine
@@ -213,6 +213,14 @@ def main() -> None:
     translator = GettextTranslator(app)
     app.installTranslator(translator)
 
+    splash_engine = QQmlApplicationEngine()
+    splash_path = Path(__file__).resolve().parent / "qml" / "StartupSplash.qml"
+    splash_engine.load(QUrl.fromLocalFile(str(splash_path)))
+    splash_window = (
+        splash_engine.rootObjects()[0] if splash_engine.rootObjects() else None
+    )
+    app.processEvents()
+
     db_path = db_path_for_name(args.db) if args.db else default_db_path()
     _instance_lock = _acquire_single_instance_lock(db_path)  # kept alive until app exits
     settings = SettingsModel(settings_path(db_path))
@@ -320,6 +328,14 @@ def main() -> None:
     from .scroll_fix import ListScrollFix
 
     _window = engine.rootObjects()[0]
+    if splash_window is not None:
+        def _close_startup_splash() -> None:
+            _window.frameSwapped.disconnect(_close_startup_splash)
+            splash_window.close()
+
+        _window.frameSwapped.connect(
+            _close_startup_splash, Qt.ConnectionType.QueuedConnection
+        )
     _results_fix = ListScrollFix(_window, "resultsList")
     _window.installEventFilter(_results_fix)
 
