@@ -7,7 +7,7 @@ Produces:
     dist/exif-turbo-<version>-linux-x86_64.rpm    — RPM package (Fedora/RHEL/openSUSE)
 
 Requirements:
-    pip install pyinstaller babel packaging
+    pip install uv==0.13.0
     dpkg-deb   (apt install dpkg)      — for DEB
     rpmbuild   (apt install rpm)       — for RPM
 
@@ -32,8 +32,10 @@ from pathlib import Path
 
 try:
     from audit_release_artifact import audit_release_payload
+    from release_environment import ensure_release_environment
 except ModuleNotFoundError:
     from scripts.audit_release_artifact import audit_release_payload
+    from scripts.release_environment import ensure_release_environment
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -51,13 +53,14 @@ def run(cmd: list[str]) -> None:
 
 
 def find_tool(name: str, venv_subpath: str | None = None) -> str:
+    if venv_subpath:
+        candidate = Path(sys.executable).parent / Path(venv_subpath).name
+        if candidate.exists():
+            return str(candidate)
+        fail(f"Required locked-environment tool '{name}' not found: {candidate}")
     found = shutil.which(name)
     if found:
         return found
-    if venv_subpath:
-        candidate = REPO_ROOT / venv_subpath
-        if candidate.exists():
-            return str(candidate)
     fail(f"Required tool '{name}' not found. See script header for install instructions.")
     return ""  # unreachable
 
@@ -338,7 +341,8 @@ def main() -> None:
     if args.deb_arch and args.rpm_only:
         fail("--deb-arch cannot be used with --rpm-only")
 
-    find_tool("pyinstaller")
+    ensure_release_environment(Path(__file__))
+    pyinstaller = find_tool("pyinstaller", venv_subpath=".venv/bin/pyinstaller")
     if not args.rpm_only:
         find_tool("dpkg-deb")
     if not args.deb_only:
@@ -352,7 +356,7 @@ def main() -> None:
     artifacts: list[Path] = []
 
     if not args.rpm_only:
-        run(["pyinstaller", "--noconfirm", "--clean", "exif-turbo-deb.spec"])
+        run([pyinstaller, "--noconfirm", "--clean", "exif-turbo-deb.spec"])
         print("  PyInstaller DEB build complete.")
         deb_bundle = REPO_ROOT / "dist" / "exif-turbo-deb"
         artifacts.append(deb_bundle)
@@ -360,7 +364,7 @@ def main() -> None:
         artifacts.append(deb_out)
 
     if not args.deb_only:
-        run(["pyinstaller", "--noconfirm", "--clean", "exif-turbo-rpm.spec"])
+        run([pyinstaller, "--noconfirm", "--clean", "exif-turbo-rpm.spec"])
         print("  PyInstaller RPM build complete.")
         rpm_bundle = REPO_ROOT / "dist" / "exif-turbo-rpm"
         artifacts.append(rpm_bundle)

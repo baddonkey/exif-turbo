@@ -20,11 +20,16 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    from release_environment import UV_VERSION
+except ModuleNotFoundError:
+    from scripts.release_environment import UV_VERSION
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 CONTAINER_IMAGE = "ubuntu:24.04"
 
-CONTAINER_SCRIPT = """\
+CONTAINER_SCRIPT = f"""\
 set -e
 apt-get update -qq
 apt-get install -y -q \
@@ -39,12 +44,8 @@ apt-get install -y -q \
     libminizip1t64
 python3 -m venv /build-venv
 . /build-venv/bin/activate
-pip install --quiet \
-    --index-url https://download.pytorch.org/whl/cpu \
-    --extra-index-url https://pypi.org/simple \
-    torch torchvision
-pip install --quiet --index-url https://pypi.org/simple -e '.[build]'
-python scripts/build_linux.py --deb-only --deb-arch "${TARGET_DEB_ARCH}"
+pip install --quiet --index-url https://pypi.org/simple uv=={UV_VERSION}
+python scripts/build_linux.py --deb-only --deb-arch "${{TARGET_DEB_ARCH}}"
 """
 
 ARCH_TO_PLATFORM: dict[str, str] = {

@@ -5,7 +5,7 @@ Produces:
     dist/exif-turbo-<version>-macos.dmg       — distributable disk image
 
 Requirements:
-    pip install pyinstaller babel packaging pillow
+    pip install uv==0.13.0
     Xcode Command Line Tools (for iconutil and hdiutil)
 
 Usage:
@@ -25,8 +25,10 @@ from pathlib import Path
 
 try:
     from audit_release_artifact import audit_release_payload
+    from release_environment import ensure_release_environment
 except ModuleNotFoundError:
     from scripts.audit_release_artifact import audit_release_payload
+    from scripts.release_environment import ensure_release_environment
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -44,13 +46,14 @@ def run(cmd: list[str]) -> None:
 
 
 def find_tool(name: str, venv_subpath: str | None = None) -> str:
+    if venv_subpath:
+        candidate = Path(sys.executable).parent / Path(venv_subpath).name
+        if candidate.exists():
+            return str(candidate)
+        fail(f"Required locked-environment tool '{name}' not found: {candidate}")
     found = shutil.which(name)
     if found:
         return found
-    if venv_subpath:
-        candidate = REPO_ROOT / venv_subpath
-        if candidate.exists():
-            return str(candidate)
     fail(f"Required tool '{name}' not found. See script header for install instructions.")
     return ""  # unreachable
 
@@ -236,6 +239,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    ensure_release_environment(Path(__file__))
     spec_file, arch_suffix = ARCH_CONFIGS[args.arch]
 
     version = read_version()
