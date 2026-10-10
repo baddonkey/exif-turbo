@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from email.message import Message
 from importlib.metadata import Distribution, PackagePath
+from io import BytesIO
 from pathlib import Path
 from typing import cast
+from urllib.error import HTTPError
 
 import pytest
 
@@ -334,6 +336,41 @@ def test_upstream_package_license_files_classifier_and_valid_cache_returns_text(
     assert result == (cached_license,)
 
 
+def test_qt_license_files_wheel_build_version_falls_back_to_qt_release_tag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    monkeypatch.setattr(stage_runtime_licenses, "REPO_ROOT", tmp_path)
+    requested_urls: list[str] = []
+
+    def urlopen(url: str, *, timeout: int) -> BytesIO:
+        requested_urls.append(url)
+        if not url.endswith("?h=v6.12.0"):
+            raise HTTPError(url, 404, "Not Found", None, None)
+
+        filename = url.split("/LICENSES/", maxsplit=1)[1].split("?", maxsplit=1)[0]
+        expected_heading, minimum_size, required_text = (
+            stage_runtime_licenses._QT_LICENSES[filename]
+        )
+        contents = (
+            expected_heading
+            + "\n"
+            + ("license terms\n" * (minimum_size // 14 + 1))
+            + required_text
+        ).encode("utf-8")
+        return BytesIO(contents)
+
+    monkeypatch.setattr(stage_runtime_licenses.urllib.request, "urlopen", urlopen)
+
+    # Act
+    license_files = stage_runtime_licenses._qt_license_files("6.12.0.140")
+
+    # Assert
+    assert len(license_files) == len(stage_runtime_licenses._QT_LICENSES)
+    assert any(url.endswith("?h=6.12.0.140") for url in requested_urls)
+    assert any(url.endswith("?h=v6.12.0") for url in requested_urls)
+
+
 def test_stage_runtime_licenses_qt_wheels_without_licenses_use_upstream_texts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -346,12 +383,22 @@ def test_stage_runtime_licenses_qt_wheels_without_licenses_use_upstream_texts(
             tmp_path,
             "PySide6",
             "6.11.1",
-            requires=("PySide6-Essentials", "PySide6-Addons", "shiboken6"),
+            requires=(
+                "PySide6-Essentials",
+                "PySide6-Addons",
+                "PySide6-Pdf",
+                "PySide6-WebEngine",
+                "shiboken6",
+            ),
         ),
         "PySide6-Essentials": FakeDistribution(
             tmp_path, "PySide6-Essentials", "6.11.1"
         ),
         "PySide6-Addons": FakeDistribution(tmp_path, "PySide6-Addons", "6.11.1"),
+        "PySide6-Pdf": FakeDistribution(tmp_path, "PySide6_Pdf", "6.11.1"),
+        "PySide6-WebEngine": FakeDistribution(
+            tmp_path, "PySide6_WebEngine", "6.11.1"
+        ),
         "shiboken6": FakeDistribution(tmp_path, "shiboken6", "6.11.1"),
     }
     python_license = tmp_path / "PYTHON-LICENSE.txt"
@@ -384,7 +431,10 @@ def test_stage_runtime_licenses_qt_wheels_without_licenses_use_upstream_texts(
     manifest = (output_dir / "PYTHON-RUNTIME-LICENSES.txt").read_text(
         encoding="utf-8"
     )
-    assert all(f"{name} 6.11.1" in manifest for name in packages)
+    assert all(
+        f"{package.metadata['Name']} 6.11.1" in manifest
+        for package in packages.values()
+    )
     assert "qt/6.11.1/LGPL-3.0-only.txt" in manifest
 
 
