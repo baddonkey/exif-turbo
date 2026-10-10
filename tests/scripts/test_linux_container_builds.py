@@ -2,30 +2,39 @@ from __future__ import annotations
 
 from pathlib import Path
 import runpy
+import tomllib
 
 import pytest
 
-from scripts import build_deb, build_rpm
+from scripts import build_deb, build_rpm, release_environment
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_linux_container_builds_resolve_project_dependencies_from_pypi() -> None:
+def test_linux_container_builds_pinned_bootstrap_preserves_explicit_cpu_source() -> None:
     # Arrange
-    torch_dependency_index = "--extra-index-url https://pypi.org/simple"
-    project_install = (
-        "pip install --quiet --index-url https://pypi.org/simple -e '.[build]'"
+    bootstrap = (
+        "pip install --quiet --index-url https://pypi.org/simple "
+        f"uv=={release_environment.UV_VERSION}"
     )
+    project = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
     # Act
     scripts = (build_deb.CONTAINER_SCRIPT, build_rpm.CONTAINER_SCRIPT)
+    cpu_index = next(
+        index for index in project["tool"]["uv"]["index"]
+        if index["name"] == "pytorch-cpu"
+    )
 
     # Assert
-    assert all(
-        torch_dependency_index in script and project_install in script
-        for script in scripts
-    )
+    assert all(bootstrap in script for script in scripts)
+    assert all("-e '.[build]'" not in script for script in scripts)
+    assert all("torch torchvision" not in script for script in scripts)
+    assert cpu_index["explicit"] is True
+    assert cpu_index["url"] == "https://download.pytorch.org/whl/cpu"
+    assert project["tool"]["uv"]["sources"]["torch"][0]["index"] == "pytorch-cpu"
+    assert project["tool"]["uv"]["sources"]["torchvision"][0]["index"] == "pytorch-cpu"
 
 
 def test_rpm_spec_explicitly_collects_qt_webengine_binary_payload() -> None:

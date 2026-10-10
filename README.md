@@ -191,9 +191,43 @@ containing Giles Laurent photographs are distributed under CC BY-SA 4.0; see
 
 ## Building from source
 
+Release scripts use the committed `uv.lock` for exact runtime and build-tool
+versions, including transitive dependencies and artifact hashes. Install the
+bootstrap resolver in the Python environment used to invoke the scripts:
+
+```bash
+python -m pip install uv==0.13.0
+```
+
+Windows, macOS, and native Linux builds automatically run in a separate
+`build/release-venv-<platform>-<architecture>-<python>` environment. The development
+environment is not synchronized or used for packaging. Linux containers install
+the same pinned resolver automatically. Builds use `--locked` and fail if project
+metadata and the lock disagree; they do not upgrade dependencies. Windows and
+Linux use explicitly locked CPU PyTorch wheels; macOS uses PyPI wheels.
+
+To validate the lock without changing it:
+
+```bash
+python -m uv lock --check
+```
+
+To deliberately update dependencies, run `python -m uv lock --upgrade` (or
+`--upgrade-package PACKAGE`), review the lock diff, and test the locked environment
+and packaged applications on each target platform before releasing. For tests in
+the development environment, run `python -m uv sync --locked --extra dev`, then
+`python -m pytest`. Do not synchronize an environment while the application or
+tests are running. The Windows release-version bump updates and commits the
+lock's project metadata without upgrading dependencies.
+
+The lock supports CPython on Windows x64, Linux x64/ARM64, and macOS ARM64/Intel. macOS Intel
+builds require Python 3.11 or 3.12. This locks Python packages, not the Python
+interpreter, container image digests, OS libraries, WiX, or downloaded ExifTool;
+those inputs still require separate release controls.
+
 ### Windows MSI
 
-Requirements: `pip install pyinstaller babel pillow`, [WiX Toolset v6](https://wixtoolset.org/)
+Requirements: the pinned uv bootstrap above, [WiX Toolset v6](https://wixtoolset.org/)
 
 ```powershell
 python scripts\build_windows.py
@@ -202,7 +236,7 @@ python scripts\build_windows.py
 
 ### macOS DMG
 
-Requirements: `pip install pyinstaller babel pillow`, Xcode Command Line Tools
+Requirements: the pinned uv bootstrap above, Xcode Command Line Tools
 
 ```bash
 # Apple Silicon (arm64) — default

@@ -16,11 +16,16 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    from release_environment import UV_VERSION
+except ModuleNotFoundError:
+    from scripts.release_environment import UV_VERSION
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 CONTAINER_IMAGE = "almalinux:9"
 
-CONTAINER_SCRIPT = """\
+CONTAINER_SCRIPT = f"""\
 set -e
 dnf install -y -q \
     python3.11 python3.11-devel python3-pip rpm-build \
@@ -31,11 +36,7 @@ dnf install -y -q \
     libXcomposite libXdamage libXrandr libxshmfence
 python3.11 -m venv /build-venv
 . /build-venv/bin/activate
-pip install --quiet \
-    --index-url https://download.pytorch.org/whl/cpu \
-    --extra-index-url https://pypi.org/simple \
-    torch torchvision
-pip install --quiet --index-url https://pypi.org/simple -e '.[build]'
+pip install --quiet --index-url https://pypi.org/simple uv=={UV_VERSION}
 python scripts/build_linux.py --rpm-only
 """
 

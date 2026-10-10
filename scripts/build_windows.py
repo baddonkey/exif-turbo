@@ -5,7 +5,7 @@ Produces:
     dist/exif-turbo-<version>-windows.msi    — distributable MSI installer
 
 Requirements:
-    pip install pyinstaller babel packaging pillow
+    pip install uv==0.13.0
     dotnet tool install --global wix          (WiX Toolset v6)
     wix extension add WixToolset.UI.wixext    (run once to install the UI ext)
 
@@ -33,8 +33,10 @@ from pathlib import Path
 
 try:
     from audit_release_artifact import audit_release_payload
+    from release_environment import ensure_release_environment
 except ModuleNotFoundError:
     from scripts.audit_release_artifact import audit_release_payload
+    from scripts.release_environment import ensure_release_environment
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -55,9 +57,10 @@ def find_tool(name: str, venv_subpath: str | None = None) -> str:
     # Prefer the venv-local binary so that venv-installed packages (e.g. av,
     # Pillow) are visible to PyInstaller instead of a globally installed copy.
     if venv_subpath:
-        candidate = REPO_ROOT / venv_subpath
+        candidate = Path(sys.executable).parent / Path(venv_subpath).name
         if candidate.exists():
             return str(candidate)
+        fail(f"Required locked-environment tool '{name}' not found: {candidate}")
     found = shutil.which(name)
     if found:
         return found
@@ -240,6 +243,7 @@ def generate_icon() -> Path:
 
 
 def main() -> None:
+    ensure_release_environment(Path(__file__))
     pyinstaller = find_tool("pyinstaller", venv_subpath=".venv/Scripts/pyinstaller.exe")
     wix = find_tool("wix")
 

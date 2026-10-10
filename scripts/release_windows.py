@@ -44,6 +44,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 INIT_FILE = REPO_ROOT / "src" / "exif_turbo" / "__init__.py"
 PYPROJECT_FILE = REPO_ROOT / "pyproject.toml"
 VERSION_INFO_FILE = REPO_ROOT / "version_info.py"
+LOCK_FILE = REPO_ROOT / "uv.lock"
 
 
 class ShellError(RuntimeError):
@@ -161,10 +162,11 @@ def write_version(version: str) -> None:
     # Regenerate the Windows exe-metadata file so it lands in the release PR
     # instead of being committed directly to a protected 'main' at build time.
     write_version_info(version, VERSION_INFO_FILE)
+    run([sys.executable, "-m", "uv", "lock", "--offline"])
 
 
 def commit_version_bump(version: str) -> None:
-    run(["git", "add", str(INIT_FILE), str(PYPROJECT_FILE), str(VERSION_INFO_FILE)])
+    run(["git", "add", str(INIT_FILE), str(PYPROJECT_FILE), str(VERSION_INFO_FILE), str(LOCK_FILE)])
     run(["git", "commit", "-m", f"chore: bump version to {version}"])
 
 
