@@ -13,6 +13,7 @@ from exif_turbo.data.ai_vector_repository import (
     _is_inside,
 )
 from exif_turbo.models.ai_model_profile import AiModelProfile, DEFAULT_AI_MODEL_PROFILE
+from exif_turbo.data.ai_vector_storage import AiVectorAuthenticationError, AiVectorStorage
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -22,16 +23,212 @@ def _random_vec(dim: int = 512) -> np.ndarray:
     return (v / np.linalg.norm(v)).astype(np.float32)
 
 
-def _make_repo(tmp_path: Path) -> AiVectorRepository:
+def _make_repo(tmp_path: Path, key: str = "") -> AiVectorRepository:
     repo = AiVectorRepository(
         tmp_path / "ai_index.faiss",
         tmp_path / "ai_id_map.json",
+        key=key,
     )
     repo.load()
     return repo
 
 
 # ── load / save round-trip ────────────────────────────────────────────────────
+
+def test_ai_vector_storage_round_trip_hides_plaintext(tmp_path: Path) -> None:
+    # Arrange
+    storage = AiVectorStorage(tmp_path / "ai_index.faiss", "test-password")
+    expected = (b"vector-content", b"/private/photo.jpg", b"model-metadata")
+
+    # Act
+    storage.save(*expected)
+
+    # Assert
+    assert storage.load() == expected
+    assert all(part not in storage.path.read_bytes() for part in expected)
+
+
+def test_ai_vector_storage_wrong_password_rejects_snapshot(tmp_path: Path) -> None:
+    # Arrange
+    storage = AiVectorStorage(tmp_path / "ai_index.faiss", "test-password")
+    storage.save(b"vectors", b"paths", b"metadata")
+    wrong = AiVectorStorage(tmp_path / "ai_index.faiss", "wrong-password")
+
+    # Act / Assert
+    with pytest.raises(AiVectorAuthenticationError):
+        wrong.load()
+
+
+def test_ai_vector_storage_interrupted_save_preserves_generation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    storage = AiVectorStorage(tmp_path / "ai_index.faiss", "test-password")
+    original = (b"vectors", b"paths", b"metadata")
+    storage.save(*original)
+
+    def fail_replace(source: Path, destination: Path) -> None:
+        raise OSError("simulated interrupted publication")
+
+    # Act
+    with monkeypatch.context() as patch:
+        patch.setattr("exif_turbo.data.ai_vector_storage.os.replace", fail_replace)
+        with pytest.raises(OSError, match="interrupted publication"):
+            storage.save(b"new-vectors", b"new-paths", b"new-metadata")
+
+    # Assert
+    assert storage.load() == original
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+def test_ai_vector_repository_encrypted_round_trip_preserves_views(tmp_path: Path) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path, "test-password")
+    expected = _random_vec()
+    repo.add_images(np.stack([expected, expected]), ["/private/a.jpg"] * 2,
+                    view_ids=["full", "top_left"])
+
+    # Act
+    repo.save()
+    loaded = _make_repo(tmp_path, "test-password")
+
+    # Assert
+    assert set(loaded.get_view_vectors("/private/a.jpg")) == {"full", "top_left"}
+    assert np.allclose(loaded.get_vector("/private/a.jpg"), expected)
+    assert not (tmp_path / "ai_index.faiss").exists()
+    assert not (tmp_path / "ai_id_map.json").exists()
+    assert not (tmp_path / "ai_index_meta.json").exists()
+
+
+def test_ai_vector_repository_plaintext_load_migrates_snapshot(tmp_path: Path) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    expected = _random_vec()
+    repo.add_images(expected, ["/private/a.jpg"])
+    repo.save()
+
+    # Act
+    migrated = _make_repo(tmp_path, "test-password")
+
+    # Assert
+    assert np.allclose(migrated.get_vector("/private/a.jpg"), expected)
+    assert (tmp_path / "ai_index.faiss.enc").exists()
+    assert not (tmp_path / "ai_id_map.json").exists()
+
+
+def test_ai_vector_repository_tampering_rejects_plaintext_fallback(tmp_path: Path) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    repo.add_images(_random_vec(), ["/private/a.jpg"])
+    repo.save()
+    legacy = {path: path.read_bytes() for path in tmp_path.glob("*.*")}
+    _make_repo(tmp_path, "test-password")
+    for path, content in legacy.items():
+        path.write_bytes(content)
+    encrypted = tmp_path / "ai_index.faiss.enc"
+    content = bytearray(encrypted.read_bytes())
+    content[-1] ^= 1
+    encrypted.write_bytes(content)
+
+    # Act / Assert
+    with pytest.raises(AiVectorAuthenticationError, match="authentication"):
+        _make_repo(tmp_path, "test-password")
+
+    assert all(path.exists() for path in legacy)
+
+
+def test_ai_vector_storage_password_change_preserves_snapshot(tmp_path: Path) -> None:
+    # Arrange
+    storage = AiVectorStorage(tmp_path / "ai_index.faiss", "old-password")
+    expected = (b"vectors", b"paths", b"metadata")
+    storage.save(*expected)
+    encrypted = storage.path.read_bytes()
+
+    # Act
+    storage.change_password("new-password")
+
+    # Assert
+    assert storage.load() == expected
+    assert storage.path.read_bytes() == encrypted
+    with pytest.raises(AiVectorAuthenticationError):
+        AiVectorStorage(tmp_path / "ai_index.faiss", "old-password").load()
+
+
+def test_ai_vector_storage_staged_password_change_recovers_after_rekey(tmp_path: Path) -> None:
+    # Arrange
+    storage = AiVectorStorage(tmp_path / "ai_index.faiss", "old-password")
+    expected = (b"vectors", b"paths", b"metadata")
+    storage.save(*expected)
+    storage.stage_password_change("new-password")
+
+    # Act
+    recovered = AiVectorStorage(tmp_path / "ai_index.faiss", "new-password")
+
+    # Assert
+    assert recovered.load() == expected
+    assert not (storage.key_dir / "password.pending").exists()
+
+
+def test_ai_vector_storage_interrupted_migration_retains_plaintext(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    paths = (tmp_path / "ai_index.faiss", tmp_path / "ai_id_map.json", tmp_path / "ai_index_meta.json")
+    original = (b"vectors", b"private-path", b"model")
+    for path, data in zip(paths, original):
+        path.write_bytes(data)
+    storage = AiVectorStorage(paths[0], "test-password")
+    storage._crypto()
+
+    def fail_replace(source: Path, destination: Path) -> None:
+        raise OSError("simulated migration interruption")
+
+    monkeypatch.setattr("exif_turbo.data.ai_vector_storage.os.replace", fail_replace)
+
+    # Act / Assert
+    with pytest.raises(OSError, match="migration interruption"):
+        storage.migrate(*paths)
+    assert tuple(path.read_bytes() for path in paths) == original
+
+
+def test_ai_vector_storage_missing_key_rejects_without_recreation(tmp_path: Path) -> None:
+    # Arrange
+    storage = AiVectorStorage(tmp_path / "ai_index.faiss", "test-password")
+    storage.save(b"vectors", b"paths", b"metadata")
+    key_path = storage.key_dir / ".thumb_key"
+    key_path.unlink()
+
+    # Act / Assert
+    with pytest.raises(AiVectorAuthenticationError, match="missing"):
+        storage.load()
+    assert not key_path.exists()
+
+
+def test_ai_vector_repository_encrypted_index_requires_password(tmp_path: Path) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path, "test-password")
+    repo.save()
+
+    # Act / Assert
+    with pytest.raises(AiVectorAuthenticationError, match="password"):
+        _make_repo(tmp_path)
+
+
+def test_ai_vector_storage_migration_cleans_legacy_temporary_files(tmp_path: Path) -> None:
+    # Arrange
+    paths = (tmp_path / "ai_index.faiss", tmp_path / "ai_id_map.json", tmp_path / "ai_index_meta.json")
+    storage = AiVectorStorage(paths[0], "test-password")
+    storage.save(b"vectors", b"paths", b"metadata")
+    temporary = tmp_path / ".ai_id_map.json.interrupted.tmp"
+    temporary.write_bytes(b"private path from interrupted legacy save")
+
+    # Act
+    storage.migrate(*paths)
+
+    # Assert
+    assert not temporary.exists()
+    assert storage.load() == (b"vectors", b"paths", b"metadata")
+
 
 def test_ai_vector_repository_empty_load_creates_index(tmp_path: Path) -> None:
     # Arrange / Act

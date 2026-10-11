@@ -22,6 +22,7 @@ Run with:
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from typing import Generator
 
 import pytest
@@ -185,7 +186,12 @@ def test_refresh_tags_uses_activity_block_without_busy_overlay() -> None:
     assert "currentFile: controller ? controller.refreshTagsCurrentFile" in folders_source
     assert "progressPrefix: controller ? controller.refreshTagsFolderName" in folders_source
     assert "onCancelRequested: controller.cancelRefreshTags()" in folders_source
-    assert "visible: _isBusy && !_isRefreshingTags" in main_source
+    assert re.search(
+        r"readonly property bool\s+_busyBlocksUi:\s+_isBusy && !_isRefreshingTags",
+        main_source,
+    )
+    busy_overlay = main_source.split("id: busyOverlay", 1)[1].split("MouseArea", 1)[0]
+    assert "visible: _busyBlocksUi" in busy_overlay
 
 
 def test_status_bar_glows_folder_name_without_indexing_bullet() -> None:

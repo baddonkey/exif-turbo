@@ -83,6 +83,7 @@ class AiSearchWorker(QThread):
                 index_path,
                 id_map_path,
                 ai_vector_metadata_path(self._db_path),
+                key=self._key,
             )
             vector_repo.load()
 
@@ -151,3 +152,5 @@ class AiSearchWorker(QThread):
             self.results_ready.emit(rows, len(rows), [], self._serial)
         except Exception as exc:  # noqa: BLE001
             self.failed.emit(str(exc))
+        finally:
+            self._key = ""

@@ -32,6 +32,8 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication, QImage
 
+from ...config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
+from ...data.ai_vector_storage import AiVectorStorage
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
 from ...data.password_policy import validate_new_database_password
@@ -1350,6 +1352,11 @@ class AppController(QObject):
             repo = ImageIndexRepository(self._db_path, key=password)
             repo.count_images("")  # verify key — raises DatabaseError on wrong key
             folder_repo = IndexedFolderRepository(self._db_path, key=password)
+            if password:
+                AiVectorStorage(ai_index_path(self._db_path), password).migrate(
+                    ai_index_path(self._db_path), ai_id_map_path(self._db_path),
+                    ai_vector_metadata_path(self._db_path),
+                )
             self._repo = repo
             self._folder_repo = folder_repo
             self._key = password
@@ -1475,7 +1482,15 @@ class AppController(QObject):
         if self._is_locked or self._repo is None:
             self.passwordChangeFinished.emit(False, _("Database is locked."))
             return
-        if self._is_indexing or self._is_building_thumbs or self._is_busy:
+        if (
+            self._is_indexing or self._is_building_thumbs or self._is_busy
+            or self._is_building_previews or self._is_ai_scanning
+            or any(worker is not None and worker.isRunning() for worker in (
+                self._ai_search_worker, self._search_worker, self._year_counts_worker,
+                self._load_more_worker, self._folder_tree_worker,
+                *self._finishing_search_workers,
+            ))
+        ):
             self.passwordChangeFinished.emit(
                 False,
                 _("Cannot change password while indexing or thumb-building is running."),
@@ -1531,6 +1546,8 @@ class AppController(QObject):
         self._password_change_worker.start()
 
     def _clear_busy_after_password_change(self) -> None:
+        self._password_change_old = ""
+        self._password_change_new = ""
         self._is_busy = False
         self._busy_cancelable = True
         self._busy_label = ""
@@ -4693,6 +4710,14 @@ class AppController(QObject):
         self._bulk_worker = None
         self._finishing_search_workers.clear()
         self._tagging.close()
+        self._key = ""
+        self._password_change_old = ""
+        self._password_change_new = ""
+        if self._thumb_provider is not None:
+            self._thumb_provider.set_key("", self._search_model.cache_dir)
+        if self._preview_provider is not None:
+            self._preview_provider.set_cache(self._search_model.cache_dir, "")
+        self._is_locked = True
 
         if self._repo is not None:
             self._repo.close()

@@ -11,6 +11,7 @@ from typing import Dict, List, Set
 import numpy as np
 
 from ..models.ai_model_profile import AiModelProfile, DEFAULT_AI_MODEL_PROFILE
+from .ai_vector_storage import AiVectorAuthenticationError, AiVectorStorage
 
 
 class AiVectorIndexError(RuntimeError):
@@ -27,12 +28,15 @@ class AiVectorRepository:
         metadata_path: Path | None = None,
         *,
         profile: AiModelProfile = DEFAULT_AI_MODEL_PROFILE,
+        key: str = "",
     ) -> None:
         self._index_path = index_path
         self._id_map_path = id_map_path
         self._metadata_path = metadata_path or index_path.with_name("ai_index_meta.json")
         self._profile = profile
         self._dimension = profile.dimension
+        self._key = key
+        self._storage = AiVectorStorage(index_path, key)
         self._faiss = None
         self._index = None
         # Maps str(sequential_faiss_id) to an image path and deterministic view.
@@ -61,21 +65,29 @@ class AiVectorRepository:
         self._faiss = faiss
         paths = (self._index_path, self._id_map_path, self._metadata_path)
         existing = tuple(path.exists() for path in paths)
-        if not any(existing):
+        encrypted = self._storage.path.exists()
+        if not encrypted and not any(existing):
             self._index = faiss.IndexFlatIP(self._dimension)
             self._id_map = {}
             self._path_map = {}
             return
-        if not all(existing):
+        if not encrypted and not all(existing):
             raise AiVectorIndexError(
                 "AI vector index has no compatible model metadata; "
                 "run AI Full Rescan"
             )
 
         try:
-            index = faiss.read_index(str(self._index_path))
-            raw_map = json.loads(self._id_map_path.read_text(encoding="utf-8"))
-            metadata = json.loads(self._metadata_path.read_text(encoding="utf-8"))
+            if encrypted:
+                index_bytes, map_bytes, metadata_bytes = self._storage.load()
+                index = faiss.deserialize_index(np.frombuffer(index_bytes, dtype=np.uint8))
+            else:
+                index_bytes = self._index_path.read_bytes()
+                map_bytes = self._id_map_path.read_bytes()
+                metadata_bytes = self._metadata_path.read_bytes()
+                index = faiss.deserialize_index(np.frombuffer(index_bytes, dtype=np.uint8))
+            raw_map = json.loads(map_bytes)
+            metadata = json.loads(metadata_bytes)
             if not isinstance(raw_map, dict) or not isinstance(metadata, dict):
                 raise ValueError("metadata or ID map has the wrong shape")
             if int(metadata["schema_version"]) != 2:
@@ -103,11 +115,11 @@ class AiVectorRepository:
             }
             if index.ntotal != len(id_map) or index.ntotal != int(metadata["count"]):
                 raise ValueError("FAISS count, ID map, and metadata count differ")
-            if self._sha256(self._index_path) != str(metadata["index_sha256"]):
+            if hashlib.sha256(index_bytes).hexdigest() != str(metadata["index_sha256"]):
                 raise ValueError("FAISS index checksum does not match metadata")
-            if self._sha256(self._id_map_path) != str(metadata["map_sha256"]):
+            if hashlib.sha256(map_bytes).hexdigest() != str(metadata["map_sha256"]):
                 raise ValueError("ID map checksum does not match metadata")
-        except AiVectorIndexError:
+        except (AiVectorIndexError, AiVectorAuthenticationError):
             raise
         except Exception as exc:  # noqa: BLE001
             raise AiVectorIndexError(
@@ -117,6 +129,8 @@ class AiVectorRepository:
         self._index = index
         self._id_map = id_map
         self._rebuild_path_map()
+        if self._key and (not encrypted or any(existing)):
+            self._storage.migrate(*paths)
 
     def reset(self) -> None:
         """Replace the loaded index with an empty index for the active model."""
@@ -130,6 +144,32 @@ class AiVectorRepository:
         """Persist the current index and id-map to disk."""
         if self._faiss is None or self._index is None:
             raise RuntimeError("load() must be called before save()")
+        if self._key:
+            index_bytes = self._faiss.serialize_index(self._index).tobytes()
+            map_bytes = json.dumps(self._id_map, ensure_ascii=False).encode("utf-8")
+            metadata_bytes = json.dumps(
+                {
+                    "schema_version": 2,
+                    "model_fingerprint": self._profile.identifier,
+                    "model_name": self._profile.model_name,
+                    "pretrained": self._profile.pretrained,
+                    "dimension": self._dimension,
+                    "count": int(self._index.ntotal),
+                    "image_count": len(self._path_map),
+                    "view_strategy": "full-plus-four-corners-v1",
+                    "index_sha256": hashlib.sha256(index_bytes).hexdigest(),
+                    "map_sha256": hashlib.sha256(map_bytes).hexdigest(),
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            self._storage.save(index_bytes, map_bytes, metadata_bytes)
+            paths = (self._index_path, self._id_map_path, self._metadata_path)
+            if any(path.exists() for path in paths):
+                self._storage.migrate(*paths)
+            return
+        if self._storage.path.exists():
+            raise AiVectorAuthenticationError("Cannot replace an encrypted AI index without a password")
         parent = self._index_path.parent
         parent.mkdir(parents=True, exist_ok=True)
         index_temp = self._temporary_path(parent, self._index_path.name)

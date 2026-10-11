@@ -8,6 +8,7 @@ from PIL import Image
 
 from exif_turbo.config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
 from exif_turbo.data.ai_vector_repository import AiVectorRepository
+from exif_turbo.data.ai_vector_storage import AiVectorStorage
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.data.indexed_folder_repository import IndexedFolderRepository
 from exif_turbo.ui.workers.ai_scan_worker import AiScanWorker
@@ -18,13 +19,13 @@ def _make_jpeg(path: Path, size: tuple[int, int] = (256, 192)) -> None:
     Image.new("RGB", size, "blue").save(path, "JPEG")
 
 
-def _seed_db(db_path: Path, sources: list[Path]) -> int:
-    folder_repo = IndexedFolderRepository(db_path, key="")
+def _seed_db(db_path: Path, sources: list[Path], key: str = "") -> int:
+    folder_repo = IndexedFolderRepository(db_path, key=key)
     folder = folder_repo.add(str(sources[0].parent))
     folder_repo.update_status(folder.id, "indexed", image_count=len(sources))
     folder_repo.close()
 
-    repo = ImageIndexRepository(db_path, key="")
+    repo = ImageIndexRepository(db_path, key=key)
     for src in sources:
         st = src.stat()
         repo.upsert_image(
@@ -157,6 +158,59 @@ def test_ai_scan_worker_full_rescan_recovers_legacy_index(
 
     # Assert
     assert _load_indexed_paths(db_path) == {str(current)}
+
+
+def test_ai_scan_worker_password_scan_encrypts_persistence(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    # Arrange
+    current = tmp_path / "src" / "current.jpg"
+    _make_jpeg(current)
+    db_path = _unique_db_path(tmp_path)
+    key = "test-ai-passphrase"
+    folder_id = _seed_db(db_path, [current], key)
+    monkeypatch.setattr(
+        "exif_turbo.ui.workers.ai_scan_worker.AiIndexerService", _FakeAiIndexerService,
+    )
+    worker = AiScanWorker(db_path, folder_id, str(current.parent), key)
+    failures: list[str] = []
+    worker.failed.connect(failures.append)
+
+    # Act
+    worker.run()
+    repository = AiVectorRepository(ai_index_path(db_path), ai_id_map_path(db_path), key=key)
+    repository.load()
+
+    # Assert
+    assert failures == []
+    assert repository.get_indexed_paths() == {str(current)}
+    assert not ai_id_map_path(db_path).exists()
+    assert worker._key == ""
+
+
+def test_ai_scan_worker_full_rescan_authentication_failure_preserves_snapshot(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    # Arrange
+    current = tmp_path / "src" / "current.jpg"
+    _make_jpeg(current)
+    db_path = _unique_db_path(tmp_path)
+    key = "test-ai-passphrase"
+    folder_id = _seed_db(db_path, [current], key)
+    storage = AiVectorStorage(ai_index_path(db_path), "different-ai-password")
+    storage.save(b"vectors", b"mapping", b"metadata")
+    original = storage.path.read_bytes()
+    worker = AiScanWorker(db_path, folder_id, str(current.parent), key, force_rebuild=True)
+    failures: list[str] = []
+    worker.failed.connect(failures.append)
+
+    # Act
+    worker.run()
+
+    # Assert
+    assert len(failures) == 1
+    assert "encryption key" in failures[0]
+    assert storage.path.read_bytes() == original
 
 
 def test_ai_scan_worker_empty_folder_finishes_without_canceling(
