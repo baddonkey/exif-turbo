@@ -18,7 +18,7 @@ from scripts import (
 )
 
 
-def test_ensure_release_environment_unlocked_process_runs_isolated_locked_build(
+def test_ensure_release_environment_sync_failure_does_not_launch_build(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Arrange
@@ -42,13 +42,49 @@ def test_ensure_release_environment_unlocked_process_runs_isolated_locked_build(
 
     assert result.value.code == 7
     command, cwd, environment = calls[0]
-    assert command[:5] == [sys.executable, "-m", "uv", "run", "--locked"]
+    assert len(calls) == 1
+    assert command[:5] == [sys.executable, "-m", "uv", "sync", "--locked"]
     assert "--no-default-groups" in command
     assert command[command.index("--extra") + 1] == "build"
     assert command[command.index("--python") + 1] == sys.executable
-    assert command[-3:] == ["python", str(script.resolve()), "--deb-only"]
+    assert command[-2:] == ["--project", str(tmp_path)]
     assert cwd == tmp_path
     assert Path(environment["UV_PROJECT_ENVIRONMENT"]).parent == tmp_path / "build"
+    assert environment["EXIF_TURBO_LOCKED_BUILD"] == str(script.resolve())
+
+
+def test_ensure_release_environment_sync_success_launches_locked_python(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    monkeypatch.setattr(release_environment, "REPO_ROOT", tmp_path)
+    monkeypatch.delenv("EXIF_TURBO_LOCKED_BUILD", raising=False)
+    monkeypatch.setattr(sys, "argv", ["build_linux.py", "--deb-only"])
+    calls: list[tuple[list[str], Path, dict[str, str]]] = []
+
+    def run(
+        command: list[str], *, cwd: Path, env: dict[str, str]
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append((command, cwd, env.copy()))
+        return subprocess.CompletedProcess(command, 0 if len(calls) == 1 else 7)
+
+    monkeypatch.setattr(release_environment.subprocess, "run", run)
+    script = tmp_path / "scripts" / "build_linux.py"
+
+    # Act / Assert
+    with pytest.raises(SystemExit) as result:
+        release_environment.ensure_release_environment(script)
+
+    assert result.value.code == 7
+    assert len(calls) == 2
+    command, cwd, environment = calls[1]
+    virtualenv = Path(environment["UV_PROJECT_ENVIRONMENT"])
+    executable_dir = virtualenv / ("Scripts" if sys.platform == "win32" else "bin")
+    python = executable_dir / ("python.exe" if sys.platform == "win32" else "python")
+    assert command == [str(python), "-u", str(script.resolve()), "--deb-only"]
+    assert cwd == tmp_path
+    assert environment["VIRTUAL_ENV"] == str(virtualenv)
+    assert environment["PATH"].split(os.pathsep)[0] == str(executable_dir)
     assert environment["EXIF_TURBO_LOCKED_BUILD"] == str(script.resolve())
 
 
