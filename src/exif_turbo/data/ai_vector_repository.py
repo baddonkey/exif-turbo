@@ -277,10 +277,11 @@ class AiVectorRepository:
         rows = list(zip(paths, row_view_ids))
         if len(set(rows)) != len(rows):
             raise ValueError("path and view rows must be unique within a batch")
-        existing_rows = {
-            (row["path"], row["view_id"]) for row in self._id_map.values()
-        }
-        if any(row in existing_rows for row in rows):
+        if any(
+            self._id_map[str(row_id)]["view_id"] == view_id
+            for path, view_id in rows
+            for row_id in self._path_map.get(path, [])
+        ):
             raise ValueError("path and view row is already indexed")
         vecs = np.asarray(embeddings, dtype=np.float32)
         if vecs.ndim == 1:

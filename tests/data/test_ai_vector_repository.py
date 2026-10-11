@@ -311,6 +311,33 @@ def test_ai_vector_repository_load_different_model_requires_full_rescan(
 
 # ── add_images ────────────────────────────────────────────────────────────────
 
+def test_ai_vector_repository_batch_append_rejects_existing_view_without_mutation(tmp_path: Path) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    repo.add_images(_random_vec(), ["/photos/a.jpg"], view_ids=["full"])
+    repo.add_images(_random_vec(), ["/photos/a.jpg"], view_ids=["top_left"])
+
+    # Act / Assert
+    with pytest.raises(ValueError, match="already indexed"):
+        repo.add_images(np.stack([_random_vec(), _random_vec()]),
+                        ["/photos/new.jpg", "/photos/a.jpg"], view_ids=["full", "full"])
+    assert repo.get_indexed_paths() == {"/photos/a.jpg"}
+    assert set(repo.get_view_vectors("/photos/a.jpg")) == {"full", "top_left"}
+
+
+def test_ai_vector_repository_removed_views_can_be_reindexed(tmp_path: Path) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    repo.add_images(_random_vec(), ["/photos/a.jpg"])
+    repo.remove_folder("/photos")
+
+    # Act
+    repo.add_images(_random_vec(), ["/photos/a.jpg"])
+
+    # Assert
+    assert repo.get_indexed_paths() == {"/photos/a.jpg"}
+
+
 def test_ai_vector_repository_add_images_increases_index_size(tmp_path: Path) -> None:
     # Arrange
     repo = _make_repo(tmp_path)

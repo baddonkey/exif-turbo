@@ -68,6 +68,15 @@ plaintext AI files but cannot erase older backups or recoverable disk blocks.
 See [What the password protects](docs/user-manual.md#what-the-password-protects)
 for migration, backup, and recovery details.
 
+## AI Runtime Measurements
+
+AI searches reuse a validated snapshot within the open database session and
+reload it when its files or encryption key change. Indexing batches check only
+existing views of incoming images rather than scanning every vector row.
+See [AI runtime benchmark](docs/ai-performance.md) for reproducible synthetic
+10k/100k measurements and memory limitations; these are not end-to-end
+large-library performance guarantees.
+
 ## Test suite
 
 The automated tests cover the following areas:
