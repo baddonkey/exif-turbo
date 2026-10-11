@@ -32,7 +32,7 @@ jobs:
       HF_HUB_OFFLINE: '1'
       TRANSFORMERS_OFFLINE: '1'
       EXIF_TURBO_TEST_OFFLINE: '1'
-      QT_QUICK_BACKEND: software
+      LIBGL_ALWAYS_SOFTWARE: '1'
       QTWEBENGINE_CHROMIUM_FLAGS: --no-sandbox --disable-gpu
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +51,15 @@ jobs:
           libxcb-icccm4 libxcb-keysyms1 libxcb-xinerama0 libxcb-shape0
           libxcb-render-util0 libxcb-image0 libx11-xcb1
           libnss3 libasound2t64 libxrandr2 libxcomposite1 libxdamage1 libxtst6
-          libsqlcipher-dev pkg-config
+          libsqlcipher-dev pkg-config libimage-exiftool-perl
+      - name: Install ExifTool (Windows)
+        if: runner.os == 'Windows'
+        run: choco install exiftool --yes --no-progress
+      - name: Install ExifTool (macOS)
+        if: runner.os == 'macOS'
+        run: brew install exiftool
+      - name: Verify ExifTool
+        run: exiftool -ver
       - name: Install locked development environment
         run: uv sync --locked --no-default-groups --extra dev --python ${{ matrix.python }} --no-managed-python
       - name: Check Linux Qt display startup

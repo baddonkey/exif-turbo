@@ -18,7 +18,10 @@ protection. Ruleset changes require repository-administrator approval.
 
 CI synchronizes the committed dependency lock with uv 0.13.0 into the repository
 `.venv`, using the `dev` extra. Linux installs Qt runtime libraries and uses Xvfb;
-the other systems use their native desktop sessions. CI runs focused AI safety
+the other systems use their native desktop sessions. ExifTool is installed and
+verified on every platform, preventing its missing-tool modal from intercepting
+UI test input. The repository selects Qt rendering per platform; CI does not
+force Qt's software scene graph on Linux or macOS. CI runs focused AI safety
 checks followed by the complete `scripts/run_tests_logged.py` runner in the
 foreground. The runner isolates each UI test file, writes subprocess output to
 files rather than pipes, and enforces 120-second per-test and 900-second per-group
