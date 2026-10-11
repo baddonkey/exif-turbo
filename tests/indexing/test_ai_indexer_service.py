@@ -495,6 +495,7 @@ def test_ai_indexer_service_encode_text_reuses_tokenizer_across_services(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Arrange
+    monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
     repo = _make_repo(tmp_path)
     first_service = AiIndexerService(repo)
     second_service = AiIndexerService(repo)
@@ -547,6 +548,7 @@ def test_ai_indexer_service_offline_tokenizer_without_vocab_falls_back_online(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Arrange
+    monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
     repo = _make_repo(tmp_path)
     service = AiIndexerService(repo)
     unk_id = 3
@@ -586,6 +588,7 @@ def test_ai_indexer_service_model_load_uses_repo_storage_cache_dir(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Arrange
+    monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
     repo = _make_repo(tmp_path)
     service = AiIndexerService(repo)
 
