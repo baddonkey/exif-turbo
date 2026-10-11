@@ -32,7 +32,7 @@ def ensure_release_environment(script: Path) -> None:
         sys.executable,
         "-m",
         "uv",
-        "run",
+        "sync",
         "--locked",
         "--no-default-groups",
         "--extra",
@@ -42,10 +42,31 @@ def ensure_release_environment(script: Path) -> None:
         "--no-managed-python",
         "--project",
         str(REPO_ROOT),
-        "python",
-        str(script),
-        *sys.argv[1:],
     ]
     print(f"Using locked release dependencies in {environment}", flush=True)
     result = subprocess.run(command, cwd=REPO_ROOT, env=child_environment)
+    if result.returncode != 0:
+        print(
+            f"Release dependency synchronization failed ({result.returncode})",
+            file=sys.stderr,
+            flush=True,
+        )
+        raise SystemExit(result.returncode)
+
+    executable_dir = environment / ("Scripts" if sys.platform == "win32" else "bin")
+    python = executable_dir / ("python.exe" if sys.platform == "win32" else "python")
+    child_environment["VIRTUAL_ENV"] = str(environment)
+    child_environment["PATH"] = str(executable_dir) + os.pathsep + child_environment.get("PATH", "")
+    print(f"Starting release build with {python}", flush=True)
+    result = subprocess.run(
+        [str(python), "-u", str(script), *sys.argv[1:]],
+        cwd=REPO_ROOT,
+        env=child_environment,
+    )
+    if result.returncode != 0:
+        print(
+            f"Locked release build failed ({result.returncode})",
+            file=sys.stderr,
+            flush=True,
+        )
     raise SystemExit(result.returncode)
