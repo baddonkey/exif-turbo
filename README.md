@@ -108,7 +108,7 @@ sudo apt install exiftool
 Download the latest installer from the [Releases page](https://github.com/baddonkey/exif-turbo/releases):
 
 - **Windows**: `exif-turbo-<version>-windows.msi` — installs to `%ProgramFiles%\exif-turbo\`, adds Start Menu shortcut; **ExifTool is bundled inside the MSI** so no separate download is needed
-- **macOS**: `exif-turbo-<version>-macos-arm64.dmg` or `exif-turbo-<version>-macos-intel.dmg` — drag-and-drop installer; signed app bundle
+- **macOS**: `exif-turbo-<version>-macos-arm64.dmg` — drag-and-drop installer for Apple silicon; signed app bundle
 - **Linux**: `exif-turbo-<version>-linux-amd64.deb` or `exif-turbo-<version>-linux-arm64.deb` (Debian/Ubuntu) and `exif-turbo-<version>-linux-x86_64.rpm` (Fedora/openSUSE) — installs to `/opt/exif-turbo/` with a `.desktop` entry and `/usr/bin/exif-turbo` symlink
 
 ### From source
@@ -243,15 +243,9 @@ Requirements: the pinned uv bootstrap above, Xcode Command Line Tools
 python scripts/build_macos.py
 # Produces: dist/exif-turbo.app  and  dist/exif-turbo-<version>-macos-arm64.dmg
 
-# Intel (x86_64)
-python scripts/build_macos.py --arch intel
-# Produces: dist/exif-turbo.app  and  dist/exif-turbo-<version>-macos-intel.dmg
 ```
 
-Run on the matching hardware: build the arm64 package on an Apple Silicon Mac
-and the intel package on an Intel Mac (or a Rosetta shell).
-
-Note: on macOS Intel builds, AI features remain unavailable and cannot be enabled in Settings (the toggle is disabled).
+Build the arm64 package on an Apple Silicon Mac.
 
 Optional: pass `--sign "Developer ID Application: Your Name (TEAMID)"` to
 codesign the bundle with a Developer ID certificate instead of ad-hoc signing.

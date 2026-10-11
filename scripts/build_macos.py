@@ -218,7 +218,6 @@ def create_lproj_dirs(app: Path) -> None:
 
 ARCH_CONFIGS: dict[str, tuple[str, str]] = {
     "arm64": ("exif-turbo-macos-arm.spec", "arm64"),
-    "intel": ("exif-turbo-macos-intel.spec", "intel"),
 }
 
 
@@ -235,7 +234,7 @@ def main() -> None:
         dest="arch",
         choices=list(ARCH_CONFIGS),
         default="arm64",
-        help="Target architecture: arm64 (default, Apple Silicon) or intel (x86_64).",
+        help="Target architecture: arm64 (Apple Silicon).",
     )
     args = parser.parse_args()
 

@@ -54,9 +54,9 @@ If you already have ExifTool installed system-wide, that version takes priority.
 
 ### macOS installer
 
-Download `exif-turbo-<version>-macos-arm64.dmg` for Apple silicon or
-`exif-turbo-<version>-macos-intel.dmg` for an Intel Mac from the same Releases
-page, open it, and drag **exif-turbo.app** into your **Applications** folder.
+Download `exif-turbo-<version>-macos-arm64.dmg` for Apple silicon from the
+Releases page, open it, and drag **exif-turbo.app** into your **Applications**
+folder.
 
 ### Linux package
 
