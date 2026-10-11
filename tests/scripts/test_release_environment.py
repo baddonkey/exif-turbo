@@ -136,9 +136,16 @@ def test_release_lock_pytorch_packages_use_cpu_or_macos_sources() -> None:
     torch_packages = [
         package for package in packages if package["name"] in {"torch", "torchvision"}
     ]
+    torch_versions = [
+        tuple(int(part) for part in package["version"].split("+")[0].split("."))
+        for package in torch_packages
+        if package["name"] == "torch"
+    ]
 
     # Assert
     assert torch_packages
+    assert torch_versions
+    assert all(version >= (2, 6, 0) for version in torch_versions)
     for package in torch_packages:
         registry = package["source"]["registry"]
         if registry == "https://download.pytorch.org/whl/cpu":

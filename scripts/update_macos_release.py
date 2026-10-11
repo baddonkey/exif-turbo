@@ -2,7 +2,6 @@
 
 Usage:
     python scripts/update_macos_release.py
-    python scripts/update_macos_release.py --arch intel
     python scripts/update_macos_release.py --tag v1.14.7
     python scripts/update_macos_release.py --skip-build
     python scripts/update_macos_release.py --sign "Developer ID Application: Your Name (TEAMID)"
@@ -22,7 +21,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 ARCH_SUFFIX: dict[str, str] = {
     "arm64": "arm64",
-    "intel": "intel",
 }
 
 
@@ -140,7 +138,7 @@ def main() -> int:
         "--arch",
         choices=list(ARCH_SUFFIX),
         default="arm64",
-        help="Target architecture: arm64 (default, Apple Silicon) or intel (x86_64).",
+        help="Target architecture: arm64 (Apple Silicon).",
     )
     parser.add_argument(
         "--tag",

@@ -45,6 +45,7 @@ build = [
 dev = ["exif-turbo[build]", "pytest", "pytest-qt", "pytest-timeout"]
 
 [tool.uv]
+constraint-dependencies = ["torch>=2.6.0"]
 build-constraint-dependencies = [
   "setuptools==83.0.0",
   "wheel==0.48.0",
@@ -55,7 +56,6 @@ environments = [
   "platform_python_implementation == 'CPython' and sys_platform == 'linux' and platform_machine == 'x86_64'",
   "platform_python_implementation == 'CPython' and sys_platform == 'linux' and platform_machine == 'aarch64'",
   "platform_python_implementation == 'CPython' and sys_platform == 'darwin' and platform_machine == 'arm64'",
-  "platform_python_implementation == 'CPython' and sys_platform == 'darwin' and platform_machine == 'x86_64' and python_version < '3.13'",
 ]
 
 [[tool.uv.index]]
