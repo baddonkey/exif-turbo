@@ -73,6 +73,8 @@ for migration, backup, and recovery details.
 AI searches reuse a validated snapshot within the open database session and
 reload it when its files or encryption key change. Indexing batches check only
 existing views of incoming images rather than scanning every vector row.
+Encrypted snapshot writes and verification use bounded chunks to reduce
+temporary copies while preserving the exact index and existing snapshot format.
 See [AI runtime benchmark](docs/ai-performance.md) for reproducible synthetic
 10k/100k measurements and memory limitations; these are not end-to-end
 large-library performance guarantees.
