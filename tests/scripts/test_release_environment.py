@@ -184,6 +184,6 @@ def test_write_version_release_bump_refreshes_and_stages_lock(
     release_windows.commit_version_bump("1.0.1")
 
     # Assert
-    assert commands[0] == [sys.executable, "-m", "uv", "lock", "--offline"]
+    assert commands[0] == [sys.executable, "-m", "uv", "lock"]
     assert str(lock) in commands[1]
     assert 'version = "1.0.1"' in project.read_text(encoding="utf-8")
