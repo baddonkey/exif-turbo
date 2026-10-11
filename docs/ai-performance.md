@@ -1,5 +1,19 @@
 # AI Runtime Benchmark
 
+## Phase 4: Date Eligibility and Facets
+
+Non-empty AI queries now search date-eligible paths for the capped display
+results. The 2,000-image limit is applied after folder, extension, enabled-folder,
+and date eligibility, preserving image-level max pooling and similarity ranking.
+An independent uncapped semantic search supplies timeline paths without the
+selected dates. Counts therefore represent all threshold-qualified images in
+the folder/format scope, not a top-2,000 sample. Empty AI queries retain their
+existing all-in-scope behavior with dates applied to displayed rows.
+
+Exact uncapped facets can search every vector and allocate a larger result set;
+the Phase 2/3 top-2,000 benchmark does not measure this additional facet work.
+Facet optimization or approximation is not included in this correctness fix.
+
 Phase 2 retains the exact five-view, 512-dimensional float32 FAISS index. It
 changes bookkeeping and search repository lifetime, not retrieval semantics or
 the embedding model. Date filtering and timeline facet changes remain separate.

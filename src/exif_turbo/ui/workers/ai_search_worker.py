@@ -106,6 +106,16 @@ class AiSearchWorker(QThread):
                 self.results_ready.emit([], 0, [], self._serial)
                 return
 
+            display_allowed_paths = facet_allowed_paths
+            if self._date_from is not None or self._date_to is not None:
+                display_allowed_paths = image_repo.get_filtered_paths(
+                    path_filter=self._path_filter,
+                    ext_filter=self._ext_filter,
+                    restrict_to_enabled_folders=True,
+                    date_from=self._date_from,
+                    date_to=self._date_to,
+                )
+
             query_text = self._query_text.strip()
             if query_text:
                 service = AiIndexerService(vector_repo)
@@ -114,26 +124,22 @@ class AiSearchWorker(QThread):
                 hits = vector_repo.search_filtered(
                     query_vec,
                     facet_allowed_paths,
-                    top_k=self._MAX_RESULTS,
+                    top_k=None,
                     threshold=self._threshold,
                 )
                 ranked_facet_paths = [path for path, _score in hits]
+                displayed_hits = vector_repo.search_filtered(
+                    query_vec,
+                    display_allowed_paths,
+                    top_k=self._MAX_RESULTS,
+                    threshold=self._threshold,
+                )
+                ranked_paths = [path for path, _score in displayed_hits]
             else:
                 ranked_facet_paths = sorted(facet_allowed_paths)
+                ranked_paths = [path for path in ranked_facet_paths if path in display_allowed_paths]
 
             self.facet_paths = list(ranked_facet_paths)
-
-            if self._date_from is not None or self._date_to is not None:
-                date_allowed_paths = image_repo.get_filtered_paths(
-                    path_filter=self._path_filter,
-                    ext_filter=self._ext_filter,
-                    restrict_to_enabled_folders=True,
-                    date_from=self._date_from,
-                    date_to=self._date_to,
-                )
-                ranked_paths = [path for path in ranked_facet_paths if path in date_allowed_paths]
-            else:
-                ranked_paths = ranked_facet_paths
 
             rows = image_repo.get_images_by_paths(
                 ranked_paths,
