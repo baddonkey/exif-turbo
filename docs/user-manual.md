@@ -111,6 +111,47 @@ named database), the lock screen shows a **New passphrase** field, a
 passphrase of at least 12 characters that mixes letters, numbers, and symbols —
 it encrypts your entire image index and **cannot be recovered if lost**.
 
+### What the password protects
+
+For password-protected databases, encryption at rest covers the SQLCipher
+database (indexed metadata, image paths, and cached tags), thumbnail and preview
+caches, and the AI index (vectors, image-path mappings, and model metadata).
+This does not encrypt the original images or videos, adjacent tagging sidecars,
+exported metadata, saved previews, copied originals, or tagged derivatives.
+Settings files and diagnostic output are not encrypted and may reveal paths or
+other activity details. Clipboard contents are also outside this protection.
+
+The AI index is stored as a single authenticated AES-256-GCM snapshot,
+`ai_index.faiss.enc`, with a separate password-wrapped key in
+`ai_index.faiss.keys/.thumb_key`. Keep the key directory with the snapshot when
+backing up or moving a database. Clearing thumbnails does not delete this key.
+The snapshot is assembled and encrypted in memory; AI saves do not stage
+plaintext vectors or mappings on disk. File names, sizes, and timestamps remain
+visible to someone who can inspect the storage directory.
+
+Existing plaintext AI files (`ai_index.faiss`, `ai_id_map.json`, and
+`ai_index_meta.json`) are migrated on the next successful password unlock, even
+when AI search is disabled. The encrypted copy is verified before the plaintext
+files and known legacy temporary files are removed. This can take time and needs
+additional free disk space and memory for a large index. Failed migration leaves
+the originals available for retry. Removing files is not secure erasure: older
+backups, filesystem snapshots, and recoverable disk blocks may still contain
+plaintext data. Earlier app versions cannot read the new encrypted snapshot;
+do not run an older version against a migrated database.
+
+Missing keys, wrong AI passwords, and failed authentication are reported instead
+of silently falling back to plaintext or overwriting the encrypted snapshot
+during **AI Full Rescan**. Restore the snapshot and its matching key directory
+from a trusted backup if necessary. Incomplete or incompatible legacy data is
+preserved inside the encrypted snapshot and may still require **AI Full Rescan**.
+
+While the app is unlocked, decrypted data exists in process memory. Closing the
+app stops workers and releases its password/key references, but Python and native
+libraries cannot guarantee secure memory erasure. Encryption does not protect
+against a compromised operating system, malware, screen capture, or swap/crash
+dumps. Explicitly enabled passwordless development databases and their caches
+are not encrypted.
+
 ### Opening an existing database
 
 Enter your password in the **Password** field and click **Unlock** (or press
@@ -1040,6 +1081,11 @@ re-encrypts every page of the database. Existing **thumbnails are preserved**
 protects the thumbnail key) is re-encrypted under the new password; the
 thumbnail cache on disk does not have to be rebuilt.
 
+The AI master key is also re-wrapped; the encrypted vector snapshot is not
+rewritten. A staged wrapper allows the next verified database unlock to recover
+an interrupted password change. After a successful change, the old password no
+longer unlocks the current AI key. Historical backups retain their old passwords.
+
 Once the operation finishes successfully the dialog closes and a confirmation
 appears. The new password is required the next time you unlock the database.
 
@@ -1048,6 +1094,8 @@ If the current password is wrong, an inline red error message
 **Change Password…** button is disabled while indexing is in progress and while
 the database is locked. The operation is also rejected if thumbnail building is
 running when you submit the dialog.
+Password changes are also rejected while AI scanning, preview building, or
+background search/database-reading workers are running.
 
 > **There is no recovery if you forget the new password.** Make sure you
 > remember it (or store it in a password manager) before clicking

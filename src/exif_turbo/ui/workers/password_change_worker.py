@@ -4,6 +4,8 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
+from ...config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
+from ...data.ai_vector_storage import AiVectorStorage
 from ...data.image_index_repository import ImageIndexRepository
 from ...utils.thumb_crypto import ThumbCrypto
 
@@ -38,9 +40,24 @@ class PasswordChangeWorker(QThread):
         self._cache_dir = cache_dir
 
     def run(self) -> None:  # noqa: D401 — QThread API
+        try:
+            self._change_password()
+        finally:
+            self._old_password = ""
+            self._new_password = ""
+
+    def _change_password(self) -> None:
         repo: ImageIndexRepository | None = None
+        ai_storage = AiVectorStorage(ai_index_path(self._db_path), self._old_password)
         try:
             repo = ImageIndexRepository(self._db_path, key=self._old_password)
+            repo.count_images("")
+            if self._old_password:
+                ai_storage.migrate(
+                    ai_index_path(self._db_path), ai_id_map_path(self._db_path),
+                    ai_vector_metadata_path(self._db_path),
+                )
+                ai_storage.stage_password_change(self._new_password)
             repo.change_password(self._new_password)
         except Exception as exc:  # noqa: BLE001
             if repo is not None:
@@ -54,6 +71,17 @@ class PasswordChangeWorker(QThread):
             repo.close()
         except Exception:  # noqa: BLE001
             pass
+        try:
+            if self._old_password:
+                ai_storage.finish_password_change(self._new_password)
+            else:
+                AiVectorStorage(ai_index_path(self._db_path), self._new_password).migrate(
+                    ai_index_path(self._db_path), ai_id_map_path(self._db_path),
+                    ai_vector_metadata_path(self._db_path),
+                )
+        except Exception as exc:
+            self.failed.emit(f"AI-key rewrap: {exc}")
+            return
         if self._cache_dir is not None:
             try:
                 ThumbCrypto.change_password(

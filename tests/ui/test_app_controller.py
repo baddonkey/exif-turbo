@@ -21,6 +21,8 @@ from PySide6.QtQuick import QQuickWindow
 from PySide6.QtQml import QQmlApplicationEngine
 from pytestqt.qtbot import QtBot
 
+from exif_turbo.config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
+from exif_turbo.data.ai_vector_storage import AiVectorStorage
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.models.image_sidecar import ImageSidecar, SidecarSource
 from exif_turbo.models.image_tag import ImageTag, TagProvenance
@@ -146,6 +148,44 @@ def test_unlock_shows_all_images(
     assert not controller.isLocked
     assert controller.totalResults == 5
     assert search_model.rowCount() == 5
+
+
+def test_unlock_existing_database_migrates_ai_artifacts_without_ai_search(
+    qtbot: QtBot, tmp_path: Path,
+) -> None:
+    # Arrange
+    db_path = tmp_path / "existing.db"
+    ImageIndexRepository(db_path, key=_TEST_PASSWORD).close()
+    paths = (ai_index_path(db_path), ai_id_map_path(db_path), ai_vector_metadata_path(db_path))
+    paths[0].parent.mkdir(parents=True, exist_ok=True)
+    original = (b"legacy-vectors", b"private-paths", b"legacy-metadata")
+    for path, data in zip(paths, original):
+        path.write_bytes(data)
+    controller = AppController(db_path, SearchListModel(cache_dir=tmp_path / "thumbs"),
+                               ExifListModel(), FolderListModel())
+
+    # Act
+    controller._do_unlock(_TEST_PASSWORD)
+
+    # Assert
+    assert not controller.isLocked
+    assert not any(path.exists() for path in paths)
+    assert AiVectorStorage(paths[0], _TEST_PASSWORD).load() == original
+    controller.close()
+
+
+def test_close_unlocked_controller_releases_password(qtbot: QtBot, tmp_path: Path) -> None:
+    # Arrange
+    controller = AppController(tmp_path / "index.db", SearchListModel(cache_dir=tmp_path / "thumbs"),
+                               ExifListModel(), FolderListModel())
+    controller._do_unlock(_TEST_PASSWORD)
+
+    # Act
+    controller.close()
+
+    # Assert
+    assert controller._key == ""
+    assert controller.isLocked
 
 
 def test_unlock_rejects_empty_password(

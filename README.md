@@ -17,7 +17,7 @@ Fully generated using VS Code Copilot.
 
 - **Video indexing** — MP4, MOV, AVI, MKV, WMV, M4V, MTS, M2TS, 3GP, WebM, FLV are indexed alongside still images; thumbnails and previews are decoded via PyAV/FFmpeg (embedded thumbnail when present, otherwise a frame at 1/3 of duration); rotation from the `tkhd` display matrix keeps portrait clips upright.
 - **AI semantic search (CLIP)** — switch the Search bar from **EXIF** to **AI** mode to search by natural-language intent (for example, "golden eagle over mountain lake") instead of exact metadata tokens. A precision picker controls match strictness: **Fine** (>= 0.22), **Normal** (>= 0.20), **Broad** (>= 0.18).
-- **AI-Scan and AI Full Rescan (per folder)** — in **Indexed Folders**, build missing CLIP embeddings for one folder with **AI-Scan**, or rebuild all vectors for that folder with **AI Full Rescan**. Image-vector schema v2 stores the full image plus four corner-crop embeddings; existing indexes require **AI Full Rescan** to upgrade. Vector data is persisted per database (`ai_index.faiss` + `ai_id_map.json`) for fast repeat AI searches.
+- **AI-Scan and AI Full Rescan (per folder)** — in **Indexed Folders**, build missing CLIP embeddings for one folder with **AI-Scan**, or rebuild all vectors for that folder with **AI Full Rescan**. Image-vector schema v2 stores the full image plus four corner-crop embeddings; incompatible older indexes require **AI Full Rescan** to upgrade. Password-protected databases persist vectors, path mappings, and model metadata in one authenticated encrypted snapshot (`ai_index.faiss.enc`); compatible plaintext AI files migrate on the next successful unlock.
 - **Non-destructive custom tagging** — enable tagging per database and open the right-side workbench from Search or Browse with the tag button or **Ctrl+T**. Add your own labels or reuse remembered tags; the original image is never changed. Tags and embedded-keyword exclusions are stored in an adjacent sidecar, and custom tags participate in FTS5 search.
 - **Current-image tag review** — inspect keywords embedded in the original and exclude individual keywords, or ignore all embedded keywords, when producing derivatives. Exclusion choices persist in the sidecar. A fixed footer previews the merged, deduplicated keywords that a derivative will receive.
 - **Copy Tags** — copy custom tags and embedded-tag exclusions to marked images, every current search result (including unloaded pages), or the current Browse folder. Individual exclusions transfer only when the target contains the same embedded tag. **Add** merges tags and applicable exclusions; **Replace** confirms before substituting them. The source image is always excluded.
@@ -27,7 +27,7 @@ Fully generated using VS Code Copilot.
 - **Recreate Thumbnail / Recreate Preview** — right-click the preview image to rebuild a single thumbnail or preview if it ever looks wrong (e.g. video frame extracted before the rotation fix); the left-grid thumbnail refreshes immediately via a cache-busting URL.
 - **Self-healing cache** — after every folder index run a fast garbage-collection pass deletes orphaned thumbnail and preview files (those whose source image no longer exists in the database). Status bar reports *“Cleaning up cache…”* during the sweep.
 - **Encrypted thumbnail and preview cache** — thumbnails and rendered previews are stored AES-256-GCM encrypted on disk; the encryption key is derived from the user’s password using a wrapped-key model so changing the password does not require rebuilding the cache
-- **Change Password** — re-encrypts the SQLCipher database under a new passphrase without rebuilding thumbnails; existing encrypted thumbnails remain valid
+- **Change Password** — re-encrypts the SQLCipher database and re-wraps cache and AI keys under a new passphrase without rebuilding thumbnails or AI vectors
 - **Preview panel toolbar** — identical pill buttons on **both the Search and Browse tab** preview panes, plus a right-click context menu: **Copy** copies the rendered preview to the system clipboard (falls back to the file path as text); **Save Preview As** (white ⤓) saves the displayed preview as JPEG or PNG with a suggested filename; **Save Original As** (orange ⤓) copies the source file byte-for-byte; **Show Original / Show Preview** toggle switches between the cached preview and the full-resolution source; a loading overlay with a spinner appears while a full-resolution original is decoding; a toast confirms each save/copy action
 - **Build Previews** — per-folder action builds a cache of downscaled preview JPEGs for instant display; configurable long-edge resolution in Settings
 - **`×` clear button** — when the search field contains text a `×` button clears it immediately (equivalent to pressing **Enter** with an empty bar)
@@ -58,6 +58,15 @@ Fully generated using VS Code Copilot.
 - **Unlock spinner** — animated indicator shown on the lock screen while the encrypted database is being opened
 - **Capture-date indexing & timeline filter** — the capture date is resolved from a prioritised chain of metadata fields and stored as a UTC epoch timestamp (`captured_at`); a **year histogram** in the Search tab lets you click or shift-click bars to filter by year range; see *Capture-date resolution* below for the full fallback chain.
 
+
+## Privacy Scope
+
+Passwords protect the database, thumbnail/preview caches, and AI vectors and path
+mappings at rest. Original media, tagging sidecars, exports, settings, diagnostic
+output, and unlocked process memory are not covered. Migration removes legacy
+plaintext AI files but cannot erase older backups or recoverable disk blocks.
+See [What the password protects](docs/user-manual.md#what-the-password-protects)
+for migration, backup, and recovery details.
 
 ## Test suite
 

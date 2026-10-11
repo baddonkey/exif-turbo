@@ -73,6 +73,7 @@ class AiScanWorker(QThread):
                 idx_path,
                 map_path,
                 ai_vector_metadata_path(self._db_path),
+                key=self._key,
             )
             try:
                 vector_repo.load()
@@ -113,3 +114,5 @@ class AiScanWorker(QThread):
 
         except Exception as exc:  # noqa: BLE001
             self.failed.emit(str(exc))
+        finally:
+            self._key = ""
