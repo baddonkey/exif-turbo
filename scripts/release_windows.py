@@ -162,7 +162,7 @@ def write_version(version: str) -> None:
     # Regenerate the Windows exe-metadata file so it lands in the release PR
     # instead of being committed directly to a protected 'main' at build time.
     write_version_info(version, VERSION_INFO_FILE)
-    run([sys.executable, "-m", "uv", "lock", "--offline"])
+    run([sys.executable, "-m", "uv", "lock"])
 
 
 def commit_version_bump(version: str) -> None:
