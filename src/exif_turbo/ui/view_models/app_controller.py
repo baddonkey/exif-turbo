@@ -33,6 +33,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication, QImage
 
 from ...config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
+from ...data.ai_search_session import AiSearchSession
 from ...data.ai_vector_storage import AiVectorStorage
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
@@ -278,6 +279,10 @@ class AppController(QObject):
         self._is_ai_search_mode: bool = False
         self._ai_enabled: bool = self._settings.ai_enabled if self._settings else False
         self._ai_search_worker: AiSearchWorker | None = None
+        self._ai_search_session = AiSearchSession(
+            ai_index_path(self._db_path), ai_id_map_path(self._db_path),
+            ai_vector_metadata_path(self._db_path),
+        )
         self._last_ai_query: str = ""
         self._last_ai_precision: str = "normal"
         self._has_ai_search_run: bool = False
@@ -1546,6 +1551,7 @@ class AppController(QObject):
         self._password_change_worker.start()
 
     def _clear_busy_after_password_change(self) -> None:
+        self._ai_search_session.invalidate()
         self._password_change_old = ""
         self._password_change_new = ""
         self._is_busy = False
@@ -3534,6 +3540,7 @@ class AppController(QObject):
             self._key,
             query,
             serial,
+            session=self._ai_search_session,
             precision=precision,
             path_filter=self._current_path_filter(),
             ext_filter=self._ext_filter,
@@ -4710,6 +4717,7 @@ class AppController(QObject):
         self._bulk_worker = None
         self._finishing_search_workers.clear()
         self._tagging.close()
+        self._ai_search_session.close()
         self._key = ""
         self._password_change_old = ""
         self._password_change_new = ""

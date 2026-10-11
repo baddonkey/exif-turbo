@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+
+from exif_turbo.config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
+from exif_turbo.data.ai_search_session import AiSearchSession
+from exif_turbo.data.ai_vector_repository import AiVectorRepository
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.data.indexed_folder_repository import IndexedFolderRepository
 from exif_turbo.ui.workers.ai_search_worker import AiSearchWorker
@@ -77,6 +82,58 @@ class _FakeAiIndexerService:
 
     def encode_text(self, _query_text: str) -> object:
         return object()
+
+
+def test_ai_search_worker_shared_session_reuses_repository_across_queries(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    # Arrange
+    db_path = tmp_path / "test.db"
+    directory = tmp_path / "photos"
+    directory.mkdir()
+    image = make_jpeg(directory / "photo.jpg")
+    folder_id = _seed_folder(db_path, directory, enabled=True)
+    _seed_image(db_path, image, folder_id, "Canon")
+    paths = (ai_index_path(db_path), ai_id_map_path(db_path), ai_vector_metadata_path(db_path))
+    repository = AiVectorRepository(*paths)
+    repository.load()
+    vector = np.ones(512, dtype=np.float32)
+    vector /= np.linalg.norm(vector)
+    repository.add_images(vector, [str(image)])
+    repository.save()
+    created: list[AiVectorRepository] = []
+
+    def factory(*files: Path, key: str) -> AiVectorRepository:
+        candidate = AiVectorRepository(*files, key=key)
+        created.append(candidate)
+        return candidate
+
+    class FakeEncoder:
+        def __init__(self, vector_repo: AiVectorRepository) -> None:
+            pass
+
+        def encode_text(self, text: str) -> np.ndarray:
+            return vector
+
+    monkeypatch.setattr("exif_turbo.ui.workers.ai_search_worker.AiIndexerService", FakeEncoder)
+    session = AiSearchSession(*paths, repository_factory=factory)
+    emitted: list[list[tuple]] = []
+    failures: list[str] = []
+
+    # Act
+    for serial in (1, 2):
+        worker = AiSearchWorker(db_path, "", "photo", serial, session=session)
+        worker.results_ready.connect(lambda rows, total, facets, serial: emitted.append(rows))
+        worker.failed.connect(failures.append)
+        worker.run()
+    session.close()
+
+    # Assert
+    assert failures == []
+    assert len(created) == 1
+    assert len(emitted) == 2
+    assert emitted[0] == emitted[1]
+    assert [row[1] for row in emitted[0]] == [str(image)]
 
 
 def test_ai_search_worker_excludes_disabled_folder_hits(

@@ -6,6 +6,7 @@ from typing import List
 from PySide6.QtCore import QThread, Signal
 
 from ...config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
+from ...data.ai_search_session import AiSearchSession
 from ...data.ai_vector_repository import AiVectorRepository
 from ...data.image_index_repository import ImageIndexRepository
 from ...indexing.ai_indexer_service import AiIndexerService
@@ -54,6 +55,7 @@ class AiSearchWorker(QThread):
         ext_filter: str = "",
         date_from: int | None = None,
         date_to: int | None = None,
+        session: AiSearchSession | None = None,
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -65,6 +67,11 @@ class AiSearchWorker(QThread):
         self._ext_filter = ext_filter
         self._date_from = date_from
         self._date_to = date_to
+        self._session = session or AiSearchSession(
+            ai_index_path(db_path), ai_id_map_path(db_path), ai_vector_metadata_path(db_path),
+            repository_factory=AiVectorRepository,
+        )
+        self._owns_session = session is None
         # Semantic result paths BEFORE the date filter is applied.  The
         # controller reads this to build the year-histogram so selecting a
         # single year does not collapse the other selectable years.
@@ -76,81 +83,66 @@ class AiSearchWorker(QThread):
 
     def run(self) -> None:
         try:
-            index_path = ai_index_path(self._db_path)
-            id_map_path = ai_id_map_path(self._db_path)
+            with self._session.repository(self._key) as vector_repo:
+                self._search(vector_repo)
+        except Exception as exc:  # noqa: BLE001
+            self.failed.emit(str(exc))
+        finally:
+            if self._owns_session:
+                self._session.close()
+            self._key = ""
 
-            vector_repo = AiVectorRepository(
-                index_path,
-                id_map_path,
-                ai_vector_metadata_path(self._db_path),
-                key=self._key,
+    def _search(self, vector_repo: AiVectorRepository) -> None:
+        image_repo = ImageIndexRepository(self._db_path, key=self._key)
+        try:
+            # Facet scope excludes dates so selecting a year keeps the timeline.
+            facet_allowed_paths = image_repo.get_filtered_paths(
+                path_filter=self._path_filter,
+                ext_filter=self._ext_filter,
+                restrict_to_enabled_folders=True,
             )
-            vector_repo.load()
+            if not facet_allowed_paths:
+                self.facet_paths = []
+                self.results_ready.emit([], 0, [], self._serial)
+                return
 
-            image_repo = ImageIndexRepository(self._db_path, key=self._key)
-            try:
-                # Facet scope: path/ext/folder filters WITHOUT the date filter.
-                # Drives the timeline so picking a single year does not collapse
-                # the other selectable years.
-                facet_allowed_paths = image_repo.get_filtered_paths(
-                    path_filter=self._path_filter,
-                    ext_filter=self._ext_filter,
-                    restrict_to_enabled_folders=True,
+            query_text = self._query_text.strip()
+            if query_text:
+                service = AiIndexerService(vector_repo)
+                query_vec = service.encode_text(query_text)
+
+                hits = vector_repo.search_filtered(
+                    query_vec,
+                    facet_allowed_paths,
+                    top_k=self._MAX_RESULTS,
+                    threshold=self._threshold,
                 )
-                if not facet_allowed_paths:
-                    self.facet_paths = []
-                    self.results_ready.emit([], 0, [], self._serial)
-                    return
+                ranked_facet_paths = [path for path, _score in hits]
+            else:
+                ranked_facet_paths = sorted(facet_allowed_paths)
 
-                query_text = self._query_text.strip()
-                if query_text:
-                    service = AiIndexerService(vector_repo)
-                    query_vec = service.encode_text(query_text)
+            self.facet_paths = list(ranked_facet_paths)
 
-                    hits = vector_repo.search_filtered(
-                        query_vec,
-                        facet_allowed_paths,
-                        top_k=self._MAX_RESULTS,
-                        threshold=self._threshold,
-                    )
-                    ranked_facet_paths = [path for path, _score in hits]
-                else:
-                    # Empty AI query means "show everything in scope".
-                    ranked_facet_paths = sorted(facet_allowed_paths)
-
-                # The timeline facet source is the full semantic set, before the
-                # date filter narrows the displayed rows.
-                self.facet_paths = list(ranked_facet_paths)
-
-                # Displayed rows additionally honour the active date filter.
-                if self._date_from is not None or self._date_to is not None:
-                    date_allowed_paths = image_repo.get_filtered_paths(
-                        path_filter=self._path_filter,
-                        ext_filter=self._ext_filter,
-                        restrict_to_enabled_folders=True,
-                        date_from=self._date_from,
-                        date_to=self._date_to,
-                    )
-                    ranked_paths = [
-                        path for path in ranked_facet_paths
-                        if path in date_allowed_paths
-                    ]
-                else:
-                    ranked_paths = ranked_facet_paths
-
-                rows = image_repo.get_images_by_paths(
-                    ranked_paths,
+            if self._date_from is not None or self._date_to is not None:
+                date_allowed_paths = image_repo.get_filtered_paths(
                     path_filter=self._path_filter,
                     ext_filter=self._ext_filter,
                     restrict_to_enabled_folders=True,
                     date_from=self._date_from,
                     date_to=self._date_to,
                 )
-            finally:
-                image_repo.close()
+                ranked_paths = [path for path in ranked_facet_paths if path in date_allowed_paths]
+            else:
+                ranked_paths = ranked_facet_paths
 
-            self.results_ready.emit(rows, len(rows), [], self._serial)
-        except Exception as exc:  # noqa: BLE001
-            self.failed.emit(str(exc))
+            rows = image_repo.get_images_by_paths(
+                ranked_paths,
+                path_filter=self._path_filter,
+                ext_filter=self._ext_filter,
+                restrict_to_enabled_folders=True,
+                date_from=self._date_from,
+                date_to=self._date_to,
+            )
         finally:
-            self._key = ""
+            image_repo.close()
+        self.results_ready.emit(rows, len(rows), [], self._serial)
