@@ -48,6 +48,62 @@ def test_ai_vector_storage_round_trip_hides_plaintext(tmp_path: Path) -> None:
     assert all(part not in storage.path.read_bytes() for part in expected)
 
 
+def test_ai_vector_storage_multichunk_snapshot_preserves_legacy_reader_compatibility(tmp_path: Path) -> None:
+    # Arrange
+    storage = AiVectorStorage(tmp_path / "ai_index.faiss", "test-password")
+    expected = (b"vectors" * 400000, b"paths" * 300000, b"metadata")
+
+    # Act
+    storage.save(*expected)
+
+    # Assert
+    assert storage.load() == expected
+    assert storage._decode(storage.path.read_bytes(), storage._crypto()) == expected
+
+
+def test_ai_vector_storage_legacy_ciphertext_loads_with_streaming_reader(tmp_path: Path) -> None:
+    # Arrange
+    storage = AiVectorStorage(tmp_path / "ai_index.faiss", "test-password")
+    expected = (b"vectors" * 400000, b"paths", b"metadata")
+    payload = storage._MAGIC + storage._LENGTHS.pack(len(expected[1]), len(expected[2]))
+    payload += expected[1] + expected[2] + expected[0]
+    storage.path.write_bytes(storage._crypto().encrypt(payload))
+
+    # Act
+    actual = storage.load()
+
+    # Assert
+    assert actual == expected
+
+
+def test_ai_vector_storage_truncated_tag_rejects_multichunk_snapshot(tmp_path: Path) -> None:
+    # Arrange
+    storage = AiVectorStorage(tmp_path / "ai_index.faiss", "test-password")
+    storage.save(b"vectors" * 400000, b"paths", b"metadata")
+    storage.path.write_bytes(storage.path.read_bytes()[:-1])
+
+    # Act / Assert
+    with pytest.raises(AiVectorAuthenticationError):
+        storage.load()
+    with pytest.raises(AiVectorAuthenticationError):
+        storage.verify()
+
+
+def test_ai_vector_storage_tampered_header_is_authentication_not_format_error(tmp_path: Path) -> None:
+    # Arrange
+    storage = AiVectorStorage(tmp_path / "ai_index.faiss", "test-password")
+    storage.save(b"vectors" * 400000, b"paths", b"metadata")
+    ciphertext = bytearray(storage.path.read_bytes())
+    ciphertext[12] ^= 1
+    storage.path.write_bytes(ciphertext)
+
+    # Act / Assert
+    with pytest.raises(AiVectorAuthenticationError):
+        storage.load()
+    with pytest.raises(AiVectorAuthenticationError):
+        storage.verify()
+
+
 def test_ai_vector_storage_wrong_password_rejects_snapshot(tmp_path: Path) -> None:
     # Arrange
     storage = AiVectorStorage(tmp_path / "ai_index.faiss", "test-password")

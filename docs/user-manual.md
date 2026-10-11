@@ -125,8 +125,9 @@ The AI index is stored as a single authenticated AES-256-GCM snapshot,
 `ai_index.faiss.enc`, with a separate password-wrapped key in
 `ai_index.faiss.keys/.thumb_key`. Keep the key directory with the snapshot when
 backing up or moving a database. Clearing thumbnails does not delete this key.
-The snapshot is assembled and encrypted in memory; AI saves do not stage
-plaintext vectors or mappings on disk. File names, sizes, and timestamps remain
+Snapshot encryption and verification process bounded chunks in memory; the
+FAISS index and serialized vector data still require memory. AI saves do not
+stage plaintext vectors or mappings on disk. File names, sizes, and timestamps remain
 visible to someone who can inspect the storage directory.
 
 Existing plaintext AI files (`ai_index.faiss`, `ai_id_map.json`, and

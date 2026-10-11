@@ -145,7 +145,8 @@ class AiVectorRepository:
         if self._faiss is None or self._index is None:
             raise RuntimeError("load() must be called before save()")
         if self._key:
-            index_bytes = self._faiss.serialize_index(self._index).tobytes()
+            serialized_index = self._faiss.serialize_index(self._index)
+            index_bytes = memoryview(serialized_index)
             map_bytes = json.dumps(self._id_map, ensure_ascii=False).encode("utf-8")
             metadata_bytes = json.dumps(
                 {

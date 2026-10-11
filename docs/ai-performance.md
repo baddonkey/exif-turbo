@@ -79,3 +79,78 @@ storage modes reflect run variability, not faster search from encryption.
 Compression, bounded-memory persistence, and any approximate index selection
 belong to Phase 3. These synthetic results do not establish end-to-end
 large-library search performance.
+
+## Phase 3: Lower-Copy Exact Persistence
+
+Phase 3 retains `IndexFlatIP`, all five views, float32 scores, and model
+fingerprints. Encrypted saves now process 1 MiB chunks rather than assembling
+the full plaintext payload, ciphertext, and decrypted verification copies.
+Verification authenticates and hashes the staged file without retaining it.
+Loads split decrypted chunks into their component buffers rather than assembling
+and then slicing a second full plaintext snapshot. FAISS serialization is passed
+as a memory view rather than copied to another full-size Python byte string.
+Migration verification no longer loads the entire snapshot into memory.
+
+The `ETAI1` snapshot format is unchanged. Old snapshots remain readable, and
+the previous reader can read newly written snapshots. No rebuild or on-disk
+migration is required for this change. Atomic ciphertext-only publication,
+password wrapping, authentication-before-use, and fail-closed error handling
+are preserved. An unauthenticated framing error is deferred until the GCM tag
+has been verified, so header tampering cannot become a rebuildable format error.
+
+This is lower-copy persistence, not constant-memory indexing. FAISS's live
+index and its serialized representation still occupy memory; loaded index bytes,
+mapping dictionaries, model memory, and concurrently active snapshots also remain.
+Save/load speed may trade off against reduced peak allocation. Exact score and
+ranking compatibility is the acceptance gate, rather than adopting lossy
+compression to meet a memory target without real-image quality evidence.
+
+Fresh-process encrypted measurements using the same Phase 2 harness and machine:
+
+| Images | Phase | Peak RSS MB | Save s | Reload/search median ms | Warm search median ms |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 10,000 | Phase 2 | 820 | 0.654 | 431 | 24 |
+| 10,000 | Phase 3 | 393 | 0.895 | 667 | 18 |
+| 100,000 | Phase 2 | 7,672 | 8.028 | 4,334 | 73 |
+| 100,000 | Phase 3 | 3,364 | 5.599 | 5,439 | 76 |
+
+Peak process RSS fell about 56% at 100k images. The 100k save was faster, but
+reload/search was slower in this run; chunk processing and allocation strategy
+trade latency for reduced memory pressure. Warm exact-search results matched
+reloaded results. Disk sizes were unchanged (106.3 MB and 1,063.3 MB).
+These are single-machine observations with three search repetitions, not
+statistical release guarantees or isolated save/load memory peaks. In-memory
+model weights, source decoding, and concurrent scan/search residency remain
+outside the synthetic workload.
+
+### Compression Evaluation
+
+Use `--compare-indexes --repeats 5` with the benchmark commands above to compare
+FAISS float16 and 8-bit scalar quantization against the exact reference. The
+candidate path max-pools all five views per image and reports image recall at
+100, maximum score error, threshold eligibility changes at 0.18/0.20/0.22,
+and serialized vector size. Queries and embeddings are independent synthetic
+normalized vectors; this does not certify semantic relevance or threshold
+stability for real image collections. Full-population candidate query timings
+are not comparable to the production top-2,000 search timings.
+
+At 10k images and five queries, float16 halved serialized vector bytes and
+retained 100% mean image recall at 100, but changed image scores by up to
+0.000039. Scalar8 reduced vector bytes to one quarter, achieved 98.8% recall,
+and changed scores by up to 0.001953. Neither changed threshold eligibility in
+that small synthetic sample. Both are lossy; neither is enabled in production.
+At 100k images, float16 used 512.0 MB of serialized vectors with 100% mean
+recall and maximum score error 0.000048. Scalar8 used 256.0 MB with 98.6%
+recall and maximum score error 0.008576; one image/query eligibility pair changed
+at each of the three thresholds. The exact reference used 1,024.0 MB.
+Product quantization and approximate nearest-neighbor adoption are deferred
+until a representative relevance corpus and quality tolerances are approved.
+
+The same benchmark measures mapping alternatives. At 10k images the current
+mapping was 3.879 MB, zlib-compressed JSON was 0.268 MB, and a compact ordered
+five-view mapping was 0.340 MB. The ordered representation assumes every image
+has every view and cannot represent arbitrary partial/legacy rows as-is.
+Mapping-only savings are small beside 102.4 MB of raw vectors and do not reduce
+the live FAISS index. No mapping format change is included in this phase.
+At 100k images the mapping sizes were 39.289 MB for current JSON, 2.664 MB
+for zlib-compressed JSON, and 3.400 MB for the restricted compact representation.

@@ -12,6 +12,7 @@ import statistics
 import sys
 import tempfile
 import time
+import zlib
 
 import numpy as np
 
@@ -31,6 +32,84 @@ class _MemoryCounters(ctypes.Structure):
 
 class AiSearchBenchmark:
     _VIEWS = ("full", "top_left", "top_right", "bottom_left", "bottom_right")
+
+    def compare_indexes(self, image_count: int, batch_size: int, queries: int) -> dict[str, object]:
+        import faiss
+
+        faiss.omp_set_num_threads(1)
+        generator = np.random.default_rng(42)
+        exact = faiss.IndexFlatIP(512)
+        for offset in range(0, image_count, batch_size):
+            count = min(batch_size, image_count - offset)
+            vectors = generator.standard_normal((count * 5, 512), dtype=np.float32)
+            vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+            exact.add(vectors)
+        query_vectors = generator.standard_normal((queries, 512), dtype=np.float32)
+        query_vectors /= np.linalg.norm(query_vectors, axis=1, keepdims=True)
+        reference: list[np.ndarray] = []
+        for query in query_vectors:
+            scores, rows = exact.search(query.reshape(1, -1), exact.ntotal)
+            pooled = np.full(image_count, -np.inf, dtype=np.float32)
+            np.maximum.at(pooled, rows[0] // 5, scores[0])
+            reference.append(pooled)
+        results: list[dict[str, object]] = []
+        for name, quantizer in (
+            ("float16", faiss.ScalarQuantizer.QT_fp16),
+            ("scalar8", faiss.ScalarQuantizer.QT_8bit),
+        ):
+            candidate = faiss.IndexScalarQuantizer(512, quantizer, faiss.METRIC_INNER_PRODUCT)
+            training = exact.reconstruct_n(0, min(exact.ntotal, 50000))
+            started = time.perf_counter()
+            candidate.train(training)
+            del training
+            for offset in range(0, exact.ntotal, batch_size * 5):
+                candidate.add(exact.reconstruct_n(offset, min(batch_size * 5, exact.ntotal - offset)))
+            build_seconds = time.perf_counter() - started
+            recall: list[float] = []
+            errors: list[float] = []
+            changes = {str(threshold): 0 for threshold in (0.18, 0.20, 0.22)}
+            started = time.perf_counter()
+            for query, expected in zip(query_vectors, reference):
+                scores, rows = candidate.search(query.reshape(1, -1), candidate.ntotal)
+                actual = np.full(image_count, -np.inf, dtype=np.float32)
+                np.maximum.at(actual, rows[0] // 5, scores[0])
+                top_k = min(100, image_count)
+                reference_ids = set(np.argsort(-expected, kind="stable")[:top_k])
+                candidate_ids = set(np.argsort(-actual, kind="stable")[:top_k])
+                recall.append(len(reference_ids & candidate_ids) / top_k)
+                errors.append(float(np.max(np.abs(actual - expected))))
+                for threshold in (0.18, 0.20, 0.22):
+                    changes[str(threshold)] += int(np.count_nonzero((actual >= threshold) != (expected >= threshold)))
+            query_seconds = time.perf_counter() - started
+            results.append({
+                "index": name, "serialized_bytes": int(faiss.serialize_index(candidate).nbytes),
+                "build_seconds": build_seconds, "all_image_query_seconds": query_seconds,
+                "mean_image_recall_at_100": statistics.mean(recall),
+                "max_image_score_error": max(errors), "threshold_eligibility_changes": changes,
+            })
+            del candidate
+            gc.collect()
+        mapping = {
+            str(image * 5 + view): {"path": f"/synthetic/library/{image:08d}.jpg", "view_id": view_id}
+            for image in range(image_count) for view, view_id in enumerate(self._VIEWS)
+        }
+        original_mapping = json.dumps(mapping).encode("utf-8")
+        del mapping
+        compact_mapping = json.dumps(
+            {"views": self._VIEWS, "paths": [f"/synthetic/library/{image:08d}.jpg" for image in range(image_count)]},
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return {
+            "images": image_count, "queries": queries, "views_per_image": 5, "dimension": 512,
+            "reference_serialized_bytes": int(faiss.serialize_index(exact).nbytes),
+            "candidates": results, "mapping_bytes": len(original_mapping),
+            "mapping_zlib_bytes": len(zlib.compress(original_mapping)),
+            "compact_full_five_view_mapping_bytes": len(compact_mapping),
+            "compact_mapping_limitation": "assumes complete ordered five-view groups; not a production format",
+            "peak_process_rss_bytes": self._peak_rss(), "faiss": faiss.__version__,
+            "python": platform.python_version(), "platform": platform.platform(),
+            "quality_limitation": "independent synthetic vectors/queries; no semantic relevance certification",
+        }
 
     @staticmethod
     def _peak_rss() -> int:
@@ -134,11 +213,17 @@ class AiSearchBenchmark:
         parser.add_argument("--batch-size", type=int, default=256)
         parser.add_argument("--repeats", type=int, default=3)
         parser.add_argument("--encrypted", action="store_true")
+        parser.add_argument("--compare-indexes", action="store_true")
         parser.add_argument("--output", type=Path)
         options = parser.parse_args()
         if min(options.images, options.batch_size, options.repeats) <= 0:
             parser.error("images, batch-size, and repeats must be positive")
-        result = cls().run(options.images, options.batch_size, options.encrypted, options.repeats)
+        benchmark = cls()
+        result = (
+            benchmark.compare_indexes(options.images, options.batch_size, options.repeats)
+            if options.compare_indexes else
+            benchmark.run(options.images, options.batch_size, options.encrypted, options.repeats)
+        )
         text = json.dumps(result, indent=2)
         if options.output is not None:
             options.output.parent.mkdir(parents=True, exist_ok=True)
