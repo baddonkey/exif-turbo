@@ -809,6 +809,112 @@ def test_full_rescan_all_runs_full_workflow_for_each_enabled_folder(
     assert bare_controller.folderWorkflowRunning is True
 
 
+def test_add_indexed_folder_runs_full_workflow_when_idle(
+    bare_controller: AppController,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    folder = SimpleNamespace(
+        id=17,
+        path=str(tmp_path),
+        display_name=tmp_path.name,
+        enabled=True,
+        status="new",
+    )
+    bare_controller._repo = SimpleNamespace(close=lambda: None)
+    bare_controller._folder_repo = SimpleNamespace(
+        exists=lambda _path: False,
+        add=lambda _path: folder,
+        get_by_id=lambda folder_id: folder if folder_id == folder.id else None,
+        close=lambda: None,
+    )
+    monkeypatch.setattr(bare_controller._folder_model, "add_folder", lambda _folder: None)
+    bare_controller._ai_enabled = True
+    calls: list[tuple[str, int, bool | None]] = []
+    monkeypatch.setattr(
+        bare_controller,
+        "_start_managed_folder_indexing",
+        lambda current, *, force: calls.append(("scan", current.id, force)),
+    )
+    monkeypatch.setattr(
+        bare_controller,
+        "refreshSidecarsForFolder",
+        lambda folder_id: calls.append(("tags", folder_id, None)),
+    )
+    monkeypatch.setattr(
+        bare_controller,
+        "_clear_previews_for_folder",
+        lambda folder_id: calls.append(("clear", folder_id, None)) or True,
+    )
+    monkeypatch.setattr(
+        bare_controller,
+        "buildPreviewsForFolder",
+        lambda folder_id: calls.append(("previews", folder_id, None)),
+    )
+    monkeypatch.setattr(
+        bare_controller,
+        "_start_ai_scan",
+        lambda folder_id, *, force_rebuild: calls.append(
+            ("ai", folder_id, force_rebuild)
+        ),
+    )
+
+    # Act
+    bare_controller.addIndexedFolder(QUrl.fromLocalFile(str(tmp_path)).toString())
+    for _stage in range(4):
+        bare_controller._advance_folder_workflow()
+
+    # Assert
+    assert calls == [
+        ("scan", folder.id, True),
+        ("tags", folder.id, None),
+        ("clear", folder.id, None),
+        ("previews", folder.id, None),
+        ("ai", folder.id, True),
+    ]
+
+
+def test_add_indexed_folder_waits_for_active_operation_to_finish(
+    bare_controller: AppController,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    folder = SimpleNamespace(
+        id=17,
+        path=str(tmp_path),
+        display_name=tmp_path.name,
+        enabled=True,
+        status="new",
+    )
+    bare_controller._repo = SimpleNamespace(close=lambda: None)
+    bare_controller._folder_repo = SimpleNamespace(
+        exists=lambda _path: False,
+        add=lambda _path: folder,
+        get_by_id=lambda folder_id: folder if folder_id == folder.id else None,
+        close=lambda: None,
+    )
+    monkeypatch.setattr(bare_controller._folder_model, "add_folder", lambda _folder: None)
+    bare_controller._is_busy = True
+    scans: list[tuple[int, bool]] = []
+    monkeypatch.setattr(
+        bare_controller,
+        "_start_managed_folder_indexing",
+        lambda current, *, force: scans.append((current.id, force)),
+    )
+
+    # Act
+    bare_controller.addIndexedFolder(QUrl.fromLocalFile(str(tmp_path)).toString())
+
+    # Assert
+    assert scans == []
+    assert bare_controller._folder_workflow_queue == [(folder.id, True)]
+    bare_controller._on_maint_finished()
+    assert scans == [(folder.id, True)]
+    assert bare_controller._active_folder_workflow == (folder.id, True)
+
+
 def test_full_scan_preview_clear_failure_advances_to_next_folder(
     bare_controller: AppController,
     monkeypatch: pytest.MonkeyPatch,
