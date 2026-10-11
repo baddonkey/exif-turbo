@@ -69,6 +69,7 @@ def test_python_license_file_homebrew_framework_returns_formula_license(
     installed_base.mkdir(parents=True)
     license_file = formula_root / "LICENSE"
     license_file.write_text("Python terms", encoding="utf-8")
+    monkeypatch.setattr(stage_runtime_licenses.sysconfig, "get_path", lambda _name: str(installed_base))
     monkeypatch.setattr(
         stage_runtime_licenses.sysconfig,
         "get_config_var",
@@ -90,6 +91,7 @@ def test_python_license_file_ubuntu_returns_versioned_package_copyright(
     license_file = installed_base / "share" / "doc" / "python3.12" / "copyright"
     license_file.parent.mkdir(parents=True)
     license_file.write_text("Python terms", encoding="utf-8")
+    monkeypatch.setattr(stage_runtime_licenses.sysconfig, "get_path", lambda _name: str(installed_base / "lib"))
     config_vars = {
         "installed_base": str(installed_base),
         "py_version_short": "3.12",

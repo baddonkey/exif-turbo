@@ -48,10 +48,15 @@ jobs:
         run: >-
           sudo apt-get update && sudo apt-get install -y
           xvfb libegl1 libopengl0 libgl1 libxcb-cursor0 libxkbcommon-x11-0
+          libxcb-icccm4 libxcb-keysyms1 libxcb-xinerama0 libxcb-shape0
+          libxcb-render-util0 libxcb-image0 libx11-xcb1
           libnss3 libasound2t64 libxrandr2 libxcomposite1 libxdamage1 libxtst6
           libsqlcipher-dev pkg-config
       - name: Install locked development environment
         run: uv sync --locked --no-default-groups --extra dev --python ${{ matrix.python }} --no-managed-python
+      - name: Check Linux Qt display startup
+        if: runner.os == 'Linux'
+        run: xvfb-run -a .venv/bin/python -c "from PySide6.QtWidgets import QApplication; app = QApplication([]); print('Qt platform:', app.platformName())"
       - name: Focused AI safety regressions (Windows)
         if: runner.os == 'Windows'
         run: .venv\Scripts\python.exe scripts/run_tests_logged.py -k "ai_vector_storage or ai_search_session or date_eligibility"
