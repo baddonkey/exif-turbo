@@ -475,6 +475,14 @@ calendar year; its height is proportional to the number of matching images taken
 in that year relative to the busiest year. A small spinner appears in this area
 while the timeline counts are loading or refreshing.
 
+For non-empty AI queries, the active folder, format, and capture-date filters
+determine eligibility before the 2,000-image display limit is applied. Images
+from other years cannot crowd out eligible matches. Results remain ordered by
+semantic similarity, with multiple views pooled into one result per image.
+The AI timeline counts all threshold-qualified images in the active folder and
+format scope, independently of the selected dates and display limit. An empty
+AI query continues to show all images in scope, subject to the active filters.
+
 | Action | Effect |
 |--------|--------|
 | **Click a bar** | Filter results to images captured in that year |

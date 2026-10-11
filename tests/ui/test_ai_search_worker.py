@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from exif_turbo.config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
 from exif_turbo.data.ai_search_session import AiSearchSession
@@ -443,6 +444,91 @@ def test_ai_search_worker_date_filter_keeps_facet_paths_for_all_years(
     rows = emitted[0][0]
     assert [row[1] for row in rows] == [str(path_2024)]
     assert set(worker.facet_paths) == {str(path_2024), str(path_2025)}
+
+
+@pytest.mark.parametrize("date_filter_enabled", [True, False])
+def test_ai_search_worker_date_eligibility_precedes_cap_and_facets_are_uncapped(
+    tmp_path: Path, monkeypatch, date_filter_enabled: bool,
+) -> None:
+    # Arrange
+    db_path = tmp_path / "test.db"
+    directory = tmp_path / "photos"
+    directory.mkdir()
+    folder_id = _seed_folder(db_path, directory, enabled=True)
+    outside_paths = [str(directory / f"outside_{number}.jpg") for number in range(2001)]
+    target = str(directory / "eligible.jpg")
+    repository = ImageIndexRepository(db_path, key="")
+    for path in outside_paths:
+        repository.upsert_image(path, Path(path).name, 1.0, 10, {}, "",
+                                folder_id=folder_id, captured_at=1735689600.0)
+    repository.upsert_image(target, "eligible.jpg", 1.0, 10, {}, "",
+                            folder_id=folder_id, captured_at=1704067200.0)
+    repository.commit()
+    repository.close()
+    _FakeAiVectorRepository.hits = [(path, 0.9) for path in outside_paths] + [(target, 0.8)]
+    monkeypatch.setattr("exif_turbo.ui.workers.ai_search_worker.AiVectorRepository", _FakeAiVectorRepository)
+    monkeypatch.setattr("exif_turbo.ui.workers.ai_search_worker.AiIndexerService", _FakeAiIndexerService)
+    worker = AiSearchWorker(db_path, "", "photo", 31,
+                            date_from=1704067200 if date_filter_enabled else None,
+                            date_to=1735689599 if date_filter_enabled else None)
+    emitted: list[list[tuple]] = []
+    failures: list[str] = []
+    worker.results_ready.connect(lambda rows, total, facets, serial: emitted.append(rows))
+    worker.failed.connect(failures.append)
+
+    # Act
+    worker.run()
+
+    # Assert
+    assert failures == []
+    expected = [target] if date_filter_enabled else outside_paths[:2000]
+    assert [row[1] for row in emitted[0]] == expected
+    assert set(worker.facet_paths) == set(outside_paths) | {target}
+
+
+@pytest.mark.parametrize("query", ["photo", ""])
+@pytest.mark.parametrize(
+    "date_from,date_to,expected_names",
+    [
+        (1704067200, 1704067300, {"start.jpg", "end.jpg"}),
+        (1704067200, None, {"start.jpg", "end.jpg", "after.jpg"}),
+        (None, 1704067300, {"before.jpg", "start.jpg", "end.jpg"}),
+    ],
+)
+def test_ai_search_worker_date_boundaries_and_open_ranges_preserve_facets(
+    tmp_path: Path, monkeypatch, query: str,
+    date_from: int | None, date_to: int | None, expected_names: set[str],
+) -> None:
+    # Arrange
+    db_path = tmp_path / "test.db"
+    directory = tmp_path / "photos"
+    directory.mkdir()
+    folder_id = _seed_folder(db_path, directory, enabled=True)
+    repository = ImageIndexRepository(db_path, key="")
+    names = ["before.jpg", "start.jpg", "end.jpg", "after.jpg", "unknown.jpg"]
+    dates = [1704067199.0, 1704067200.0, 1704067300.0, 1704067301.0, None]
+    paths = [str(directory / name) for name in names]
+    for path, date in zip(paths, dates):
+        repository.upsert_image(path, Path(path).name, 1.0, 10, {}, "",
+                                folder_id=folder_id, captured_at=date)
+    repository.commit()
+    repository.close()
+    _FakeAiVectorRepository.hits = [(path, 0.9) for path in paths]
+    monkeypatch.setattr("exif_turbo.ui.workers.ai_search_worker.AiVectorRepository", _FakeAiVectorRepository)
+    monkeypatch.setattr("exif_turbo.ui.workers.ai_search_worker.AiIndexerService", _FakeAiIndexerService)
+    worker = AiSearchWorker(db_path, "", query, 32, date_from=date_from, date_to=date_to)
+    emitted: list[list[tuple]] = []
+    failures: list[str] = []
+    worker.results_ready.connect(lambda rows, total, facets, serial: emitted.append(rows))
+    worker.failed.connect(failures.append)
+
+    # Act
+    worker.run()
+
+    # Assert
+    assert failures == []
+    assert {Path(row[1]).name for row in emitted[0]} == expected_names
+    assert set(worker.facet_paths) == set(paths)
 
 
 def test_ai_search_worker_calls_vector_search_with_2000_result_cap(

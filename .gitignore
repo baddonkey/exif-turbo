@@ -58,6 +58,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 logs/test-runs/
+logs/ai-benchmarks/
 .pytest-*.xml
 cover/
 
