@@ -194,6 +194,45 @@ def test_main_menu_disabled_during_blocking_busy_operation(
     qtbot.waitUntil(lambda: bool(main_menu.property("enabled")))
 
 
+def test_selection_and_action_menu_entries_disabled_outside_search_browse(
+    qtbot: QtBot,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    action_names = [
+        "selectAllAction",
+        "deselectAllAction",
+        "invertSelectionAction",
+        "selectMissingThumbnailsAction",
+        "exportJsonAction",
+        "derivativeResultsAction",
+        "derivativeMarkedAction",
+        "deleteMarkedAction",
+    ]
+    actions = [root.findChild(QObject, name) for name in action_names]
+    assert tab_bar is not None
+    assert all(action is not None for action in actions)
+
+    # Act
+    tab_bar.setProperty("currentIndex", 2)
+
+    # Assert
+    qtbot.waitUntil(
+        lambda: all(not bool(action.property("enabled")) for action in actions)
+    )
+
+    for tab_index in (0, 1):
+        tab_bar.setProperty("currentIndex", tab_index)
+        qtbot.waitUntil(
+            lambda: bool(root.findChild(QObject, "selectAllAction").property("enabled"))
+            and bool(root.findChild(QObject, "exportJsonAction").property("enabled"))
+        )
+
+
 def test_do_unlock_rejects_empty_password_directly(
     tmp_path: Path,
 ) -> None:

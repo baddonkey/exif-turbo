@@ -184,6 +184,8 @@ ApplicationWindow {
     property bool _aiSearchMode: false
     property string _aiSearchPrecision: "normal"
     readonly property bool _aiEnabled: controller ? controller.aiEnabled : true
+    readonly property bool _searchOrBrowseActive:
+        mainTabBar.currentIndex === 0 || mainTabBar.currentIndex === 1
 
 
     // ── Null-safe proxies ─────────────────────────────────────────────────
@@ -711,25 +713,29 @@ ApplicationWindow {
             implicitWidth: selectMenuMetrics.width + 64
 
             Action {
+                objectName: "selectAllAction"
                 text: qsTr("Select &All")
-                enabled: !_isLocked
+                enabled: !_isLocked && root._searchOrBrowseActive
                 onTriggered: if (!_isLocked) controller.selectAll()
             }
             Action {
+                objectName: "deselectAllAction"
                 text: qsTr("&Deselect All")
-                enabled: !_isLocked
+                enabled: !_isLocked && root._searchOrBrowseActive
                 onTriggered: if (!_isLocked) controller.deselectAll()
             }
             Action {
+                objectName: "invertSelectionAction"
                 text: qsTr("&Invert Selection")
-                enabled: !_isLocked
+                enabled: !_isLocked && root._searchOrBrowseActive
                 onTriggered: if (!_isLocked) controller.invertSelection()
             }
             MenuSeparator {}
             Action {
                 id: selectMissingItem
+                objectName: "selectMissingThumbnailsAction"
                 text: qsTr("Select Images Without &Thumbnail")
-                enabled: !_isLocked
+                enabled: !_isLocked && root._searchOrBrowseActive
                 onTriggered: if (!_isLocked) controller.selectMissingThumbnails()
             }
         }
@@ -756,18 +762,21 @@ ApplicationWindow {
 
             Action {
                 id: exportJsonItem
+                objectName: "exportJsonAction"
                 readonly property int _cnt: controller ? controller.checkedCount : 0
                 text: _cnt > 0
                       ? qsTr("Export Metadata as &JSON (%1 selected)").arg(_cnt)
                       : qsTr("Export Metadata as &JSON (all results)")
-                enabled: !_isLocked
+                enabled: !_isLocked && root._searchOrBrowseActive
                 onTriggered: if (!_isLocked) exportJsonDialog.open()
             }
             MenuSeparator {}
             Action {
                 id: derivativeResultsItem
+                objectName: "derivativeResultsAction"
                 text: qsTr("Generate Tagged Derivatives for Current &Results...")
-                enabled: !_isLocked && _derivativeAvailable && _totalResults > 0
+                enabled: !_isLocked && root._searchOrBrowseActive
+                         && _derivativeAvailable && _totalResults > 0
                          && !_isExportingDerivatives
                 onTriggered: {
                     derivativeTargetDialog.scope = "results"
@@ -776,9 +785,11 @@ ApplicationWindow {
             }
             Action {
                 id: derivativeMarkedItem
+                objectName: "derivativeMarkedAction"
                 readonly property int _cnt: controller ? controller.checkedCount : 0
                 text: qsTr("Generate Tagged Derivatives for &Marked Images (%1 selected)").arg(_cnt)
-                enabled: !_isLocked && _derivativeAvailable && _cnt > 0
+                enabled: !_isLocked && root._searchOrBrowseActive
+                         && _derivativeAvailable && _cnt > 0
                          && !_isExportingDerivatives
                 onTriggered: {
                     derivativeTargetDialog.scope = "marked"
@@ -788,9 +799,10 @@ ApplicationWindow {
             MenuSeparator {}
             Action {
                 id: deleteMarkedItem
+                objectName: "deleteMarkedAction"
                 readonly property int _cnt: controller ? controller.checkedCount : 0
                 text: qsTr("&Delete Marked Images (%1 selected)").arg(_cnt)
-                enabled: !_isLocked && _cnt > 0
+                enabled: !_isLocked && root._searchOrBrowseActive && _cnt > 0
                 onTriggered: if (!_isLocked && _cnt > 0) deleteMarkedDialog.open()
             }
         }
