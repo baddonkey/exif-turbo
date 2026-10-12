@@ -37,6 +37,7 @@ from exif_turbo.ui.models.settings_model import SettingsModel
 from exif_turbo.ui.providers.preview_image_provider import PreviewImageProvider
 from exif_turbo.ui.providers.raw_image_provider import RawImageProvider
 from exif_turbo.ui.view_models.app_controller import AppController
+from exif_turbo.tagging.custom_tag_migration import CustomTagMigrationService
 
 _PAUSE_MS = 300
 _QML_PATH = (
@@ -84,6 +85,7 @@ def controller_with_images(
             metadata, f"{fname} {make}",
         )
     repo.commit()
+    repo.mark_migration_completed(CustomTagMigrationService.MIGRATION_NAME)
     repo.close()
 
     search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
