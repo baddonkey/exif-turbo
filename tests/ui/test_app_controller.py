@@ -578,7 +578,9 @@ def test_close_late_search_result_does_not_restart_workers(
     bare_controller.loadedResultsChanged.connect(lambda: updates.append(True))
     bare_controller.close()
 
-    bare_controller._on_search_finished([], 0, [], bare_controller._search_serial)
+    bare_controller._on_search_finished(
+        [], 0, [], bare_controller._search_coordinator.serial
+    )
 
     assert updates == []
     assert bare_controller._year_counts_worker is None
