@@ -35,6 +35,17 @@ def _seed_db(db_path: Path, sources: list[Path]) -> int:
     return folder.id
 
 
+def _run_preview_worker(
+    worker: PreviewBuildWorker,
+    qtbot: QtBot,
+    timeout: int = 10_000,
+) -> list[object]:
+    with qtbot.waitSignal(worker.finished, timeout=timeout) as signal:
+        worker.start()
+    assert worker.wait(timeout), "preview worker signal fired before its thread stopped"
+    return signal.args
+
+
 def test_preview_worker_renders_jpeg_for_each_indexed_image(
     tmp_path: Path, qtbot: QtBot
 ) -> None:
@@ -51,8 +62,7 @@ def test_preview_worker_renders_jpeg_for_each_indexed_image(
     worker = PreviewBuildWorker(db, cache, folder_id, target_long_edge=128)
 
     # Act
-    with qtbot.waitSignal(worker.finished, timeout=10_000):
-        worker.start()
+    _run_preview_worker(worker, qtbot)
 
     # Assert
     out_dir = preview_dir(cache)
@@ -76,8 +86,7 @@ def test_preview_worker_skips_already_cached_files(
     folder_id = _seed_db(db, [src])
 
     first = PreviewBuildWorker(db, cache, folder_id, target_long_edge=128)
-    with qtbot.waitSignal(first.finished, timeout=10_000):
-        first.start()
+    _run_preview_worker(first, qtbot)
 
     st = src.stat()
     out_path = preview_dir(cache) / preview_cache_name_from_stamp(
@@ -88,8 +97,7 @@ def test_preview_worker_skips_already_cached_files(
 
     # Act
     second = PreviewBuildWorker(db, cache, folder_id, target_long_edge=128)
-    with qtbot.waitSignal(second.finished, timeout=10_000):
-        second.start()
+    _run_preview_worker(second, qtbot)
 
     # Assert
     assert out_path.stat().st_mtime == initial_mtime
@@ -110,9 +118,7 @@ def test_preview_worker_finishes_on_empty_folder(
 
     # Act / Assert — worker emits finished(0, 0) without error.
     worker = PreviewBuildWorker(db, cache, folder.id, target_long_edge=128)
-    with qtbot.waitSignal(worker.finished, timeout=5_000) as sig:
-        worker.start()
-    assert sig.args == [0, 0]
+    assert _run_preview_worker(worker, qtbot, timeout=5_000) == [0, 0]
 
 
 def test_preview_worker_writes_encrypted_files_when_keyed(
@@ -145,8 +151,7 @@ def test_preview_worker_writes_encrypted_files_when_keyed(
     )
 
     # Act
-    with qtbot.waitSignal(worker.finished, timeout=10_000):
-        worker.start()
+    _run_preview_worker(worker, qtbot)
 
     # Assert — the cache contains a `.jpg.enc`, not a plain `.jpg`.
     files = list(preview_dir(cache).iterdir())
@@ -203,8 +208,7 @@ def test_preview_worker_emits_oversized_signal_for_too_large_images(
 
     _mod.render_preview = _fake_render  # type: ignore[assignment]
     try:
-        with qtbot.waitSignal(worker.finished, timeout=10_000):
-            worker.start()
+        _run_preview_worker(worker, qtbot)
     finally:
         _mod.render_preview = original_render  # type: ignore[assignment]
 

@@ -3668,7 +3668,16 @@ class AppController(QObject):
     def _on_preview_oversized(self, count: int) -> None:
         self._preview_oversized_skipped = count
 
+    def _join_preview_worker(self) -> None:
+        worker = self._preview_worker
+        if worker is None:
+            return
+        worker.wait()
+        if self._preview_worker is worker:
+            self._preview_worker = None
+
     def _on_preview_done(self, built: int, total: int) -> None:
+        self._join_preview_worker()
         folder_id = self._preview_build_folder_id
         folder_name = self._preview_build_folder_name
         oversized = self._preview_oversized_skipped
@@ -3693,6 +3702,7 @@ class AppController(QObject):
             self._resume_queued_folder_workflows()
 
     def _on_preview_failed(self, error: str) -> None:
+        self._join_preview_worker()
         folder_id = self._preview_build_folder_id
         folder_name = self._preview_build_folder_name
         self._clear_preview_build_state()
@@ -3714,6 +3724,7 @@ class AppController(QObject):
             self._resume_queued_folder_workflows()
 
     def _on_preview_canceled(self, built: int, total: int) -> None:
+        self._join_preview_worker()
         folder_id = self._preview_build_folder_id
         folder_name = self._preview_build_folder_name
         workflow_canceled = (
