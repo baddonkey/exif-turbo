@@ -238,7 +238,10 @@ def test_remove_indexed_folder_removes_from_model(
 
     with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
         controller.addIndexedFolder(QUrl.fromLocalFile(str(alpha_dir)).toString())
-    qtbot.wait(_PAUSE_MS)
+    qtbot.waitUntil(
+        lambda: not controller.folderWorkflowRunning and not controller.isIndexing,
+        timeout=15_000,
+    )
 
     assert folder_model.rowCount() >= 1
     alpha_id = folder_model.data(folder_model.index(0), FolderListModel.FolderIdRole)

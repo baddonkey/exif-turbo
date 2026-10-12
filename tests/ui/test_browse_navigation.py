@@ -1134,6 +1134,8 @@ def browse_navigation_window(
 
     yield controller, search_model, engine, root
 
+    controller.close()
+    root.close()
     engine.deleteLater()
     qtbot.wait(100)
 
