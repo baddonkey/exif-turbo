@@ -1002,6 +1002,7 @@ def test_add_indexed_folder_waits_for_active_operation_to_finish(
     )
     monkeypatch.setattr(bare_controller._folder_model, "add_folder", lambda _folder: None)
     bare_controller._is_busy = True
+    bare_controller._maint_worker = QThread(bare_controller)  # type: ignore[assignment]
     scans: list[tuple[int, bool]] = []
     monkeypatch.setattr(
         bare_controller,
