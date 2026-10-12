@@ -42,6 +42,15 @@ def _make_jpeg(path: Path, color: tuple) -> Path:
     Image.new("RGB", (32, 32), color=color).save(str(path), format="JPEG")
     return path
 
+def _wait_for_folder_idle(qtbot: QtBot, controller: AppController) -> None:
+    qtbot.waitUntil(
+        lambda: not controller.folderWorkflowRunning
+        and not controller.isIndexing
+        and not controller.isBusy
+        and controller._search_worker is None,
+        timeout=15_000,
+    )
+
 
 # ── Module-scoped DB fixture ──────────────────────────────────────────────────
 
@@ -137,7 +146,7 @@ def test_add_indexed_folder_tracks_folder_in_model(
     # Act
     with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
         controller.addIndexedFolder(QUrl.fromLocalFile(str(alpha_dir)).toString())
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
 
     # Assert — folder appears in the model
     assert folder_model.rowCount() >= 1
@@ -155,12 +164,12 @@ def test_add_duplicate_folder_does_not_add_twice(
     # Arrange
     controller, _, folder_model, alpha_dir, _ = folder_window
     controller.addIndexedFolder(QUrl.fromLocalFile(str(alpha_dir)).toString())
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
     count_after_first = folder_model.rowCount()
 
     # Act — add same folder again
     controller.addIndexedFolder(QUrl.fromLocalFile(str(alpha_dir)).toString())
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
 
     # Assert — row count unchanged
     assert folder_model.rowCount() == count_after_first
@@ -175,10 +184,10 @@ def test_set_folder_enabled_false_excludes_images_from_search(
 
     with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
         controller.addIndexedFolder(QUrl.fromLocalFile(str(alpha_dir)).toString())
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
     with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
         controller.addIndexedFolder(QUrl.fromLocalFile(str(beta_dir)).toString())
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
 
     # Confirm both folders tracked
     assert folder_model.rowCount() == 2
@@ -196,7 +205,7 @@ def test_set_folder_enabled_false_excludes_images_from_search(
     # Act — disable alpha folder
     with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
         controller.setFolderEnabled(alpha_id, False)
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
 
     # Assert — only beta images (2 Nikon) appear in search
     assert controller.totalResults == 2
@@ -211,19 +220,19 @@ def test_set_folder_enabled_true_restores_images_in_search(
 
     with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
         controller.addIndexedFolder(QUrl.fromLocalFile(str(alpha_dir)).toString())
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
 
     alpha_id = folder_model.data(folder_model.index(0), FolderListModel.FolderIdRole)
 
     with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
         controller.setFolderEnabled(alpha_id, False)
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
     count_disabled = controller.totalResults
 
     # Act — re-enable alpha
     with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
         controller.setFolderEnabled(alpha_id, True)
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
 
     # Assert — more results than when disabled
     assert controller.totalResults > count_disabled
@@ -238,10 +247,7 @@ def test_remove_indexed_folder_removes_from_model(
 
     with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
         controller.addIndexedFolder(QUrl.fromLocalFile(str(alpha_dir)).toString())
-    qtbot.waitUntil(
-        lambda: not controller.folderWorkflowRunning and not controller.isIndexing,
-        timeout=15_000,
-    )
+    _wait_for_folder_idle(qtbot, controller)
 
     assert folder_model.rowCount() >= 1
     alpha_id = folder_model.data(folder_model.index(0), FolderListModel.FolderIdRole)
@@ -249,7 +255,7 @@ def test_remove_indexed_folder_removes_from_model(
     # Act
     with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
         controller.removeIndexedFolder(alpha_id)
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
 
     # Assert — folder removed from model
     ids = [folder_model.data(folder_model.index(i), FolderListModel.FolderIdRole)
@@ -270,10 +276,10 @@ def test_remove_indexed_folder_clears_active_search_filter(
 
     with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
         controller.addIndexedFolder(QUrl.fromLocalFile(str(alpha_dir)).toString())
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
     with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
         controller.addIndexedFolder(QUrl.fromLocalFile(str(beta_dir)).toString())
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
 
     # Find alpha id and path
     alpha_id = None
@@ -290,14 +296,14 @@ def test_remove_indexed_folder_clears_active_search_filter(
     # Set search folder filter to alpha — should narrow results to 3 Canon images
     with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
         controller.setSearchFolderFilter(alpha_path)
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
     assert controller.totalResults == 3
     assert _json.loads(controller.searchFolderFilters) == [alpha_path]
 
     # Act — remove the alpha folder
     with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
         controller.removeIndexedFolder(alpha_id)
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
 
     # Assert — search filter is cleared and the remaining beta images are shown
     assert _json.loads(controller.searchFolderFilters) == []
@@ -317,15 +323,10 @@ def test_disable_indexed_folder_clears_active_search_filter(
 
     with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
         controller.addIndexedFolder(QUrl.fromLocalFile(str(alpha_dir)).toString())
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
     with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
         controller.addIndexedFolder(QUrl.fromLocalFile(str(beta_dir)).toString())
-    qtbot.waitUntil(
-        lambda: not controller.folderWorkflowRunning
-        and not controller.isIndexing
-        and controller._search_worker is None,
-        timeout=15_000,
-    )
+    _wait_for_folder_idle(qtbot, controller)
 
     alpha_id = None
     alpha_path = None
@@ -340,14 +341,14 @@ def test_disable_indexed_folder_clears_active_search_filter(
 
     with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
         controller.setSearchFolderFilter(alpha_path)
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
     assert controller.totalResults == 3
     assert _json.loads(controller.searchFolderFilters) == [alpha_path]
 
     # Act — disable the alpha folder
     with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
         controller.setFolderEnabled(alpha_id, False)
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
 
     # Assert — search filter is cleared and beta images are shown
     assert _json.loads(controller.searchFolderFilters) == []
@@ -363,15 +364,10 @@ def test_checked_only_filter_excludes_marked_images_from_disabled_folders(
 
     with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
         controller.addIndexedFolder(QUrl.fromLocalFile(str(alpha_dir)).toString())
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
     with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
         controller.addIndexedFolder(QUrl.fromLocalFile(str(beta_dir)).toString())
-    qtbot.waitUntil(
-        lambda: not controller.folderWorkflowRunning
-        and not controller.isIndexing
-        and controller._search_worker is None,
-        timeout=15_000,
-    )
+    _wait_for_folder_idle(qtbot, controller)
 
     alpha_row = None
     beta_row = None
@@ -401,17 +397,17 @@ def test_checked_only_filter_excludes_marked_images_from_disabled_folders(
 
     controller.toggleChecked(alpha_row)
     controller.toggleChecked(beta_row)
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
 
     with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
         controller.setCheckedOnlyFilter(True)
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
     assert controller.totalResults == 2
 
     # Act
     with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
         controller.setFolderEnabled(beta_id, False)
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
 
     # Assert
     assert controller.checkedCount == 1
