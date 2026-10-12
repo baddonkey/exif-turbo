@@ -71,6 +71,7 @@ _QML_PATH = (
     Path(__file__).resolve().parents[2]
     / "src" / "exif_turbo" / "ui" / "qml" / "Main.qml"
 )
+_DATE_FILTER_ROW_QML_PATH = _QML_PATH.with_name("DateFilterRow.qml")
 
 # Sample images from the schweiz test collection, cycled across all years.
 _SAMPLE_DIR = Path(__file__).resolve().parents[1] / "sample-data" / "schweiz"
@@ -233,7 +234,7 @@ class TestTimelineFilterWrap:
 
         date_filter_row = root.findChild(QQuickItem, "dateFilterRow")
         assert date_filter_row is not None, (
-            "objectName: 'dateFilterRow' is missing from the Rectangle in Main.qml"
+            "objectName: 'dateFilterRow' is missing from DateFilterRow.qml"
         )
 
         # Assert — the date filter panel must be visible (year data loaded).
@@ -280,10 +281,10 @@ class TestTimelineFilterWrap:
 
 def test_timeline_filter_shows_loading_indicator_while_counts_load() -> None:
     # Arrange
-    source = _QML_PATH.read_text(encoding="utf-8")
+    source = _DATE_FILTER_ROW_QML_PATH.read_text(encoding="utf-8")
 
     # Act / Assert
     assert 'objectName: "timelineLoadingIndicator"' in source
-    assert "running: root._isLoadingYearCounts" in source
-    assert "visible: _hasYears || root._isLoadingYearCounts" in source
+    assert "running: dateFilterRow.loading" in source
+    assert "visible: _hasYears || loading" in source
     assert 'text: qsTr("Loading timeline...")' in source

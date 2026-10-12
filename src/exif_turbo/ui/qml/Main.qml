@@ -196,7 +196,7 @@ ApplicationWindow {
         function onIsLockedChanged() {
             if (!controller.isLocked) {
                 root.requestActivate()
-                searchField.forceActiveFocus()
+                searchToolbar.focusQuery()
             }
         }
         function onClipboardCopyDone(message) {
@@ -1291,8 +1291,8 @@ ApplicationWindow {
                 // text) and clear them so Browse shows un-filtered folder
                 // contents. enterBrowseTab is a no-op if a snapshot is held.
                 root._savedSearchScrollY = resultsList.contentY
-                controller.enterBrowseTab(searchField.text)
-                searchField.text = ""
+                controller.enterBrowseTab(searchToolbar.queryText)
+                searchToolbar.queryText = ""
             } else if (currentIndex === 0) {
                 // Returning to Search: restore the snapshot, repopulate searchField,
                 // and request a one-shot scroll restore once results have loaded.
@@ -1301,7 +1301,7 @@ ApplicationWindow {
                 root._restoreSearchPosition = true
                 root._searchRestoreAttempts = 0
                 var savedQuery = controller.leaveBrowseTab()
-                searchField.text = savedQuery
+                searchToolbar.queryText = savedQuery
             }
         }
     }
@@ -1365,286 +1365,21 @@ ApplicationWindow {
                     anchors.fill: parent
                     spacing: 0
 
-                    // Search bar
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 52
-                        color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.07)
-
-                        RowLayout {
-                            anchors { fill: parent; leftMargin: 10; rightMargin: 10; topMargin: 8; bottomMargin: 8 }
-                            spacing: 6
-
-                            // ── EXIF / AI mode toggle pill ────────────────
-                            Rectangle {
-                                visible: root._aiEnabled
-                                implicitWidth: 82
-                                implicitHeight: 30
-                                radius: 4
-                                color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.08)
-                                border.color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.18)
-                                border.width: 1
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    spacing: 0
-
-                                    Button {
-                                        Layout.fillWidth: true
-                                        Layout.fillHeight: true
-                                        flat: true
-                                        text: qsTr("EXIF")
-                                        font.pixelSize: 11
-                                        font.bold: !root._aiSearchMode
-                                        highlighted: !root._aiSearchMode
-                                        onClicked: {
-                                            root._aiSearchMode = false
-                                            controller.setAiSearchMode(false)
-                                        }
-                                        topPadding: 0; bottomPadding: 0
-                                        leftPadding: 4; rightPadding: 4
-                                    }
-
-                                    Rectangle {
-                                        width: 1
-                                        Layout.fillHeight: true
-                                        color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.18)
-                                    }
-
-                                    Button {
-                                        Layout.fillWidth: true
-                                        Layout.fillHeight: true
-                                        flat: true
-                                        text: qsTr("AI")
-                                        font.pixelSize: 11
-                                        font.bold: root._aiSearchMode
-                                        highlighted: root._aiSearchMode
-                                        onClicked: {
-                                            root._aiSearchMode = true
-                                            controller.setAiSearchMode(true)
-                                        }
-                                        topPadding: 0; bottomPadding: 0
-                                        leftPadding: 4; rightPadding: 4
-                                    }
-                                }
-                            }
-
-                            // ── AI precision picker (Fine / Normal / Broad) ─────────
-                            Rectangle {
-                                visible: root._aiSearchMode
-                                implicitWidth: 148
-                                implicitHeight: 30
-                                radius: 4
-                                color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.08)
-                                border.color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.18)
-                                border.width: 1
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    spacing: 0
-
-                                    Repeater {
-                                        model: [
-                                            { key: "fine",   label: qsTr("Fine")   },
-                                            { key: "normal", label: qsTr("Normal") },
-                                            { key: "broad",  label: qsTr("Broad")  },
-                                        ]
-
-                                        delegate: RowLayout {
-                                            spacing: 0
-                                            Layout.fillWidth: true
-                                            Layout.fillHeight: true
-
-                                            Rectangle {
-                                                visible: index > 0
-                                                width: 1
-                                                Layout.fillHeight: true
-                                                color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.18)
-                                            }
-
-                                            Button {
-                                                Layout.fillWidth: true
-                                                Layout.fillHeight: true
-                                                flat: true
-                                                text: modelData.label
-                                                font.pixelSize: 11
-                                                font.bold: root._aiSearchPrecision === modelData.key
-                                                highlighted: root._aiSearchPrecision === modelData.key
-                                                onClicked: root._aiSearchPrecision = modelData.key
-                                                topPadding: 0; bottomPadding: 0
-                                                leftPadding: 4; rightPadding: 4
-                                                ToolTip.text: modelData.key === "fine"   ? qsTr("Precise — score ≥ 0.22 (strictest)")  :
-                                                              modelData.key === "normal" ? qsTr("Balanced — score ≥ 0.20")               :
-                                                                                           qsTr("Broad — score ≥ 0.18 (most results)")
-                                                ToolTip.visible: hovered
-                                                ToolTip.delay: 600
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                Layout.fillWidth: true
-                                implicitHeight: 36
-                                radius: 4
-                                color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.07)
-                                border.color: searchField.activeFocus ? root._accentColor : Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.2)
-                                border.width: 1
-
-                                Label {
-                                    anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                                    visible: searchField.text.length === 0
-                                    text: root._aiSearchMode ? qsTr("Describe what you\u2019re looking for\u2026") : qsTr("Search EXIF metadata\u2026")
-                                    font.pixelSize: 13
-                                    opacity: 0.4
-                                }
-
-                                TextInput {
-                                    id: searchField
-                                    objectName: "searchField"
-                                    anchors { left: parent.left; right: parent.right; leftMargin: 10; rightMargin: text.length > 0 ? 52 : 32; verticalCenter: parent.verticalCenter }
-                                    font.pixelSize: 13
-                                    color: Material.foreground
-                                    selectedTextColor: "white"
-                                    selectionColor: root._accentColor
-                                    clip: true
-                                    Keys.onReturnPressed: root._aiSearchMode ? controller.aiSearch(text, root._aiSearchPrecision) : controller.search(text)
-                                }
-
-                                // Clear button — visible whenever the field has text
-                                Item {
-                                    id: clearSearchButton
-                                    objectName: "clearSearchButton"
-                                    anchors { right: searchHelpButton.left; rightMargin: 2; verticalCenter: parent.verticalCenter }
-                                    width: 20; height: 20
-                                    visible: searchField.text.length > 0
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "\u00D7"
-                                        font.pixelSize: 16
-                                        color: Material.foreground
-                                        opacity: clearSearchMouse.containsMouse ? 1.0 : 0.45
-                                        Behavior on opacity { NumberAnimation { duration: 80 } }
-                                    }
-
-                                    MouseArea {
-                                        id: clearSearchMouse
-                                        objectName: "clearSearchMouse"
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            searchField.text = ""
-                                            searchField.forceActiveFocus()
-                                            if (root._aiSearchMode)
-                                                controller.aiSearch("", root._aiSearchPrecision)
-                                            else
-                                                controller.search("")
-                                        }
-                                    }
-                                }
-
-                                // Help (?) button — shows search-syntax hints on hover — EXIF mode only
-                                Item {
-                                    id: searchHelpButton
-                                    anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
-                                    width: 20; height: 20
-                                    visible: !root._aiSearchMode
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "?"
-                                        font.pixelSize: 13
-                                        font.bold: true
-                                        color: Material.foreground
-                                        opacity: searchHelpHover.hovered ? 1.0 : 0.45
-                                        Behavior on opacity { NumberAnimation { duration: 80 } }
-                                    }
-
-                                    HoverHandler { id: searchHelpHover }
-
-                                    ToolTip {
-                                        id: searchHelpTip
-                                        visible: searchHelpHover.hovered
-                                        delay: 300
-                                        timeout: 20000
-                                        // Anchor the tip below the help icon so it doesn't cover the search field
-                                        x: -contentItem.implicitWidth + searchHelpButton.width
-                                        y: searchHelpButton.height + 6
-                                        padding: 12
-
-                                        contentItem: ColumnLayout {
-                                            spacing: 8
-
-                                            Label {
-                                                text: qsTr("Search syntax")
-                                                font.pixelSize: 13
-                                                font.bold: true
-                                                color: root._accentColor
-                                            }
-
-                                            GridLayout {
-                                                columns: 2
-                                                columnSpacing: 16
-                                                rowSpacing: 4
-
-                                                // header row
-                                                Label { text: qsTr("Example"); font.pixelSize: 11; font.bold: true; opacity: 0.65 }
-                                                Label { text: qsTr("Meaning"); font.pixelSize: 11; font.bold: true; opacity: 0.65 }
-
-                                                Label { text: "canon";          font.family: monoFont; font.pixelSize: 12 }
-                                                Label { text: qsTr("single token"); font.pixelSize: 12 }
-
-                                                Label { text: "canon r5";       font.family: monoFont; font.pixelSize: 12 }
-                                                Label { text: qsTr("both tokens (implicit AND)"); font.pixelSize: 12 }
-
-                                                Label { text: "canon OR nikon"; font.family: monoFont; font.pixelSize: 12 }
-                                                Label { text: qsTr("either token"); font.pixelSize: 12 }
-
-                                                Label { text: "canon NOT raw";  font.family: monoFont; font.pixelSize: 12 }
-                                                Label { text: qsTr("exclude token"); font.pixelSize: 12 }
-
-                                                Label { text: "\"Z 9\"";        font.family: monoFont; font.pixelSize: 12 }
-                                                Label { text: qsTr("exact phrase"); font.pixelSize: 12 }
-
-                                                Label { text: "summer*";        font.family: monoFont; font.pixelSize: 12 }
-                                                Label { text: qsTr("prefix wildcard"); font.pixelSize: 12 }
-                                            }
-
-                                            Rectangle {
-                                                Layout.fillWidth: true
-                                                height: 1
-                                                color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.15)
-                                            }
-
-                                            Label {
-                                                text: qsTr("Tips")
-                                                font.pixelSize: 13
-                                                font.bold: true
-                                                color: root._accentColor
-                                            }
-
-                                            Label {
-                                                text: qsTr("• Operators AND, OR, NOT must be UPPERCASE\n• Quote multi-word phrases\n• In ExifTool keys (e.g. GPS:GPSLatitude) the colon acts as a separator")
-                                                font.pixelSize: 12
-                                                lineHeight: 1.25
-                                                wrapMode: Text.WordWrap
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            Button {
-                                text: qsTr("Search")
-                                highlighted: true
-                                implicitHeight: 36
-                                font.pixelSize: 13
-                                onClicked: root._aiSearchMode ? controller.aiSearch(searchField.text, root._aiSearchPrecision) : controller.search(searchField.text)
-                            }
+                    SearchToolbar {
+                        id: searchToolbar
+                        aiEnabled: root._aiEnabled
+                        aiSearchMode: root._aiSearchMode
+                        aiSearchPrecision: root._aiSearchPrecision
+                        accentColor: root._accentColor
+                        monoFontFamily: root.monoFont
+                        onSearchRequested: (query) => root._aiSearchMode
+                            ? controller.aiSearch(query, root._aiSearchPrecision)
+                            : controller.search(query)
+                        onAiSearchModeRequested: (enabled) => {
+                            root._aiSearchMode = enabled
+                            controller.setAiSearchMode(enabled)
                         }
+                        onAiSearchPrecisionRequested: (precision) => root._aiSearchPrecision = precision
                     }
 
                     // Panel header
@@ -1904,197 +1639,15 @@ ApplicationWindow {
                         }
                     }
 
-                    // ── Date-filter row ───────────────────────────────────
-                    // Shown whenever at least one image has a known captured_at.
-                    // Contains a mini histogram (year bars) + From/To year pickers.
-                    Rectangle {
-                        id: dateFilterRow
-                        objectName: "dateFilterRow"
-                        Layout.fillWidth: true
-                        readonly property bool _hasYears: root._years.length > 0
-                        readonly property bool _filterActive: root._dateFrom !== -1 || root._dateTo !== -1
-                        implicitHeight: (_hasYears || root._isLoadingYearCounts)
-                                        ? contentRowLayout.implicitHeight + 8 : 0
-                        visible: _hasYears || root._isLoadingYearCounts
-                        color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.04)
-
-                        // Tooltip for the whole filter strip (non-blocking).
-                        MouseArea {
-                            anchors.fill: parent
-                            acceptedButtons: Qt.NoButton
-                            hoverEnabled: true
-                            ToolTip.text: qsTr("Filter by capture date — click a year to select it, Shift-click to extend the range")
-                            ToolTip.visible: containsMouse
-                            ToolTip.delay: 600
-                        }
-
-                        // Compute histogram max for bar height scaling.
-                        readonly property int _maxCount: {
-                            var m = 1
-                            var ys = root._years
-                            for (var i = 0; i < ys.length; i++)
-                                if (ys[i].count > m) m = ys[i].count
-                            return m
-                        }
-
-                        // Min/max year available
-                        readonly property int _minYear: root._years.length > 0 ? root._years[0].year : 0
-                        readonly property int _maxYear: root._years.length > 0 ? root._years[root._years.length - 1].year : 0
-
-                        // Active filter years (0 = unset → use min/max)
-                        readonly property int _activeFrom: root._dateFrom !== -1
-                            ? new Date(root._dateFrom * 1000).getUTCFullYear()
-                            : _minYear
-                        readonly property int _activeTo:   root._dateTo !== -1
-                            ? new Date(root._dateTo   * 1000).getUTCFullYear()
-                            : _maxYear
-
-                        RowLayout {
-                            id: contentRowLayout
-                            anchors { top: parent.top; left: parent.left; right: parent.right; leftMargin: 8; rightMargin: 8; topMargin: 4 }
-                            spacing: 8
-
-                            BusyIndicator {
-                                objectName: "timelineLoadingIndicator"
-                                Layout.alignment: Qt.AlignTop
-                                Layout.preferredWidth: 22
-                                Layout.preferredHeight: 22
-                                running: root._isLoadingYearCounts
-                                visible: running
-                            }
-
-                            Label {
-                                Layout.alignment: Qt.AlignTop
-                                visible: root._isLoadingYearCounts && !dateFilterRow._hasYears
-                                text: qsTr("Loading timeline...")
-                                font.pixelSize: 10
-                                opacity: 0.65
-                            }
-
-                            // ── Mini histogram ────────────────────────────
-                            Flow {
-                                id: histFlow
-                                Layout.fillWidth: true
-                                spacing: 2
-
-                                Repeater {
-                                    model: root._years
-                                    delegate: Item {
-                                        id: yearBarDelegate
-                                        required property var modelData
-                                        property bool _ready: false
-                                        Component.onCompleted: _ready = true
-                                        width: 18
-                                        height: 60
-
-                                        readonly property bool _inRange:
-                                            modelData.year >= dateFilterRow._activeFrom &&
-                                            modelData.year <= dateFilterRow._activeTo
-                                        readonly property int _barH: {
-                                            var ys = root._years
-                                            var m = 1
-                                            for (var i = 0; i < ys.length; i++)
-                                                if (ys[i].count > m) m = ys[i].count
-                                            return Math.max(3, Math.round(
-                                                (modelData.count / m) * (height - 18)
-                                            ))
-                                        }
-
-                                        // Year label
-                                        Label {
-                                            anchors { bottom: bar.top; horizontalCenter: parent.horizontalCenter; bottomMargin: 1 }
-                                            text: modelData.year.toString()
-                                            font.pixelSize: 8
-                                            rotation: -45
-                                            transformOrigin: Item.Center
-                                            opacity: _inRange ? 1.0 : 0.4
-                                            color: _inRange ? Material.foreground : Material.foreground
-                                        }
-
-                                        // Bar
-                                        Rectangle {
-                                            id: bar
-                                            anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
-                                            width: 14
-                                            height: parent._barH
-                                            radius: 2
-                                            color: parent._inRange
-                                                   ? root._accentColor
-                                                   : Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.25)
-
-                                            Behavior on height {
-                                                enabled: yearBarDelegate._ready
-                                                NumberAnimation { duration: 150 }
-                                            }
-                                        }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            hoverEnabled: true
-                                            onClicked: (mouse) => {
-                                                var yr = modelData.year
-                                                var yStart = Math.floor(Date.UTC(yr,   0, 1) / 1000)
-                                                var yEnd   = Math.floor(Date.UTC(yr+1, 0, 1) / 1000) - 1
-                                                if (dateFilterRow._activeFrom === yr && dateFilterRow._activeTo === yr
-                                                        && root._dateFrom !== -1) {
-                                                    // clicking the already-selected single year → clear
-                                                    controller.clearDateFilter()
-                                                } else if (root._dateFrom !== -1 && (mouse.modifiers & Qt.ShiftModifier)) {
-                                                    // shift-click → extend range to include this year
-                                                    var fromTs = yr < dateFilterRow._activeFrom
-                                                        ? yStart
-                                                        : Math.floor(Date.UTC(dateFilterRow._activeFrom, 0, 1) / 1000)
-                                                    var toTs = yr > dateFilterRow._activeTo
-                                                        ? yEnd
-                                                        : Math.floor(Date.UTC(dateFilterRow._activeTo + 1, 0, 1) / 1000) - 1
-                                                    controller.setDateFilter(fromTs, toTs)
-                                                } else {
-                                                    controller.setDateFilter(yStart, yEnd)
-                                                }
-                                            }
-                                            ToolTip.text: {
-                                                var base = modelData.year + ": " + modelData.count + " " + qsTr("images")
-                                                if (root._dateFrom !== -1 && !(dateFilterRow._activeFrom === modelData.year && dateFilterRow._activeTo === modelData.year))
-                                                    return base + "\n" + qsTr("Shift-click to extend range")
-                                                return base
-                                            }
-                                            ToolTip.visible: containsMouse
-                                            ToolTip.delay: 400
-                                        }
-                                    }
-                                }
-                            }
-
-                            // ── Clear chip ────────────────────────────────
-                            Rectangle {
-                                visible: dateFilterRow._filterActive
-                                Layout.alignment: Qt.AlignTop
-                                implicitHeight: 22
-                                implicitWidth: _clearDateLabel.implicitWidth + 14
-                                radius: 11
-                                color: Qt.rgba(root._accentColor.r, root._accentColor.g, root._accentColor.b, 0.15)
-
-                                Label {
-                                    id: _clearDateLabel
-                                    anchors.centerIn: parent
-                                    text: "\u2715"
-                                    font.pixelSize: 11
-                                    color: Material.foreground
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: controller.clearDateFilter()
-                                    ToolTip.text: qsTr("Clear date filter")
-                                    ToolTip.visible: containsMouse
-                                    ToolTip.delay: 400
-                                }
-                            }
-                        }
+                    DateFilterRow {
+                        years: root._years
+                        loading: root._isLoadingYearCounts
+                        dateFrom: root._dateFrom
+                        dateTo: root._dateTo
+                        accentColor: root._accentColor
+                        onDateFilterRequested: (from, to) => controller.setDateFilter(from, to)
+                        onDateFilterCleared: controller.clearDateFilter()
                     }
-
                     // Search error banner — replaces results when a query
                     // fails (e.g. malformed FTS expression).
                     Item {
