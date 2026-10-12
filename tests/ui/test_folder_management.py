@@ -320,7 +320,12 @@ def test_disable_indexed_folder_clears_active_search_filter(
     qtbot.wait(_PAUSE_MS)
     with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
         controller.addIndexedFolder(QUrl.fromLocalFile(str(beta_dir)).toString())
-    qtbot.wait(_PAUSE_MS)
+    qtbot.waitUntil(
+        lambda: not controller.folderWorkflowRunning
+        and not controller.isIndexing
+        and controller._search_worker is None,
+        timeout=15_000,
+    )
 
     alpha_id = None
     alpha_path = None
@@ -361,7 +366,12 @@ def test_checked_only_filter_excludes_marked_images_from_disabled_folders(
     qtbot.wait(_PAUSE_MS)
     with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
         controller.addIndexedFolder(QUrl.fromLocalFile(str(beta_dir)).toString())
-    qtbot.wait(_PAUSE_MS)
+    qtbot.waitUntil(
+        lambda: not controller.folderWorkflowRunning
+        and not controller.isIndexing
+        and controller._search_worker is None,
+        timeout=15_000,
+    )
 
     alpha_row = None
     beta_row = None
