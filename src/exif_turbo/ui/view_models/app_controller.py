@@ -35,6 +35,7 @@ from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication, QImage
 from ...config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
 from ...data.ai_search_session import AiSearchSession
 from ...data.ai_vector_storage import AiVectorStorage
+from .search_coordinator import SearchCoordinator
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
 from ...data.password_policy import validate_new_database_password
@@ -322,7 +323,7 @@ class AppController(QObject):
         self._year_counts_loading_serial: int = 0
         self._load_more_worker: SearchPageWorker | None = None
         self._page_load_mode = "append"
-        self._search_serial: int = 0
+        self._search_coordinator = SearchCoordinator()
         self._date_from: int | None = None
         self._date_to: int | None = None
         self._year_counts: str = "[]"
@@ -333,10 +334,6 @@ class AppController(QObject):
         # is removed in _on_search_worker_done, which is connected to
         # QThread.finished — emitted only after run() has fully returned.
         self._finishing_search_workers: set[QThread] = set()
-        # Params for a search that arrived while one was already in-flight.
-        # Consumed immediately when the current worker finishes.
-        self._pending_search_params: dict | None = None
-        self._pending_search_show_busy_ui: bool = True
         self._search_shows_busy_ui: bool = False
         self._filter_proxy: CheckedFilterProxyModel | None = None
         self._checked_only_filter_active: bool = False
@@ -1985,7 +1982,7 @@ class AppController(QObject):
                 QTimer.singleShot(0, self.searchRestoreReady.emit)
             self._loading = False
             self._consume_pending_load_more_request()
-            self._schedule_year_counts_reload(self._search_serial)
+            self._schedule_year_counts_reload(self._search_coordinator.serial)
         else:
             if image_id:
                 self._pending_restore_image_id = image_id
@@ -2048,19 +2045,20 @@ class AppController(QObject):
             date_from=self._date_from,
             date_to=self._date_to,
         )
-        if self._search_worker is not None:
-            # A search is already running.  Record the latest params so
-            # _on_search_finished fires another search immediately after
-            # the current one closes its connection.  This keeps at most
-            # one SearchWorker (and one extra DB connection) alive at a time.
-            self._pending_search_params = params
-            self._pending_search_show_busy_ui = show_busy_ui
-            self._search_serial += 1  # serial bump marks in-flight result stale
+        request = self._search_coordinator.request(
+            params,
+            show_busy_ui=show_busy_ui,
+            worker_active=self._search_worker is not None,
+        )
+        if request is None:
             return
+        self._start_search_request(request.params, request.show_busy_ui, request.serial)
 
-        self._search_serial += 1
-        serial = self._search_serial
-
+    def _start_search_request(
+        self, params: dict, show_busy_ui: bool, serial: int
+    ) -> None:
+        if self._db_path is None:
+            return
         worker = SearchWorker(
             self._db_path,
             self._key,
@@ -2116,27 +2114,14 @@ class AppController(QObject):
             self._finishing_search_workers.add(old_worker)
         # If newer params are waiting, fire a follow-up search and discard
         # these (now stale) results — only the latest request matters.
-        if self._pending_search_params is not None:
-            pending = self._pending_search_params
-            self._pending_search_params = None
-            pending_show_busy_ui = self._pending_search_show_busy_ui
-            serial_now = self._search_serial
-            worker = SearchWorker(
-                self._db_path,
-                self._key,
-                serial=serial_now,
-                **pending,
+        pending = self._search_coordinator.take_pending()
+        if pending is not None:
+            self._start_search_request(
+                pending.params, pending.show_busy_ui, pending.serial
             )
-            worker.results_ready.connect(self._on_search_finished)
-            worker.failed.connect(self._on_search_failed)
-            worker.finished.connect(self._on_search_worker_done)
-            self._search_worker = worker
-            self._search_shows_busy_ui = pending_show_busy_ui
-            self._set_search_busy_ui(pending_show_busy_ui)
-            worker.start()
             return
         # Discard results that belong to a superseded search.
-        if serial != self._search_serial:
+        if not self._search_coordinator.is_current(serial):
             self._search_shows_busy_ui = False
             self._set_search_busy_ui(False)
             return
@@ -2289,7 +2274,7 @@ class AppController(QObject):
             # Keep the existing synchronous path for that mode.
             def _reload_ai() -> None:
                 try:
-                    if serial != self._search_serial:
+                    if not self._search_coordinator.is_current(serial):
                         return
                     self._load_year_counts()
                 finally:
@@ -2322,7 +2307,7 @@ class AppController(QObject):
         worker.start()
 
     def _on_year_counts_ready(self, counts: list, serial: int) -> None:
-        if serial != self._search_serial:
+        if not self._search_coordinator.is_current(serial):
             return
         self._year_counts = json.dumps([{"year": y, "count": c} for y, c in counts])
         self.yearCountsChanged.emit()
@@ -2581,7 +2566,7 @@ class AppController(QObject):
             path_filter=self._current_path_filter(),
             restrict_to_enabled_folders=(self._folder_repo is not None),
             marked_only=self._checked_only_filter_active,
-            serial=self._search_serial,
+            serial=self._search_coordinator.serial,
             date_from=self._date_from,
             date_to=self._date_to,
         )
@@ -2601,7 +2586,7 @@ class AppController(QObject):
 
     def _on_load_more_finished(self, rows: list, serial: int) -> None:
         self._load_more_worker = None
-        if serial != self._search_serial:
+        if not self._search_coordinator.is_current(serial):
             self._loading = False
             self._consume_pending_load_more_request()
             return
@@ -3548,8 +3533,7 @@ class AppController(QObject):
     def _start_ai_search_worker(self, query: str, precision: str) -> None:
         """Internal helper: create and start an AiSearchWorker."""
         self._clear_status_for_primary_action()
-        self._search_serial += 1
-        serial = self._search_serial
+        serial = self._search_coordinator.begin_secondary_search()
         worker = AiSearchWorker(
             self._db_path,
             self._key,
@@ -4678,7 +4662,7 @@ class AppController(QObject):
 
     def close(self) -> None:
         self._app_closing = True
-        self._pending_search_params = None
+        self._search_coordinator.clear()
         self._pending_year_counts_serial = 0
         self._scan_queue.clear()
         self._folder_workflow_queue.clear()
