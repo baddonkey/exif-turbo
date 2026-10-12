@@ -1,0 +1,8 @@
+{
+  "include": ["../../src", "../../scripts"],
+  "exclude": ["../../build", "../../dist", "../../.venv"],
+  "extraPaths": ["../../src", "../..", "../../scripts"],
+  "pythonVersion": "3.11",
+  "pythonPlatform": "Windows",
+  "typeCheckingMode": "basic"
+}

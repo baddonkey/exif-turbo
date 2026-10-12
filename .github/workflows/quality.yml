@@ -1,0 +1,134 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, ubuntu-24.04]
+        python: ['3.11', '3.13']
+        include:
+          - os: macos-15
+            python: '3.13'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    env:
+      PYTHONUNBUFFERED: '1'
+      PYTHONIOENCODING: utf-8
+      HF_HUB_OFFLINE: '1'
+      TRANSFORMERS_OFFLINE: '1'
+      EXIF_TURBO_TEST_OFFLINE: '1'
+      LIBGL_ALWAYS_SOFTWARE: '1'
+      QTWEBENGINE_CHROMIUM_FLAGS: --no-sandbox --disable-gpu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.0'
+          enable-cache: true
+      - name: Install Linux runtime libraries
+        if: runner.os == 'Linux'
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          xvfb libegl1 libopengl0 libgl1 libxcb-cursor0 libxkbcommon-x11-0
+          libxcb-icccm4 libxcb-keysyms1 libxcb-xinerama0 libxcb-shape0
+          libxcb-render-util0 libxcb-image0 libx11-xcb1
+          libnss3 libasound2t64 libxrandr2 libxcomposite1 libxdamage1 libxtst6
+          libsqlcipher-dev pkg-config libimage-exiftool-perl
+      - name: Install ExifTool (Windows)
+        if: runner.os == 'Windows'
+        run: choco install exiftool --yes --no-progress
+      - name: Install ExifTool (macOS)
+        if: runner.os == 'macOS'
+        run: brew install exiftool
+      - name: Verify ExifTool
+        run: exiftool -ver
+      - name: Install locked development environment
+        run: uv sync --locked --no-default-groups --extra dev --python ${{ matrix.python }} --no-managed-python
+      - name: Check Linux Qt display startup
+        if: runner.os == 'Linux'
+        run: xvfb-run -a .venv/bin/python -c "from PySide6.QtWidgets import QApplication; app = QApplication([]); print('Qt platform:', app.platformName())"
+      - name: Focused AI safety regressions (Windows)
+        if: runner.os == 'Windows'
+        run: .venv\Scripts\python.exe scripts/run_tests_logged.py -k "ai_vector_storage or ai_search_session or date_eligibility"
+      - name: Focused AI safety regressions (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a .venv/bin/python scripts/run_tests_logged.py -k "ai_vector_storage or ai_search_session or date_eligibility"
+      - name: Complete isolated suite (Windows)
+        if: runner.os == 'Windows'
+        run: .venv\Scripts\python.exe scripts/run_tests_logged.py
+      - name: Complete isolated suite (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a .venv/bin/python scripts/run_tests_logged.py
+      - name: Focused AI safety regressions (macOS)
+        if: runner.os == 'macOS'
+        run: .venv/bin/python scripts/run_tests_logged.py -k "ai_vector_storage or ai_search_session or date_eligibility"
+      - name: Complete isolated suite (macOS)
+        if: runner.os == 'macOS'
+        run: .venv/bin/python scripts/run_tests_logged.py
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tests-${{ matrix.os }}-${{ matrix.python }}
+          path: logs/test-runs/
+          if-no-files-found: warn
+          retention-days: 14
+
+  static:
+    name: Static Quality
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.0'
+          enable-cache: true
+      - name: Install locked development environment
+        run: uv sync --locked --no-default-groups --extra dev --python 3.13 --no-managed-python
+      - name: Check Python and QML diagnostic baselines
+        run: .venv\Scripts\python.exe scripts/check_quality.py
+      - name: Upload static reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-quality
+          path: logs/quality/
+          if-no-files-found: warn
+          retention-days: 14
+
+  required:
+    name: Required Quality
+    needs: [tests, static]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require all quality jobs to succeed
+        env:
+          TEST_RESULT: ${{ needs.tests.result }}
+          STATIC_RESULT: ${{ needs.static.result }}
+        run: |
+          test "$TEST_RESULT" = success
+          test "$STATIC_RESULT" = success

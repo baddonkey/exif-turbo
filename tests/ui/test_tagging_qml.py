@@ -128,11 +128,13 @@ def test_main_qml_tagging_drawer_pushes_content_aside(
     # Arrange
     search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
     settings_model = SettingsModel(tmp_path / "settings.json")
+    exif_model = ExifListModel()
+    folder_model = FolderListModel()
     controller = AppController(
         tmp_path / "tagging.db",
         search_model,
-        ExifListModel(),
-        FolderListModel(),
+        exif_model,
+        folder_model,
         settings_model,
     )
     filter_proxy = CheckedFilterProxyModel()
@@ -146,8 +148,8 @@ def test_main_qml_tagging_drawer_pushes_content_aside(
     context.setContextProperty("controller", controller)
     context.setContextProperty("searchModel", search_model)
     context.setContextProperty("filteredSearchModel", filter_proxy)
-    context.setContextProperty("exifModel", ExifListModel())
-    context.setContextProperty("folderListModel", FolderListModel())
+    context.setContextProperty("exifModel", exif_model)
+    context.setContextProperty("folderListModel", folder_model)
     context.setContextProperty("settingsModel", settings_model)
     context.setContextProperty("thirdPartyLicensesHtml", "")
     context.setContextProperty("userManualUrl", "")
@@ -160,6 +162,8 @@ def test_main_qml_tagging_drawer_pushes_content_aside(
     root.setHeight(800)
     root.show()
     qtbot.waitExposed(root, timeout=3_000)
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=5_000):
+        controller.unlock("")
 
     drawer = root.findChild(QObject, "taggingDrawer")
     search_viewport = root.findChild(QQuickItem, "searchContentViewport")
@@ -171,6 +175,8 @@ def test_main_qml_tagging_drawer_pushes_content_aside(
     assert tab_bar is not None
 
     def assert_viewports_track_drawer() -> None:
+        for viewport in (search_viewport, browse_viewport):
+            viewport.ensurePolished()
         drawer_left = root.width() - float(drawer.property("width")) * float(
             drawer.property("position")
         )

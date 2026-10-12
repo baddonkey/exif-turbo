@@ -1222,6 +1222,9 @@ class AppController(QObject):
             self.refreshTagsChanged.emit()
 
     def _clear_maint_busy(self) -> None:
+        worker = self._maint_worker
+        if isinstance(worker, QThread):
+            worker.wait()
         self._maint_worker = None
         self._is_busy = False
         self._busy_detail = ""
@@ -1229,7 +1232,13 @@ class AppController(QObject):
         self.busyDetailChanged.emit()
         self.refreshTagsChanged.emit()
 
+    @Slot()
     def _on_maint_finished(self) -> None:
+        if self._app_closing or self._maint_worker is None:
+            return
+        sender = self.sender()
+        if sender is not None and sender is not self._maint_worker:
+            return
         operation = self._maint_operation
         worker = self._maint_worker
         folder_name = self._maint_folder_name
@@ -1263,7 +1272,10 @@ class AppController(QObject):
         self._maint_status_operation = ""
         self._resume_queued_folder_workflows()
 
+    @Slot(str)
     def _on_maint_failed(self, msg: str) -> None:
+        if self._app_closing:
+            return
         migration_failed = self._maint_operation == "remove_controlled_tags"
         workflow_failed = self._folder_workflow_step == "tags"
         folder_name = self._maint_folder_name
@@ -1290,7 +1302,10 @@ class AppController(QObject):
         else:
             self._resume_queued_folder_workflows()
 
+    @Slot()
     def _on_maint_canceled(self) -> None:
+        if self._app_closing:
+            return
         workflow_canceled = self._folder_workflow_step == "tags"
         folder_name = self._maint_folder_name
         status_operation = self._maint_status_operation

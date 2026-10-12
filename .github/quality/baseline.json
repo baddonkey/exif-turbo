@@ -1,0 +1,1053 @@
+{
+  "pyright_version": "1.1.414",
+  "diagnostics": [
+    {
+      "file": "scripts/benchmark_ai_search.py",
+      "message": "Argument of type \"list[Literal['full', 'top_left', 'top_right', 'bottom_left', 'bottom_right']]\" cannot be assigned to parameter \"view_ids\" of type \"List[str] | None\" in function \"add_images\"\n\u00a0\u00a0Type \"list[Literal['full', 'top_left', 'top_right', 'bottom_left', 'bottom_right']]\" is not assignable to type \"List[str] | None\"\n\u00a0\u00a0\u00a0\u00a0\"list[Literal['full', 'top_left', 'top_right', 'bottom_left', 'bottom_right']]\" is not assignable to \"List[str]\"\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0Type parameter \"_T@list\" is invariant, but \"Literal['full', 'top_left', 'top_right', 'bottom_left', 'bottom_right']\" is not the same as \"str\"\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0Consider switching from \"list\" to \"Sequence\" which is covariant\n\u00a0\u00a0\u00a0\u00a0\"list[Literal['full', 'top_left', 'top_right', 'bottom_left', 'bottom_right']]\" is not assignable to \"None\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "scripts/build_linux.py",
+      "message": "\"group\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "scripts/build_macos.py",
+      "message": "\"LANCZOS\" is not a known attribute of module \"PIL.Image\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "scripts/build_macos.py",
+      "message": "\"group\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "scripts/build_windows.py",
+      "message": "\"group\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "scripts/build_windows.py",
+      "message": "\"name\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "scripts/build_windows.py",
+      "message": "\"rename\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "scripts/diagnose_db_key.py",
+      "message": "\"DatabaseError\" is not a known attribute of module \"sqlcipher3\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "scripts/diagnose_db_key.py",
+      "message": "\"connect\" is not a known attribute of module \"sqlcipher3\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "scripts/export_manual_pdf.py",
+      "message": "Import \"weasyprint\" could not be resolved",
+      "rule": "reportMissingImports",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "scripts/export_manual_pdf.py",
+      "message": "Import \"xhtml2pdf\" could not be resolved",
+      "rule": "reportMissingImports",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "scripts/rekey_db.py",
+      "message": "\"DatabaseError\" is not a known attribute of module \"sqlcipher3\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "scripts/stage_runtime_licenses.py",
+      "message": "Argument of type \"_SimplePath\" cannot be assigned to parameter \"args\" of type \"StrPath\" in function \"__new__\"\n\u00a0\u00a0Type \"_SimplePath\" is not assignable to type \"StrPath\"\n\u00a0\u00a0\u00a0\u00a0\"SimplePath\" is not assignable to \"str\"\n\u00a0\u00a0\u00a0\u00a0\"SimplePath\" is incompatible with protocol \"PathLike[str]\"\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\"__fspath__\" is not present",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "scripts/stage_runtime_licenses.py",
+      "message": "Cannot access attribute \"get\" for class \"PackageMetadata\"\n\u00a0\u00a0Attribute \"get\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 3
+    },
+    {
+      "file": "scripts/take_screenshots.py",
+      "message": "Argument of type \"Property\" cannot be assigned to parameter \"prev_source\" of type \"str | None\" in function \"_wait_for_preview\"\n\u00a0\u00a0Type \"Property\" is not assignable to type \"str | None\"\n\u00a0\u00a0\u00a0\u00a0\"Property\" is not assignable to \"str\"\n\u00a0\u00a0\u00a0\u00a0\"Property\" is not assignable to \"None\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 4
+    },
+    {
+      "file": "scripts/take_screenshots.py",
+      "message": "Cannot access attribute \"showNormal\" for class \"QObject\"\n\u00a0\u00a0Attribute \"showNormal\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "scripts/take_screenshots.py",
+      "message": "\"LANCZOS\" is not a known attribute of module \"PIL.Image\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/app.py",
+      "message": "Import \"triton._C.libtriton\" could not be resolved",
+      "rule": "reportMissingImports",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/data/_connection.py",
+      "message": "\"Connection\" is not a known attribute of module \"sqlcipher3\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/data/_connection.py",
+      "message": "\"DatabaseError\" is not a known attribute of module \"sqlcipher3\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/data/_connection.py",
+      "message": "\"connect\" is not a known attribute of module \"sqlcipher3\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 4
+    },
+    {
+      "file": "src/exif_turbo/data/ai_vector_repository.py",
+      "message": "\"search\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/data/image_index_repository.py",
+      "message": "\"OperationalError\" is not a known attribute of module \"sqlcipher3\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/indexing/ai_indexer_service.py",
+      "message": "Argument of type \"str\" cannot be assigned to parameter \"aug_cfg\" of type \"Dict[str, Any] | AugmentationCfg | None\" in function \"create_model_and_transforms\"\n\u00a0\u00a0Type \"str\" is not assignable to type \"Dict[str, Any] | AugmentationCfg | None\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"Dict[str, Any]\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"AugmentationCfg\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"None\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/indexing/ai_indexer_service.py",
+      "message": "Argument of type \"str\" cannot be assigned to parameter \"context_length\" of type \"int | None\" in function \"get_tokenizer\"\n\u00a0\u00a0Type \"str\" is not assignable to type \"int | None\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"int\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"None\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 3
+    },
+    {
+      "file": "src/exif_turbo/indexing/ai_indexer_service.py",
+      "message": "Argument of type \"str\" cannot be assigned to parameter \"force_context_length\" of type \"int | None\" in function \"create_model_and_transforms\"\n\u00a0\u00a0Type \"str\" is not assignable to type \"int | None\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"int\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"None\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/indexing/ai_indexer_service.py",
+      "message": "Argument of type \"str\" cannot be assigned to parameter \"force_custom_text\" of type \"bool\" in function \"create_model_and_transforms\"\n\u00a0\u00a0\"str\" is not assignable to \"bool\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/indexing/ai_indexer_service.py",
+      "message": "Argument of type \"str\" cannot be assigned to parameter \"force_image_size\" of type \"int | Tuple[int, int] | None\" in function \"create_model_and_transforms\"\n\u00a0\u00a0Type \"str\" is not assignable to type \"int | Tuple[int, int] | None\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"int\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"Tuple[int, int]\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"None\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/indexing/ai_indexer_service.py",
+      "message": "Argument of type \"str\" cannot be assigned to parameter \"force_patch_dropout\" of type \"float | None\" in function \"create_model_and_transforms\"\n\u00a0\u00a0Type \"str\" is not assignable to type \"float | None\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"float\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"None\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/indexing/ai_indexer_service.py",
+      "message": "Argument of type \"str\" cannot be assigned to parameter \"force_quick_gelu\" of type \"bool\" in function \"create_model_and_transforms\"\n\u00a0\u00a0\"str\" is not assignable to \"bool\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/indexing/ai_indexer_service.py",
+      "message": "Argument of type \"str\" cannot be assigned to parameter \"image_mean\" of type \"Tuple[float, ...] | None\" in function \"create_model_and_transforms\"\n\u00a0\u00a0Type \"str\" is not assignable to type \"Tuple[float, ...] | None\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"Tuple[float, ...]\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"None\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/indexing/ai_indexer_service.py",
+      "message": "Argument of type \"str\" cannot be assigned to parameter \"image_std\" of type \"Tuple[float, ...] | None\" in function \"create_model_and_transforms\"\n\u00a0\u00a0Type \"str\" is not assignable to type \"Tuple[float, ...] | None\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"Tuple[float, ...]\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"None\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/indexing/ai_indexer_service.py",
+      "message": "Argument of type \"str\" cannot be assigned to parameter \"jit\" of type \"bool\" in function \"create_model_and_transforms\"\n\u00a0\u00a0\"str\" is not assignable to \"bool\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/indexing/ai_indexer_service.py",
+      "message": "Argument of type \"str\" cannot be assigned to parameter \"load_weights\" of type \"bool\" in function \"create_model_and_transforms\"\n\u00a0\u00a0\"str\" is not assignable to \"bool\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/indexing/ai_indexer_service.py",
+      "message": "Argument of type \"str\" cannot be assigned to parameter \"output_dict\" of type \"bool | None\" in function \"create_model_and_transforms\"\n\u00a0\u00a0Type \"str\" is not assignable to type \"bool | None\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"bool\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"None\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/indexing/ai_indexer_service.py",
+      "message": "Argument of type \"str\" cannot be assigned to parameter \"pretrained_image\" of type \"bool\" in function \"create_model_and_transforms\"\n\u00a0\u00a0\"str\" is not assignable to \"bool\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/indexing/ai_indexer_service.py",
+      "message": "Argument of type \"str\" cannot be assigned to parameter \"pretrained_text\" of type \"bool\" in function \"create_model_and_transforms\"\n\u00a0\u00a0\"str\" is not assignable to \"bool\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/indexing/ai_indexer_service.py",
+      "message": "Argument of type \"str\" cannot be assigned to parameter \"weights_only\" of type \"bool\" in function \"create_model_and_transforms\"\n\u00a0\u00a0\"str\" is not assignable to \"bool\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/indexing/ai_indexer_service.py",
+      "message": "Cannot assign to attribute \"HF_HUB_OFFLINE\" for class \"ModuleType\"\n\u00a0\u00a0Attribute \"HF_HUB_OFFLINE\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/indexing/ai_indexer_service.py",
+      "message": "Import \"certifi\" could not be resolved",
+      "rule": "reportMissingImports",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/indexing/image_utils.py",
+      "message": "Argument of type \"int\" cannot be assigned to parameter \"method\" of type \"Transpose\" in function \"transpose\"\n\u00a0\u00a0\"int\" is not assignable to \"Transpose\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/indexing/indexer_service.py",
+      "message": "Argument of type \"list[tuple[str, str, float, int, dict[Unknown, Unknown], str, int | None]]\" cannot be assigned to parameter \"items\" of type \"list[tuple[str, str, float, int, dict[Unknown, Unknown], str, int | None, float | None]]\" in function \"upsert_images_batch\"\n\u00a0\u00a0\"list[tuple[str, str, float, int, dict[Unknown, Unknown], str, int | None]]\" is not assignable to \"list[tuple[str, str, float, int, dict[Unknown, Unknown], str, int | None, float | None]]\"\n\u00a0\u00a0\u00a0\u00a0Type parameter \"_T@list\" is invariant, but \"tuple[str, str, float, int, dict[Unknown, Unknown], str, int | None]\" is not the same as \"tuple[str, str, float, int, dict[Unknown, Unknown], str, int | None, float | None]\"\n\u00a0\u00a0\u00a0\u00a0Consider switching from \"list\" to \"Sequence\" which is covariant",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/indexing/indexer_service.py",
+      "message": "Argument of type \"tuple[str, str, float, int, Dict[str, str], str, int | None, float | None]\" cannot be assigned to parameter \"object\" of type \"tuple[str, str, float, int, dict[Unknown, Unknown], str, int | None]\" in function \"append\"\n\u00a0\u00a0\"tuple[str, str, float, int, Dict[str, str], str, int | None, float | None]\" is not assignable to \"tuple[str, str, float, int, dict[Unknown, Unknown], str, int | None]\"\n\u00a0\u00a0\u00a0\u00a0Tuple size mismatch; expected 7 but received 8",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/models/image_tag.py",
+      "message": "\"total_seconds\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/app_main.py",
+      "message": "Argument of type \"() -> bool\" cannot be assigned to parameter \"on_wheel_down_at_bottom\" of type \"(() -> None) | None\" in function \"__init__\"\n\u00a0\u00a0Type \"() -> bool\" is not assignable to type \"(() -> None) | None\"\n\u00a0\u00a0\u00a0\u00a0Type \"() -> bool\" is not assignable to type \"() -> None\"\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0Function return type \"bool\" is incompatible with type \"None\"\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\"bool\" is not assignable to \"None\"\n\u00a0\u00a0\u00a0\u00a0\"MethodType\" is not assignable to \"None\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/app_main.py",
+      "message": "Cannot access attribute \"close\" for class \"QObject\"\n\u00a0\u00a0Attribute \"close\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/app_main.py",
+      "message": "Cannot access attribute \"frameSwapped\" for class \"QObject\"\n\u00a0\u00a0Attribute \"frameSwapped\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/ui/models/checked_filter_proxy_model.py",
+      "message": "Argument of type \"SearchListModel | None\" cannot be assigned to parameter \"sourceModel\" of type \"QAbstractItemModel\" in function \"setSourceModel\"\n\u00a0\u00a0Type \"SearchListModel | None\" is not assignable to type \"QAbstractItemModel\"\n\u00a0\u00a0\u00a0\u00a0\"None\" is not assignable to \"QAbstractItemModel\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/models/embedded_tag_list_model.py",
+      "message": "Cannot access attribute \"DisplayRole\" for class \"type[Qt]\"\n\u00a0\u00a0Attribute \"DisplayRole\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/ui/models/embedded_tag_list_model.py",
+      "message": "Cannot access attribute \"UserRole\" for class \"type[Qt]\"\n\u00a0\u00a0Attribute \"UserRole\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/ui/models/exif_list_model.py",
+      "message": "Cannot access attribute \"DisplayRole\" for class \"type[Qt]\"\n\u00a0\u00a0Attribute \"DisplayRole\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/models/exif_list_model.py",
+      "message": "Cannot access attribute \"UserRole\" for class \"type[Qt]\"\n\u00a0\u00a0Attribute \"UserRole\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/ui/models/folder_list_model.py",
+      "message": "Cannot access attribute \"DisplayRole\" for class \"type[Qt]\"\n\u00a0\u00a0Attribute \"DisplayRole\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/models/folder_list_model.py",
+      "message": "Cannot access attribute \"UserRole\" for class \"type[Qt]\"\n\u00a0\u00a0Attribute \"UserRole\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 10
+    },
+    {
+      "file": "src/exif_turbo/ui/models/free_tag_list_model.py",
+      "message": "Cannot access attribute \"DisplayRole\" for class \"type[Qt]\"\n\u00a0\u00a0Attribute \"DisplayRole\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/ui/models/free_tag_list_model.py",
+      "message": "Cannot access attribute \"UserRole\" for class \"type[Qt]\"\n\u00a0\u00a0Attribute \"UserRole\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/models/search_list_model.py",
+      "message": "Cannot access attribute \"DisplayRole\" for class \"type[Qt]\"\n\u00a0\u00a0Attribute \"DisplayRole\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/models/search_list_model.py",
+      "message": "Cannot access attribute \"UserRole\" for class \"type[Qt]\"\n\u00a0\u00a0Attribute \"UserRole\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 11
+    },
+    {
+      "file": "src/exif_turbo/ui/models/settings_model.py",
+      "message": "Argument of type \"Literal['QVariantList']\" cannot be assigned to parameter \"type\" of type \"type\" in function \"__init__\"\n\u00a0\u00a0\"Literal['QVariantList']\" is not assignable to \"type\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 6
+    },
+    {
+      "file": "src/exif_turbo/ui/providers/raw_image_provider.py",
+      "message": "\"LibRawError\" is not exported from module \"rawpy\"",
+      "rule": "reportPrivateImportUsage",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/providers/raw_image_provider.py",
+      "message": "\"ThumbFormat\" is not exported from module \"rawpy\"",
+      "rule": "reportPrivateImportUsage",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/providers/thumb_image_provider.py",
+      "message": "Argument of type \"Literal['PNG']\" cannot be assigned to parameter \"format\" of type \"bytes | bytearray | memoryview[int] | None\" in function \"loadFromData\"\n\u00a0\u00a0Type \"Literal['PNG']\" is not assignable to type \"bytes | bytearray | memoryview[int] | None\"\n\u00a0\u00a0\u00a0\u00a0\"Literal['PNG']\" is not assignable to \"bytes\"\n\u00a0\u00a0\u00a0\u00a0\"Literal['PNG']\" is not assignable to \"bytearray\"\n\u00a0\u00a0\u00a0\u00a0\"Literal['PNG']\" is not assignable to \"memoryview[int]\"\n\u00a0\u00a0\u00a0\u00a0\"Literal['PNG']\" is not assignable to \"None\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/providers/thumb_image_provider.py",
+      "message": "Argument of type \"Literal['PNG']\" cannot be assigned to parameter \"format\" of type \"bytes | bytearray | memoryview[int] | None\" in function \"load\"\n\u00a0\u00a0Type \"Literal['PNG']\" is not assignable to type \"bytes | bytearray | memoryview[int] | None\"\n\u00a0\u00a0\u00a0\u00a0\"Literal['PNG']\" is not assignable to \"bytes\"\n\u00a0\u00a0\u00a0\u00a0\"Literal['PNG']\" is not assignable to \"bytearray\"\n\u00a0\u00a0\u00a0\u00a0\"Literal['PNG']\" is not assignable to \"memoryview[int]\"\n\u00a0\u00a0\u00a0\u00a0\"Literal['PNG']\" is not assignable to \"None\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/providers/thumb_image_provider.py",
+      "message": "No overloads for \"load\" match the provided arguments",
+      "rule": "reportCallIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/qml/CustomTaggingSettings.qml",
+      "message": "Unqualified access",
+      "rule": "unqualified",
+      "severity": "warning",
+      "tool": "qmllint",
+      "count": 3
+    },
+    {
+      "file": "src/exif_turbo/ui/qml/FoldersPanel.qml",
+      "message": "Detected height on an item that is managed by a layout. This is undefined behavior; use implictHeight or Layout.preferredHeight instead.",
+      "rule": "Quick.layout-positioning",
+      "severity": "warning",
+      "tool": "qmllint",
+      "count": 3
+    },
+    {
+      "file": "src/exif_turbo/ui/qml/FoldersPanel.qml",
+      "message": "Detected width on an item that is managed by a layout. This is undefined behavior; use implicitWidth or Layout.preferredWidth instead.",
+      "rule": "Quick.layout-positioning",
+      "severity": "warning",
+      "tool": "qmllint",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/ui/qml/FoldersPanel.qml",
+      "message": "Member \"cancelRequested\" not found on type \"QQuickItem\"",
+      "rule": "missing-property",
+      "severity": "warning",
+      "tool": "qmllint",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/qml/FoldersPanel.qml",
+      "message": "Unqualified access",
+      "rule": "unqualified",
+      "severity": "warning",
+      "tool": "qmllint",
+      "count": 301
+    },
+    {
+      "file": "src/exif_turbo/ui/qml/GpuBackendConsentDialog.qml",
+      "message": "Detected height on an item that is managed by a layout. This is undefined behavior; use implictHeight or Layout.preferredHeight instead.",
+      "rule": "Quick.layout-positioning",
+      "severity": "warning",
+      "tool": "qmllint",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/qml/GpuBackendConsentDialog.qml",
+      "message": "Unqualified access",
+      "rule": "unqualified",
+      "severity": "warning",
+      "tool": "qmllint",
+      "count": 24
+    },
+    {
+      "file": "src/exif_turbo/ui/qml/Main.qml",
+      "message": "Detected height on an item that is managed by a layout. This is undefined behavior; use implictHeight or Layout.preferredHeight instead.",
+      "rule": "Quick.layout-positioning",
+      "severity": "warning",
+      "tool": "qmllint",
+      "count": 37
+    },
+    {
+      "file": "src/exif_turbo/ui/qml/Main.qml",
+      "message": "Detected width on an item that is managed by a layout. This is undefined behavior; use implicitWidth or Layout.preferredWidth instead.",
+      "rule": "Quick.layout-positioning",
+      "severity": "warning",
+      "tool": "qmllint",
+      "count": 5
+    },
+    {
+      "file": "src/exif_turbo/ui/qml/Main.qml",
+      "message": "Member \"implicitHeight\" not found on type \"QObject\"",
+      "rule": "missing-property",
+      "severity": "warning",
+      "tool": "qmllint",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/ui/qml/Main.qml",
+      "message": "Member \"padding\" not found on type \"QObject\"",
+      "rule": "missing-property",
+      "severity": "warning",
+      "tool": "qmllint",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/ui/qml/Main.qml",
+      "message": "Property \"padding\" already exists in base type \"QQuickTextEdit\", use a different name.",
+      "rule": "property-override",
+      "severity": "warning",
+      "tool": "qmllint",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/ui/qml/Main.qml",
+      "message": "Unqualified access",
+      "rule": "unqualified",
+      "severity": "warning",
+      "tool": "qmllint",
+      "count": 834
+    },
+    {
+      "file": "src/exif_turbo/ui/qml/TaggingDrawer.qml",
+      "message": "Detected height on an item that is managed by a layout. This is undefined behavior; use implictHeight or Layout.preferredHeight instead.",
+      "rule": "Quick.layout-positioning",
+      "severity": "warning",
+      "tool": "qmllint",
+      "count": 3
+    },
+    {
+      "file": "src/exif_turbo/ui/qml/TaggingDrawer.qml",
+      "message": "Unqualified access",
+      "rule": "unqualified",
+      "severity": "warning",
+      "tool": "qmllint",
+      "count": 54
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "Argument of type \"Property | Literal[2048]\" cannot be assigned to parameter \"target_long_edge\" of type \"int\" in function \"__init__\"\n\u00a0\u00a0Type \"Property | Literal[2048]\" is not assignable to type \"int\"\n\u00a0\u00a0\u00a0\u00a0\"Property\" is not assignable to \"int\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "Argument of type \"Property | int\" cannot be assigned to parameter \"arg1\" of type \"SupportsRichComparisonT@min\" in function \"min\"\n\u00a0\u00a0Type \"Property | int\" is not assignable to type \"int\"\n\u00a0\u00a0\u00a0\u00a0\"Property\" is not assignable to \"int\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "Argument of type \"Property | int\" cannot be assigned to parameter \"workers\" of type \"int\" in function \"__init__\"\n\u00a0\u00a0Type \"Property | int\" is not assignable to type \"int\"\n\u00a0\u00a0\u00a0\u00a0\"Property\" is not assignable to \"int\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "Argument of type \"str | None\" cannot be assigned to parameter \"source_path\" of type \"str\" in function \"copy_selected_tags\"\n\u00a0\u00a0Type \"str | None\" is not assignable to type \"str\"\n\u00a0\u00a0\u00a0\u00a0\"None\" is not assignable to \"str\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "Argument of type \"str | list[str] | bool | int | None\" cannot be assigned to parameter \"date_from\" of type \"int | None\" in function \"__init__\"\n\u00a0\u00a0Type \"str | list[str] | bool | int | None\" is not assignable to type \"int | None\"\n\u00a0\u00a0\u00a0\u00a0Type \"str\" is not assignable to type \"int | None\"\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"int\"\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"None\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "Argument of type \"str | list[str] | bool | int | None\" cannot be assigned to parameter \"date_to\" of type \"int | None\" in function \"__init__\"\n\u00a0\u00a0Type \"str | list[str] | bool | int | None\" is not assignable to type \"int | None\"\n\u00a0\u00a0\u00a0\u00a0Type \"str\" is not assignable to type \"int | None\"\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"int\"\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"None\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "Argument of type \"str | list[str] | bool | int | None\" cannot be assigned to parameter \"ext_filter\" of type \"str\" in function \"__init__\"\n\u00a0\u00a0Type \"str | list[str] | bool | int | None\" is not assignable to type \"str\"\n\u00a0\u00a0\u00a0\u00a0\"int\" is not assignable to \"str\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "Argument of type \"str | list[str] | bool | int | None\" cannot be assigned to parameter \"marked_only\" of type \"bool\" in function \"__init__\"\n\u00a0\u00a0Type \"str | list[str] | bool | int | None\" is not assignable to type \"bool\"\n\u00a0\u00a0\u00a0\u00a0\"int\" is not assignable to \"bool\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "Argument of type \"str | list[str] | bool | int | None\" cannot be assigned to parameter \"offset\" of type \"int\" in function \"__init__\"\n\u00a0\u00a0Type \"str | list[str] | bool | int | None\" is not assignable to type \"int\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"int\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "Argument of type \"str | list[str] | bool | int | None\" cannot be assigned to parameter \"page_size\" of type \"int\" in function \"__init__\"\n\u00a0\u00a0Type \"str | list[str] | bool | int | None\" is not assignable to type \"int\"\n\u00a0\u00a0\u00a0\u00a0\"str\" is not assignable to \"int\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "Argument of type \"str | list[str] | bool | int | None\" cannot be assigned to parameter \"path_filter\" of type \"List[str] | None\" in function \"__init__\"\n\u00a0\u00a0Type \"str | list[str] | bool | int | None\" is not assignable to type \"List[str] | None\"\n\u00a0\u00a0\u00a0\u00a0Type \"int\" is not assignable to type \"List[str] | None\"\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\"int\" is not assignable to \"List[str]\"\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\"int\" is not assignable to \"None\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "Argument of type \"str | list[str] | bool | int | None\" cannot be assigned to parameter \"query\" of type \"str\" in function \"__init__\"\n\u00a0\u00a0Type \"str | list[str] | bool | int | None\" is not assignable to type \"str\"\n\u00a0\u00a0\u00a0\u00a0\"int\" is not assignable to \"str\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "Argument of type \"str | list[str] | bool | int | None\" cannot be assigned to parameter \"restrict_to_enabled_folders\" of type \"bool\" in function \"__init__\"\n\u00a0\u00a0Type \"str | list[str] | bool | int | None\" is not assignable to type \"bool\"\n\u00a0\u00a0\u00a0\u00a0\"int\" is not assignable to \"bool\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "Argument of type \"str | list[str] | bool | int | None\" cannot be assigned to parameter \"sort_by\" of type \"str\" in function \"__init__\"\n\u00a0\u00a0Type \"str | list[str] | bool | int | None\" is not assignable to type \"str\"\n\u00a0\u00a0\u00a0\u00a0\"int\" is not assignable to \"str\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "Type \"str | int | bool\" is not assignable to return type \"str\"\n\u00a0\u00a0Type \"str | int | bool\" is not assignable to type \"str\"\n\u00a0\u00a0\u00a0\u00a0\"int\" is not assignable to \"str\"",
+      "rule": "reportReturnType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "\"DatabaseError\" is not a known attribute of module \"sqlcipher3\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "\"Image\" is not defined",
+      "rule": "reportUndefinedVariable",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/tagging_controller.py",
+      "message": "Cannot access attribute \"cancel\" for class \"QThread\"\n\u00a0\u00a0Attribute \"cancel\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/workers/thumb_worker.py",
+      "message": "Argument of type \"bytes | NDArray[uint8]\" cannot be assigned to parameter \"obj\" of type \"SupportsArrayInterface\" in function \"fromarray\"\n\u00a0\u00a0Type \"bytes | NDArray[uint8]\" is not assignable to type \"SupportsArrayInterface\"\n\u00a0\u00a0\u00a0\u00a0\"bytes\" is incompatible with protocol \"SupportsArrayInterface\"\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\"__array_interface__\" is not present",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/workers/thumb_worker.py",
+      "message": "\"LANCZOS\" is not a known attribute of module \"PIL.Image\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/workers/thumb_worker.py",
+      "message": "\"LibRawError\" is not exported from module \"rawpy\"",
+      "rule": "reportPrivateImportUsage",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/workers/thumb_worker.py",
+      "message": "\"ThumbFormat\" is not exported from module \"rawpy\"",
+      "rule": "reportPrivateImportUsage",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/decode_process.py",
+      "message": "Argument of type \"SpawnProcess\" cannot be assigned to parameter \"process\" of type \"Process\" in function \"__init__\"\n\u00a0\u00a0\"SpawnProcess\" is not assignable to \"Process\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/decode_process.py",
+      "message": "Argument of type \"SpawnProcess\" cannot be assigned to parameter \"process\" of type \"Process\" in function \"_stop_process\"\n\u00a0\u00a0\"SpawnProcess\" is not assignable to \"Process\"",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "Argument of type \"bytes | NDArray[uint8]\" cannot be assigned to parameter \"obj\" of type \"SupportsArrayInterface\" in function \"fromarray\"\n\u00a0\u00a0Type \"bytes | NDArray[uint8]\" is not assignable to type \"SupportsArrayInterface\"\n\u00a0\u00a0\u00a0\u00a0\"bytes\" is incompatible with protocol \"SupportsArrayInterface\"\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\"__array_interface__\" is not present",
+      "rule": "reportArgumentType",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "Cannot access attribute \"bands\" for class \"list[Unknown]\"\n\u00a0\u00a0Attribute \"bands\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "Cannot access attribute \"cast\" for class \"list[Unknown]\"\n\u00a0\u00a0Attribute \"cast\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "Cannot access attribute \"colourspace\" for class \"list[Unknown]\"\n\u00a0\u00a0Attribute \"colourspace\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "Cannot access attribute \"flatten\" for class \"list[Unknown]\"\n\u00a0\u00a0Attribute \"flatten\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "Cannot access attribute \"format\" for class \"list[Unknown]\"\n\u00a0\u00a0Attribute \"format\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "Cannot access attribute \"hasalpha\" for class \"list[Unknown]\"\n\u00a0\u00a0Attribute \"hasalpha\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "Cannot access attribute \"height\" for class \"list[Unknown]\"\n\u00a0\u00a0Attribute \"height\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "Cannot access attribute \"interpretation\" for class \"list[Unknown]\"\n\u00a0\u00a0Attribute \"interpretation\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "Cannot access attribute \"width\" for class \"list[Unknown]\"\n\u00a0\u00a0Attribute \"width\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "Cannot access attribute \"write_to_memory\" for class \"list[Unknown]\"\n\u00a0\u00a0Attribute \"write_to_memory\" is unknown",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "\"Image\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "\"LANCZOS\" is not a known attribute of module \"PIL.Image\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 3
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "\"LibRawError\" is not exported from module \"rawpy\"",
+      "rule": "reportPrivateImportUsage",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "\"ThumbFormat\" is not exported from module \"rawpy\"",
+      "rule": "reportPrivateImportUsage",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "\"_MEIPASS\" is not a known attribute of module \"sys\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "\"bands\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "\"cast\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "\"colourspace\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "\"flatten\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "\"format\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "\"hasalpha\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "\"height\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "\"interpretation\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "\"width\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/preview_render.py",
+      "message": "\"write_to_memory\" is not a known attribute of \"None\"",
+      "rule": "reportOptionalMemberAccess",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/process_memory.py",
+      "message": "\"sysconf\" is not a known attribute of module \"os\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/utils/video_frame.py",
+      "message": "\"LANCZOS\" is not a known attribute of module \"PIL.Image\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
+    }
+  ]
+}

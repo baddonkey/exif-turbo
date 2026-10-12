@@ -22,7 +22,7 @@ from unittest.mock import patch
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import QPoint, QPointF, Qt, QUrl
+from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QPointF, Qt, QUrl
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtTest import QTest
@@ -1134,8 +1134,11 @@ def browse_navigation_window(
 
     yield controller, search_model, engine, root
 
-    engine.deleteLater()
-    qtbot.wait(100)
+    controller.close()
+    root.close()
+    with qtbot.waitSignal(engine.destroyed, timeout=5_000):
+        engine.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
 class TestBrowseNavigationQml:

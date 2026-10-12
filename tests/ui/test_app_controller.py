@@ -132,6 +132,32 @@ def window(
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 
+def test_maintenance_completion_keeps_worker_alive_until_native_join(
+    qtbot: QtBot, tmp_path: Path,
+) -> None:
+    # Arrange
+    controller = AppController(tmp_path / "maintenance.db",
+                               SearchListModel(cache_dir=tmp_path / "thumbs"),
+                               ExifListModel(), FolderListModel())
+    held_during_join: list[bool] = []
+
+    class RecordingThread(QThread):
+        def wait(self, *args: object) -> bool:
+            held_during_join.append(controller._maint_worker is self)
+            return True
+
+    worker = RecordingThread()
+    controller._maint_worker = worker  # type: ignore[assignment]
+
+    # Act
+    controller._clear_maint_busy()
+
+    # Assert
+    assert held_during_join == [True]
+    assert controller._maint_worker is None
+    controller.close()
+
+
 def test_unlock_shows_all_images(
     qtbot: QtBot,
     window: tuple[AppController, SearchListModel, QQuickWindow],
@@ -976,6 +1002,7 @@ def test_add_indexed_folder_waits_for_active_operation_to_finish(
     )
     monkeypatch.setattr(bare_controller._folder_model, "add_folder", lambda _folder: None)
     bare_controller._is_busy = True
+    bare_controller._maint_worker = QThread(bare_controller)  # type: ignore[assignment]
     scans: list[tuple[int, bool]] = []
     monkeypatch.setattr(
         bare_controller,

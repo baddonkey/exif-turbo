@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import socket
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -32,6 +33,17 @@ if Path(sys.prefix).resolve() != _venv.resolve():
     )
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
+
+@pytest.fixture(autouse=True)
+def _block_ci_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    if os.environ.get("EXIF_TURBO_TEST_OFFLINE") != "1":
+        return
+
+    def reject_connection(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("CI tests must mock network/model downloads")
+
+    monkeypatch.setattr(socket.socket, "connect", reject_connection)
+    monkeypatch.setattr(socket.socket, "connect_ex", reject_connection)
 
 
 @pytest.fixture

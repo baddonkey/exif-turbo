@@ -81,6 +81,11 @@ large-library performance guarantees.
 
 ## Test suite
 
+Pull requests run locked-dependency, process-isolated test jobs and static
+diagnostic regression gates. See [CI quality checks](docs/continuous-integration.md)
+for the platform matrix, offline AI safeguards, diagnostic baselines, and the
+`Required Quality` branch-protection check.
+
 The automated tests cover the following areas:
 
 | Suite | What it covers |
