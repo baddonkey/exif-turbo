@@ -24,7 +24,7 @@ from unittest.mock import patch
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QPointF, Qt, QUrl
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, QPointF, Qt, QUrl
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtTest import QTest
@@ -1138,6 +1138,28 @@ def click_search_result_browse_button(window: QQuickWindow, results_list: QQuick
     )
 
 
+def wait_for_browse_jump(
+    qtbot: QtBot, root: QObject, browse_list: QQuickItem,
+) -> None:
+    def assert_scroll_completed() -> None:
+        state = {
+            "pendingTarget": root.property("_pendingBrowseTargetId"),
+            "pendingScroll": root.property("_pendingBrowseScrollRow"),
+            "totalResults": root.property("_totalResults"),
+            "prefetchInFlight": root.property("_browsePrefetchInFlight"),
+            **{
+                name: browse_list.property(name)
+                for name in (
+                    "count", "currentIndex", "contentY", "originY",
+                    "contentHeight", "height", "visible",
+                )
+            },
+        }
+        assert state["pendingScroll"] == -1 and float(state["contentY"]) > 0.0, state
+
+    qtbot.waitUntil(assert_scroll_completed, timeout=5000)
+
+
 @pytest.fixture
 def browse_navigation_window(
     qtbot: QtBot,
@@ -1534,11 +1556,7 @@ class TestBrowseNavigationQml:
         click_search_result_browse_button(qml_window, results_list)
         qtbot.waitUntil(lambda: tab_bar.property("currentIndex") == 1, timeout=5000)
         qtbot.waitUntil(lambda: root.property("_pendingBrowseTargetId") == -1, timeout=5000)
-        qtbot.waitUntil(
-            lambda: root.property("_pendingBrowseScrollRow") == -1
-            and float(browse_list.property("contentY")) > 0.0,
-            timeout=5000,
-        )
+        wait_for_browse_jump(qtbot, root, browse_list)
 
         # Assert
         assert controller.totalResults == 130
@@ -1647,11 +1665,7 @@ class TestBrowseNavigationQml:
         click_search_result_browse_button(qml_window, results_list)
         qtbot.waitUntil(lambda: tab_bar.property("currentIndex") == 1, timeout=5000)
         qtbot.waitUntil(lambda: root.property("_pendingBrowseTargetId") == -1, timeout=5000)
-        qtbot.waitUntil(
-            lambda: root.property("_pendingBrowseScrollRow") == -1
-            and float(browse_list.property("contentY")) > 0.0,
-            timeout=5000,
-        )
+        wait_for_browse_jump(qtbot, root, browse_list)
 
         # Assert
         assert controller.isAiSearchMode is False
