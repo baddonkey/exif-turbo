@@ -55,6 +55,12 @@ _IMAGES: list[tuple[str, str, str, str]] = [
 ]
 
 
+def _single_worker_settings(path: Path) -> SettingsModel:
+    settings = SettingsModel(path)
+    settings.setWorkerCount(1)
+    return settings
+
+
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 
@@ -91,8 +97,7 @@ def controller_with_images(
     search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
     exif_model = ExifListModel()
     folder_model = FolderListModel()
-    settings = SettingsModel(tmp_path / "settings.json")
-    settings.setWorkerCount(1)
+    settings = _single_worker_settings(tmp_path / "settings.json")
     controller = AppController(
         tmp_path / "test.db", search_model, exif_model, folder_model, settings
     )
@@ -908,7 +913,7 @@ class TestBrowseNavigation:
             search_model,
             ExifListModel(),
             FolderListModel(),
-            SettingsModel(tmp_path / "ai-restore-settings.json"),
+            _single_worker_settings(tmp_path / "ai-restore-settings.json"),
         )
 
         with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
@@ -987,7 +992,7 @@ class TestBrowseNavigation:
         repo.close()
 
         search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
-        settings = SettingsModel(tmp_path / "settings.json")
+        settings = _single_worker_settings(tmp_path / "settings.json")
         settings.setSortBy("filename_asc")
         controller = AppController(
             tmp_path / "large.db", search_model,
@@ -1046,7 +1051,7 @@ class TestBrowseNavigation:
         repo.close()
 
         search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
-        settings = SettingsModel(tmp_path / "settings.json")
+        settings = _single_worker_settings(tmp_path / "settings.json")
         settings.setSortBy("filename_asc")
         controller = AppController(
             tmp_path / "large_prev.db", search_model,
@@ -1113,7 +1118,9 @@ def browse_navigation_window(
     controller, search_model, _, _ = controller_with_images
     exif_model = ExifListModel()
     folder_model = FolderListModel()
-    settings = SettingsModel(search_model.cache_dir.parent / "qml-settings.json")
+    settings = _single_worker_settings(
+        search_model.cache_dir.parent / "qml-settings.json"
+    )
     filter_proxy = CheckedFilterProxyModel()
     filter_proxy.setSourceModel(search_model)
     controller.set_filter_proxy(filter_proxy)
@@ -1351,7 +1358,7 @@ class TestBrowseNavigationQml:
         search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
         exif_model = ExifListModel()
         folder_model = FolderListModel()
-        settings = SettingsModel(tmp_path / "qml-settings.json")
+        settings = _single_worker_settings(tmp_path / "qml-settings.json")
         settings.setSortBy("filename_asc")
         controller = AppController(
             tmp_path / "large_qml.db",
@@ -1444,7 +1451,7 @@ class TestBrowseNavigationQml:
         search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
         exif_model = ExifListModel()
         folder_model = FolderListModel()
-        settings = SettingsModel(tmp_path / "qml-search-settings.json")
+        settings = _single_worker_settings(tmp_path / "qml-search-settings.json")
         settings.setSortBy("filename_asc")
         controller = AppController(
             tmp_path / "large_qml_search.db",
@@ -1543,7 +1550,7 @@ class TestBrowseNavigationQml:
         search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
         exif_model = ExifListModel()
         folder_model = FolderListModel()
-        settings = SettingsModel(tmp_path / "qml-ai-settings.json")
+        settings = _single_worker_settings(tmp_path / "qml-ai-settings.json")
         settings.setSortBy("filename_asc")
         controller = AppController(
             tmp_path / "large_qml_ai.db",
@@ -1671,7 +1678,7 @@ class TestBrowseNavigationQml:
         repo.close()
 
         search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
-        settings = SettingsModel(tmp_path / "mid-jump-settings.json")
+        settings = _single_worker_settings(tmp_path / "mid-jump-settings.json")
         settings.setSortBy("filename_asc")
         controller = AppController(
             tmp_path / "mid_jump.db",
@@ -1730,7 +1737,9 @@ class TestBrowseNavigationQml:
         search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
         exif_model = ExifListModel()
         folder_model = FolderListModel()
-        settings = SettingsModel(tmp_path / "qml-downprefetch-settings.json")
+        settings = _single_worker_settings(
+            tmp_path / "qml-downprefetch-settings.json"
+        )
         settings.setSortBy("filename_asc")
         controller = AppController(
             tmp_path / "large_qml_downprefetch.db",
@@ -1831,7 +1840,9 @@ class TestBrowseNavigationQml:
         search_model = SearchListModel(cache_dir=tmp_path / "thumbs")
         exif_model = ExifListModel()
         folder_model = FolderListModel()
-        settings = SettingsModel(tmp_path / "qml-downkeyprefetch-settings.json")
+        settings = _single_worker_settings(
+            tmp_path / "qml-downkeyprefetch-settings.json"
+        )
         settings.setSortBy("filename_asc")
         controller = AppController(
             tmp_path / "large_qml_downkeyprefetch.db",
