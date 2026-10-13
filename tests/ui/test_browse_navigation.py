@@ -92,6 +92,7 @@ def controller_with_images(
     exif_model = ExifListModel()
     folder_model = FolderListModel()
     settings = SettingsModel(tmp_path / "settings.json")
+    settings.setWorkerCount(1)
     controller = AppController(
         tmp_path / "test.db", search_model, exif_model, folder_model, settings
     )

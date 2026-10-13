@@ -268,6 +268,7 @@ class AppController(QObject):
         self._pending_preview_pixel_count: int | None = None
         self._index_worker: IndexWorker | None = None
         self._thumb_worker: ThumbWorker | None = None
+        self._thumb_cancel_for_index_pending = False
         self._preview_worker: PreviewBuildWorker | None = None
         self._is_building_previews: bool = False
         self._preview_build_folder_id: int = 0
@@ -3061,10 +3062,13 @@ class AppController(QObject):
 
     def _process_next_in_queue(self) -> None:
         """Start the next folder in the scan queue if not already indexing."""
-        if self._is_indexing:
+        if self._is_indexing or self._thumb_cancel_for_index_pending:
             return
         if not self._scan_queue:
             self._resume_queued_folder_workflows()
+            return
+        if self._thumb_worker is not None and self._thumb_worker.isRunning():
+            self._cancel_thumb_worker_before_indexing()
             return
         folder_id, force = self._scan_queue.pop(0)
         self._index_queue_position += 1
@@ -3075,6 +3079,57 @@ class AppController(QObject):
             self._process_next_in_queue()
             return
         self._actually_start_indexing(folder_obj, force=force)
+
+    def _cancel_thumb_worker_before_indexing(self) -> None:
+        worker = self._thumb_worker
+        if worker is None or not worker.isRunning() or self._thumb_cancel_for_index_pending:
+            return
+
+        self._thumb_cancel_for_index_pending = True
+        worker.finished.connect(self._on_thumb_terminal_before_indexing)
+        worker.canceled.connect(self._on_thumb_terminal_before_indexing)
+        worker.failed.connect(self._on_thumb_failed_before_indexing)
+        try:
+            worker.progress.disconnect(self._on_thumb_progress)
+            worker.finished.disconnect(self._on_thumb_done)
+            worker.failed.disconnect(self._on_thumb_failed)
+            worker.canceled.disconnect(self._on_thumb_canceled)
+        except RuntimeError:
+            pass
+
+        self._thumb_refresh_timer.stop()
+        worker.cancel()
+        self._is_building_thumbs = False
+        self._pending_thumb_restart = False
+        self._thumb_folder_name = ""
+        self.isBuildingThumbsChanged.emit()
+        if not worker.isRunning():
+            self._finish_thumb_worker_before_indexing(worker)
+
+    @Slot(int, int)
+    def _on_thumb_terminal_before_indexing(self, _done: int, _total: int) -> None:
+        worker = self.sender()
+        if isinstance(worker, ThumbWorker):
+            self._finish_thumb_worker_before_indexing(worker)
+
+    @Slot(str)
+    def _on_thumb_failed_before_indexing(self, _error: str) -> None:
+        worker = self.sender()
+        if isinstance(worker, ThumbWorker):
+            self._finish_thumb_worker_before_indexing(worker)
+
+    def _finish_thumb_worker_before_indexing(self, worker: ThumbWorker) -> None:
+        if worker is not self._thumb_worker:
+            return
+        worker.wait()
+        worker.finished.disconnect(self._on_thumb_terminal_before_indexing)
+        worker.canceled.disconnect(self._on_thumb_terminal_before_indexing)
+        worker.failed.disconnect(self._on_thumb_failed_before_indexing)
+        self._thumb_worker = None
+        self._thumb_cancel_for_index_pending = False
+        worker.deleteLater()
+        if not self._app_closing:
+            self._process_next_in_queue()
 
     def _reset_index_queue_progress(self) -> None:
         self._index_queue_position = 0
@@ -3114,27 +3169,6 @@ class AppController(QObject):
                 self._finish_folder_workflow()
             self._process_next_in_queue()
             return
-        # Cancel any thumb worker that is still running (e.g. the one started at
-        # unlock time).  A definitive build will be triggered after indexing
-        # finishes, so there is no value in letting the two workers race.
-        if self._thumb_worker and self._thumb_worker.isRunning():
-            # Disconnect all callbacks BEFORE cancelling.  The 'canceled' signal
-            # is emitted asynchronously on the worker thread; without this it can
-            # arrive after the post-index Worker B has already started, causing
-            # _on_thumb_canceled to stop Worker B's refresh timer and flip
-            # _is_building_thumbs to False while B is still running.
-            try:
-                self._thumb_worker.progress.disconnect(self._on_thumb_progress)
-                self._thumb_worker.finished.disconnect(self._on_thumb_done)
-                self._thumb_worker.failed.disconnect(self._on_thumb_failed)
-                self._thumb_worker.canceled.disconnect(self._on_thumb_canceled)
-            except RuntimeError:
-                pass  # already disconnected
-            self._thumb_refresh_timer.stop()
-            self._thumb_worker.cancel()
-            self._is_building_thumbs = False
-            self._pending_thumb_restart = False
-            self.isBuildingThumbsChanged.emit()
         self._scanning_folder_id = folder_obj.id
         self._scanning_folder_name = folder_obj.display_name
         if self._folder_repo:
@@ -4505,6 +4539,8 @@ class AppController(QObject):
     def _on_thumb_progress(self, current: int, total: int, path: str) -> None:
         # Throttle to ~5 Hz — ThumbWorker can fire thousands of signals per second
         # with multi-threaded workers, which floods the GUI event loop.
+        if self._thumb_cancel_for_index_pending:
+            return
         now = time.monotonic()
         if now - self._last_thumb_progress_update < 0.2 and current != total:
             return
@@ -4615,7 +4651,19 @@ class AppController(QObject):
             self._search_model.refresh_thumbnails()
             self._refresh_selected_thumb_source()
 
+    def _join_thumb_worker(self) -> None:
+        worker = self._thumb_worker
+        if worker is None:
+            return
+        worker.wait()
+        if self._thumb_worker is worker:
+            self._thumb_worker = None
+        worker.deleteLater()
+
     def _on_thumb_done(self, cached: int, total: int) -> None:
+        if self._thumb_cancel_for_index_pending:
+            return
+        self._join_thumb_worker()
         self._thumb_refresh_timer.stop()
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
@@ -4637,6 +4685,9 @@ class AppController(QObject):
             self._thumb_folder_name = ""
 
     def _on_thumb_failed(self, error: str) -> None:
+        if self._thumb_cancel_for_index_pending:
+            return
+        self._join_thumb_worker()
         self._thumb_refresh_timer.stop()
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
@@ -4650,6 +4701,9 @@ class AppController(QObject):
         self._thumb_folder_name = ""
 
     def _on_thumb_canceled(self, cached: int, total: int) -> None:
+        if self._thumb_cancel_for_index_pending:
+            return
+        self._join_thumb_worker()
         self._thumb_refresh_timer.stop()
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
@@ -4714,6 +4768,7 @@ class AppController(QObject):
             worker.wait()
         self._thumb_worker = None
         self._preview_worker = None
+        self._thumb_cancel_for_index_pending = False
         self._index_worker = None
         self._password_change_worker = None
         self._maint_worker = None
