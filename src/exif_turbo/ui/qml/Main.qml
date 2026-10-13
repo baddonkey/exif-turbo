@@ -537,6 +537,7 @@ ApplicationWindow {
                 if (mainTabBar.currentIndex !== 1 || root._pendingBrowseScrollRow !== proxyRow)
                     return
                 root._suspendBrowsePrefetch = true
+                browseImageList.forceLayout()
                 browseImageList.positionViewAtIndex(proxyRow, ListView.Beginning)
                 Qt.callLater(function() {
                     root._suspendBrowsePrefetch = false
