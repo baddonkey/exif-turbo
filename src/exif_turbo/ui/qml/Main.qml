@@ -538,7 +538,10 @@ ApplicationWindow {
                     return
                 root._suspendBrowsePrefetch = true
                 browseImageList.forceLayout()
-                browseImageList.positionViewAtIndex(proxyRow, ListView.Beginning)
+                var targetY = browseImageList.originY + proxyRow * root._browseRowHeight
+                var maximumY = browseImageList.originY
+                             + Math.max(0, browseImageList.contentHeight - browseImageList.height)
+                browseImageList.contentY = Math.min(targetY, maximumY)
                 Qt.callLater(function() {
                     root._suspendBrowsePrefetch = false
                     // Keep loading while the jump target is effectively pinned
@@ -2925,7 +2928,7 @@ ApplicationWindow {
                         delegate: Rectangle {
                             id: browseCardDelegate
                             width: browseImageList.width
-                            height: 210
+                            height: root._browseRowHeight
                             color: "transparent"
 
                             readonly property bool _isSelected: ListView.isCurrentItem

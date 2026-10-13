@@ -1155,7 +1155,8 @@ def wait_for_browse_jump(
                 )
             },
         }
-        assert state["pendingScroll"] == -1 and float(state["contentY"]) > 0.0, state
+        if state["pendingScroll"] != -1 or float(state["contentY"]) <= 0.0:
+            raise AssertionError(json.dumps(state, sort_keys=True))
 
     qtbot.waitUntil(assert_scroll_completed, timeout=5000)
 
