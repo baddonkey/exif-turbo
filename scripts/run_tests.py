@@ -88,7 +88,10 @@ def _run_pytest(
     group_timeout: float | None,
 ) -> int:
     """Run pytest as an isolated subprocess, inheriting this console."""
-    cmd = [sys.executable, "-m", "pytest", "-p", "no:cacheprovider", *targets, *extra]
+    cmd = [
+        sys.executable, "-m", "pytest", "-p", "no:cacheprovider",
+        "-v", "--capture=tee-sys", *targets, *extra,
+    ]
     if junit_path is not None:
         cmd.append(f"--junitxml={junit_path}")
     print(f"\n=== pytest {' '.join(targets)} ===", flush=True)
