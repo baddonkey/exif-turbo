@@ -225,7 +225,7 @@ wheels = [
 
 [[package]]
 name = "exif-turbo"
-version = "1.20.4"
+version = "1.20.5"
 source = { editable = "." }
 dependencies = [
     { name = "av" },
