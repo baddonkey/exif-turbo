@@ -187,8 +187,8 @@ def test_ai_search_select_all_marks_only_ai_results(
     assert search_model.rowCount() == len(ai_result_paths)
 
     # Act
-    with qtbot.waitSignal(controller.checkedCountChanged, timeout=5000):
-        controller.selectAll()
+    controller.selectAll()
+    qtbot.waitUntil(lambda: controller.isBusy is False, timeout=5000)
 
     repo = ImageIndexRepository(db_path, key="")
     marked_paths = set(repo.get_marked_paths())
