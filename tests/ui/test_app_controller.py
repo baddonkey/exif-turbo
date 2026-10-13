@@ -1323,6 +1323,29 @@ def test_preview_completion_with_folder_context_updates_standard_status(
     assert bare_controller.statusText == "Holiday Photos, Previews: 2 / 2 built"
 
 
+def test_preview_completion_joins_worker_before_clearing_reference(
+    bare_controller: AppController,
+) -> None:
+    # Arrange
+    wait_observations: list[bool] = []
+    worker = SimpleNamespace()
+
+    def wait() -> None:
+        wait_observations.append(bare_controller._preview_worker is worker)
+
+    worker.wait = wait
+    bare_controller._preview_worker = worker  # type: ignore[assignment]
+    bare_controller._preview_build_folder_id = 0
+    bare_controller._preview_build_folder_name = "Holiday Photos"
+
+    # Act
+    bare_controller._on_preview_done(2, 2)
+
+    # Assert
+    assert wait_observations == [True]
+    assert bare_controller._preview_worker is None
+
+
 def test_ai_scan_failure_with_folder_context_updates_standard_error_status(
     bare_controller: AppController,
 ) -> None:

@@ -44,9 +44,11 @@ from pytestqt.qtbot import QtBot
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.data.indexed_folder_repository import IndexedFolderRepository
+from exif_turbo.tagging.custom_tag_migration import CustomTagMigrationService
 from exif_turbo.ui.models.exif_list_model import ExifListModel
 from exif_turbo.ui.models.folder_list_model import FolderListModel
 from exif_turbo.ui.models.search_list_model import SearchListModel
+from exif_turbo.ui.models.settings_model import SettingsModel
 from exif_turbo.ui.view_models.app_controller import AppController
 from exif_turbo.utils.thumb_cache import thumb_cache_name_from_stamp
 
@@ -91,6 +93,7 @@ def indexed_db(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
             str(img_path), fname, stat.st_mtime, stat.st_size, metadata, text
         )
     repo.commit()
+    repo.mark_migration_completed(CustomTagMigrationService.MIGRATION_NAME)
     repo.close()
     return base / "index.db", base
 
@@ -105,11 +108,14 @@ def _make_controller(
     """Construct a minimal AppController backed by the given DB and cache dir."""
     cache_dir.mkdir(parents=True, exist_ok=True)
     search_model = SearchListModel(cache_dir=cache_dir)
+    settings = SettingsModel(cache_dir.parent / "settings.json")
+    settings.setWorkerCount(1)
     return AppController(
         db_path,
         search_model,
         ExifListModel(),
         FolderListModel(),
+        settings,
     )
 
 
@@ -351,6 +357,7 @@ def test_rescan_triggers_exactly_one_thumb_build_not_multiple(
     qtbot: QtBot,
     indexed_db: tuple[Path, Path],
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Pressing Rescan must not trigger multiple thumb-build runs, and the
     cancelled unlock-time worker must not corrupt the post-index worker's state.
@@ -363,10 +370,10 @@ def test_rescan_triggers_exactly_one_thumb_build_not_multiple(
        _is_building_thumbs=False while B was still running — hiding the progress
        bar and preventing mid-build thumbnail refreshes.
 
-    After the fixes:
-    - _actually_start_indexing() disconnects Worker A's signals before cancelling,
-      so its late 'canceled' can never touch Worker B's state.
-    - isBuildingThumbs stays True continuously throughout Worker B's entire run.
+    After the fixes, queued indexing waits for Worker A's thread to stop before
+    starting IndexWorker, so Worker A cannot overlap later work or touch the
+    replacement worker's state. This test disables year-count reloads because
+    they are unrelated to the thumbnail/rescan lifecycle under test.
     """
     db_path, base = indexed_db
     cache_dir = tmp_path / "thumbs"
@@ -389,11 +396,17 @@ def test_rescan_triggers_exactly_one_thumb_build_not_multiple(
         metadata = {"FileName": fname, "Make": make, "Model": model}
         repo.upsert_image(str(img_path), fname, stat.st_mtime, stat.st_size, metadata, fname)
     repo.commit()
+    repo.mark_migration_completed(CustomTagMigrationService.MIGRATION_NAME)
     repo.close()
     folder_repo.close()
 
     search_model = SearchListModel(cache_dir=cache_dir)
-    ctrl = AppController(local_db, search_model, ExifListModel(), FolderListModel())
+    settings = SettingsModel(tmp_path / "rescan_settings.json")
+    settings.setWorkerCount(1)
+    ctrl = AppController(
+        local_db, search_model, ExifListModel(), FolderListModel(), settings
+    )
+    monkeypatch.setattr(ctrl, "_schedule_year_counts_reload", lambda _serial: None)
 
     try:
         # Unlock — starts Worker A (unlock-triggered)
@@ -413,14 +426,21 @@ def test_rescan_triggers_exactly_one_thumb_build_not_multiple(
 
         ctrl.isBuildingThumbsChanged.connect(_on_building_changed)
 
-        # Act — rescan; _actually_start_indexing cancels Worker A and
-        # disconnects its signals
+        index_started: list[bool] = []
+
+        def _on_indexing_changed() -> None:
+            if ctrl.isIndexing:
+                index_started.append(True)
+
+        ctrl.isIndexingChanged.connect(_on_indexing_changed)
+
+        # Act — queue a rescan; indexing begins after Worker A has stopped.
         folder_id = ctrl._folder_model._rows[0].id
         ctrl.rescanFolder(folder_id)
 
         # Wait for indexing + thumb build to fully complete
         qtbot.waitUntil(
-            lambda: not ctrl.isBuildingThumbs and not ctrl.isIndexing,
+            lambda: bool(index_started) and not ctrl.isBuildingThumbs and not ctrl.isIndexing,
             timeout=30_000,
         )
 
