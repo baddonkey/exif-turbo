@@ -1534,7 +1534,11 @@ class TestBrowseNavigationQml:
         click_search_result_browse_button(qml_window, results_list)
         qtbot.waitUntil(lambda: tab_bar.property("currentIndex") == 1, timeout=5000)
         qtbot.waitUntil(lambda: root.property("_pendingBrowseTargetId") == -1, timeout=5000)
-        qtbot.wait(_PAUSE_MS)
+        qtbot.waitUntil(
+            lambda: root.property("_pendingBrowseScrollRow") == -1
+            and float(browse_list.property("contentY")) > 0.0,
+            timeout=5000,
+        )
 
         # Assert
         assert controller.totalResults == 130
