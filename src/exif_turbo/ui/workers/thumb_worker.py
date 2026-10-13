@@ -139,7 +139,7 @@ def _decode_thumbnail_source(
 
 
 class ThumbWorker(QThread):
-    finished = Signal(int, int)
+    completed = Signal(int, int)
     failed = Signal(str)
     progress = Signal(int, int, str)
     canceled = Signal(int, int)
@@ -159,6 +159,24 @@ class ThumbWorker(QThread):
         self._cancel_event = threading.Event()
         self._resume_event = threading.Event()
         self._resume_event.set()  # starts unpaused
+        self._terminal_kind = ""
+        self._terminal_counts = (0, 0)
+        self._terminal_error = ""
+
+    def _emit_completed(self, cached: int, total: int) -> None:
+        self._terminal_kind = "completed"
+        self._terminal_counts = (cached, total)
+        self.completed.emit(cached, total)
+
+    def _emit_canceled(self, cached: int, total: int) -> None:
+        self._terminal_kind = "canceled"
+        self._terminal_counts = (cached, total)
+        self.canceled.emit(cached, total)
+
+    def _emit_failed(self, error: str) -> None:
+        self._terminal_kind = "failed"
+        self._terminal_error = error
+        self.failed.emit(error)
 
     def cancel(self) -> None:
         self._cancel_event.set()
@@ -186,7 +204,7 @@ class ThumbWorker(QThread):
                 repo.close()
 
             if self._cancel_event.is_set():
-                self.canceled.emit(0, 0)
+                self._emit_canceled(0, 0)
                 return
 
             self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -256,7 +274,7 @@ class ThumbWorker(QThread):
             self.progress.emit(0, missing_total, "")
 
             if self._cancel_event.is_set():
-                self.canceled.emit(cached, total_all)
+                self._emit_canceled(cached, total_all)
                 return
 
             skip_log = self.cache_dir / "thumbs_skipped.log"
@@ -332,7 +350,7 @@ class ThumbWorker(QThread):
                 try:
                     for future in as_completed(futures):
                         if self._cancel_event.is_set():
-                            self.canceled.emit(cached, total_all)
+                            self._emit_canceled(cached, total_all)
                             return
                         path = futures[future]
                         missing_completed += 1
@@ -340,21 +358,21 @@ class ThumbWorker(QThread):
                         if future.result():
                             cached += 1
                 finally:
-                    executor.shutdown(wait=not self._cancel_event.is_set(), cancel_futures=True)
+                    executor.shutdown(wait=True, cancel_futures=True)
             else:
                 for idx, path in enumerate(paths, start=1):
                     if self._cancel_event.is_set():
-                        self.canceled.emit(cached, total_all)
+                        self._emit_canceled(cached, total_all)
                         return
                     self.progress.emit(idx, missing_total, path)
                     if build_thumb(path):
                         cached += 1
 
             if self._cancel_event.is_set():
-                self.canceled.emit(cached, total_all)
+                self._emit_canceled(cached, total_all)
             else:
-                self.finished.emit(cached, total_all)
+                self._emit_completed(cached, total_all)
         except Exception as exc:
-            self.failed.emit(str(exc))
+            self._emit_failed(str(exc))
         finally:
             _nap.release()

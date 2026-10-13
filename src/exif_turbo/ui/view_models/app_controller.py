@@ -3086,14 +3086,8 @@ class AppController(QObject):
             return
 
         self._thumb_cancel_for_index_pending = True
-        worker.finished.connect(self._on_thumb_terminal_before_indexing)
-        worker.canceled.connect(self._on_thumb_terminal_before_indexing)
-        worker.failed.connect(self._on_thumb_failed_before_indexing)
         try:
             worker.progress.disconnect(self._on_thumb_progress)
-            worker.finished.disconnect(self._on_thumb_done)
-            worker.failed.disconnect(self._on_thumb_failed)
-            worker.canceled.disconnect(self._on_thumb_canceled)
         except RuntimeError:
             pass
 
@@ -3103,28 +3097,10 @@ class AppController(QObject):
         self._pending_thumb_restart = False
         self._thumb_folder_name = ""
         self.isBuildingThumbsChanged.emit()
-        if not worker.isRunning():
-            self._finish_thumb_worker_before_indexing(worker)
-
-    @Slot(int, int)
-    def _on_thumb_terminal_before_indexing(self, _done: int, _total: int) -> None:
-        worker = self.sender()
-        if isinstance(worker, ThumbWorker):
-            self._finish_thumb_worker_before_indexing(worker)
-
-    @Slot(str)
-    def _on_thumb_failed_before_indexing(self, _error: str) -> None:
-        worker = self.sender()
-        if isinstance(worker, ThumbWorker):
-            self._finish_thumb_worker_before_indexing(worker)
 
     def _finish_thumb_worker_before_indexing(self, worker: ThumbWorker) -> None:
         if worker is not self._thumb_worker:
             return
-        worker.wait()
-        worker.finished.disconnect(self._on_thumb_terminal_before_indexing)
-        worker.canceled.disconnect(self._on_thumb_terminal_before_indexing)
-        worker.failed.disconnect(self._on_thumb_failed_before_indexing)
         self._thumb_worker = None
         self._thumb_cancel_for_index_pending = False
         worker.deleteLater()
@@ -4585,9 +4561,7 @@ class AppController(QObject):
             key=self._key,
         )
         self._thumb_worker.progress.connect(self._on_thumb_progress)
-        self._thumb_worker.finished.connect(self._on_thumb_done)
-        self._thumb_worker.failed.connect(self._on_thumb_failed)
-        self._thumb_worker.canceled.connect(self._on_thumb_canceled)
+        self._thumb_worker.finished.connect(self._on_thumb_worker_finished)
         # LowPriority (QoS utility) instead of LowestPriority (QoS background):
         # on macOS, LowestPriority maps to QOS_CLASS_BACKGROUND which the scheduler
         # starves whenever IndexWorker (LowPriority/utility) is active, making thumbs
@@ -4651,19 +4625,34 @@ class AppController(QObject):
             self._search_model.refresh_thumbnails()
             self._refresh_selected_thumb_source()
 
-    def _join_thumb_worker(self) -> None:
-        worker = self._thumb_worker
-        if worker is None:
+    @Slot()
+    def _on_thumb_worker_finished(self) -> None:
+        worker = self.sender()
+        if not isinstance(worker, ThumbWorker):
             return
         worker.wait()
-        if self._thumb_worker is worker:
-            self._thumb_worker = None
+        if self._thumb_worker is not worker:
+            worker.deleteLater()
+            return
+        if self._thumb_cancel_for_index_pending:
+            self._finish_thumb_worker_before_indexing(worker)
+            return
+        self._thumb_worker = None
         worker.deleteLater()
+        if self._app_closing:
+            return
+        if worker._terminal_kind == "completed":
+            self._on_thumb_done(*worker._terminal_counts)
+        elif worker._terminal_kind == "canceled":
+            self._on_thumb_canceled(*worker._terminal_counts)
+        else:
+            self._on_thumb_failed(
+                worker._terminal_error or "Thumbnail worker exited without a result"
+            )
 
     def _on_thumb_done(self, cached: int, total: int) -> None:
         if self._thumb_cancel_for_index_pending:
             return
-        self._join_thumb_worker()
         self._thumb_refresh_timer.stop()
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
@@ -4687,7 +4676,6 @@ class AppController(QObject):
     def _on_thumb_failed(self, error: str) -> None:
         if self._thumb_cancel_for_index_pending:
             return
-        self._join_thumb_worker()
         self._thumb_refresh_timer.stop()
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
@@ -4703,7 +4691,6 @@ class AppController(QObject):
     def _on_thumb_canceled(self, cached: int, total: int) -> None:
         if self._thumb_cancel_for_index_pending:
             return
-        self._join_thumb_worker()
         self._thumb_refresh_timer.stop()
         self._is_building_thumbs = False
         self.isBuildingThumbsChanged.emit()
