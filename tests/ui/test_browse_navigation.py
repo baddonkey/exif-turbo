@@ -14,19 +14,22 @@ Run with:
 
 from __future__ import annotations
 
+import gc
 import json
 import math
+import threading
 from pathlib import Path
 from typing import Generator
 from unittest.mock import patch
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QPointF, Qt, QUrl
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, QPointF, Qt, QUrl
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtTest import QTest
 from pytestqt.qtbot import QtBot
+from shiboken6 import isValid
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.ui.models.checked_filter_proxy_model import CheckedFilterProxyModel
@@ -38,6 +41,7 @@ from exif_turbo.ui.providers.preview_image_provider import PreviewImageProvider
 from exif_turbo.ui.providers.raw_image_provider import RawImageProvider
 from exif_turbo.ui.view_models.app_controller import AppController
 from exif_turbo.tagging.custom_tag_migration import CustomTagMigrationService
+from tests.ui.conftest import _retire_controllers
 
 _PAUSE_MS = 300
 _QML_PATH = (
@@ -108,7 +112,8 @@ def controller_with_images(
 
     yield controller, search_model, folder_a, folder_b
 
-    controller.close()
+    if isValid(controller):
+        controller.close()
     qtbot.wait(100)
 
 
@@ -116,6 +121,30 @@ def controller_with_images(
 
 
 class TestSelectResultById:
+    def test_controller_retirement_before_worker_gc_destroys_on_gui_thread(
+        self,
+        controller_with_images: tuple[AppController, SearchListModel, Path, Path],
+    ) -> None:
+        # Arrange
+        controller, _, _, _ = controller_with_images
+        owner_thread_id = threading.get_ident()
+        destroyed_thread_ids: list[int] = []
+        controller.destroyed.connect(
+            lambda: destroyed_thread_ids.append(threading.get_ident()),
+            Qt.ConnectionType.DirectConnection,
+        )
+
+        # Act
+        _retire_controllers([controller])
+        collector = threading.Thread(target=gc.collect)
+        collector.start()
+        collector.join(timeout=5)
+
+        # Assert
+        assert not collector.is_alive()
+        assert not isValid(controller)
+        assert destroyed_thread_ids == [owner_thread_id]
+
     def test_selectResultById_known_id_returns_proxy_row(
         self,
         qtbot: QtBot,
@@ -1109,6 +1138,29 @@ def click_search_result_browse_button(window: QQuickWindow, results_list: QQuick
     )
 
 
+def wait_for_browse_jump(
+    qtbot: QtBot, root: QObject, browse_list: QQuickItem,
+) -> None:
+    def assert_scroll_completed() -> None:
+        state = {
+            "pendingTarget": root.property("_pendingBrowseTargetId"),
+            "pendingScroll": root.property("_pendingBrowseScrollRow"),
+            "totalResults": root.property("_totalResults"),
+            "prefetchInFlight": root.property("_browsePrefetchInFlight"),
+            **{
+                name: browse_list.property(name)
+                for name in (
+                    "count", "currentIndex", "contentY", "originY",
+                    "contentHeight", "height", "visible",
+                )
+            },
+        }
+        if state["pendingScroll"] != -1 or float(state["contentY"]) <= 0.0:
+            raise AssertionError(json.dumps(state, sort_keys=True))
+
+    qtbot.waitUntil(assert_scroll_completed, timeout=5000)
+
+
 @pytest.fixture
 def browse_navigation_window(
     qtbot: QtBot,
@@ -1331,10 +1383,12 @@ class TestBrowseNavigationQml:
         assert root.property("_pendingBrowseTargetId") == -1
         assert search_model.get_path(controller.currentResultRow) == target_path
 
+    @pytest.mark.parametrize("qml_engine", [False, True], indirect=True)
     def test_browse_jump_scrolls_large_folder_to_target_row(
         self,
         qtbot: QtBot,
         tmp_path: Path,
+        qml_engine: QQmlApplicationEngine,
     ) -> None:
         # Arrange
         folder = tmp_path / "large_folder"
@@ -1371,7 +1425,7 @@ class TestBrowseNavigationQml:
         filter_proxy.setSourceModel(search_model)
         controller.set_filter_proxy(filter_proxy)
 
-        engine = QQmlApplicationEngine()
+        engine = qml_engine
         engine.addImageProvider("preview", PreviewImageProvider())
         engine.addImageProvider("raw", RawImageProvider())
         ctx = engine.rootContext()
@@ -1416,16 +1470,12 @@ class TestBrowseNavigationQml:
         assert browse_list.property("currentIndex") == controller.currentProxyResultRow
         assert controller.currentProxyResultRow > 0
 
-        qml_window.setVisible(False)
-        qtbot.wait(50)
-        engine.deleteLater()
-        controller.close()
-        qtbot.wait(100)
-
+    @pytest.mark.parametrize("qml_engine", [False, True], indirect=True)
     def test_browse_button_click_large_folder_opens_target_slice(
         self,
         qtbot: QtBot,
         tmp_path: Path,
+        qml_engine: QQmlApplicationEngine,
     ) -> None:
         # Arrange
         folder = tmp_path / "large_folder_search"
@@ -1464,7 +1514,7 @@ class TestBrowseNavigationQml:
         filter_proxy.setSourceModel(search_model)
         controller.set_filter_proxy(filter_proxy)
 
-        engine = QQmlApplicationEngine()
+        engine = qml_engine
         engine.addImageProvider("preview", PreviewImageProvider())
         engine.addImageProvider("raw", RawImageProvider())
         ctx = engine.rootContext()
@@ -1507,7 +1557,7 @@ class TestBrowseNavigationQml:
         click_search_result_browse_button(qml_window, results_list)
         qtbot.waitUntil(lambda: tab_bar.property("currentIndex") == 1, timeout=5000)
         qtbot.waitUntil(lambda: root.property("_pendingBrowseTargetId") == -1, timeout=5000)
-        qtbot.wait(_PAUSE_MS)
+        wait_for_browse_jump(qtbot, root, browse_list)
 
         # Assert
         assert controller.totalResults == 130
@@ -1516,16 +1566,12 @@ class TestBrowseNavigationQml:
         assert float(browse_list.property("contentY")) > 0.0
         assert search_model.rowCount() < controller.totalResults
 
-        qml_window.setVisible(False)
-        qtbot.wait(50)
-        engine.deleteLater()
-        controller.close()
-        qtbot.wait(100)
-
+    @pytest.mark.parametrize("qml_engine", [False, True], indirect=True)
     def test_ai_browse_button_click_large_folder_opens_target_slice(
         self,
         qtbot: QtBot,
         tmp_path: Path,
+        qml_engine: QQmlApplicationEngine,
     ) -> None:
         # Arrange
         folder = tmp_path / "large_folder_ai"
@@ -1563,7 +1609,7 @@ class TestBrowseNavigationQml:
         filter_proxy.setSourceModel(search_model)
         controller.set_filter_proxy(filter_proxy)
 
-        engine = QQmlApplicationEngine()
+        engine = qml_engine
         engine.addImageProvider("preview", PreviewImageProvider())
         engine.addImageProvider("raw", RawImageProvider())
         ctx = engine.rootContext()
@@ -1620,7 +1666,7 @@ class TestBrowseNavigationQml:
         click_search_result_browse_button(qml_window, results_list)
         qtbot.waitUntil(lambda: tab_bar.property("currentIndex") == 1, timeout=5000)
         qtbot.waitUntil(lambda: root.property("_pendingBrowseTargetId") == -1, timeout=5000)
-        qtbot.wait(_PAUSE_MS)
+        wait_for_browse_jump(qtbot, root, browse_list)
 
         # Assert
         assert controller.isAiSearchMode is False
@@ -1639,12 +1685,6 @@ class TestBrowseNavigationQml:
         assert controller.isAiSearchMode is True
         assert search_model.rowCount() == 1
         assert search_model.get_path(controller.currentResultRow) == target_path
-
-        qml_window.setVisible(False)
-        qtbot.wait(50)
-        engine.deleteLater()
-        controller.close()
-        qtbot.wait(100)
 
     def test_browse_jump_into_middle_loads_from_start_so_scroll_up_needs_no_prepend(
         self,
@@ -1719,6 +1759,7 @@ class TestBrowseNavigationQml:
         self,
         qtbot: QtBot,
         tmp_path: Path,
+        qml_engine: QQmlApplicationEngine,
     ) -> None:
         # Arrange
         folder = tmp_path / "large_folder_downprefetch"
@@ -1752,7 +1793,7 @@ class TestBrowseNavigationQml:
         filter_proxy.setSourceModel(search_model)
         controller.set_filter_proxy(filter_proxy)
 
-        engine = QQmlApplicationEngine()
+        engine = qml_engine
         engine.addImageProvider("preview", PreviewImageProvider())
         engine.addImageProvider("raw", RawImageProvider())
         ctx = engine.rootContext()
@@ -1814,14 +1855,11 @@ class TestBrowseNavigationQml:
         assert search_model.rowCount() == initial_count + 50
         assert float(browse_list.property("contentY")) > 0.0
 
-        engine.deleteLater()
-        controller.close()
-        qtbot.wait(100)
-
     def test_browse_down_arrow_prefetches_next_page_before_loaded_end(
         self,
         qtbot: QtBot,
         tmp_path: Path,
+        qml_engine: QQmlApplicationEngine,
     ) -> None:
         # Arrange
         folder = tmp_path / "large_folder_downkeyprefetch"
@@ -1855,7 +1893,7 @@ class TestBrowseNavigationQml:
         filter_proxy.setSourceModel(search_model)
         controller.set_filter_proxy(filter_proxy)
 
-        engine = QQmlApplicationEngine()
+        engine = qml_engine
         engine.addImageProvider("preview", PreviewImageProvider())
         engine.addImageProvider("raw", RawImageProvider())
         ctx = engine.rootContext()
@@ -1928,8 +1966,3 @@ class TestBrowseNavigationQml:
         assert search_model.rowCount() == initial_count + 50
         assert controller.currentResultRow == 49
 
-        qml_window.setVisible(False)
-        qtbot.wait(50)
-        engine.deleteLater()
-        controller.close()
-        qtbot.wait(100)

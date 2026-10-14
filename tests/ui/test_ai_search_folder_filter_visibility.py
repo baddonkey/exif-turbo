@@ -17,7 +17,12 @@ from exif_turbo.ui.models.settings_model import SettingsModel
 from exif_turbo.ui.providers.preview_image_provider import PreviewImageProvider
 from exif_turbo.ui.providers.raw_image_provider import RawImageProvider
 from exif_turbo.ui.view_models.app_controller import AppController
-from tests.ui.test_folder_management import _PAUSE_MS, _QML_PATH, folder_demo_db
+from tests.ui.test_folder_management import (
+    _PAUSE_MS,
+    _QML_PATH,
+    _wait_for_folder_idle,
+    folder_demo_db,
+)
 
 
 def test_ai_search_mode_keeps_folder_filter_visible(
@@ -164,12 +169,12 @@ def test_ai_search_select_all_marks_only_ai_results(
     qtbot.waitUntil(lambda: bool(engine.rootObjects()), timeout=5000)
     with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
         controller.unlock("")
-    qtbot.wait(_PAUSE_MS)
+    _wait_for_folder_idle(qtbot, controller)
 
     for folder in (alpha_dir, beta_dir):
         with qtbot.waitSignal(controller.indexedFoldersChanged, timeout=3000):
             controller.addIndexedFolder(QUrl.fromLocalFile(str(folder)).toString())
-        qtbot.wait(_PAUSE_MS)
+        _wait_for_folder_idle(qtbot, controller)
 
     controller.setAiSearchMode(True)
     fake_rows = [

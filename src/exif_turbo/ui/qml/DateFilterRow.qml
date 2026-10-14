@@ -87,7 +87,7 @@ Rectangle {
                         yearBarDelegate.modelData.year >= dateFilterRow._activeFrom &&
                         yearBarDelegate.modelData.year <= dateFilterRow._activeTo
                     readonly property int _barH: Math.max(3, Math.round(
-                        (yearBarDelegate.modelData.count / dateFilterRow._maxCount) * (height - 18)
+                        Math.min(1, yearBarDelegate.modelData.count / dateFilterRow._maxCount) * (height - 18)
                     ))
 
                     Label {

@@ -51,7 +51,7 @@ from typing import Generator
 import pytest
 from PIL import Image
 from PySide6.QtCore import QUrl
-from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent
 from PySide6.QtQuick import QQuickItem
 from pytestqt.qtbot import QtBot
 
@@ -288,3 +288,41 @@ def test_timeline_filter_shows_loading_indicator_while_counts_load() -> None:
     assert "running: dateFilterRow.loading" in source
     assert "visible: _hasYears || loading" in source
     assert 'text: qsTr("Loading timeline...")' in source
+
+
+def test_timeline_filter_transient_count_mismatch_keeps_bar_height_bounded(
+    qtbot: QtBot,
+) -> None:
+    # Arrange
+    engine = QQmlApplicationEngine()
+    component = QQmlComponent(
+        engine, QUrl.fromLocalFile(str(_DATE_FILTER_ROW_QML_PATH))
+    )
+    assert component.isReady(), component.errorString()
+    timeline = component.createWithInitialProperties({
+        "width": 400,
+        "years": engine.evaluate('[{"year": 2000, "count": 1}]'),
+    })
+    assert isinstance(timeline, QQuickItem), component.errorString()
+    try:
+        delegates: list[QQuickItem] = []
+        pending = timeline.childItems()
+        while pending:
+            item = pending.pop()
+            pending.extend(item.childItems())
+            if item.property("_barH") is not None:
+                delegates.append(item)
+        assert len(delegates) == 1
+        delegate = delegates[0]
+
+        # Act
+        delegate.setProperty(
+            "modelData", engine.evaluate('({"year": 2000, "count": 100000})')
+        )
+
+        # Assert
+        assert 3 <= delegate.property("_barH") <= delegate.height() - 18
+    finally:
+        timeline.deleteLater()
+        engine.deleteLater()
+        qtbot.wait(1)
