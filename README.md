@@ -1,7 +1,14 @@
 # exif-turbo
 
-Fast image EXIF metadata search and indexing tool with a PySide6 QML desktop UI.
-Fully generated using VS Code Copilot.
+Search your photo library by metadata or visual content. exif-turbo is a
+local-first desktop app that indexes image and video libraries, with full-text
+search across embedded metadata and AI-powered natural-language search for
+images. Your library stays on your device; password-protected databases encrypt
+the index and supported caches at rest.
+
+Available for **Windows**, **macOS (Apple silicon)**, and **Linux**.
+[Download the latest release](https://github.com/baddonkey/exif-turbo/releases) or
+open the [User Manual](docs/user-manual.md) for installation and usage details.
 
 ![exif-turbo search tab](docs/screenshots/03_search_eagle.png)
 
