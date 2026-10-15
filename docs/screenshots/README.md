@@ -15,6 +15,13 @@ license](https://creativecommons.org/licenses/by-sa/4.0/):
 - `05_browse_tab.png`
 - `07_folder_filter.png`
 - `09_ai_search_mode.png`
+- `exif-turbo-demo.mp4`
+
+The demo video combines the indexed-folders screen with generated tall-window
+captures of a broad EXIF search, AI search mode, and the Browse tab. The search
+and Browse captures and video contain Giles Laurent photographs and are
+distributed under CC BY-SA 4.0. The poster shows the indexed-folders screen,
+which contains no third-party photographs.
 
 `08_gps_location_bar.png` contains a scaled/cropped photograph by 1904.CC
 (Manuel Schmalstieg), available from

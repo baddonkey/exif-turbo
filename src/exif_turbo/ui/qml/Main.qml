@@ -24,6 +24,7 @@ ApplicationWindow {
     // Resolved accent colour — safe to use from bare Rectangle children.
     readonly property color _accentColor: Material.accentColor
     readonly property string monoFont: "Courier New"
+    property bool _demoMode: false
     // Colours for the third-party licenses WebEngineView HTML template.
     // Use rgb() to avoid Qt's #AARRGGBB string format being misread by CSS as #RRGGBBAA.
     readonly property string _licenseLinkColor: settingsModel?.theme === "dark" ? "#64B5F6" : "#1565C0"
@@ -1770,7 +1771,7 @@ ApplicationWindow {
                                     // Full path — elide middle so both root and filename are hinted
                                     Label {
                                         Layout.fillWidth: true
-                                        text: model.path
+                                        text: root._demoMode ? qsTr("Sample library") : model.path
                                         font.pixelSize: 10
                                         font.family: root.monoFont
                                         opacity: 0.45
@@ -2633,12 +2634,16 @@ ApplicationWindow {
 
                                 Label {
                                     id: valueLabel
-                                    text: model.value
+                                    readonly property string displayValue:
+                                        root._demoMode &&
+                                        (model.tag === "SourceFile" || model.tag === "System:Directory")
+                                        ? qsTr("Sample library") : model.value
+                                    text: displayValue
                                     Layout.fillWidth: true
                                     font.pixelSize: 11
                                     elide: Text.ElideRight
                                     opacity: 0.75
-                                    ToolTip.text: model.value
+                                    ToolTip.text: displayValue
                                     ToolTip.visible: (valueHover ? valueHover.hovered : false) && truncated
                                     HoverHandler { id: valueHover }
                                 }
@@ -2990,7 +2995,7 @@ ApplicationWindow {
 
                                     Label {
                                         Layout.fillWidth: true
-                                        text: model.path
+                                        text: root._demoMode ? qsTr("Sample library") : model.path
                                         font.pixelSize: 10; font.family: root.monoFont
                                         opacity: 0.45; elide: Text.ElideMiddle
                                     }
@@ -3730,12 +3735,16 @@ ApplicationWindow {
 
                                     Label {
                                         id: browseValueLabel
-                                        text: model.value
+                                        readonly property string displayValue:
+                                            root._demoMode &&
+                                            (model.tag === "SourceFile" || model.tag === "System:Directory")
+                                            ? qsTr("Sample library") : model.value
+                                        text: displayValue
                                         Layout.fillWidth: true
                                         font.pixelSize: 11
                                         elide: Text.ElideRight
                                         opacity: 0.75
-                                        ToolTip.text: model.value
+                                        ToolTip.text: displayValue
                                         ToolTip.visible: (browseValueHover ? browseValueHover.hovered : false) && truncated
                                         HoverHandler { id: browseValueHover }
                                     }
@@ -3752,6 +3761,7 @@ ApplicationWindow {
     FoldersPanel {
         anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; bottom: parent.bottom }
         visible: !_isLocked && mainTabBar.currentIndex === 2
+        demoMode: root._demoMode
     }
 
     // ── Settings tab ─────────────────────────────────────────────────────

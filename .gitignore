@@ -87,6 +87,10 @@ docs/_build/
 # and scripts/export_manual_pdf.py — do not commit)
 docs/screenshots/demo.db
 docs/screenshots/thumbs/
+docs/screenshots/demo_exif_results.png
+docs/screenshots/demo_ai_mode.png
+docs/screenshots/demo_browse_tab.png
+docs/screenshots/demo_indexed_folders.png
 
 # Large local build input for the bundled public-figure snapshot.
 assets/wikidata/wikidata-public-figure-entities-v1.jsonl

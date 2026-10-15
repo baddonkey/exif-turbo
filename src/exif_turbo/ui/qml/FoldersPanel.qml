@@ -8,6 +8,7 @@ Item {
     id: foldersPanel
     objectName: "foldersPanel"
     property bool expertMode: false
+    property bool demoMode: false
 
     // ── Status colour map ─────────────────────────────────────────────────
     function statusColor(status) {
@@ -201,6 +202,7 @@ Item {
                 }
             delegate: Rectangle {
                 id: folderDelegate
+                required property string path
                 width: foldersList.width
                 height: 76
                 color: index % 2 === 0 ? Material.background : Qt.darker(Material.background, 1.03)
@@ -249,7 +251,7 @@ Item {
 
                         Label {
                             Layout.fillWidth: true
-                            text: model.path
+                            text: foldersPanel.demoMode ? qsTr("Sample library") : folderDelegate.path
                             font.pixelSize: 10
                             font.family: "Courier New"
                             opacity: 0.45
