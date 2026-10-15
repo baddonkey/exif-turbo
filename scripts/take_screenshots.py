@@ -373,6 +373,7 @@ def _run_gui(demo_only: bool = False) -> None:
 
     root = engine.rootObjects()[0]
     root.showNormal()
+    root.setProperty("_demoMode", demo_only)
     root.setProperty("width", 1920 if demo_only else 1200)
     root.setProperty("height", 1080 if demo_only else 800)
 

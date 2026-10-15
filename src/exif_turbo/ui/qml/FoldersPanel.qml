@@ -8,6 +8,7 @@ Item {
     id: foldersPanel
     objectName: "foldersPanel"
     property bool expertMode: false
+    property bool demoMode: false
 
     // ── Status colour map ─────────────────────────────────────────────────
     function statusColor(status) {
@@ -249,7 +250,7 @@ Item {
 
                         Label {
                             Layout.fillWidth: true
-                            text: model.path
+                            text: foldersPanel.demoMode ? qsTr("Sample library") : model.path
                             font.pixelSize: 10
                             font.family: "Courier New"
                             opacity: 0.45
