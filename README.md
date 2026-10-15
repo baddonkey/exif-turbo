@@ -9,7 +9,7 @@ collections on Windows, macOS, and Linux.
 
 [![Watch the exif-turbo walkthrough: full-screen search, metadata, AI search, and Browse](docs/screenshots/exif-turbo-demo-poster.png)](docs/screenshots/exif-turbo-demo.mp4)
 
-*The demo includes photographs by © Giles Laurent, licensed CC BY-SA 4.0; see [screenshot attribution](docs/screenshots/README.md).*
+*The demo and poster include photographs by © Giles Laurent, licensed CC BY-SA 4.0; see [screenshot attribution](docs/screenshots/README.md).*
 
 ## What it does
 
