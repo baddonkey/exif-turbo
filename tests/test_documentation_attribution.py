@@ -40,13 +40,9 @@ def test_screenshot_attribution_manifest_all_photo_screenshots_maps_sources() ->
     assert missing == []
 
 
-def test_user_documents_photo_screenshots_credit_immediately_after_image() -> None:
+def test_user_manual_photo_screenshots_credit_immediately_after_image() -> None:
     # Arrange
     expected = {
-        REPO_ROOT / "README.md": (
-            "03_search_eagle",
-            "09_ai_search_mode",
-        ),
         REPO_ROOT / "docs" / "user-manual.md": (
             "02_search_all",
             "04_search_milky_way",
@@ -76,6 +72,18 @@ def test_user_documents_photo_screenshots_credit_immediately_after_image() -> No
             else:
                 assert "Giles Laurent" in credit
                 assert "CC BY-SA 4.0" in credit
+
+
+def test_readme_demo_poster_credit_names_photographer_and_license() -> None:
+    # Arrange
+    readme = REPO_ROOT / "README.md"
+
+    # Act
+    credit = _credit_after_screenshot(readme, "exif-turbo-demo-poster")
+
+    # Assert
+    assert "Giles Laurent" in credit
+    assert "CC BY-SA 4.0" in credit
 
 
 def test_screenshot_license_notice_cc_by_sa_composites_identifies_treatment() -> None:

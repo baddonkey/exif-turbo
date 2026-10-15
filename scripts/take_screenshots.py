@@ -429,7 +429,7 @@ def _run_gui(demo_only: bool = False) -> None:
             QTimer.singleShot(1500, step_demo_exif_grab)
             return
         _grab(root, "02_search_all")
-        prev = ctrl.selectedImageSource
+        prev = str(ctrl.selectedImageSource)
         ctrl.search("chateau")
         print("  Searching 'chateau' -- waiting for preview to decode ...")
         _wait_for_preview(root, ctrl, step_1_prepare_ai_mode, prev_source=prev)
