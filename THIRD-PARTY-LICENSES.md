@@ -169,6 +169,7 @@ Mandatory attribution per the license:
 | Used in | Description |
 |---------|-------------|
 | Documentation screenshots | Search (all / eagle / Milky Way), Browse, folder-filter, and AI-mode screenshot composites (`02`, `03`, `04`, `05`, `07`, and `09`) contain scaled/cropped Giles Laurent photographs and are distributed under CC BY-SA 4.0 |
+| README walkthrough | `exif-turbo-demo-poster.png` and `exif-turbo-demo.mp4` contain scaled/cropped Giles Laurent photographs and are distributed under CC BY-SA 4.0 |
 | `tests/sample-data/schweiz/` | 13 wildlife, landscape, and astrophotography test images |
 
 Full per-file attribution is listed in

@@ -56,7 +56,7 @@ def build_demo() -> tuple[Path, Path]:
         check=True,
     )
     scenes = _load_scenes()
-    scenes[0].save(_POSTER, format="PNG", optimize=True)
+    scenes[_SCENES.index("demo_exif_results.png")].save(_POSTER, format="PNG", optimize=True)
 
     _OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     container = av.open(str(_OUTPUT), mode="w", options={"movflags": "+faststart"})
