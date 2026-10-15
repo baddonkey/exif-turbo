@@ -439,7 +439,7 @@ def _run_gui(demo_only: bool = False) -> None:
         from PySide6.QtCore import QObject
 
         search_field = root.findChild(QObject, "searchField")
-        prev = ctrl.selectedImageSource
+        prev = str(ctrl.selectedImageSource)
         ctrl.search("chateau")
         if search_field is not None:
             search_field.setProperty("text", "chateau")
@@ -483,7 +483,7 @@ def _run_gui(demo_only: bool = False) -> None:
         _grab(root, "09_ai_search_mode")
         root.setProperty("_aiSearchMode", False)
         ctrl.setAiSearchMode(False)
-        prev = ctrl.selectedImageSource
+        prev = str(ctrl.selectedImageSource)
         ctrl.search("eagle")
         print("  Searching 'eagle' -- waiting for preview to decode ...")
         _wait_for_preview(root, ctrl, step_2_eagle, prev_source=prev)
@@ -491,7 +491,7 @@ def _run_gui(demo_only: bool = False) -> None:
     # -- Step 2: eagle search -------------------------------------------------
     def step_2_eagle() -> None:
         _grab(root, "03_search_eagle")
-        prev = ctrl.selectedImageSource
+        prev = str(ctrl.selectedImageSource)
         ctrl.search("milky way")
         print("  Searching 'milky way' -- waiting for preview to decode ...")
         _wait_for_preview(root, ctrl, step_3_milky_way, prev_source=prev)
@@ -559,7 +559,7 @@ def _run_gui(demo_only: bool = False) -> None:
         ctrl.clearSearchFolderFilters()
         ctrl.toggleSearchFolderFilter(str(GPS_SAMPLE_FOLDER))
         ctrl.search("")
-        prev = ctrl.selectedImageSource
+        prev = str(ctrl.selectedImageSource)
         ctrl.selectResult(0)
         print("  GPS image -- waiting for preview to decode ...")
         _wait_for_preview(root, ctrl, step_7_gps_grab, prev_source=prev or "")
