@@ -5,8 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "exif-turbo"
 version = "1.20.6"
-description = "Fast EXIF full-text search with a PySide6 UI"
+description = "Local-first photo and video library indexing with EXIF metadata and AI image search"
 requires-python = ">=3.11"
+keywords = ["EXIF", "image search", "photo management", "metadata", "semantic search", "privacy", "video"]
 dependencies = [
   "PySide6>=6.11",
   "Pillow>=12.3",
@@ -21,6 +22,13 @@ dependencies = [
   "open-clip-torch>=3.3",
   "transformers[sentencepiece]>=4.51,<6",
 ]
+
+[project.urls]
+Homepage = "https://github.com/baddonkey/exif-turbo"
+Repository = "https://github.com/baddonkey/exif-turbo"
+Issues = "https://github.com/baddonkey/exif-turbo/issues"
+Releases = "https://github.com/baddonkey/exif-turbo/releases"
+Documentation = "https://github.com/baddonkey/exif-turbo/blob/main/docs/user-manual.md"
 
 [project.scripts]
 exif-turbo = "exif_turbo.app:main"
