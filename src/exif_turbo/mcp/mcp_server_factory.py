@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from mcp.server import MCPServer
-from mcp.types import CallToolResult, ImageContent, TextContent
+from mcp.types import CallToolResult, ContentBlock, ImageContent, TextContent
 
 from .mcp_session_service import McpSessionError, McpSessionService
 
@@ -45,9 +45,9 @@ class McpServerFactory:
             except McpSessionError as exc:
                 return CallToolResult(
                     content=[TextContent(type="text", text=str(exc))],
-                    isError=True,
+                    is_error=True,
                 )
-            content: list[TextContent | ImageContent] = [
+            content: list[ContentBlock] = [
                 TextContent(
                     type="text",
                     text=json.dumps(payload.to_dict(), ensure_ascii=False, indent=2),
@@ -58,12 +58,12 @@ class McpServerFactory:
                     ImageContent(
                         type="image",
                         data=payload.preview_jpeg_base64,
-                        mimeType="image/jpeg",
+                        mime_type="image/jpeg",
                     )
                 )
             return CallToolResult(
                 content=content,
-                structuredContent=payload.to_dict(),
+                structured_content=payload.to_dict(),
             )
 
         @server.tool(
@@ -80,12 +80,12 @@ class McpServerFactory:
             except McpSessionError as exc:
                 return CallToolResult(
                     content=[TextContent(type="text", text=str(exc))],
-                    isError=True,
+                    is_error=True,
                 )
             except Exception as exc:  # noqa: BLE001 — surface to MCP clients
                 return CallToolResult(
                     content=[TextContent(type="text", text=str(exc))],
-                    isError=True,
+                    is_error=True,
                 )
             return CallToolResult(
                 content=[
@@ -94,7 +94,7 @@ class McpServerFactory:
                         text=json.dumps(result, ensure_ascii=False, indent=2),
                     )
                 ],
-                structuredContent=result,
+                structured_content=result,
             )
 
         @server.resource(

@@ -4,6 +4,7 @@ import QtQuick.Controls.Material
 import QtQuick.Layouts
 
 ColumnLayout {
+    id: root
     required property var appController
     required property var appSettings
     Layout.fillWidth: true
@@ -28,10 +29,10 @@ ColumnLayout {
         id: mcpEnabledSwitch
         objectName: "mcpEnabledSwitch"
         text: qsTr("Enable MCP server for this database")
-        checked: appSettings ? appSettings.mcpEnabled : false
+        checked: root.appSettings ? root.appSettings.mcpEnabled : false
         onToggled: {
-            if (appSettings)
-                appSettings.setMcpEnabled(checked)
+            if (root.appSettings)
+                root.appSettings.setMcpEnabled(checked)
         }
     }
 
@@ -40,7 +41,7 @@ ColumnLayout {
         columnSpacing: 12
         rowSpacing: 8
         Layout.fillWidth: true
-        enabled: appSettings ? appSettings.mcpEnabled : false
+        enabled: root.appSettings ? root.appSettings.mcpEnabled : false
 
         Label {
             text: qsTr("Host")
@@ -49,12 +50,12 @@ ColumnLayout {
         TextField {
             id: mcpHostField
             objectName: "mcpHostField"
-            text: appSettings ? appSettings.mcpHost : "127.0.0.1"
+            text: root.appSettings ? root.appSettings.mcpHost : "127.0.0.1"
             Layout.fillWidth: true
             placeholderText: "127.0.0.1"
             onEditingFinished: {
-                if (appSettings)
-                    appSettings.setMcpHost(text)
+                if (root.appSettings)
+                    root.appSettings.setMcpHost(text)
             }
         }
 
@@ -68,22 +69,22 @@ ColumnLayout {
             from: 1
             to: 65535
             editable: true
-            value: appSettings ? appSettings.mcpPort : 8765
+            value: root.appSettings ? root.appSettings.mcpPort : 8765
             Layout.preferredWidth: 140
             onValueModified: {
-                if (appSettings)
-                    appSettings.setMcpPort(value)
+                if (root.appSettings)
+                    root.appSettings.setMcpPort(value)
             }
         }
     }
 
     RowLayout {
-        visible: appController && appController.mcpUrl !== ""
+        visible: root.appController && root.appController.mcpUrl !== ""
         Layout.fillWidth: true
         spacing: 8
 
         Label {
-            text: qsTr("Endpoint: %1").arg(appController ? appController.mcpUrl : "")
+            text: qsTr("Endpoint: %1").arg(root.appController ? root.appController.mcpUrl : "")
             font.pixelSize: 12
             font.family: "monospace"
             wrapMode: Text.WrapAnywhere
@@ -96,10 +97,10 @@ ColumnLayout {
             objectName: "mcpCopyUrlButton"
             text: qsTr("Copy")
             flat: true
-            enabled: appController && appController.mcpUrl !== ""
+            enabled: root.appController && root.appController.mcpUrl !== ""
             onClicked: {
-                if (appController)
-                    appController.copyTextToClipboard(appController.mcpUrl)
+                if (root.appController)
+                    root.appController.copyTextToClipboard(root.appController.mcpUrl)
             }
             ToolTip.visible: hovered
             ToolTip.delay: 400
@@ -108,12 +109,12 @@ ColumnLayout {
     }
 
     Label {
-        visible: appController && appController.mcpStatusMessage !== ""
-        text: appController ? appController.mcpStatusMessage : ""
+        visible: root.appController && root.appController.mcpStatusMessage !== ""
+        text: root.appController ? root.appController.mcpStatusMessage : ""
         font.pixelSize: 12
         wrapMode: Text.WordWrap
         Layout.fillWidth: true
-        color: (appController && appController.mcpRunning)
+        color: (root.appController && root.appController.mcpRunning)
                ? (Material.theme === Material.Dark ? "#a5d6a7" : "#2e7d32")
                : (Material.theme === Material.Dark ? "#ffcc80" : "#ef6c00")
     }

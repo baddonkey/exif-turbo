@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, List, Tuple
 
 if TYPE_CHECKING:
+    from PIL import Image as PilImage
+
     from ..providers.preview_image_provider import PreviewImageProvider
     from ..providers.thumb_image_provider import ThumbnailImageProvider
 
@@ -567,15 +569,15 @@ class AppController(QObject):
 
     @Property(bool, notify=mcpStatusChanged)
     def mcpRunning(self) -> bool:
-        return self._mcp.mcpRunning
+        return self._mcp.is_running
 
     @Property(str, notify=mcpStatusChanged)
     def mcpUrl(self) -> str:
-        return self._mcp.mcpUrl
+        return self._mcp.url
 
     @Property(str, notify=mcpStatusChanged)
     def mcpStatusMessage(self) -> str:
-        return self._mcp.mcpStatusMessage
+        return self._mcp.status_message
 
     def _mcp_selected_free_tags(self) -> tuple[str, ...]:
         path = self._search_model.get_path(self._current_result_row)
@@ -588,7 +590,7 @@ class AppController(QObject):
                 _log.exception("Failed to read free tags for MCP selection")
         return tuple(self._tagging.free_tags_model._rows)
 
-    def _mcp_load_preview_image(self) -> object | None:
+    def _mcp_load_preview_image(self) -> PilImage.Image | None:
         path = self._pending_preview_path or self._search_model.get_path(
             self._current_result_row
         )

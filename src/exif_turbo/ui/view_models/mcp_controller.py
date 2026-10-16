@@ -6,6 +6,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from PIL import Image
 from PySide6.QtCore import Property, QObject, Signal
 
 from ...i18n import _
@@ -37,7 +38,7 @@ class McpController(QObject):
         selected_metadata_json: Callable[[], str | None],
         selected_has_preview: Callable[[], bool],
         selected_free_tags: Callable[[], tuple[str, ...]],
-        load_preview_image: Callable[[], object | None],
+        load_preview_image: Callable[[], Image.Image | None],
         get_tagging_service: Callable[[], TaggingService | None],
         tagging_available: Callable[[], bool],
         refresh_after_mutation: Callable[[], None],
@@ -61,12 +62,12 @@ class McpController(QObject):
         if self._settings is not None:
             self._settings.mcpSettingsChanged.connect(self.sync_from_settings)
 
-    @Property(bool, notify=mcpStatusChanged)
-    def mcpRunning(self) -> bool:
+    @property
+    def is_running(self) -> bool:
         return self._runtime.is_running and not self._runtime.error
 
-    @Property(str, notify=mcpStatusChanged)
-    def mcpUrl(self) -> str:
+    @property
+    def url(self) -> str:
         endpoint = self._runtime.endpoint
         if endpoint is None:
             if self._settings is None:
@@ -74,9 +75,21 @@ class McpController(QObject):
             return f"http://{self._settings.mcp_host}:{self._settings.mcp_port}/mcp"
         return endpoint.url
 
+    @property
+    def status_message(self) -> str:
+        return self._status_message
+
+    @Property(bool, notify=mcpStatusChanged)
+    def mcpRunning(self) -> bool:
+        return self.is_running
+
+    @Property(str, notify=mcpStatusChanged)
+    def mcpUrl(self) -> str:
+        return self.url
+
     @Property(str, notify=mcpStatusChanged)
     def mcpStatusMessage(self) -> str:
-        return self._status_message
+        return self.status_message
 
     def sync_from_settings(self) -> None:
         """Start or stop the MCP server to match settings + lock state."""
@@ -107,7 +120,7 @@ class McpController(QObject):
             self.mcpStatusChanged.emit()
             return
         self._status_message = _("MCP server listening on {url}").format(
-            url=self.mcpUrl
+            url=self.url
         )
         self.mcpStatusChanged.emit()
 
