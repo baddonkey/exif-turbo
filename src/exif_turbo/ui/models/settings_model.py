@@ -58,6 +58,13 @@ _JSON_INDENT_SIZE_CHOICES: List[int] = [2, 4, 8]
 _MIN_JSON_INDENT_SIZE = 1
 _MAX_JSON_INDENT_SIZE = 8
 
+# MCP Streamable HTTP interface (opt-in; binds locally by default).
+_DEFAULT_MCP_ENABLED = False
+_DEFAULT_MCP_HOST = "127.0.0.1"
+_DEFAULT_MCP_PORT = 8765
+_MIN_MCP_PORT = 1
+_MAX_MCP_PORT = 65535
+
 _IS_MACOS_INTEL = sys.platform == "darwin" and platform.machine().lower() in {"x86_64", "amd64"}
 _AI_FEATURE_SUPPORTED = not _IS_MACOS_INTEL
 _AI_UNAVAILABLE_REASON = _("PyTorch is not available on macOS Intel for Python 3.13+.")
@@ -86,6 +93,7 @@ class SettingsModel(QObject):
     gpuInstallFinished = Signal(bool, str)
     taggingSettingsChanged = Signal()
     jsonExportFormatChanged = Signal()
+    mcpSettingsChanged = Signal()
 
     def __init__(self, settings_path: Path, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -108,6 +116,9 @@ class SettingsModel(QObject):
         self._json_pretty: bool = _DEFAULT_JSON_PRETTY
         self._json_indent_style: str = _DEFAULT_JSON_INDENT_STYLE
         self._json_indent_size: int = _DEFAULT_JSON_INDENT_SIZE
+        self._mcp_enabled: bool = _DEFAULT_MCP_ENABLED
+        self._mcp_host: str = _DEFAULT_MCP_HOST
+        self._mcp_port: int = _DEFAULT_MCP_PORT
         self._load()
         configure_vips_allowed_extensions(self._libvips_extensions)
 
@@ -322,6 +333,60 @@ class SettingsModel(QObject):
             return
         self._tagging_enabled = value
         self.taggingSettingsChanged.emit()
+        self._save()
+
+    # ── MCP interface ─────────────────────────────────────────────────────────
+
+    @Property(bool, notify=mcpSettingsChanged)
+    def mcpEnabled(self) -> bool:
+        return self._mcp_enabled
+
+    @property
+    def mcp_enabled(self) -> bool:
+        return self._mcp_enabled
+
+    @Slot(bool)
+    def setMcpEnabled(self, value: bool) -> None:
+        if self._mcp_enabled == value:
+            return
+        self._mcp_enabled = value
+        self.mcpSettingsChanged.emit()
+        self._save()
+
+    @Property(str, notify=mcpSettingsChanged)
+    def mcpHost(self) -> str:
+        return self._mcp_host
+
+    @property
+    def mcp_host(self) -> str:
+        return self._mcp_host
+
+    @Slot(str)
+    def setMcpHost(self, value: str) -> None:
+        host = value.strip() or _DEFAULT_MCP_HOST
+        if self._mcp_host == host:
+            return
+        self._mcp_host = host
+        self.mcpSettingsChanged.emit()
+        self._save()
+
+    @Property(int, notify=mcpSettingsChanged)
+    def mcpPort(self) -> int:
+        return self._mcp_port
+
+    @property
+    def mcp_port(self) -> int:
+        return self._mcp_port
+
+    @Slot(int)
+    def setMcpPort(self, value: int) -> None:
+        if not isinstance(value, int):
+            return
+        clamped = max(_MIN_MCP_PORT, min(_MAX_MCP_PORT, value))
+        if self._mcp_port == clamped:
+            return
+        self._mcp_port = clamped
+        self.mcpSettingsChanged.emit()
         self._save()
 
     @Property("QVariantList", notify=blacklistChanged)
@@ -569,6 +634,15 @@ class SettingsModel(QObject):
                     _MIN_JSON_INDENT_SIZE,
                     min(_MAX_JSON_INDENT_SIZE, data["jsonExportIndentSize"]),
                 )
+            if isinstance(data.get("mcpEnabled"), bool):
+                self._mcp_enabled = data["mcpEnabled"]
+            if isinstance(data.get("mcpHost"), str) and data["mcpHost"].strip():
+                self._mcp_host = data["mcpHost"].strip()
+            if isinstance(data.get("mcpPort"), int):
+                self._mcp_port = max(
+                    _MIN_MCP_PORT,
+                    min(_MAX_MCP_PORT, data["mcpPort"]),
+                )
         except Exception:
             pass  # corrupt/missing file — use defaults
 
@@ -591,6 +665,9 @@ class SettingsModel(QObject):
                         "jsonExportPretty": self._json_pretty,
                         "jsonExportIndentStyle": self._json_indent_style,
                         "jsonExportIndentSize": self._json_indent_size,
+                        "mcpEnabled": self._mcp_enabled,
+                        "mcpHost": self._mcp_host,
+                        "mcpPort": self._mcp_port,
                     },
                     indent=2,
                 ),

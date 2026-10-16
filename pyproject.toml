@@ -21,6 +21,7 @@ dependencies = [
   "faiss-cpu>=1.14",
   "open-clip-torch>=3.3",
   "transformers[sentencepiece]>=4.51,<6",
+  "mcp>=2.3,<3",
 ]
 
 [project.urls]
