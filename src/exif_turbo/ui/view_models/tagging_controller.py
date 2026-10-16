@@ -116,6 +116,11 @@ class TaggingController(QObject):
         if repository is not None:
             self._service = TaggingService(repository, FilesystemSidecarRepository())
 
+    @property
+    def service(self) -> TaggingService | None:
+        """Return the active tagging service, if the database is unlocked."""
+        return self._service
+
     def clear(self) -> None:
         self.cancel_workers(wait=True)
         self._service = None

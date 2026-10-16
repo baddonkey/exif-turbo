@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, List, Tuple
 
 if TYPE_CHECKING:
+    from PIL import Image as PilImage
+
     from ..providers.preview_image_provider import PreviewImageProvider
     from ..providers.thumb_image_provider import ThumbnailImageProvider
 
@@ -84,6 +86,7 @@ from ..workers.search_worker import SearchPageWorker, SearchWorker
 from ..workers.thumb_worker import ThumbWorker
 from ..workers.year_counts_worker import YearCountsWorker
 from ...utils.preview_render import MAX_PREVIEW_PX, render_preview
+from .mcp_controller import McpController
 from .tagging_controller import TaggingController
 
 _PAGE_SIZE = 50
@@ -176,6 +179,7 @@ class AppController(QObject):
     taggingStateChanged = Signal()
     bulkTagOperationChanged = Signal()
     derivativeOperationChanged = Signal()
+    mcpStatusChanged = Signal()
 
     def __init__(
         self,
@@ -378,6 +382,25 @@ class AppController(QObject):
         self._tagging.taggingStateChanged.connect(self.taggingStateChanged)
         self._tagging.bulkTagOperationChanged.connect(self.bulkTagOperationChanged)
         self._tagging.derivativeOperationChanged.connect(self.derivativeOperationChanged)
+        self._mcp = McpController(
+            settings=settings,
+            is_locked=lambda: self._is_locked,
+            selected_path=lambda: self._search_model.get_path(self._current_result_row),
+            selected_image_id=lambda: self._search_model.get_image_id(
+                self._current_result_row
+            ),
+            selected_metadata_json=lambda: self._search_model.get_metadata_json(
+                self._current_result_row
+            ),
+            selected_has_preview=lambda: self._selected_has_preview,
+            selected_free_tags=self._mcp_selected_free_tags,
+            load_preview_image=self._mcp_load_preview_image,
+            get_tagging_service=lambda: self._tagging.service,
+            tagging_available=lambda: self._tagging.free_tagging_available,
+            refresh_after_mutation=self._refresh_after_tag_mutation,
+            parent=self,
+        )
+        self._mcp.mcpStatusChanged.connect(self.mcpStatusChanged)
         # Timer: kick off a batch thumb build while indexing runs. Fires 5 s
         # after indexing begins so the DB has a first batch of rows to process.
         self._thumb_batch_timer = QTimer(self)
@@ -541,6 +564,43 @@ class AppController(QObject):
     @Property(bool, notify=taggingStateChanged)
     def freeTaggingAvailable(self) -> bool:
         return self._tagging.free_tagging_available
+
+    # ── MCP interface ─────────────────────────────────────────────────────────
+
+    @Property(bool, notify=mcpStatusChanged)
+    def mcpRunning(self) -> bool:
+        return self._mcp.is_running
+
+    @Property(str, notify=mcpStatusChanged)
+    def mcpUrl(self) -> str:
+        return self._mcp.url
+
+    @Property(str, notify=mcpStatusChanged)
+    def mcpStatusMessage(self) -> str:
+        return self._mcp.status_message
+
+    def _mcp_selected_free_tags(self) -> tuple[str, ...]:
+        path = self._search_model.get_path(self._current_result_row)
+        if not path:
+            return ()
+        if self._repo is not None:
+            try:
+                return self._repo.get_free_tags(path)
+            except Exception:  # noqa: BLE001
+                _log.exception("Failed to read free tags for MCP selection")
+        return tuple(self._tagging.free_tags_model._rows)
+
+    def _mcp_load_preview_image(self) -> PilImage.Image | None:
+        path = self._pending_preview_path or self._search_model.get_path(
+            self._current_result_row
+        )
+        if not path:
+            return None
+        try:
+            return self._load_preview_for_clipboard(path)
+        except Exception:  # noqa: BLE001
+            _log.exception("Failed to load preview image for MCP")
+            return None
 
     @Property(QObject, constant=True)
     def embeddedTagsModel(self) -> QObject:
@@ -1465,6 +1525,7 @@ class AppController(QObject):
                 self._start_managed_folder_indexing(folder, force=False)
         if not self._scan_queue and not self._is_indexing:
             self._start_auto_thumbs()
+        self._mcp.sync_from_settings()
 
     def _abort_unlock_after_custom_tag_migration(self, error: str) -> None:
         self._clear_tagging_services()
@@ -3934,6 +3995,15 @@ class AppController(QObject):
             self.clipboardCopyDone.emit(_("Path copied to clipboard"))
 
     @Slot(str)
+    def copyTextToClipboard(self, text: str) -> None:
+        """Copy plain *text* to the system clipboard and show a toast."""
+        value = (text or "").strip()
+        if not value:
+            return
+        QGuiApplication.clipboard().setText(value)
+        self.clipboardCopyDone.emit(_("Copied to clipboard"))
+
+    @Slot(str)
     def doSavePreview(self, file_url: str) -> None:
         """Save the currently displayed preview image to the path chosen in QML."""
         path = self._pending_preview_path
@@ -4768,6 +4838,7 @@ class AppController(QObject):
         self._ai_search_worker = None
         self._bulk_worker = None
         self._finishing_search_workers.clear()
+        self._mcp.close()
         self._tagging.close()
         self._ai_search_session.close()
         self._key = ""

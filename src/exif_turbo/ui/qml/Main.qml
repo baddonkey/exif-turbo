@@ -4369,6 +4369,15 @@ ApplicationWindow {
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
 
+                    McpSettings {
+                        id: mcpSettingsSection
+                        appController: controller
+                        appSettings: settingsModel
+                        Layout.bottomMargin: 28
+                    }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: Material.dividerColor; Layout.bottomMargin: 28 }
+
                     // ── AI Features ───────────────────────────────────────
                     Label {
                         text: qsTr("AI Features")
