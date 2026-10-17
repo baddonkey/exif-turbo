@@ -45,6 +45,7 @@ class SearchWorker(QThread):
         serial: int,
         date_from: int | None = None,
         date_to: int | None = None,
+        image_set_id: int | None = None,
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -60,6 +61,7 @@ class SearchWorker(QThread):
         self._serial = serial
         self._date_from = date_from
         self._date_to = date_to
+        self._image_set_id = image_set_id
 
     def run(self) -> None:
         try:
@@ -73,6 +75,7 @@ class SearchWorker(QThread):
                 marked_only=self._marked_only,
                 date_from=self._date_from,
                 date_to=self._date_to,
+                image_set_id=self._image_set_id,
             )
             total: int = repo.count_images(
                 self._query,
@@ -82,6 +85,7 @@ class SearchWorker(QThread):
                 marked_only=self._marked_only,
                 date_from=self._date_from,
                 date_to=self._date_to,
+                image_set_id=self._image_set_id,
             )
             format_counts: list = repo.get_format_counts(
                 query=self._query,
@@ -89,6 +93,7 @@ class SearchWorker(QThread):
                 restrict_to_enabled_folders=self._restrict,
                 date_from=self._date_from,
                 date_to=self._date_to,
+                image_set_id=self._image_set_id,
             )
             repo.close()
             self.results_ready.emit(rows, total, format_counts, self._serial)
@@ -118,6 +123,7 @@ class SearchPageWorker(QThread):
         serial: int,
         date_from: int | None = None,
         date_to: int | None = None,
+        image_set_id: int | None = None,
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -133,6 +139,7 @@ class SearchPageWorker(QThread):
         self._serial = serial
         self._date_from = date_from
         self._date_to = date_to
+        self._image_set_id = image_set_id
 
     def run(self) -> None:
         try:
@@ -148,6 +155,7 @@ class SearchPageWorker(QThread):
                 marked_only=self._marked_only,
                 date_from=self._date_from,
                 date_to=self._date_to,
+                image_set_id=self._image_set_id,
             )
             repo.close()
             self.results_ready.emit(rows, self._serial)

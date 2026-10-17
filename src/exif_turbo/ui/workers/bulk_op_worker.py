@@ -51,6 +51,9 @@ class BulkOpWorker(QThread):
         # date filter
         date_from: int | None = None,
         date_to: int | None = None,
+        image_set_id: int | None = None,
+        marked_set_id: int | None = None,
+        export_all_in_set: bool = False,
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -69,6 +72,9 @@ class BulkOpWorker(QThread):
         self._cache_dir = cache_dir
         self._date_from = date_from
         self._date_to = date_to
+        self._image_set_id = image_set_id
+        self._marked_set_id = marked_set_id
+        self._export_all_in_set = export_all_in_set
         self._cancel_event = threading.Event()
 
         # Output fields — read by the controller in the finished slot
@@ -121,6 +127,7 @@ class BulkOpWorker(QThread):
                 marked_only=self._marked_only,
                 date_from=self._date_from,
                 date_to=self._date_to,
+                image_set_id=self._image_set_id,
             )
         else:
             paths = list(self._image_paths)
@@ -142,6 +149,7 @@ class BulkOpWorker(QThread):
             marked_only=self._marked_only,
             date_from=self._date_from,
             date_to=self._date_to,
+            image_set_id=self._image_set_id,
         )
         affected = len(added) + len(removed)
         self.progress.emit(affected, affected)
@@ -176,6 +184,7 @@ class BulkOpWorker(QThread):
             marked_only=self._marked_only,
             date_from=self._date_from,
             date_to=self._date_to,
+            image_set_id=self._image_set_id,
         )
         if self._is_canceled():
             self.canceled.emit()
@@ -244,7 +253,7 @@ class BulkOpWorker(QThread):
             return
 
         self.progress.emit(0, 0)
-        paths = repo.get_marked_paths()
+        paths = repo.get_marked_paths(image_set_id=self._marked_set_id)
         total = len(paths)
         self.progress.emit(0, total)
 
@@ -352,6 +361,8 @@ class BulkOpWorker(QThread):
         records = repo.get_marked_metadata(
             self._sort_by,
             restrict_to_enabled_folders=self._restrict_to_enabled_folders,
+            image_set_id=self._marked_set_id,
+            include_unmarked=self._export_all_in_set and self._marked_set_id is not None,
         )
 
         if self._is_canceled():

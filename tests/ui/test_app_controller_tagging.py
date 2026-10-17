@@ -602,10 +602,12 @@ def test_app_controller_derivative_slot_converts_url_and_all_indexed_roots(
     assert worker.started is True
 
 
+@pytest.mark.parametrize("image_set_id", [None, 7])
 def test_app_controller_current_results_forwards_complete_search_scope(
     tagging_controller: tuple[AppController, SearchListModel, Path, Path],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    image_set_id: int | None,
 ) -> None:
     # Arrange
     controller, _model, _db_path, _image_path = tagging_controller
@@ -619,6 +621,7 @@ def test_app_controller_current_results_forwards_complete_search_scope(
     controller._checked_only_filter_active = True
     controller._date_from = 100
     controller._date_to = 200
+    controller._search_image_set_id = image_set_id
     assert controller._settings is not None
     FakeDerivativeWorker.instances.clear()
     monkeypatch.setattr(app_controller_module, "DerivativeExportWorker", FakeDerivativeWorker)
@@ -638,7 +641,37 @@ def test_app_controller_current_results_forwards_complete_search_scope(
         "marked_only": True,
         "date_from": 100,
         "date_to": 200,
+        "image_set_id": image_set_id,
     }
+
+
+@pytest.mark.parametrize("marked_only", [False, True])
+def test_app_controller_sets_derivatives_ignore_search_scope(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    marked_only: bool,
+) -> None:
+    # Arrange
+    controller, _, _, _ = tagging_controller
+    controller.setActionImageSet(23)
+    controller._query_text = "unrelated"
+    controller._is_ai_search_mode = True
+    FakeDerivativeWorker.instances.clear()
+    monkeypatch.setattr(app_controller_module, "DerivativeExportWorker", FakeDerivativeWorker)
+
+    # Act
+    output_url = QUrl.fromLocalFile(str(tmp_path / "output")).toString()
+    if marked_only:
+        controller.generateDerivativesForMarked(output_url)
+    else:
+        controller.generateDerivativesForCurrentResults(output_url)
+
+    # Assert
+    expected_options = {"matching_results": True, "image_set_id": 23}
+    if marked_only:
+        expected_options["marked_only"] = True
+    assert FakeDerivativeWorker.instances[0].options == expected_options
 
 
 def test_app_controller_current_ai_results_passes_complete_cached_paths(

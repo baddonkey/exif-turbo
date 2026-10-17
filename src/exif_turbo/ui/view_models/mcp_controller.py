@@ -4,7 +4,7 @@ import io
 import logging
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from PIL import Image
 from PySide6.QtCore import Property, QObject, Signal
@@ -42,6 +42,12 @@ class McpController(QObject):
         get_tagging_service: Callable[[], TaggingService | None],
         tagging_available: Callable[[], bool],
         refresh_after_mutation: Callable[[], None],
+        list_image_sets: Callable[[], list[dict[str, Any]]],
+        get_image_set_images: Callable[[int, int, int], list[dict[str, Any]]],
+        load_indexed_preview_image: Callable[[int], Image.Image | None],
+        set_image_custom_tags: Callable[
+            [int, str, Sequence[str], str], tuple[str, ...]
+        ],
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -56,6 +62,10 @@ class McpController(QObject):
         self._get_tagging_service = get_tagging_service
         self._tagging_available = tagging_available
         self._refresh_after_mutation = refresh_after_mutation
+        self._list_image_sets = list_image_sets
+        self._get_image_set_images = get_image_set_images
+        self._load_indexed_preview_image = load_indexed_preview_image
+        self._set_image_custom_tags = set_image_custom_tags
         self._dispatcher = MainThreadDispatcher(self)
         self._runtime = McpServerRuntime()
         self._status_message = ""
@@ -149,6 +159,38 @@ class McpController(QObject):
         labels = list(tags)
         return self._dispatcher.call(lambda: self._add_custom_tags_main(labels))
 
+    def list_image_sets(self) -> list[dict[str, Any]]:
+        return self._dispatcher.call(self._list_image_sets)
+
+    def get_image_set_images(
+        self,
+        set_id: int,
+        limit: int,
+        offset: int,
+    ) -> list[dict[str, Any]]:
+        return self._dispatcher.call(
+            lambda: self._get_image_set_images(set_id, limit, offset)
+        )
+
+    def load_image_preview_jpeg(self, image_id: int) -> bytes | None:
+        return self._dispatcher.call(
+            lambda: self._load_indexed_preview_jpeg_main(image_id)
+        )
+
+    def set_image_custom_tags(
+        self,
+        image_id: int,
+        path: str,
+        tags: Sequence[str],
+        mode: str,
+    ) -> tuple[str, ...]:
+        labels = list(tags)
+        return self._dispatcher.call(
+            lambda: self._set_image_custom_tags(
+                image_id, path, labels, mode
+            )
+        )
+
     def _get_selected_image_main(self) -> SelectedImageSnapshot | None:
         path = self._selected_path()
         if not path:
@@ -169,6 +211,14 @@ class McpController(QObject):
         buf = io.BytesIO()
         rgb = image.convert("RGB")
         rgb.save(buf, format="JPEG", quality=90)
+        return buf.getvalue()
+
+    def _load_indexed_preview_jpeg_main(self, image_id: int) -> bytes | None:
+        image = self._load_indexed_preview_image(image_id)
+        if image is None:
+            return None
+        buf = io.BytesIO()
+        image.convert("RGB").save(buf, format="JPEG", quality=90)
         return buf.getvalue()
 
     def _add_custom_tags_main(self, tags: list[str]) -> tuple[str, ...]:

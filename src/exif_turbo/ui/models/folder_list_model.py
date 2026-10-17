@@ -18,6 +18,7 @@ class FolderListModel(QAbstractListModel):
     ErrorMessageRole = Qt.UserRole + 8
     PreviewCachedCountRole = Qt.UserRole + 9
     PreviewTotalCountRole = Qt.UserRole + 10
+    FolderEnabledRole = Qt.UserRole + 11
 
     def __init__(self) -> None:
         super().__init__()
@@ -37,6 +38,7 @@ class FolderListModel(QAbstractListModel):
             self.ErrorMessageRole: b"errorMessage",
             self.PreviewCachedCountRole: b"previewCachedCount",
             self.PreviewTotalCountRole:  b"previewTotalCount",
+            self.FolderEnabledRole:      b"folderEnabled",
         }
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
@@ -55,6 +57,8 @@ class FolderListModel(QAbstractListModel):
         if role == self.DisplayNameRole:
             return f.display_name
         if role == self.EnabledRole:
+            return f.enabled
+        if role == self.FolderEnabledRole:
             return f.enabled
         if role == self.RecursiveRole:
             return f.recursive

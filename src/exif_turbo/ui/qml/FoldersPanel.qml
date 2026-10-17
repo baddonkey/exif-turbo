@@ -202,14 +202,22 @@ Item {
                 }
             delegate: Rectangle {
                 id: folderDelegate
+                required property int index
+                required property int folderId
                 required property string path
+                required property string displayName
+                required property bool folderEnabled
+                required property string status
+                required property int imageCount
+                required property int previewCachedCount
+                required property int previewTotalCount
                 width: foldersList.width
                 height: 76
-                color: index % 2 === 0 ? Material.background : Qt.darker(Material.background, 1.03)
+                color: folderDelegate.index % 2 === 0 ? Material.background : Qt.darker(Material.background, 1.03)
                 readonly property bool aiScanningThisFolder: controller &&
-                    controller.isAiScanning && controller.aiScanFolderId === model.folderId
+                    controller.isAiScanning && controller.aiScanFolderId === folderDelegate.folderId
                 readonly property color rowStatusColor: aiScanningThisFolder
-                    ? Material.accentColor : foldersPanel.statusColor(model.status)
+                    ? Material.accentColor : foldersPanel.statusColor(folderDelegate.status)
 
                 // Status indicator bar on the left
                 Rectangle {
@@ -225,14 +233,14 @@ Item {
                     Switch {
                         id: enabledSwitch
                         objectName: "folderEnabledSwitch"
-                        checked: model.enabled
+                        checked: folderDelegate.folderEnabled
                         implicitHeight: 40
                         enabled: !controller || (!controller.folderWorkflowRunning &&
                                  !controller.isBusy && !controller.isIndexing &&
                                  !controller.isBuildingPreviews && !controller.isAiScanning)
                         ToolTip.text: checked ? qsTr("Folder is included in search results") : qsTr("Folder is excluded from search results")
                         ToolTip.visible: hovered
-                        onToggled: { if (controller) controller.setFolderEnabled(model.folderId, checked) }
+                        onToggled: { if (controller) controller.setFolderEnabled(folderDelegate.folderId, checked) }
                     }
 
                     // Name + path
@@ -242,11 +250,11 @@ Item {
 
                         Label {
                             Layout.fillWidth: true
-                            text: model.displayName
+                            text: folderDelegate.displayName
                             font.pixelSize: 13
                             font.weight: Font.DemiBold
                             elide: Text.ElideRight
-                            opacity: model.enabled ? 1.0 : 0.5
+                            opacity: folderDelegate.folderEnabled ? 1.0 : 0.5
                         }
 
                         Label {
@@ -292,7 +300,7 @@ Item {
                                         ? (controller.aiScanIsFullRescan
                                                          ? qsTr("AI Full Scan")
                                            : qsTr("AI-Scan"))
-                                        : model.status.toUpperCase()
+                                        : folderDelegate.status.toUpperCase()
                                     font.pixelSize: 9
                                     font.weight: Font.DemiBold
                                     color: folderDelegate.rowStatusColor
@@ -302,7 +310,7 @@ Item {
 
                         // Image count badge — only when indexed
                         Rectangle {
-                            visible: model.imageCount > 0
+                            visible: folderDelegate.imageCount > 0
                             height: 16
                             width: cntLabel.implicitWidth + 10
                             radius: 8
@@ -312,7 +320,7 @@ Item {
                             Label {
                                 id: cntLabel
                                 anchors.centerIn: parent
-                                text: model.imageCount + " " + qsTr("images")
+                                text: folderDelegate.imageCount + " " + qsTr("images")
                                 font.pixelSize: 9
                                 color: Material.foreground
                                 opacity: 0.7
@@ -321,17 +329,17 @@ Item {
 
                         // Preview-cache badge
                         Rectangle {
-                            visible: model.previewCachedCount > 0
+                            visible: folderDelegate.previewCachedCount > 0
                             height: 16
                             width: prevLabel.implicitWidth + 14
                             radius: 8
-                            color: (model.previewTotalCount > 0 && model.previewCachedCount >= model.previewTotalCount)
+                            color: (folderDelegate.previewTotalCount > 0 && folderDelegate.previewCachedCount >= folderDelegate.previewTotalCount)
                                    ? Qt.rgba(0.30, 0.69, 0.31, 0.22)   // green-ish when full
                                    : Qt.rgba(1.00, 0.60, 0.00, 0.22)   // amber when partial
                             Layout.alignment: Qt.AlignRight
-                            ToolTip.text: (model.previewTotalCount > 0 && model.previewCachedCount >= model.previewTotalCount)
-                                          ? qsTr("All %1 previews are cached").arg(model.previewTotalCount)
-                                          : qsTr("%1 of %2 previews cached").arg(model.previewCachedCount).arg(model.previewTotalCount)
+                            ToolTip.text: (folderDelegate.previewTotalCount > 0 && folderDelegate.previewCachedCount >= folderDelegate.previewTotalCount)
+                                          ? qsTr("All %1 previews are cached").arg(folderDelegate.previewTotalCount)
+                                          : qsTr("%1 of %2 previews cached").arg(folderDelegate.previewCachedCount).arg(folderDelegate.previewTotalCount)
                             ToolTip.visible: previewBadgeMA.containsMouse
 
                             MouseArea {
@@ -344,9 +352,9 @@ Item {
                             Label {
                                 id: prevLabel
                                 anchors.centerIn: parent
-                                text: "\u2713 " + model.previewCachedCount
-                                      + (model.previewTotalCount > 0
-                                         ? "/" + model.previewTotalCount
+                                  text: "\u2713 " + folderDelegate.previewCachedCount
+                                      + (folderDelegate.previewTotalCount > 0
+                                         ? "/" + folderDelegate.previewTotalCount
                                          : "")
                                       + " " + qsTr("previews")
                                 font.pixelSize: 9
@@ -364,13 +372,13 @@ Item {
                         text: qsTr("Scan")
                         font.pixelSize: 11
                         implicitHeight: 30
-                        enabled: model.enabled && model.status !== "scanning" &&
+                        enabled: folderDelegate.folderEnabled && folderDelegate.status !== "scanning" &&
                                  controller && !controller.folderWorkflowRunning &&
                                  !controller.isBusy && !controller.isIndexing &&
                                  !controller.isBuildingPreviews && !controller.isAiScanning
                         ToolTip.text: qsTr("Rescan, refresh tags, build previews, and run AI-Scan")
                         ToolTip.visible: hovered
-                        onClicked: { if (controller) controller.scanFolder(model.folderId) }
+                        onClicked: { if (controller) controller.scanFolder(folderDelegate.folderId) }
                     }
 
                     Button {
@@ -380,13 +388,13 @@ Item {
                         text: qsTr("Full Scan")
                         font.pixelSize: 11
                         implicitHeight: 30
-                        enabled: model.enabled && model.status !== "scanning" &&
+                        enabled: folderDelegate.folderEnabled && folderDelegate.status !== "scanning" &&
                                  controller && !controller.folderWorkflowRunning &&
                                  !controller.isBusy && !controller.isIndexing &&
                                  !controller.isBuildingPreviews && !controller.isAiScanning
                         ToolTip.text: qsTr("Full rescan, refresh tags, clear and rebuild previews, and run AI Full Rescan")
                         ToolTip.visible: hovered
-                        onClicked: { if (controller) controller.fullScanFolder(model.folderId) }
+                        onClicked: { if (controller) controller.fullScanFolder(folderDelegate.folderId) }
                     }
 
                     Button {
@@ -396,11 +404,11 @@ Item {
                         text: qsTr("Scan")
                         font.pixelSize: 11
                         implicitHeight: 30
-                        enabled: model.enabled && model.status !== "scanning" &&
+                        enabled: folderDelegate.folderEnabled && folderDelegate.status !== "scanning" &&
                                  (!controller || !controller.folderWorkflowRunning)
                         ToolTip.text: qsTr("Re-index this folder (incremental)")
                         ToolTip.visible: hovered
-                        onClicked: { if (controller) controller.rescanFolder(model.folderId) }
+                        onClicked: { if (controller) controller.rescanFolder(folderDelegate.folderId) }
                     }
 
                     // Full Scan button
@@ -411,11 +419,11 @@ Item {
                         text: qsTr("Full Scan")
                         font.pixelSize: 11
                         implicitHeight: 30
-                        enabled: model.enabled && model.status !== "scanning" &&
+                        enabled: folderDelegate.folderEnabled && folderDelegate.status !== "scanning" &&
                                  (!controller || !controller.folderWorkflowRunning)
                         ToolTip.text: qsTr("Force re-extract EXIF for every file in this folder")
                         ToolTip.visible: hovered
-                        onClicked: { if (controller) controller.fullRescanFolder(model.folderId) }
+                        onClicked: { if (controller) controller.fullRescanFolder(folderDelegate.folderId) }
                     }
 
                     Button {
@@ -425,15 +433,15 @@ Item {
                         text: qsTr("Refresh Tags")
                         font.pixelSize: 11
                         implicitHeight: 30
-                        enabled: model.enabled && model.imageCount > 0 &&
-                                 model.status !== "scanning" &&
+                        enabled: folderDelegate.folderEnabled && folderDelegate.imageCount > 0 &&
+                                 folderDelegate.status !== "scanning" &&
                                  (!controller || (!controller.isBusy &&
                                   !controller.folderWorkflowRunning))
                         ToolTip.text: qsTr("Re-read sidecar tag files for indexed images in this folder")
                         ToolTip.visible: hovered
                         onClicked: {
                             if (controller)
-                                controller.refreshSidecarsForFolder(model.folderId)
+                                controller.refreshSidecarsForFolder(folderDelegate.folderId)
                         }
                     }
 
@@ -442,25 +450,25 @@ Item {
                         objectName: "expertBuildPreviewsButton"
                         flat: true
                         visible: foldersPanel.expertMode
-                        text: (controller && controller.isBuildingPreviews && controller.previewBuildFolderId === model.folderId)
+                        text: (controller && controller.isBuildingPreviews && controller.previewBuildFolderId === folderDelegate.folderId)
                               ? qsTr("Cancel Previews")
                               : qsTr("Build Previews")
                         font.pixelSize: 11
                         implicitHeight: 30
-                        enabled: model.enabled && model.imageCount > 0 &&
+                        enabled: folderDelegate.folderEnabled && folderDelegate.imageCount > 0 &&
                                  (!controller || !controller.folderWorkflowRunning) &&
-                                 (!controller || !controller.isBuildingPreviews || controller.previewBuildFolderId === model.folderId)
-                        ToolTip.text: (controller && controller.isBuildingPreviews && controller.previewBuildFolderId === model.folderId)
+                                 (!controller || !controller.isBuildingPreviews || controller.previewBuildFolderId === folderDelegate.folderId)
+                        ToolTip.text: (controller && controller.isBuildingPreviews && controller.previewBuildFolderId === folderDelegate.folderId)
                                       ? qsTr("Cancel the running preview build")
                                       : qsTr("Render preview-cache JPEGs for this folder")
                         ToolTip.visible: hovered
                         onClicked: {
                             if (!controller)
                                 return
-                            if (controller.isBuildingPreviews && controller.previewBuildFolderId === model.folderId)
+                            if (controller.isBuildingPreviews && controller.previewBuildFolderId === folderDelegate.folderId)
                                 controller.cancelPreviewBuild()
                             else
-                                controller.buildPreviewsForFolder(model.folderId)
+                                controller.buildPreviewsForFolder(folderDelegate.folderId)
                         }
                     }
 
@@ -470,19 +478,19 @@ Item {
                         flat: true
                         visible: foldersPanel.expertMode && controller && controller.aiEnabled
                         text: (controller && controller.isAiScanning
-                               && controller.aiScanFolderId === model.folderId
+                               && controller.aiScanFolderId === folderDelegate.folderId
                                && !controller.aiScanIsFullRescan)
                               ? qsTr("Cancel AI-Scan")
                               : qsTr("AI-Scan")
                         font.pixelSize: 11
                         implicitHeight: 30
-                        enabled: model.enabled && model.imageCount > 0 &&
+                        enabled: folderDelegate.folderEnabled && folderDelegate.imageCount > 0 &&
                                  (!controller || !controller.folderWorkflowRunning) &&
                                  (!controller || !controller.isAiScanning
-                                  || (controller.aiScanFolderId === model.folderId
+                                  || (controller.aiScanFolderId === folderDelegate.folderId
                                       && !controller.aiScanIsFullRescan))
                         ToolTip.text: (controller && controller.isAiScanning
-                                       && controller.aiScanFolderId === model.folderId
+                                       && controller.aiScanFolderId === folderDelegate.folderId
                                        && !controller.aiScanIsFullRescan)
                                       ? qsTr("Cancel the running AI-Scan")
                                       : qsTr("Build missing CLIP vector embeddings for this folder (enables AI search)")
@@ -491,11 +499,11 @@ Item {
                             if (!controller)
                                 return
                             if (controller.isAiScanning
-                                    && controller.aiScanFolderId === model.folderId
+                                    && controller.aiScanFolderId === folderDelegate.folderId
                                     && !controller.aiScanIsFullRescan)
                                 controller.cancelAiScan()
                             else
-                                controller.aiScanFolder(model.folderId)
+                                controller.aiScanFolder(folderDelegate.folderId)
                         }
                     }
 
@@ -504,19 +512,19 @@ Item {
                         flat: true
                         visible: foldersPanel.expertMode && controller && controller.aiEnabled
                         text: (controller && controller.isAiScanning
-                               && controller.aiScanFolderId === model.folderId
+                               && controller.aiScanFolderId === folderDelegate.folderId
                                && controller.aiScanIsFullRescan)
                               ? qsTr("Cancel AI Full Scan")
                               : qsTr("AI Full Scan")
                         font.pixelSize: 11
                         implicitHeight: 30
-                        enabled: model.enabled && model.imageCount > 0 &&
+                        enabled: folderDelegate.folderEnabled && folderDelegate.imageCount > 0 &&
                                  (!controller || !controller.folderWorkflowRunning) &&
                                  (!controller || !controller.isAiScanning
-                                  || (controller.aiScanFolderId === model.folderId
+                                  || (controller.aiScanFolderId === folderDelegate.folderId
                                       && controller.aiScanIsFullRescan))
                         ToolTip.text: (controller && controller.isAiScanning
-                                       && controller.aiScanFolderId === model.folderId
+                                       && controller.aiScanFolderId === folderDelegate.folderId
                                        && controller.aiScanIsFullRescan)
                                       ? qsTr("Cancel the running AI full scan")
                                       : qsTr("Rebuild every CLIP vector embedding for this folder from scratch")
@@ -525,11 +533,11 @@ Item {
                             if (!controller)
                                 return
                             if (controller.isAiScanning
-                                    && controller.aiScanFolderId === model.folderId
+                                    && controller.aiScanFolderId === folderDelegate.folderId
                                     && controller.aiScanIsFullRescan)
                                 controller.cancelAiScan()
                             else
-                                controller.aiFullRescanFolder(model.folderId)
+                                controller.aiFullRescanFolder(folderDelegate.folderId)
                         }
                     }
 
@@ -542,17 +550,17 @@ Item {
                         text: qsTr("Clear Previews")
                         font.pixelSize: 11
                         implicitHeight: 30
-                        opacity: model.previewCachedCount > 0 ? 1.0 : 0.0
-                        enabled: model.previewCachedCount > 0 &&
+                        opacity: folderDelegate.previewCachedCount > 0 ? 1.0 : 0.0
+                        enabled: folderDelegate.previewCachedCount > 0 &&
                                  (!controller || !controller.folderWorkflowRunning) &&
                                  (!controller || !controller.isBuildingPreviews
-                                  || controller.previewBuildFolderId !== model.folderId)
+                                  || controller.previewBuildFolderId !== folderDelegate.folderId)
                         ToolTip.text: qsTr("Delete all cached previews for this folder")
                         ToolTip.visible: hovered
                         onClicked: {
-                            foldersPanel._pendingFolderId = model.folderId
-                            foldersPanel._pendingFolderName = model.displayName
-                            foldersPanel._pendingPreviewCount = model.previewCachedCount
+                            foldersPanel._pendingFolderId = folderDelegate.folderId
+                            foldersPanel._pendingFolderName = folderDelegate.displayName
+                            foldersPanel._pendingPreviewCount = folderDelegate.previewCachedCount
                             clearPreviewsConfirmDialog.open()
                         }
                     }
@@ -571,8 +579,8 @@ Item {
                         ToolTip.text: qsTr("Remove this folder and delete its indexed images")
                         ToolTip.visible: hovered
                         onClicked: {
-                            foldersPanel._pendingFolderId = model.folderId
-                            foldersPanel._pendingFolderName = model.displayName
+                            foldersPanel._pendingFolderId = folderDelegate.folderId
+                            foldersPanel._pendingFolderName = folderDelegate.displayName
                             removeConfirmDialog.open()
                         }
                     }

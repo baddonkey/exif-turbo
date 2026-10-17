@@ -9,6 +9,7 @@ Run with:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from threading import get_ident
 from types import SimpleNamespace
@@ -16,8 +17,8 @@ from typing import Generator
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import QObject, QThread, QUrl
-from PySide6.QtQuick import QQuickWindow
+from PySide6.QtCore import QObject, QPointF, QThread, QUrl
+from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtQml import QQmlApplicationEngine
 from pytestqt.qtbot import QtBot
 
@@ -34,6 +35,7 @@ from exif_turbo.ui.models.settings_model import SettingsModel
 from exif_turbo.ui.providers.preview_image_provider import PreviewImageProvider
 from exif_turbo.ui.providers.raw_image_provider import RawImageProvider
 from exif_turbo.ui.view_models.app_controller import AppController
+from exif_turbo.ui.workers.image_set_membership_worker import ImageSetMembershipWorker
 
 # How long to leave the window visible between steps (ms).
 _PAUSE_MS = 700
@@ -297,6 +299,477 @@ def test_selection_and_action_menu_entries_disabled_outside_search_browse(
             lambda: bool(root.findChild(QObject, "selectAllAction").property("enabled"))
             and bool(root.findChild(QObject, "exportJsonAction").property("enabled"))
         )
+
+
+def test_sets_actions_follow_selected_set_and_preserve_search_scope(
+    qtbot: QtBot,
+    demo_db: tuple[Path, Path],
+    tmp_path: Path,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    assert controller._repo is not None
+    image_paths = [str(demo_db[1] / "images" / camera[0]) for camera in _CAMERAS]
+    first_id = controller.createImageSet("First action scope")
+    second_id = controller.createImageSet("Second action scope")
+    controller._repo.add_images_to_set(first_id, [image_paths[0]])
+    controller._repo.add_images_to_set(second_id, [image_paths[2]])
+    controller._repo.clear_all_marks()
+    controller._repo.mark_images(image_paths[:2], True)
+    controller._query_text = "unrelated search"
+    controller._search_image_set_id = first_id
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    sets_page = root.findChild(QObject, "setsPage")
+    export_action = root.findChild(QObject, "exportJsonAction")
+    delete_action = root.findChild(QObject, "deleteMarkedAction")
+    assert tab_bar is not None
+    assert sets_page is not None
+    assert export_action is not None
+    assert delete_action is not None
+
+    # Act / Assert
+    tab_bar.setProperty("currentIndex", 3)
+    sets_page.setProperty("selectedSetId", first_id)
+    qtbot.waitUntil(lambda: controller.actionMarkedCount == 1)
+    assert controller.actionImageCount == 1
+    assert bool(export_action.property("enabled"))
+    assert bool(delete_action.property("enabled"))
+    sets_page.setProperty("selectedSetId", second_id)
+    qtbot.waitUntil(lambda: controller._action_image_set_id == second_id)
+    assert controller.actionMarkedCount == 0
+    assert bool(export_action.property("enabled"))
+    assert not bool(delete_action.property("enabled"))
+    qtbot.waitUntil(lambda: "Second action scope" in str(export_action.property("text")))
+    controller.renameImageSet(second_id, "Renamed action scope")
+    qtbot.waitUntil(lambda: "Renamed action scope" in str(export_action.property("text")))
+    output_path = tmp_path / "selected-set.json"
+    controller.exportMarkedMetadataJson(QUrl.fromLocalFile(str(output_path)).toString())
+    qtbot.waitUntil(lambda: not controller.isBusy, timeout=5000)
+    assert [record["path"] for record in json.loads(output_path.read_text())] == [image_paths[2]]
+    sets_page.setProperty("selectedSetId", -1)
+    qtbot.waitUntil(lambda: not bool(export_action.property("enabled")))
+    assert controller.actionImageCount == 0
+    assert not bool(delete_action.property("enabled"))
+    tab_bar.setProperty("currentIndex", 0)
+    qtbot.waitUntil(lambda: controller._action_image_set_id is None)
+    assert controller._search_image_set_id == first_id
+    assert "Renamed action scope" not in str(export_action.property("text"))
+
+
+def test_sets_tab_displays_and_manages_database_sets(
+    qtbot: QtBot,
+    tmp_path: Path,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    set_id = controller.createImageSet("Family")
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    sets_page = root.findChild(QObject, "setsPage")
+    assert set_id > 0
+    assert tab_bar is not None
+    assert sets_page is not None
+
+    # Act
+    tab_bar.setProperty("currentIndex", 3)
+    qtbot.waitUntil(lambda: bool(sets_page.property("visible")))
+    edit_filter_button = root.findChild(QObject, "editSetFilterButton")
+    filter_dialog = root.findChild(QObject, "imageSetFilterDialog")
+    assert edit_filter_button is not None
+    assert filter_dialog is not None
+    edit_filter_button.clicked.emit()
+    qtbot.waitUntil(lambda: bool(filter_dialog.property("visible")))
+    filter_root = root.findChild(QObject, "imageSetFilterRoot")
+    assert filter_root is not None
+    filter_root.setProperty(
+        "value",
+        {
+            "op": "and",
+            "conditions": [
+                {
+                    "op": "or",
+                    "conditions": [
+                        {"field": "text", "operator": "matches", "value": "wildlife"}
+                    ],
+                }
+            ],
+        },
+    )
+    filter_tree = filter_root.property("value")
+    assert filter_tree["conditions"][0]["op"] == "or"
+    child_repeater = filter_root.findChild(QObject, "imageSetFilterChildRepeater")
+    assert child_repeater is not None
+    assert child_repeater.property("count") == 1
+    filter_dialog.reject()
+    image_path = str(tmp_path / "marked.jpg")
+    assert controller._repo is not None
+    controller._repo.upsert_image(image_path, "marked.jpg", 1.0, 100, {}, "marked")
+    controller._repo.mark_image(image_path, True)
+    started = controller.changeImageSetMembers(set_id, "marked", True)
+    qtbot.waitUntil(lambda: not controller.imageSetOperationRunning, timeout=5000)
+    filter_saved = controller.setImageSetFilterJson(
+        set_id,
+        '{"op":"and","conditions":[{"field":"text","operator":"matches","value":"marked"}]}',
+    )
+    reapply_started = controller.reapplyImageSetFilter(set_id, "replace", False)
+    qtbot.waitUntil(lambda: not controller.imageSetOperationRunning, timeout=5000)
+    reapply_progress_total = controller.imageSetOperationProgressTotal
+    empty_dialog = root.findChild(QObject, "emptyReplaceDialog")
+    assert empty_dialog is not None
+    empty_filter_saved = controller.setImageSetFilterJson(
+        set_id,
+        '{"op":"and","conditions":[{"field":"text","operator":"matches","value":"no-such-image"}]}',
+    )
+    with qtbot.waitSignal(
+        controller.imageSetEmptyReplaceConfirmationRequired, timeout=5000
+    ):
+        empty_replace_started = controller.reapplyImageSetFilter(
+            set_id, "replace", False
+        )
+    qtbot.waitUntil(lambda: not controller.imageSetOperationRunning, timeout=5000)
+    qtbot.waitUntil(lambda: bool(empty_dialog.property("visible")), timeout=5000)
+    members_before_confirm = controller.imageSetMembersJson(set_id, 10, 0)
+    empty_dialog.reject()
+    set_list = root.findChild(QQuickItem, "setList")
+    rename_dialog = root.findChild(QObject, "renameSetDialog")
+    rename_field = root.findChild(QObject, "renameSetNameField")
+    confirm_rename_button = root.findChild(QObject, "confirmRenameSetButton")
+    delete_dialog = root.findChild(QObject, "deleteSetDialog")
+    assert set_list is not None
+
+    def find_set_action(item: QQuickItem, object_name: str) -> QQuickItem | None:
+        if item.objectName() == object_name:
+            return item
+        for child in item.childItems():
+            found = find_set_action(child, object_name)
+            if found is not None:
+                return found
+        return None
+
+    rename_button = find_set_action(set_list, "setRowRenameButton")
+    delete_button = find_set_action(set_list, "setRowDeleteButton")
+    assert rename_button is not None
+    assert delete_button is not None
+    assert rename_dialog is not None
+    assert rename_field is not None
+    assert confirm_rename_button is not None
+    assert delete_dialog is not None
+    rename_button.clicked.emit()
+    qtbot.waitUntil(lambda: bool(rename_dialog.property("visible")))
+    rename_field.setProperty("text", "Family Photos")
+    confirm_rename_button.clicked.emit()
+    qtbot.waitUntil(lambda: not bool(rename_dialog.property("visible")))
+    renamed = '"name": "Family Photos"' in controller.imageSetsJson
+    delete_button = find_set_action(set_list, "setRowDeleteButton")
+    assert delete_button is not None
+    delete_button.clicked.emit()
+    qtbot.waitUntil(lambda: bool(delete_dialog.property("visible")))
+    set_existed_before_delete_confirmation = (
+        '"id": ' + str(set_id) in controller.imageSetsJson
+    )
+    delete_dialog.accept()
+
+    # Assert
+    assert started is True
+    assert filter_saved is True
+    assert reapply_started is True
+    assert empty_filter_saved is True
+    assert empty_replace_started is True
+    assert '"filename": "marked.jpg"' in members_before_confirm
+    assert reapply_progress_total == 1
+    assert renamed is True
+    assert set_existed_before_delete_confirmation is True
+    assert '"id": ' + str(set_id) not in controller.imageSetsJson
+
+
+def test_sets_plus_button_creates_set_through_name_dialog(
+    qtbot: QtBot,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    create_button = root.findChild(QObject, "createImageSetButton")
+    create_dialog = root.findChild(QObject, "createSetDialog")
+    name_field = root.findChild(QObject, "createSetNameField")
+    confirm_button = root.findChild(QObject, "confirmCreateSetButton")
+    assert tab_bar is not None
+    assert create_button is not None
+    assert create_dialog is not None
+    assert name_field is not None
+    assert confirm_button is not None
+
+    # Act
+    tab_bar.setProperty("currentIndex", 3)
+    create_button.clicked.emit()
+    qtbot.waitUntil(lambda: bool(create_dialog.property("visible")))
+    name_field.setProperty("text", "Created from dialog")
+    confirm_button.clicked.emit()
+
+    # Assert
+    qtbot.waitUntil(lambda: "Created from dialog" in controller.imageSetsJson)
+    qtbot.waitUntil(lambda: not bool(create_dialog.property("visible")))
+
+
+def test_sets_operation_running_shows_progress_and_cancel_controls(
+    qtbot: QtBot,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    progress_row = root.findChild(QObject, "imageSetOperationProgressRow")
+    progress_bar = root.findChild(QObject, "imageSetOperationProgressBar")
+    cancel_button = root.findChild(QObject, "cancelImageSetOperationButton")
+    assert tab_bar is not None
+    assert progress_row is not None
+    assert progress_bar is not None
+    assert cancel_button is not None
+    tab_bar.setProperty("currentIndex", 3)
+    worker = ImageSetMembershipWorker(
+        controller._db_path, _TEST_PASSWORD, 1, "marked", True
+    )
+    controller._image_set_worker = worker
+
+    # Act / Assert
+    try:
+        controller.imageSetOperationChanged.emit()
+        qtbot.waitUntil(lambda: bool(progress_row.property("visible")))
+        assert bool(progress_bar.property("indeterminate"))
+        controller._on_image_set_worker_progress(500, 1001)
+        qtbot.waitUntil(lambda: float(progress_bar.property("value")) == 500)
+        assert float(progress_bar.property("to")) == 1001
+        assert not bool(progress_bar.property("indeterminate"))
+        assert bool(cancel_button.property("enabled"))
+        cancel_button.clicked.emit()
+        assert worker._cancel_event.is_set()
+        controller._on_image_set_worker_canceled(500, 500, 0)
+        assert "500" in controller.imageSetStatus
+    finally:
+        controller._image_set_worker = None
+        controller.imageSetOperationChanged.emit()
+    qtbot.waitUntil(lambda: not bool(progress_row.property("visible")))
+
+
+def test_sets_reapply_group_filter_changes_update_enabled_state(
+    qtbot: QtBot,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    set_id = controller.createImageSet("Filter actions")
+    sets_page = root.findChild(QObject, "setsPage")
+    assert sets_page is not None
+    sets_page.setProperty("selectedSetId", set_id)
+    controls = [
+        root.findChild(QObject, name)
+        for name in (
+            "reapplySetFilterGroup",
+            "addSetFilterMatchesButton",
+            "replaceSetFilterMatchesButton",
+        )
+    ]
+    assert all(control is not None for control in controls)
+
+    # Act / Assert
+    for expected_enabled in (False, True, False):
+        if expected_enabled:
+            assert controller.setImageSetFilterJson(
+                set_id,
+                '{"op":"and","conditions":[{"field":"text",'
+                '"operator":"matches","value":"Canon"}]}',
+            )
+        else:
+            controller.clearImageSetFilter(set_id)
+        qtbot.waitUntil(
+            lambda: all(
+                bool(control.property("enabled")) == expected_enabled
+                for control in controls
+                if control is not None
+            )
+        )
+
+
+def test_sets_action_separators_wrapping_hides_row_end_diamonds(
+    qtbot: QtBot,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    add_group = root.findChild(QQuickItem, "addSetActionGroup")
+    filter_group = root.findChild(QQuickItem, "filterSetActionGroup")
+    reapply_group = root.findChild(QQuickItem, "reapplySetFilterGroup")
+    filter_separator = root.findChild(QQuickItem, "filterActionSeparator")
+    reapply_separator = root.findChild(QQuickItem, "reapplyActionSeparator")
+    assert tab_bar is not None
+    assert add_group is not None
+    assert filter_group is not None
+    assert reapply_group is not None
+    assert filter_separator is not None
+    assert reapply_separator is not None
+    tab_bar.setProperty("currentIndex", 3)
+    root.showNormal()
+
+    # Act / Assert
+    root.resize(2000, 900)
+    qtbot.waitUntil(lambda: reapply_group.y() == add_group.y())
+    qtbot.waitUntil(lambda: bool(filter_separator.property("visible")))
+    assert bool(reapply_separator.property("visible"))
+    for separator, button_name in (
+        (filter_separator, "editSetFilterButton"),
+        (reapply_separator, "addSetFilterMatchesButton"),
+    ):
+        button = root.findChild(QQuickItem, button_name)
+        assert button is not None
+        diamond = separator.childItems()[0]
+        diamond_center = diamond.mapToScene(QPointF(diamond.width() / 2, diamond.height() / 2))
+        button_center = button.mapToScene(QPointF(button.width() / 2, button.height() / 2))
+        assert diamond_center.y() == pytest.approx(button_center.y(), abs=0.5)
+    action_flow = add_group.parentItem()
+    assert action_flow is not None
+    two_group_width = int(
+        root.width() - action_flow.width()
+        + add_group.width() + filter_group.width() + 25
+    )
+    root.resize(two_group_width, 900)
+    qtbot.waitUntil(lambda: reapply_group.y() > filter_group.y())
+    assert filter_group.y() == add_group.y()
+    assert bool(filter_separator.property("visible"))
+    assert not bool(reapply_separator.property("visible"))
+    root.resize(900, 900)
+    qtbot.waitUntil(lambda: filter_group.y() > add_group.y())
+    qtbot.waitUntil(lambda: reapply_group.y() > filter_group.y())
+    assert not bool(filter_separator.property("visible"))
+    assert not bool(reapply_separator.property("visible"))
+
+
+def test_sets_splitter_width_stays_when_selection_changes(
+    qtbot: QtBot,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    first_id = controller.createImageSet("First")
+    second_id = controller.createImageSet("Second")
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    sets_page = root.findChild(QObject, "setsPage")
+    set_list_pane = root.findChild(QObject, "setListPane")
+    assert tab_bar is not None
+    assert sets_page is not None
+    assert set_list_pane is not None
+    tab_bar.setProperty("currentIndex", 3)
+    qtbot.waitUntil(lambda: bool(sets_page.property("visible")))
+    qtbot.waitUntil(lambda: float(sets_page.property("width")) > 500)
+
+    # Act
+    sets_page.setProperty("setListPaneWidth", 340.0)
+    qtbot.waitUntil(
+        lambda: abs(float(set_list_pane.property("width")) - 340.0) < 1
+    )
+    width_before_selection_change = float(set_list_pane.property("width"))
+    sets_page.setProperty("selectedSetId", first_id)
+    sets_page.setProperty("selectedSetId", second_id)
+    qtbot.wait(50)
+    width_after_selection_change = float(set_list_pane.property("width"))
+
+    # Assert
+    assert abs(width_after_selection_change - width_before_selection_change) < 1
+
+
+def test_search_image_set_filter_limits_results_and_can_be_cleared(
+    qtbot: QtBot,
+    tmp_path: Path,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, search_model, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    assert controller._repo is not None
+    member_path = tmp_path / "member.jpg"
+    other_path = tmp_path / "other.jpg"
+    Image.new("RGB", (8, 8), color="red").save(member_path)
+    Image.new("RGB", (8, 8), color="blue").save(other_path)
+    for path in (member_path, other_path):
+        controller._repo.upsert_image(
+            str(path), path.name, 1.0, path.stat().st_size, {}, "shared query"
+        )
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.search("shared query")
+    set_id = controller.createImageSet("Search scope")
+    controller._repo.add_images_to_set(set_id, [str(member_path)])
+    set_combo = root.findChild(QObject, "searchSetCombo")
+    assert set_combo is not None
+
+    # Act
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.setSearchImageSetFilter(set_id)
+    assert set_combo.property("currentValue") == set_id
+    filtered_total = controller._total_results
+    filtered_paths = [search_model.get_path(row) for row in range(search_model.rowCount())]
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.setSearchImageSetFilter(-1)
+    all_sets_total = controller._total_results
+    all_sets_paths = [search_model.get_path(row) for row in range(search_model.rowCount())]
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.setSearchImageSetFilter(-2)
+    ignored_total = controller._total_results
+    ignored_paths = [search_model.get_path(row) for row in range(search_model.rowCount())]
+    assert set_combo.property("currentValue") == -2
+    controller.enterBrowseTab("")
+    assert controller.searchImageSetId == -2
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.leaveBrowseTab()
+    assert controller.searchImageSetId == -2
+    unfiltered_total = controller._total_results
+
+    # Assert
+    assert filtered_total == 1
+    assert all_sets_total == 1
+    assert ignored_total == 2
+    assert unfiltered_total > filtered_total
+    assert filtered_paths == [str(member_path)]
+    assert all_sets_paths == [str(member_path)]
+    assert set(ignored_paths) == {str(member_path), str(other_path)}
+    assert set_combo.property("currentValue") == -2
+
+
+def test_search_set_filter_loads_persisted_sets_after_unlock(
+    qtbot: QtBot,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    repository = ImageIndexRepository(controller._db_path, key=_TEST_PASSWORD)
+    repository.create_image_set("Previously saved")
+    repository.close()
+    set_combo = root.findChild(QObject, "searchSetCombo")
+    assert set_combo is not None
+
+    # Act
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    assert "Previously saved" in controller.imageSetsJson
+    qtbot.waitUntil(lambda: int(set_combo.property("count")) == 3, timeout=3000)
+
+    # Assert
+    assert set_combo.property("currentValue") == -2
 
 
 def test_do_unlock_rejects_empty_password_directly(

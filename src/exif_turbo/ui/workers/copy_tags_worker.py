@@ -32,6 +32,7 @@ class CopyTagsWorker(QThread):
         restrict_to_enabled_folders: bool = False,
         date_from: int | None = None,
         date_to: int | None = None,
+        image_set_id: int | None = None,
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -46,6 +47,7 @@ class CopyTagsWorker(QThread):
         self._restrict_to_enabled_folders = restrict_to_enabled_folders
         self._date_from = date_from
         self._date_to = date_to
+        self._image_set_id = image_set_id
         self._cancel_event = threading.Event()
 
     def cancel(self) -> None:
@@ -69,6 +71,7 @@ class CopyTagsWorker(QThread):
                         restrict_to_enabled_folders=self._restrict_to_enabled_folders,
                         date_from=self._date_from,
                         date_to=self._date_to,
+                        image_set_id=self._image_set_id,
                     )
             result = TaggingService(image_repository, FilesystemSidecarRepository()).copy_tags_to_paths(
                 self._source_image_path,

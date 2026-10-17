@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 
 import pytest
 import sqlcipher3
 
-from exif_turbo.data.image_index_repository import ImageIndexRepository
+from exif_turbo.data.image_index_repository import (
+    ImageIndexRepository,
+    ImageSetFilterReapplyCanceled,
+)
 from tests.conftest import make_jpeg, make_png
 
 
@@ -78,6 +82,364 @@ def test_count_images_after_insert_returns_correct_count(repo: ImageIndexReposit
     repo.commit()
 
     assert repo.count_images("") == 5
+
+
+def test_image_set_create_add_and_remove_members(repo: ImageIndexRepository, tmp_path: Path) -> None:
+    # Arrange
+    image_paths = [
+        str(make_jpeg(tmp_path / "first.jpg")),
+        str(make_jpeg(tmp_path / "second.jpg")),
+    ]
+    for image_path in image_paths:
+        repo.upsert_image(
+            image_path, Path(image_path).name, 1.0, 100, {"Make": "Canon"}, "Canon"
+        )
+    apply_filter = {"operator": "and", "conditions": []}
+
+    # Act
+    set_id = repo.create_image_set("Family", apply_filter)
+    first_add_count = repo.add_images_to_set(set_id, image_paths)
+    duplicate_add_count = repo.add_images_to_set(set_id, image_paths)
+    remove_count = repo.remove_images_from_set(set_id, image_paths[:1])
+    image_sets = repo.list_image_sets()
+    members = repo.get_image_set_members(set_id)
+
+    # Assert
+    assert first_add_count == 2
+    assert duplicate_add_count == 0
+    assert remove_count == 1
+    assert image_sets[0]["apply_filter"] == apply_filter
+    assert image_sets[0]["member_count"] == 1
+    assert [member["path"] for member in members] == [image_paths[1]]
+
+
+def test_search_image_set_filter_restricts_rows_counts_and_offsets(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange
+    member_path = str(make_jpeg(tmp_path / "member.jpg"))
+    other_path = str(make_jpeg(tmp_path / "other.jpg"))
+    repo.upsert_image(
+        member_path, "member.jpg", 1.0, 100, {}, "wildlife", captured_at=1704067200.0
+    )
+    repo.upsert_image(
+        other_path, "other.jpg", 1.0, 100, {}, "wildlife", captured_at=1704067200.0
+    )
+    set_id = repo.create_image_set("Wildlife")
+    repo.add_images_to_set(set_id, [member_path])
+
+    # Act
+    rows = repo.search_images("wildlife", limit=10, offset=0, image_set_id=set_id)
+    count = repo.count_images("wildlife", image_set_id=set_id)
+    matching_paths = repo.get_matching_paths("wildlife", image_set_id=set_id)
+    all_sets_rows = repo.search_images("wildlife", 10, 0, image_set_id=-1)
+    all_sets_count = repo.count_images("wildlife", image_set_id=-1)
+    ignored_rows = repo.search_images("wildlife", 10, 0)
+    ignored_count = repo.count_images("wildlife")
+    filtered_paths = repo.get_filtered_paths(image_set_id=set_id)
+    format_counts = repo.get_format_counts(query="wildlife", image_set_id=set_id)
+    year_counts = repo.get_year_counts(query="wildlife", image_set_id=set_id)
+    hydrated_rows = repo.get_images_by_paths(
+        [member_path, other_path], image_set_id=set_id
+    )
+    member_offset = repo.find_image_offset(1, query="wildlife", image_set_id=set_id)
+    other_offset = repo.find_image_offset(2, query="wildlife", image_set_id=set_id)
+    marked = repo.bulk_mark_images(True, query="wildlife", image_set_id=set_id)
+
+    # Assert
+    assert [row[1] for row in rows] == [member_path]
+    assert count == 1
+    assert matching_paths == [member_path]
+    assert filtered_paths == {member_path}
+    assert format_counts == [("jpg", 1)]
+    assert year_counts == [(2024, 1)]
+    assert [row[1] for row in hydrated_rows] == [member_path]
+    assert member_offset == 0
+    assert other_offset is None
+    assert marked == [member_path]
+    assert [row[1] for row in all_sets_rows] == [member_path]
+    assert all_sets_count == 1
+    assert {row[1] for row in ignored_rows} == {member_path, other_path}
+    assert ignored_count == 2
+
+
+def test_image_set_name_is_unique_ignoring_case(repo: ImageIndexRepository) -> None:
+    # Arrange
+    repo.create_image_set("Summer")
+
+    # Act / Assert
+    with pytest.raises(ValueError, match="already exists"):
+        repo.create_image_set(" summer ")
+
+
+def test_image_set_members_cascade_when_indexed_image_is_deleted(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange
+    image_path = str(make_jpeg(tmp_path / "removed.jpg"))
+    repo.upsert_image(image_path, "removed.jpg", 1.0, 100, {}, "removed")
+    set_id = repo.create_image_set("Archive")
+    repo.add_images_to_set(set_id, [image_path])
+
+    # Act
+    repo.delete_missing([])
+
+    # Assert
+    assert repo.get_image_set_members(set_id) == []
+
+
+def test_image_set_filter_reapply_matches_nested_text_and_metadata_conditions(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange
+    canon_path = str(make_jpeg(tmp_path / "canon.jpg"))
+    marked_path = str(make_jpeg(tmp_path / "marked.jpg"))
+    other_path = str(make_jpeg(tmp_path / "other.jpg"))
+    repo.upsert_image(canon_path, "canon.jpg", 1.0, 100, {"Make": "Canon"}, "camera canon")
+    repo.upsert_image(marked_path, "marked.jpg", 1.0, 100, {"Make": "Nikon"}, "camera nikon")
+    repo.upsert_image(other_path, "other.jpg", 1.0, 100, {"Make": "Nikon"}, "camera nikon")
+    repo.mark_image(marked_path, True)
+    set_id = repo.create_image_set(
+        "Cameras",
+        {
+            "op": "and",
+            "conditions": [
+                {"field": "text", "operator": "matches", "value": "camera"},
+                {
+                    "op": "or",
+                    "conditions": [
+                        {
+                            "field": "metadata",
+                            "key": "Make",
+                            "operator": "equals",
+                            "value": "Canon",
+                        },
+                        {"field": "marked", "operator": "equals", "value": True},
+                    ],
+                },
+            ],
+        },
+    )
+
+    # Act
+    result = repo.reapply_image_set_filter(set_id, mode="replace")
+
+    # Assert
+    assert result == {"matched": 2, "added": 2, "removed": 0}
+    assert {member["path"] for member in repo.get_image_set_members(set_id)} == {
+        canon_path,
+        marked_path,
+    }
+
+
+def test_image_set_filter_empty_replace_requires_confirmation(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange
+    image_path = str(make_jpeg(tmp_path / "kept.jpg"))
+    repo.upsert_image(image_path, "kept.jpg", 1.0, 100, {}, "kept")
+    set_id = repo.create_image_set(
+        "Keep",
+        {"op": "and", "conditions": [
+            {"field": "text", "operator": "matches", "value": "no-match-token"}
+        ]},
+    )
+    repo.add_images_to_set(set_id, [image_path])
+
+    # Act / Assert
+    with pytest.raises(ValueError, match="requires confirmation"):
+        repo.reapply_image_set_filter(set_id, mode="replace")
+    assert [member["path"] for member in repo.get_image_set_members(set_id)] == [image_path]
+
+
+def test_image_set_filter_numeric_metadata_comparison_matches_numeric_values(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange
+    first_path = str(make_jpeg(tmp_path / "wide.jpg"))
+    second_path = str(make_jpeg(tmp_path / "narrow.jpg"))
+    repo.upsert_image(first_path, "wide.jpg", 1.0, 100, {"FocalLength": "85"}, "wide")
+    repo.upsert_image(second_path, "narrow.jpg", 1.0, 100, {"FocalLength": "35"}, "narrow")
+    set_id = repo.create_image_set(
+        "Long lenses",
+        {
+            "op": "and",
+            "conditions": [
+                {
+                    "field": "metadata",
+                    "key": "FocalLength",
+                    "operator": "greater_than",
+                    "value": 50,
+                }
+            ],
+        },
+    )
+
+    # Act
+    count = repo.count_image_set_filter_matches(set_id)
+
+    # Assert
+    assert count == 1
+
+
+def test_image_set_filter_can_be_cleared(repo: ImageIndexRepository) -> None:
+    # Arrange
+    set_id = repo.create_image_set(
+        "Filtered",
+        {"op": "and", "conditions": [
+            {"field": "marked", "operator": "equals", "value": True}
+        ]},
+    )
+
+    # Act
+    repo.set_image_set_filter(set_id, None)
+
+    # Assert
+    image_set = repo.list_image_sets()[0]
+    assert image_set["apply_filter"] is None
+    assert image_set["apply_filter_version"] is None
+
+
+def test_image_set_filter_rejects_invalid_tree_without_overwriting_saved_filter(
+    repo: ImageIndexRepository,
+) -> None:
+    # Arrange
+    valid_filter = {
+        "op": "and",
+        "conditions": [
+            {"field": "marked", "operator": "equals", "value": True}
+        ],
+    }
+    set_id = repo.create_image_set("Validated", valid_filter)
+
+    # Act / Assert
+    with pytest.raises(ValueError, match="Unsupported image-set filter condition"):
+        repo.set_image_set_filter(
+            set_id,
+            {
+                "op": "and",
+                "conditions": [
+                    {"field": "mystery", "operator": "equals", "value": "x"}
+                ],
+            },
+        )
+    assert repo.list_image_sets()[0]["apply_filter"] == valid_filter
+
+
+def test_image_set_filter_reapply_reports_batched_progress(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange
+    image_paths = [str(tmp_path / f"match-{index}.jpg") for index in range(1001)]
+    repo.upsert_images_batch(
+        [
+            (path, Path(path).name, 1.0, 100, {}, "wildlife", None, None)
+            for path in image_paths
+        ]
+    )
+    set_id = repo.create_image_set(
+        "Progress",
+        {
+            "op": "and",
+            "conditions": [
+                {"field": "text", "operator": "matches", "value": "wildlife"}
+            ],
+        },
+    )
+    progress: list[tuple[int, int]] = []
+
+    # Act
+    result = repo.reapply_image_set_filter_with_progress(
+        set_id,
+        mode="add",
+        on_progress=lambda done, total: progress.append((done, total)),
+        batch_size=500,
+    )
+
+    # Assert
+    assert result == {"matched": 1001, "added": 1001, "removed": 0}
+    assert progress == [(0, 1001), (500, 1001), (1000, 1001), (1001, 1001)]
+
+
+@pytest.mark.parametrize("mode", ["add", "replace"])
+def test_image_set_filter_reapply_cancel_before_changes_keeps_members(
+    repo: ImageIndexRepository, tmp_path: Path, mode: str
+) -> None:
+    # Arrange
+    stale_path = str(tmp_path / "prior-member.jpg")
+    matching_path = str(tmp_path / "matching.jpg")
+    repo.upsert_image(stale_path, "prior-member.jpg", 1.0, 100, {}, "other")
+    repo.upsert_image(matching_path, "matching.jpg", 1.0, 100, {}, "wildlife")
+    set_id = repo.create_image_set(
+        "Cancel before changes",
+        {
+            "op": "and",
+            "conditions": [
+                {"field": "text", "operator": "matches", "value": "wildlife"}
+            ],
+        },
+    )
+    repo.add_images_to_set(set_id, [stale_path])
+
+    # Act / Assert
+    with pytest.raises(ImageSetFilterReapplyCanceled) as raised:
+        repo.reapply_image_set_filter_with_progress(
+            set_id, mode=mode, cancel_check=lambda: True
+        )
+    assert (raised.value.processed, raised.value.added, raised.value.removed) == (0, 0, 0)
+    assert [member["path"] for member in repo.get_image_set_members(set_id)] == [stale_path]
+    assert not repo.conn.in_transaction
+
+
+def test_image_set_filter_reapply_cancel_keeps_completed_replacement(
+    repo: ImageIndexRepository, tmp_path: Path
+) -> None:
+    # Arrange
+    matching_paths = [str(tmp_path / f"match-{index}.jpg") for index in range(1001)]
+    stale_path = str(tmp_path / "prior-member.jpg")
+    repo.upsert_images_batch(
+        [
+            (path, Path(path).name, 1.0, 100, {}, "wildlife", None, None)
+            for path in matching_paths
+        ]
+        + [(stale_path, "prior-member.jpg", 1.0, 100, {}, "other", None, None)]
+    )
+    set_id = repo.create_image_set(
+        "Cancelable",
+        {
+            "op": "and",
+            "conditions": [
+                {"field": "text", "operator": "matches", "value": "wildlife"}
+            ],
+        },
+    )
+    repo.add_images_to_set(set_id, [stale_path])
+    cancel_event = threading.Event()
+    progress: list[tuple[int, int]] = []
+
+    def cancel_after_batch(done: int, total: int) -> None:
+        progress.append((done, total))
+        if done >= 500:
+            cancel_event.set()
+
+    # Act / Assert
+    with pytest.raises(ImageSetFilterReapplyCanceled) as raised:
+        repo.reapply_image_set_filter_with_progress(
+            set_id,
+            mode="replace",
+            confirm_empty_replace=True,
+            cancel_check=cancel_event.is_set,
+            on_progress=cancel_after_batch,
+            batch_size=500,
+        )
+    assert raised.value.processed == 500
+    assert raised.value.added == 500
+    assert raised.value.removed == 1
+    assert progress == [(0, 1001), (500, 1001)]
+    assert {
+        member["path"] for member in repo.get_image_set_members(set_id, limit=1001)
+    } == set(matching_paths[:500])
+    assert not repo.conn.in_transaction
 
 
 def test_find_image_offset_path_filter_returns_sorted_offset(repo: ImageIndexRepository, tmp_path: Path) -> None:

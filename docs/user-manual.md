@@ -951,13 +951,13 @@ Copy Tags or use **Action → Generate Tagged Derivatives for Marked Images…**
 Use **Action → Generate Tagged Derivatives for Current Results…** to process
 the complete current result set, including pages not yet loaded into the view,
 or **Action → Generate Tagged Derivatives for Marked Images…** to process the
-marked set. Only images with custom tags or included embedded keywords produce
-copies. The chosen output root must be outside every indexed source root. The
+marked set. Images without tags are exported too, as unchanged copies unless
+embedded-tag exclusions need to be applied. The chosen output root must be outside every indexed source root. The
 exporter:
 
 - preserves each source format and relative source folder tree;
 - adds collision-safe top-level labels when marks span multiple indexed roots;
-- skips untagged images and existing destination files without overwriting;
+- skips existing destination files without overwriting;
 - merges existing embedded keywords with custom tags,
   removes case-insensitive duplicates, and writes the result to **XMP Subject**
   and **IPTC Keywords** on a temporary copy;

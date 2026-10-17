@@ -145,7 +145,7 @@ def test_folder_row_ai_scan_running_has_folder_scoped_indicator() -> None:
     source = (_QML_PATH.parent / "FoldersPanel.qml").read_text(encoding="utf-8")
 
     # Act / Assert
-    assert "controller.aiScanFolderId === model.folderId" in source
+    assert "controller.aiScanFolderId === folderDelegate.folderId" in source
     assert "running: folderDelegate.aiScanningThisFolder" in source
     assert 'qsTr("AI-Scan")' in source
     assert 'qsTr("AI Full Scan")' in source

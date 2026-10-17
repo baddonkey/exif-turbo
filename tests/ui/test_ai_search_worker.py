@@ -253,6 +253,59 @@ def test_ai_search_worker_applies_path_filter_to_hits(
     assert [row[1] for row in rows] == [str(beta_path)]
 
 
+def test_ai_search_worker_applies_image_set_filter_to_hits(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    # Arrange
+    db_path = tmp_path / "test.db"
+    directory = tmp_path / "photos"
+    directory.mkdir()
+    member_path = make_jpeg(directory / "member.jpg")
+    other_path = make_jpeg(directory / "other.jpg")
+    folder_id = _seed_folder(db_path, directory, enabled=True)
+    _seed_image(db_path, member_path, folder_id, "Canon")
+    _seed_image(db_path, other_path, folder_id, "Nikon")
+    image_repository = ImageIndexRepository(db_path, key="")
+    set_id = image_repository.create_image_set("AI scope")
+    image_repository.add_images_to_set(set_id, [str(member_path)])
+    image_repository.close()
+
+    _FakeAiVectorRepository.hits = [
+        (str(other_path), 0.95),
+        (str(member_path), 0.90),
+    ]
+    monkeypatch.setattr(
+        "exif_turbo.ui.workers.ai_search_worker.AiVectorRepository",
+        _FakeAiVectorRepository,
+    )
+    monkeypatch.setattr(
+        "exif_turbo.ui.workers.ai_search_worker.AiIndexerService",
+        _FakeAiIndexerService,
+    )
+    emitted: list[tuple[list[tuple], int, list, int]] = []
+    failures: list[str] = []
+    worker = AiSearchWorker(db_path, "", "animal", 10, image_set_id=set_id)
+    worker.results_ready.connect(
+        lambda rows, total, format_counts, serial: emitted.append(
+            (rows, total, format_counts, serial)
+        )
+    )
+    worker.failed.connect(failures.append)
+
+    # Act
+    worker.run()
+
+    # Assert
+    assert failures == []
+    assert len(emitted) == 1
+    rows, total, format_counts, serial = emitted[0]
+    assert total == 1
+    assert format_counts == []
+    assert serial == 10
+    assert [row[1] for row in rows] == [str(member_path)]
+
+
 def test_ai_search_worker_filters_before_candidate_cap(
     tmp_path: Path,
     monkeypatch,
