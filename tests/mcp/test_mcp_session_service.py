@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
 import pytest
@@ -149,6 +150,34 @@ def test_mcp_session_service_inline_previews_enforce_small_page_limit() -> None:
         service.get_image_set_images(1, limit=6, include_previews=True)
 
 
+@pytest.mark.parametrize(("include_previews", "expected_limit"), [(False, 25), (True, 5)])
+def test_mcp_session_service_image_set_default_limit_matches_preview_mode(
+    include_previews: bool,
+    expected_limit: int,
+) -> None:
+    # Arrange
+    port = _FakePort()
+    port.image_set_images = [
+        {"id": image_id, "free_tags": ["Oberkulm"]}
+        for image_id in range(1, 31)
+    ]
+    port.previews = {image_id: b"jpeg" for image_id in range(1, 31)}
+    service = McpSessionService(port)
+
+    # Act
+    page = service.get_image_set_images(1, include_previews=include_previews)
+
+    # Assert
+    assert page["limit"] == expected_limit
+    assert len(page["images"]) == expected_limit
+    assert page["next_offset"] == expected_limit
+    assert all(image["free_tags"] == ["Oberkulm"] for image in page["images"])
+    assert all(
+        image["preview_jpeg_base64"] == ("anBlZw==" if include_previews else None)
+        for image in page["images"]
+    )
+
+
 def test_mcp_session_service_tag_batch_continues_after_image_failure() -> None:
     # Arrange
     port = _FakePort()
@@ -188,3 +217,82 @@ def test_mcp_session_service_tag_batch_reports_malformed_items_individually() ->
     assert result["failed"] == 1
     assert result["succeeded"] == 1
     assert result["results"][0]["error"] == "Each update must be an object."
+
+
+def test_mcp_session_service_add_custom_tags_success_logs_target_and_tags(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Arrange
+    snapshot = SelectedImageSnapshot(
+        path="/photos/a.jpg",
+        filename="a.jpg",
+        image_id=7,
+        free_tags=("existing",),
+        has_preview=False,
+        metadata_json=None,
+    )
+    service = McpSessionService(
+        _FakePort(snapshot=snapshot, resulting_tags=("existing", "new"))
+    )
+
+    # Act
+    with caplog.at_level(logging.INFO, logger="exif_turbo.mcp.mcp_session_service"):
+        service.add_custom_tags([" new "])
+
+    # Assert
+    assert caplog.record_tuples == [
+        (
+            "exif_turbo.mcp.mcp_session_service",
+            logging.INFO,
+            "MCP add_custom_tags succeeded: image_id=7 path='/photos/a.jpg' "
+            "mode=append requested_tags=['new'] free_tags=['existing', 'new']",
+        )
+    ]
+
+
+def test_mcp_session_service_tag_batch_logs_each_success_not_failed_updates(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Arrange
+    service = McpSessionService(_FakePort())
+    updates = [
+        {"image_id": 1, "path": "/photos/a.jpg", "tags": [" alpha "]},
+        {"image_id": 2, "path": "/photos/fail.jpg", "tags": ["beta"]},
+        {"image_id": 3, "path": "/photos/c.jpg", "tags": [], "mode": "replace"},
+        {"image_id": 4, "path": "/photos/invalid.jpg", "tags": []},
+    ]
+
+    # Act
+    with caplog.at_level(logging.INFO, logger="exif_turbo.mcp.mcp_session_service"):
+        result = service.set_custom_tags_batch(updates)
+
+    # Assert
+    assert result["succeeded"] == 2
+    assert result["failed"] == 2
+    assert caplog.record_tuples == [
+        (
+            "exif_turbo.mcp.mcp_session_service",
+            logging.INFO,
+            "MCP set_custom_tags_batch succeeded: image_id=1 path='/photos/a.jpg' "
+            "mode=append requested_tags=['alpha'] free_tags=['alpha']",
+        ),
+        (
+            "exif_turbo.mcp.mcp_session_service",
+            logging.INFO,
+            "MCP set_custom_tags_batch succeeded: image_id=3 path='/photos/c.jpg' "
+            "mode=replace requested_tags=[] free_tags=[]",
+        ),
+    ]
+
+
+def test_mcp_session_service_add_custom_tags_without_selection_does_not_log_success(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Arrange
+    service = McpSessionService(_FakePort())
+
+    # Act / Assert
+    with caplog.at_level(logging.INFO, logger="exif_turbo.mcp.mcp_session_service"):
+        with pytest.raises(McpSessionError, match="No image is currently selected"):
+            service.add_custom_tags(["new"])
+    assert caplog.records == []

@@ -36,7 +36,10 @@ class McpServerFactory:
             description=(
                 "Return the image currently selected in exif-turbo, including "
                 "path, filename, free tags, EXIF/metadata JSON, and a JPEG "
-                "preview when available."
+                "preview when available. Uses the tagging drawer's selection: "
+                "the selected set member in Sets, otherwise the Search/Browse "
+                "selection. No selection is returned when a set is active "
+                "without a selected member."
             ),
         )
         def get_selected_image(include_preview: bool = True) -> CallToolResult:
@@ -72,7 +75,10 @@ class McpServerFactory:
             name="add_custom_tags",
             description=(
                 "Add one or more custom free-text tags to the image currently "
-                "selected in exif-turbo. Tags are stored in the sidecar and "
+                "selected in the exif-turbo tagging drawer, not every image "
+                "in a set. Use get_selected_image to verify the target path "
+                "first. For a batch, use set_custom_tags_batch with explicit "
+                "image IDs and paths. Tags are stored in the sidecar and "
                 "index; originals are never modified."
             ),
         )
@@ -129,13 +135,16 @@ class McpServerFactory:
             description=(
                 "Return one bounded page of images from a set, including paths, "
                 "metadata, custom tags, and per-image preview resource URIs. "
-                "Previews can optionally be included inline."
+                "Previews can optionally be included inline. The default limit "
+                "is 5 with inline previews, otherwise 25. Maximum limits are "
+                "5 with inline previews and 50 otherwise. Use next_offset "
+                "to fetch subsequent pages."
             ),
         )
         def get_image_set_images(
             set_id: int,
             offset: int = 0,
-            limit: int = 25,
+            limit: int | None = None,
             include_previews: bool = False,
         ) -> CallToolResult:
             try:

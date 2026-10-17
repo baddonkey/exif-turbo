@@ -171,3 +171,18 @@ def test_mcp_server_factory_returns_per_image_tag_batch_results() -> None:
     assert result.is_error is False
     assert result.structured_content["succeeded"] == 1
     assert result.structured_content["results"][0]["free_tags"] == ["family"]
+
+
+def test_mcp_server_factory_image_set_previews_without_limit_returns_images() -> None:
+    # Arrange
+    factory = McpServerFactory(McpSessionService(_FakePort(None)))
+    tool = _tool_fn(factory.create(), "get_image_set_images")
+
+    # Act
+    result = tool(set_id=4, include_previews=True)
+
+    # Assert
+    assert result.is_error is False
+    assert result.structured_content["limit"] == 5
+    assert result.structured_content["images"][0]["free_tags"] == ["tag-a"]
+    assert any(getattr(block, "type", None) == "image" for block in result.content)

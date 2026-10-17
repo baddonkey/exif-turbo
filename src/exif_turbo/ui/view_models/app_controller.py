@@ -412,14 +412,10 @@ class AppController(QObject):
         self._mcp = McpController(
             settings=settings,
             is_locked=lambda: self._is_locked,
-            selected_path=lambda: self._search_model.get_path(self._current_result_row),
-            selected_image_id=lambda: self._search_model.get_image_id(
-                self._current_result_row
-            ),
-            selected_metadata_json=lambda: self._search_model.get_metadata_json(
-                self._current_result_row
-            ),
-            selected_has_preview=lambda: self._selected_has_preview,
+            selected_path=self._tagging_selected_path,
+            selected_image_id=self._mcp_selected_image_id,
+            selected_metadata_json=self._mcp_selected_metadata_json,
+            selected_has_preview=self._mcp_selected_has_preview,
             selected_free_tags=self._mcp_selected_free_tags,
             load_preview_image=self._mcp_load_preview_image,
             get_tagging_service=lambda: self._tagging.service,
@@ -610,8 +606,35 @@ class AppController(QObject):
     def mcpStatusMessage(self) -> str:
         return self._mcp.status_message
 
+    def _mcp_selected_image_row(
+        self,
+    ) -> tuple[int, str, str, str, int, float] | None:
+        path = self._tagging_selected_path()
+        if not path or self._repo is None:
+            return None
+        rows = self._repo.get_images_by_paths([path])
+        return rows[0] if rows else None
+
+    def _mcp_selected_image_id(self) -> int | None:
+        if self._action_image_set_id is None:
+            return self._search_model.get_image_id(self._current_result_row)
+        row = self._mcp_selected_image_row()
+        return None if row is None else row[0]
+
+    def _mcp_selected_metadata_json(self) -> str | None:
+        if self._action_image_set_id is None:
+            return self._search_model.get_metadata_json(self._current_result_row)
+        row = self._mcp_selected_image_row()
+        return None if row is None else row[3]
+
+    def _mcp_selected_has_preview(self) -> bool:
+        if self._action_image_set_id is None:
+            return self._selected_has_preview
+        row = self._mcp_selected_image_row()
+        return row is not None and self._compute_has_preview(row[1], (row[5], row[4]))
+
     def _mcp_selected_free_tags(self) -> tuple[str, ...]:
-        path = self._search_model.get_path(self._current_result_row)
+        path = self._tagging_selected_path()
         if not path:
             return ()
         if self._repo is not None:
@@ -622,11 +645,15 @@ class AppController(QObject):
         return tuple(self._tagging.free_tags_model._rows)
 
     def _mcp_load_preview_image(self) -> PilImage.Image | None:
-        path = self._pending_preview_path or self._search_model.get_path(
-            self._current_result_row
-        )
+        path = self._tagging_selected_path()
         if not path:
             return None
+        if self._action_image_set_id is not None:
+            image_id = self._mcp_selected_image_id()
+            return (
+                None if image_id is None
+                else self._mcp_load_indexed_preview_image(image_id)
+            )
         try:
             return self._load_preview_for_clipboard(path)
         except Exception:  # noqa: BLE001

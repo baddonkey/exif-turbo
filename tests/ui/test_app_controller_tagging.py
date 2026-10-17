@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import base64
+import io
 import json
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from PIL import Image
 from PySide6.QtCore import QObject, QPoint, QPointF, QMetaObject, Qt, QUrl, Signal
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickItem, QQuickWindow
@@ -12,6 +15,7 @@ from PySide6.QtTest import QTest
 from pytestqt.qtbot import QtBot
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
+from exif_turbo.mcp.mcp_session_service import McpSessionService
 from exif_turbo.models.search_result import SearchResult
 from exif_turbo.tagging.derivative_export_service import (
     DerivativeExportItemResult,
@@ -121,6 +125,151 @@ def test_app_controller_set_member_tagging_keeps_search_selection(
     controller.setActionImageSet(0)
     assert controller.taggingFilename == search_path.name
     assert controller.selectedSetMemberPath == ""
+
+
+@pytest.mark.parametrize("mode", ["append", "replace"])
+def test_app_controller_mcp_batch_updates_selected_set_member_custom_tags(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    # Arrange
+    controller, search_model, _, search_path = tagging_controller
+    set_path = tmp_path / "set-member.jpg"
+    set_path.write_bytes(b"image")
+    assert controller._repo is not None
+    controller._repo.upsert_image(str(set_path), set_path.name, 1.0, 5, {}, "")
+    image_id = controller._repo.get_images_by_paths([str(set_path)])[0][0]
+    set_id = controller.createImageSet("MCP tagging set")
+    controller._repo.add_images_to_set(set_id, [str(set_path)])
+    controller.setActionImageSet(set_id)
+    controller.selectImageSetMember(str(set_path))
+    controller.addSelectedFreeTag("Original")
+    session = McpSessionService(controller._mcp)
+
+    # Act
+    result = session.set_custom_tags_batch(
+        [{"image_id": image_id, "path": str(set_path), "tags": ["MCP tag"], "mode": mode}]
+    )
+
+    # Assert
+    expected_tags = ("Original", "MCP tag") if mode == "append" else ("MCP tag",)
+    assert result["succeeded"] == 1, result
+    assert controller._repo.get_free_tags(str(set_path)) == expected_tags
+    model = controller.freeTagsModel
+    assert tuple(
+        model.data(model.index(row), model.LabelRole)
+        for row in range(model.rowCount())
+    ) == tuple(sorted(expected_tags))
+    controller.selectImageSetMember("")
+    controller.selectImageSetMember(str(set_path))
+    assert tuple(
+        model.data(model.index(row), model.LabelRole)
+        for row in range(model.rowCount())
+    ) == tuple(sorted(expected_tags))
+    assert search_model.get_path(controller.currentResultRow) == str(search_path)
+
+
+def test_app_controller_mcp_selected_image_targets_set_member_not_search_image(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    controller, search_model, _, search_path = tagging_controller
+    set_path = tmp_path / "selected-member.jpg"
+    set_path.write_bytes(b"image")
+    assert controller._repo is not None
+    controller._repo.upsert_image(
+        str(set_path), set_path.name, 1.0, 5, {"Make": "Set camera"}, ""
+    )
+    image_id = controller._repo.get_images_by_paths([str(set_path)])[0][0]
+    set_id = controller.createImageSet("Selected MCP set")
+    controller._repo.add_images_to_set(set_id, [str(set_path)])
+    controller.setActionImageSet(set_id)
+    controller.selectImageSetMember(str(set_path))
+    controller.addSelectedFreeTag("Existing")
+    session = McpSessionService(controller._mcp)
+
+    # Act
+    selected = session.get_selected_image(include_preview=False)
+    result = session.add_custom_tags(["MCP tag"])
+
+    # Assert
+    assert selected.path == str(set_path)
+    assert selected.image_id == image_id
+    assert selected.metadata == {"Make": "Set camera"}
+    assert selected.free_tags == ("Existing",)
+    assert result["path"] == str(set_path)
+    assert controller._repo.get_free_tags(str(set_path)) == ("Existing", "MCP tag")
+    assert controller._repo.get_free_tags(str(search_path)) == ()
+    assert not FilesystemSidecarRepository.sidecar_path(search_path).exists()
+    assert search_model.get_path(controller.currentResultRow) == str(search_path)
+
+
+def test_app_controller_mcp_unselected_set_does_not_fall_back_to_search_image(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _, _, search_path = tagging_controller
+    set_id = controller.createImageSet("No member selected")
+    controller.setActionImageSet(set_id)
+    session = McpSessionService(controller._mcp)
+
+    # Act / Assert
+    with pytest.raises(RuntimeError, match="No image is currently selected"):
+        session.add_custom_tags(["Wrong target"])
+    assert not FilesystemSidecarRepository.sidecar_path(search_path).exists()
+
+
+def test_app_controller_mcp_set_selection_preview_ignores_search_preview(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    controller, _, _, search_path = tagging_controller
+    set_path = tmp_path / "blue.png"
+    Image.new("RGB", (8, 8), "blue").save(set_path)
+    Image.new("RGB", (8, 8), "red").save(search_path)
+    assert controller._repo is not None
+    controller._repo.upsert_image(str(set_path), set_path.name, 1.0, 5, {}, "")
+    set_id = controller.createImageSet("Preview set")
+    controller._repo.add_images_to_set(set_id, [str(set_path)])
+    controller.setActionImageSet(set_id)
+    controller.selectImageSetMember(str(set_path))
+    controller._pending_preview_path = str(search_path)
+    controller._selected_has_preview = True
+
+    # Act
+    selected = McpSessionService(controller._mcp).get_selected_image()
+
+    # Assert
+    assert selected.path == str(set_path)
+    assert selected.has_preview is False
+    assert selected.preview_jpeg_base64 is not None
+    with Image.open(io.BytesIO(base64.b64decode(selected.preview_jpeg_base64))) as preview:
+        red, green, blue = preview.convert("RGB").getpixel((0, 0))
+        assert blue > 240
+        assert red < 10
+        assert green < 10
+
+
+def test_app_controller_mcp_search_selection_still_targets_search_image(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _, _, search_path = tagging_controller
+    session = McpSessionService(controller._mcp)
+
+    # Act
+    selected = session.get_selected_image(include_preview=False)
+    result = session.add_custom_tags(["Search tag"])
+
+    # Assert
+    assert selected.path == str(search_path)
+    assert selected.image_id == 1
+    assert result["path"] == str(search_path)
+    assert controller._repo is not None
+    assert controller._repo.get_free_tags(str(search_path)) == ("Search tag",)
 
 
 def test_app_controller_selection_exposes_deduplicated_embedded_tags_read_only(
@@ -983,5 +1132,3 @@ def test_app_controller_derivative_result_reports_first_failure_detail(
     assert "First failure (broken.png): ExifTool metadata write failed" in (
         controller.derivativeResultSummary
     )
-
-

@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
 from .selected_image_port import SelectedImagePort
 from .selected_image_snapshot import SelectedImageSnapshot
+
+_log = logging.getLogger(__name__)
 
 
 class McpSessionError(RuntimeError):
@@ -72,6 +75,14 @@ class McpSessionService:
             raise McpSessionError("Provide at least one non-empty custom tag.")
         snapshot = self._require_selection()
         resulting = self._port.add_custom_tags(cleaned)
+        _log.info(
+            "MCP add_custom_tags succeeded: image_id=%s path=%r mode=append "
+            "requested_tags=%r free_tags=%r",
+            snapshot.image_id,
+            snapshot.path,
+            cleaned,
+            list(resulting),
+        )
         return {
             "path": snapshot.path,
             "added": cleaned,
@@ -86,13 +97,15 @@ class McpSessionService:
         set_id: int,
         *,
         offset: int = 0,
-        limit: int = 25,
+        limit: int | None = None,
         include_previews: bool = False,
     ) -> dict[str, Any]:
         if isinstance(set_id, bool) or not isinstance(set_id, int) or set_id < 1:
             raise McpSessionError("set_id must be a positive integer.")
         if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
             raise McpSessionError("offset must not be negative.")
+        if limit is None:
+            limit = MAX_INLINE_PREVIEW_IMAGES if include_previews else 25
         if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1 or limit > MAX_IMAGE_SET_PAGE_SIZE:
             raise McpSessionError(
                 f"limit must be between 1 and {MAX_IMAGE_SET_PAGE_SIZE}."
@@ -190,6 +203,15 @@ class McpSessionService:
                 "ok": False,
                 "error": str(exc),
             }
+        _log.info(
+            "MCP set_custom_tags_batch succeeded: image_id=%s path=%r mode=%s "
+            "requested_tags=%r free_tags=%r",
+            image_id,
+            path,
+            mode,
+            cleaned,
+            list(resulting),
+        )
         return {
             "image_id": image_id,
             "path": path,
