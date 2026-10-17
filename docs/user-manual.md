@@ -879,7 +879,7 @@ shown in full and never truncated.
 ## 10. Custom Tags and Derivatives
 
 Tagging is optional for each database. Enable **Custom Tags** in Settings, then
-open the drawer from Search or Browse with the tag button or **Ctrl+T**. Add
+open the drawer from Search, Browse, or Sets with the tag button or **Ctrl+T**. Add
 your own labels, reuse remembered labels, and control which embedded keywords
 are included in derivative copies. There are no vocabulary lookups or AI tag
 suggestions. AI image search and AI-Scan are separate features.
@@ -911,8 +911,10 @@ tags from FTS after the next synchronization.
 
 ### Tagging drawer
 
-From the **Search** or **Browse** tab, click the tag button at the upper right
-or press **Ctrl+T**. The non-modal drawer contains these controls:
+From the **Search**, **Browse**, or **Sets** tab, click the tag button at the upper
+right or press **Ctrl+T**. In Sets, select an image in the member list first, or
+double-click a member to select it and open tagging. This does not change the
+focused Search image. The non-modal drawer contains these controls:
 
 - **Existing image keywords** lists keywords already embedded in the original
   image's XMP or IPTC metadata. Select individual tags to exclude them from
@@ -934,6 +936,11 @@ or press **Ctrl+T**. The non-modal drawer contains these controls:
   **Replace** substitutes the target's custom tags and exclusion settings and
   requires confirmation. The focused source image is always excluded.
   Progress and cancellation are available while the copy runs.
+  On Sets, the default targets are the current set and its marked members.
+  Every named set is also available as a destination from Search, Browse, or
+  Sets. Choosing another set copies only to that destination's members,
+  regardless of current Search filters. The focused source image is excluded
+  even if it belongs to the destination set.
 
 Derivative generation starts from the **Action** menu. The drawer footer is a
 read-only preview.
@@ -1151,7 +1158,7 @@ The **Reset Database…** button is disabled while indexing is in progress.
 | `Escape` | Close the find-in-metadata bar |
 | `F3` | Jump to next match in metadata |
 | `Shift+F3` | Jump to previous match in metadata |
-| `Ctrl+T` | Open / close the tagging drawer in Search or Browse |
+| `Ctrl+T` | Open / close the tagging drawer in Search, Browse, or Sets |
 | `Space` | Toggle the mark on the focused Search or Browse image |
 | `↓` | Select the next result (Search tab) / next image (Browse tab) |
 | `↑` | Select the previous result (Search tab) / previous image (Browse tab) |

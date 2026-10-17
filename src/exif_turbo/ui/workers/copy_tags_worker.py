@@ -61,7 +61,8 @@ class CopyTagsWorker(QThread):
             if image_paths is None:
                 if self._marked_only:
                     image_paths = image_repository.get_marked_paths(
-                        restrict_to_enabled_folders=self._restrict_to_enabled_folders
+                        restrict_to_enabled_folders=self._restrict_to_enabled_folders,
+                        image_set_id=self._image_set_id,
                     )
                 else:
                     image_paths = image_repository.get_matching_paths(

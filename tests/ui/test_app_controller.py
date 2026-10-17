@@ -518,6 +518,84 @@ def test_sets_plus_button_creates_set_through_name_dialog(
     qtbot.waitUntil(lambda: not bool(create_dialog.property("visible")))
 
 
+def test_sets_member_selection_opens_shared_tagging_drawer(
+    qtbot: QtBot,
+    demo_db: tuple[Path, Path],
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    set_id = controller.createImageSet("Tagging drawer set")
+    target_set_id = controller.createImageSet("Other tagging target")
+    image_path = str(demo_db[1] / "images" / _CAMERAS[0][0])
+    assert controller._repo is not None
+    controller._repo.add_images_to_set(set_id, [image_path])
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    sets_page = root.findChild(QQuickItem, "setsPage")
+    member_list = root.findChild(QQuickItem, "imageSetMemberList")
+    tagging_button = root.findChild(QObject, "taggingWorkbenchButton")
+    drawer = root.findChild(QObject, "taggingDrawer")
+    copy_target = root.findChild(QObject, "copyTagsTarget")
+    assert tab_bar is not None
+    assert sets_page is not None
+    assert member_list is not None
+    assert tagging_button is not None
+    assert drawer is not None
+    assert copy_target is not None
+
+    # Act / Assert
+    tab_bar.setProperty("currentIndex", 3)
+    sets_page.setProperty("selectedSetId", set_id)
+    content = member_list.property("contentItem")
+    qtbot.waitUntil(lambda: any(
+        item.objectName() == "imageSetMemberDelegate" for item in content.childItems()
+    ))
+    delegate = next(
+        item for item in content.childItems()
+        if item.objectName() == "imageSetMemberDelegate"
+    )
+    delegate.clicked.emit()
+    assert controller.selectedSetMemberPath == image_path
+    assert bool(delegate.property("highlighted"))
+    assert bool(tagging_button.property("visible"))
+    tagging_button.clicked.emit()
+    qtbot.waitUntil(lambda: bool(drawer.property("opened")))
+    assert bool(drawer.property("hasSelection"))
+    assert drawer.property("selectedFilename") == _CAMERAS[0][0]
+    assert bool(drawer.property("setMode"))
+    copy_target.setProperty("currentIndex", 1)
+    assert copy_target.property("currentValue") == "set"
+    assert "Tagging drawer set" in str(copy_target.property("currentText"))
+    for target_index in range(int(copy_target.property("count"))):
+        copy_target.setProperty("currentIndex", target_index)
+        if copy_target.property("currentValue") == f"set:{target_set_id}":
+            break
+    assert copy_target.property("currentValue") == f"set:{target_set_id}"
+    assert "Other tagging target" in str(copy_target.property("currentText"))
+    controller.renameImageSet(target_set_id, "Renamed tagging target")
+    qtbot.waitUntil(lambda: "Renamed tagging target" in str(copy_target.property("currentText")))
+    assert copy_target.property("currentValue") == f"set:{target_set_id}"
+    qtbot.waitUntil(lambda: sets_page.width() < root.width() - 300)
+    controller.removeImageSetMember(set_id, image_path)
+    qtbot.waitUntil(lambda: not bool(drawer.property("hasSelection")))
+    tab_bar.setProperty("currentIndex", 0)
+    qtbot.waitUntil(lambda: not bool(drawer.property("opened")))
+    tagging_button.clicked.emit()
+    qtbot.waitUntil(lambda: bool(drawer.property("opened")))
+    for target_index in range(int(copy_target.property("count"))):
+        copy_target.setProperty("currentIndex", target_index)
+        if copy_target.property("currentValue") == f"set:{target_set_id}":
+            break
+    assert copy_target.property("currentValue") == f"set:{target_set_id}"
+    controller.deleteImageSet(target_set_id)
+    qtbot.waitUntil(lambda: int(copy_target.property("currentIndex")) == -1)
+    copy_button = root.findChild(QObject, "copyTagsButton")
+    assert copy_button is not None
+    assert not bool(copy_button.property("enabled"))
+
+
 def test_sets_operation_running_shows_progress_and_cancel_controls(
     qtbot: QtBot,
     window: tuple[AppController, SearchListModel, QQuickWindow],

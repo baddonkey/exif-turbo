@@ -84,7 +84,8 @@ def test_tagging_qml_contract_keeps_custom_tagging_and_removes_vocabulary_sugges
     assert "appController.derivativeTagsModel" in source
     assert 'text: qsTr("Custom tags")' in drawer_source
     assert 'objectName: "copyTagsTarget"' in drawer_source
-    assert "onBrowseModeChanged: copyTarget.currentIndex = 0" in drawer_source
+    assert "onBrowseModeChanged: {" in drawer_source
+    assert "copyTarget.currentIndex = 0" in drawer_source
     assert 'objectName: "copyTagsAddMode"' in drawer_source
     assert 'objectName: "copyTagsReplaceMode"' in drawer_source
     assert drawer_source.count("RadioButton {") >= 2

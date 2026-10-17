@@ -735,6 +735,14 @@ class ImageIndexRepository:
             for set_id, name, filter_json, filter_version, member_count in rows
         ]
 
+    def image_set_contains_path(self, set_id: int, path: str) -> bool:
+        return bool(self.conn.execute(
+            "SELECT EXISTS(SELECT 1 FROM image_set_members AS members "
+            "JOIN images ON images.id = members.image_id "
+            "WHERE members.set_id = ? AND images.path = ?)",
+            (set_id, path),
+        ).fetchone()[0])
+
     def add_images_to_set(self, set_id: int, image_paths: Iterable[str]) -> int:
         if self.conn.execute(
             "SELECT 1 FROM image_sets WHERE id = ?", (set_id,)

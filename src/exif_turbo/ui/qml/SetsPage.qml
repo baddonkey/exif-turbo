@@ -10,6 +10,7 @@ Item {
     objectName: "setsPage"
 
     required property var appController
+    signal taggingRequested()
     property color accentColor: Material.accent
     property var sets: []
     property var members: []
@@ -456,19 +457,28 @@ Item {
 
             ListView {
                 id: memberList
+                objectName: "imageSetMemberList"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
                 model: root.members
-                delegate: Item {
+                delegate: ItemDelegate {
                     id: memberDelegate
+                    objectName: "imageSetMemberDelegate"
                     required property var modelData
                     width: memberList.width
                     height: 68
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 14
-                        anchors.rightMargin: 14
+                    leftPadding: 14
+                    rightPadding: 14
+                    topPadding: 0
+                    bottomPadding: 0
+                    highlighted: modelData.path === root.appController.selectedSetMemberPath
+                    onClicked: root.appController.selectImageSetMember(modelData.path)
+                    onDoubleClicked: {
+                        root.appController.selectImageSetMember(modelData.path)
+                        root.taggingRequested()
+                    }
+                    contentItem: RowLayout {
                         spacing: 10
                         Rectangle {
                             Layout.preferredWidth: 52

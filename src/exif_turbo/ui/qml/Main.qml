@@ -198,7 +198,7 @@ ApplicationWindow {
     }
     Shortcut {
         sequence: "Ctrl+T"
-        enabled: !_isLocked && (mainTabBar.currentIndex === 0 || mainTabBar.currentIndex === 1)
+        enabled: !_isLocked && (root._searchOrBrowseActive || mainTabBar.currentIndex === 3)
         onActivated: taggingDrawer.opened ? taggingDrawer.close() : taggingDrawer.openTaggingPanel()
     }
 
@@ -1359,7 +1359,7 @@ ApplicationWindow {
         anchors { top: parent.top; right: parent.right; rightMargin: 8 }
         width: 40; height: 40
         z: 11
-        visible: !_isLocked && (mainTabBar.currentIndex === 0 || mainTabBar.currentIndex === 1)
+        visible: !_isLocked && (root._searchOrBrowseActive || mainTabBar.currentIndex === 3)
         enabled: !_isLocked
         icon.source: "../../assets/tag_icon.svg"
         icon.width: 20
@@ -1374,8 +1374,11 @@ ApplicationWindow {
         id: taggingDrawer
         appController: controller
         appSettings: settingsModel
-        selectedFilename: controller ? controller.selectedFilename : ""
+        selectedFilename: controller ? controller.taggingFilename : ""
         browseMode: mainTabBar.currentIndex === 1
+        setMode: mainTabBar.currentIndex === 3
+        setName: setsPage.selectedSet ? setsPage.selectedSet.name : ""
+        currentSetId: setsPage.selectedSetId
     }
 
     // ── Search tab ───────────────────────────────────────────────────────
@@ -3840,10 +3843,11 @@ ApplicationWindow {
     // ── Sets tab ─────────────────────────────────────────────────────────
     SetsPage {
         id: setsPage
-        anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; bottom: parent.bottom }
+        anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; rightMargin: taggingDrawer.width * taggingDrawer.position; bottom: parent.bottom }
         visible: !_isLocked && mainTabBar.currentIndex === 3
         appController: controller
         accentColor: root._accentColor
+        onTaggingRequested: taggingDrawer.openTaggingPanel()
     }
 
     // ── Settings tab ─────────────────────────────────────────────────────

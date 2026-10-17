@@ -191,6 +191,7 @@ class AppController(QObject):
     imageSetOperationProgressChanged = Signal()
     imageSetEmptyReplaceConfirmationRequired = Signal()
     actionScopeChanged = Signal()
+    taggingSelectionChanged = Signal()
 
     def __init__(
         self,
@@ -367,6 +368,10 @@ class AppController(QObject):
         self._bulk_worker: BulkOpWorker | None = None
         self._image_set_worker: ImageSetMembershipWorker | None = None
         self._action_image_set_id: int | None = None
+        self._set_tagging_path: str | None = None
+        self.currentResultRowChanged.connect(self.taggingSelectionChanged.emit)
+        self.imageSetMembersChanged.connect(self._validate_set_tagging_selection)
+        self.imageSetsChanged.connect(self._validate_set_tagging_selection)
         self.imageSetsChanged.connect(self.actionScopeChanged.emit)
         self.imageSetMembersChanged.connect(self.actionScopeChanged.emit)
         self.checkedCountChanged.connect(self.actionScopeChanged.emit)
@@ -393,7 +398,7 @@ class AppController(QObject):
             is_locked=lambda: self._is_locked,
             get_repository=lambda: self._repo,
             get_folder_repository=lambda: self._folder_repo,
-            selected_path=lambda: self._search_model.get_path(self._current_result_row),
+            selected_path=self._tagging_selected_path,
             refresh_after_mutation=self._refresh_after_tag_mutation,
             copy_worker_factory=lambda *args, **kwargs: CopyTagsWorker(*args, **kwargs),
             derivative_worker_factory=lambda *args, **kwargs: DerivativeExportWorker(
@@ -1140,7 +1145,66 @@ class AppController(QObject):
         action_set_id = None if set_id == 0 else max(0, set_id)
         if self._action_image_set_id != action_set_id:
             self._action_image_set_id = action_set_id
+            self._set_tagging_path = None
+            self._refresh_tagging_selection()
             self.actionScopeChanged.emit()
+
+    def _tagging_selected_path(self) -> str | None:
+        if self._is_locked:
+            return None
+        if self._action_image_set_id is not None:
+            return self._set_tagging_path
+        return self._search_model.get_path(self._current_result_row)
+
+    def _validate_set_tagging_selection(self) -> None:
+        if (
+            self._set_tagging_path and self._repo is not None
+            and self._action_image_set_id is not None
+            and not self._repo.image_set_contains_path(
+                self._action_image_set_id, self._set_tagging_path
+            )
+        ):
+            self._set_tagging_path = None
+            self._refresh_tagging_selection()
+
+    @Property(bool, notify=taggingSelectionChanged)
+    def hasTaggingSelection(self) -> bool:
+        return self._tagging_selected_path() is not None
+
+    @Property(str, notify=taggingSelectionChanged)
+    def taggingFilename(self) -> str:
+        path = self._tagging_selected_path()
+        return Path(path).name if path else ""
+
+    @Property(str, notify=taggingSelectionChanged)
+    def selectedSetMemberPath(self) -> str:
+        return self._set_tagging_path or ""
+
+    @Slot(str)
+    def selectImageSetMember(self, path: str) -> None:
+        if self._repo is None or not self._action_image_set_id or self._is_locked:
+            return
+        if path and not self._repo.image_set_contains_path(self._action_image_set_id, path):
+            return
+        self._set_tagging_path = path or None
+        self._refresh_tagging_selection()
+
+    def _refresh_tagging_selection(self) -> None:
+        path = self._tagging_selected_path()
+        metadata_json = "{}"
+        if path and self._repo is not None:
+            rows = self._repo.get_images_by_paths([path])
+            if rows:
+                metadata_json = rows[0][3]
+        try:
+            metadata = json.loads(metadata_json)
+        except (TypeError, ValueError):
+            metadata = {}
+        self._tagging.set_embedded_tags(
+            extract_embedded_keyword_labels(metadata) if isinstance(metadata, dict) else ()
+        )
+        self._tagging.refresh_selected_state()
+        self.taggingSelectionChanged.emit()
 
     @Property(int, notify=actionScopeChanged)
     def actionImageCount(self) -> int:
@@ -4375,10 +4439,13 @@ class AppController(QObject):
 
     @Slot()
     def refreshSelectedTaggingState(self) -> None:
-        self._tagging.refresh_selected_state()
+        if self._action_image_set_id is not None:
+            self._refresh_tagging_selection()
+        else:
+            self._tagging.refresh_selected_state()
 
     def _refresh_selected_tagging_state(self) -> None:
-        self._tagging.refresh_selected_state()
+        self.refreshSelectedTaggingState()
 
     @Slot(str)
     def addSelectedFreeTag(self, label: str) -> None:
@@ -4749,14 +4816,34 @@ class AppController(QObject):
 
     @Slot(str, str)
     def copySelectedTags(self, target_scope: str, mode: str) -> None:
-        source_path = self._search_model.get_path(self._current_result_row)
+        source_path = self._tagging_selected_path()
         if not self._tagging.can_copy_tags(source_path):
             return
         if mode not in {"add", "replace"}:
             self._tagging.show_copy_error(_("Choose whether to add or replace tags."))
             return
         worker_kwargs: dict[str, object] = {}
-        if target_scope == "marked":
+        if target_scope.startswith("set:"):
+            try:
+                target_set_id = int(target_scope.removeprefix("set:"))
+            except ValueError:
+                target_set_id = 0
+            if self._repo is None or not any(
+                image_set["id"] == target_set_id
+                for image_set in self._repo.list_image_sets()
+            ):
+                self._tagging.show_copy_error(_("Choose a valid copy target."))
+                return
+            worker_kwargs = {"image_set_id": target_set_id}
+        elif self._action_image_set_id is not None:
+            if target_scope not in {"marked", "set"}:
+                self._tagging.show_copy_error(_("Choose a valid copy target."))
+                return
+            worker_kwargs = {
+                "image_set_id": self._action_image_set_id,
+                "marked_only": target_scope == "marked",
+            }
+        elif target_scope == "marked":
             worker_kwargs = {
                 "marked_only": True,
                 "restrict_to_enabled_folders": self._folder_repo is not None,
@@ -4994,7 +5081,8 @@ class AppController(QObject):
             self._geo_wikipedia_url = ""
             self.geoWikipediaUrlChanged.emit()
         self._exif_model.set_rows([])
-        self._tagging.clear_embedded_tags()
+        if self._action_image_set_id is None or self._is_locked:
+            self._tagging.clear_embedded_tags()
         self._selected_image_source = ""
         self._selected_thumb_source = ""
         self._current_result_row = -1
@@ -5032,9 +5120,10 @@ class AppController(QObject):
         try:
             parsed = json.loads(meta_json)
             if isinstance(parsed, dict):
-                self._tagging.set_embedded_tags(
-                    extract_embedded_keyword_labels(parsed)
-                )
+                if self._action_image_set_id is None:
+                    self._tagging.set_embedded_tags(
+                        extract_embedded_keyword_labels(parsed)
+                    )
                 rows = sorted(
                     [(str(k), str(v)) for k, v in parsed.items()],
                     key=lambda r: r[0].lower(),
@@ -5054,7 +5143,8 @@ class AppController(QObject):
         except Exception:
             pass
         self._exif_model.set_rows([])
-        self._tagging.clear_embedded_tags()
+        if self._action_image_set_id is None or self._is_locked:
+            self._tagging.clear_embedded_tags()
         if self._geo_location_url:
             self._geo_location_url = ""
             self.geoLocationUrlChanged.emit()

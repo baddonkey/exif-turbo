@@ -77,6 +77,52 @@ def tagging_controller(
     controller.close()
 
 
+def test_app_controller_set_member_tagging_keeps_search_selection(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    controller, search_model, _, search_path = tagging_controller
+    set_path = tmp_path / "set-member.jpg"
+    set_path.write_bytes(b"image")
+    assert controller._repo is not None
+    controller._repo.upsert_image(
+        str(set_path), set_path.name, 1.0, 5, {"IPTC:Keywords": ["Set embedded"]}, ""
+    )
+    set_id = controller.createImageSet("Tagging set")
+    controller._repo.add_images_to_set(set_id, [str(set_path)])
+
+    # Act
+    controller.setActionImageSet(set_id)
+    controller.selectImageSetMember(str(set_path))
+    controller.addSelectedFreeTag("Set custom")
+
+    # Assert
+    assert controller.taggingFilename == set_path.name
+    assert controller.hasTaggingSelection
+    assert controller._repo.get_free_tags(str(set_path)) == ("Set custom",)
+    assert controller._repo.get_free_tags(str(search_path)) == ()
+    assert search_model.get_path(controller.currentResultRow) == str(search_path)
+    assert controller.embeddedTagsModel.rowCount() == 1
+    controller._update_exif_table('{"IPTC:Keywords": ["Unrelated Search tag"]}')
+    embedded_model = controller.embeddedTagsModel
+    assert embedded_model.data(embedded_model.index(0), embedded_model.LabelRole) == "Set embedded"
+    controller.setSelectedEmbeddedTagExcluded("Set embedded", True)
+    controller.setExcludeAllSelectedEmbeddedTags(True)
+    loaded = FilesystemSidecarRepository().read(set_path)
+    assert loaded is not None
+    assert loaded.sidecar.excluded_embedded_tags == ("Set embedded",)
+    assert loaded.sidecar.exclude_all_embedded_tags
+    controller.removeSelectedFreeTag("Set custom")
+    assert controller._repo.get_free_tags(str(set_path)) == ()
+    assert not FilesystemSidecarRepository.sidecar_path(search_path).exists()
+    controller.selectImageSetMember(str(search_path))
+    assert controller.selectedSetMemberPath == str(set_path)
+    controller.setActionImageSet(0)
+    assert controller.taggingFilename == search_path.name
+    assert controller.selectedSetMemberPath == ""
+
+
 def test_app_controller_selection_exposes_deduplicated_embedded_tags_read_only(
     tagging_controller: tuple[AppController, SearchListModel, Path, Path],
 ) -> None:
@@ -508,6 +554,106 @@ class FakeCopyTagsWorker(QObject):
         return False
 
 
+@pytest.mark.parametrize("scope, mode", [
+    ("set", "add"), ("set", "replace"),
+    ("marked", "add"), ("marked", "replace"),
+])
+def test_app_controller_sets_copy_tags_keeps_outside_images_untouched(
+    qtbot: QtBot,
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+    scope: str,
+    mode: str,
+) -> None:
+    # Arrange
+    controller, _, _, source_path = tagging_controller
+    target_path = tmp_path / "target.jpg"
+    outside_path = tmp_path / "outside.jpg"
+    assert controller._repo is not None
+    for path in (target_path, outside_path):
+        path.write_bytes(b"image")
+        controller._repo.upsert_image(str(path), path.name, 1.0, 5, {}, "")
+        controller._repo.mark_image(str(path), True)
+    set_id = controller.createImageSet("Copy tags set")
+    controller._repo.add_images_to_set(set_id, [str(source_path), str(target_path)])
+    controller.setActionImageSet(set_id)
+    controller.selectImageSetMember(str(source_path))
+    controller.addSelectedFreeTag("Shared tag")
+    controller._query_text = "unrelated search"
+    controller._is_ai_search_mode = True
+
+    # Act
+    controller.copySelectedTags(scope, mode)
+    qtbot.waitUntil(lambda: not controller.isTaggingBulk, timeout=5000)
+
+    # Assert
+    assert controller._repo.get_free_tags(str(target_path)) == ("Shared tag",)
+    assert controller._repo.get_free_tags(str(outside_path)) == ()
+    assert not FilesystemSidecarRepository.sidecar_path(outside_path).exists()
+    assert controller._repo.get_free_tags(str(source_path)) == ("Shared tag",)
+
+
+@pytest.mark.parametrize("source_tab, mode", [
+    ("sets", "add"), ("sets", "replace"),
+    ("search", "add"), ("search", "replace"),
+])
+def test_app_controller_copy_tags_to_other_set_only_changes_destination_members(
+    qtbot: QtBot,
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+    source_tab: str,
+    mode: str,
+) -> None:
+    # Arrange
+    controller, _, _, source_path = tagging_controller
+    peer_path = tmp_path / "source-peer.jpg"
+    target_path = tmp_path / "destination.jpg"
+    outside_path = tmp_path / "outside.jpg"
+    assert controller._repo is not None
+    for path in (peer_path, target_path, outside_path):
+        path.write_bytes(b"image")
+        controller._repo.upsert_image(str(path), path.name, 1.0, 5, {}, "")
+    source_set_id = controller.createImageSet("Source set")
+    target_set_id = controller.createImageSet("Destination set")
+    controller._repo.add_images_to_set(source_set_id, [str(source_path), str(peer_path)])
+    controller._repo.add_images_to_set(target_set_id, [str(source_path), str(target_path)])
+    if source_tab == "sets":
+        controller.setActionImageSet(source_set_id)
+        controller.selectImageSetMember(str(source_path))
+    controller.addSelectedFreeTag("Shared tag")
+    source_sidecar = FilesystemSidecarRepository.sidecar_path(source_path)
+    source_revision = source_sidecar.stat().st_mtime_ns
+    controller._query_text = "unrelated search"
+    controller._is_ai_search_mode = True
+
+    # Act
+    controller.copySelectedTags(f"set:{target_set_id}", mode)
+    qtbot.waitUntil(lambda: not controller.isTaggingBulk, timeout=5000)
+
+    # Assert
+    assert controller._repo.get_free_tags(str(target_path)) == ("Shared tag",)
+    assert controller._repo.get_free_tags(str(peer_path)) == ()
+    assert controller._repo.get_free_tags(str(outside_path)) == ()
+    assert controller._repo.get_free_tags(str(source_path)) == ("Shared tag",)
+    assert source_sidecar.stat().st_mtime_ns == source_revision
+
+
+def test_app_controller_copy_tags_deleted_destination_does_not_start(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _, _, _ = tagging_controller
+    set_id = controller.createImageSet("Deleted destination")
+    controller.addSelectedFreeTag("Shared tag")
+    controller.deleteImageSet(set_id)
+
+    # Act
+    controller.copySelectedTags(f"set:{set_id}", "add")
+
+    # Assert
+    assert not controller.isTaggingBulk
+
+
 def test_app_controller_copy_tags_folder_forwards_current_browse_scope(
     tagging_controller: tuple[AppController, SearchListModel, Path, Path],
     tmp_path: Path,
@@ -538,6 +684,7 @@ def test_app_controller_copy_tags_folder_forwards_current_browse_scope(
         "restrict_to_enabled_folders": True,
         "date_from": 100,
         "date_to": 200,
+        "image_set_id": None,
     }
     assert worker.started is True
 

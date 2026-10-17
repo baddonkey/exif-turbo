@@ -61,6 +61,17 @@ the marked-file confirmation and never affects images outside the selected set.
 Without a selected set, these actions are disabled. Returning to Search or Browse
 restores their normal action scope without changing the Search set filter.
 
+The shared tagging drawer is available on Sets through the tag button or Ctrl+T.
+Selecting a member focuses its tags; double-clicking also opens the drawer.
+Tag edits and embedded-keyword exclusions apply to that member without changing
+the Search image selection. Copy Tags supports the complete selected set or its
+marked members, as well as any other named set. Named-set destinations are
+also available from Search and Browse and are independent of current Search
+filters. The source image is excluded even when it belongs to the destination.
+The existing Add/Replace confirmation, progress, and cancel behavior applies.
+Switching sets or removing the focused member clears the tagging
+selection so subsequent edits cannot target a stale image.
+
 ## 4. Saved Filters
 
 A set may have one optional structured filter. Filters are saved as data with
