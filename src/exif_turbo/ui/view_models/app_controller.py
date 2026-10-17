@@ -1236,7 +1236,7 @@ class AppController(QObject):
     @Property(int, notify=actionScopeChanged)
     def actionImageCount(self) -> int:
         if self._action_image_set_id is None:
-            return self.totalResults
+            return self._total_results
         if self._repo is None or self._action_image_set_id == 0:
             return 0
         return self._repo.count_images("", image_set_id=self._action_image_set_id)
@@ -1244,7 +1244,7 @@ class AppController(QObject):
     @Property(int, notify=actionScopeChanged)
     def actionMarkedCount(self) -> int:
         if self._action_image_set_id is None:
-            return self.checkedCount
+            return self._checked_total_count
         if self._repo is None or self._action_image_set_id == 0:
             return 0
         return self._repo.count_images(

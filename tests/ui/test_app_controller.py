@@ -10,6 +10,7 @@ Run with:
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from threading import get_ident
 from types import SimpleNamespace
@@ -98,9 +99,12 @@ def demo_db(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
 def window(
     qtbot: QtBot,
     demo_db: tuple[Path, Path],
+    tmp_path: Path,
 ) -> Generator[tuple[AppController, SearchListModel, QQuickWindow], None, None]:
     """Load the full QML window backed by the demo DB; one fresh window per test."""
-    db_path, base = demo_db
+    template_db, base = demo_db
+    db_path = tmp_path / template_db.name
+    shutil.copy2(template_db, db_path)
 
     search_model = SearchListModel(cache_dir=base / "thumbs")
     exif_model = ExifListModel()
@@ -901,12 +905,13 @@ def test_plaintext_database_requests_new_passphrase(
 
 def test_unlock_migrates_controlled_tags_before_initial_search(
     qtbot: QtBot,
+    demo_db: tuple[Path, Path],
     window: tuple[AppController, SearchListModel, QQuickWindow],
 ) -> None:
     # Arrange
     controller, search_model, _ = window
     db_path = controller._db_path
-    image_path = db_path.parent / "images" / _CAMERAS[0][0]
+    image_path = demo_db[1] / "images" / _CAMERAS[0][0]
     sidecar_repository = FilesystemSidecarRepository()
     sidecar = ImageSidecar(
         source=SidecarSource(filename=image_path.name),

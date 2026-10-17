@@ -110,10 +110,13 @@ def _drain_qthreads_after_test() -> Iterator[None]:
     if app is None:
         return
     import gc
+    app_thread = app.thread()
     threads: list[QThread] = []
     for obj in gc.get_objects():
         if issubclass(type(obj), QThread):
             try:
+                if obj is app_thread or obj == app_thread:
+                    continue
                 if obj.isRunning():
                     threads.append(obj)
             except RuntimeError:

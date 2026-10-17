@@ -8,17 +8,17 @@ from ...models.indexed_folder import IndexedFolder
 
 
 class FolderListModel(QAbstractListModel):
-    FolderIdRole = Qt.UserRole + 1
-    PathRole = Qt.UserRole + 2
-    DisplayNameRole = Qt.UserRole + 3
-    EnabledRole = Qt.UserRole + 4
-    RecursiveRole = Qt.UserRole + 5
-    StatusRole = Qt.UserRole + 6
-    ImageCountRole = Qt.UserRole + 7
-    ErrorMessageRole = Qt.UserRole + 8
-    PreviewCachedCountRole = Qt.UserRole + 9
-    PreviewTotalCountRole = Qt.UserRole + 10
-    FolderEnabledRole = Qt.UserRole + 11
+    FolderIdRole = Qt.ItemDataRole.UserRole + 1
+    PathRole = Qt.ItemDataRole.UserRole + 2
+    DisplayNameRole = Qt.ItemDataRole.UserRole + 3
+    EnabledRole = Qt.ItemDataRole.UserRole + 4
+    RecursiveRole = Qt.ItemDataRole.UserRole + 5
+    StatusRole = Qt.ItemDataRole.UserRole + 6
+    ImageCountRole = Qt.ItemDataRole.UserRole + 7
+    ErrorMessageRole = Qt.ItemDataRole.UserRole + 8
+    PreviewCachedCountRole = Qt.ItemDataRole.UserRole + 9
+    PreviewTotalCountRole = Qt.ItemDataRole.UserRole + 10
+    FolderEnabledRole = Qt.ItemDataRole.UserRole + 11
 
     def __init__(self) -> None:
         super().__init__()
@@ -46,7 +46,7 @@ class FolderListModel(QAbstractListModel):
             return 0
         return len(self._rows)
 
-    def data(self, index: QModelIndex, role: int = Qt.DisplayRole):
+    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):
         if not index.isValid() or index.row() >= len(self._rows):
             return None
         f = self._rows[index.row()]

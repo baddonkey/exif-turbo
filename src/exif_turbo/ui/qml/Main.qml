@@ -1331,7 +1331,7 @@ ApplicationWindow {
 
         onCurrentIndexChanged: {
             controller.setActionImageSet(currentIndex === 3 ? setsPage.selectedSetId : 0)
-            if (taggingDrawer.opened)
+            if (taggingDrawer.visible)
                 taggingDrawer.close()
             if (currentIndex === 1) {
                 // Entering Browse: snapshot Search filters (incl. searchField
