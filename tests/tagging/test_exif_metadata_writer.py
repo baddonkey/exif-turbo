@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -463,7 +464,7 @@ def test_write_keywords_readback_mismatch_reports_field_values(
             metadata = (
                 {"XMP-dc:Subject": [], "IPTC:Keywords": []}
                 if read_count == 1
-                else {"XMP-dc:Subject": ["Deer"], "IPTC:Keywords": []}
+                else {"XMP-dc:Subject": "Deer", "IPTC:Keywords": []}
             )
             return subprocess.CompletedProcess(arguments, 0, json.dumps([metadata]), "")
         return subprocess.CompletedProcess(arguments, 0, "updated", "")
@@ -478,6 +479,50 @@ def test_write_keywords_readback_mismatch_reports_field_values(
         ExifMetadataWriter().write_keywords(target, ("Deer",))
 
     assert "IPTC:Keywords: expected ('Deer',), got ()" in str(error.value)
+
+
+def test_write_keywords_real_exiftool_stores_xmp_subject_as_rdf_bag(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    from PIL import Image
+    from exif_turbo.indexing.exif_metadata_extractor import find_exiftool, is_exiftool_available
+
+    if not is_exiftool_available():
+        pytest.skip("ExifTool is required for the metadata integration test")
+    target = tmp_path / "derivative.jpg"
+    Image.new("RGB", (8, 8)).save(target)
+
+    # Act
+    ExifMetadataWriter().write_keywords(target, ("HTMC", "USGS"))
+    ExifMetadataWriter().write_keywords(target, ("HTMC", "USGS"))
+
+    # Assert
+    result = subprocess.run(
+        [find_exiftool(), "-json", "-G1", "-a", "-s", "-Keywords", str(target)],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    record = json.loads(result.stdout)[0]
+    assert record["IPTC:Keywords"] == ["HTMC", "USGS"]
+    xmp_result = subprocess.run(
+        [find_exiftool(), "-b", "-XMP", str(target)],
+        check=True,
+        capture_output=True,
+    )
+    root = ET.fromstring(xmp_result.stdout)
+    namespaces = {
+        "dc": "http://purl.org/dc/elements/1.1/",
+        "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    }
+    bag = root.find(".//dc:subject/rdf:Bag", namespaces)
+    assert bag is not None
+    assert [item.text for item in bag.findall("rdf:li", namespaces)] == [
+        "HTMC",
+        "USGS",
+    ]
 
 
 def test_normalize_nonstandard_xmp_app1_header_replaces_only_header(
