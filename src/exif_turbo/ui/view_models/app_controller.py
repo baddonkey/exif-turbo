@@ -2675,6 +2675,7 @@ class AppController(QObject):
             ext_filter=self._ext_filter,
             path_filter=self._current_path_filter(),
             restrict_to_enabled_folders=(self._folder_repo is not None),
+            image_set_id=self._search_image_set_id,
         )
         worker.results_ready.connect(self._on_year_counts_ready)
         worker.failed.connect(self._on_year_counts_failed)
