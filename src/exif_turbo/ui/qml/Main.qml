@@ -1962,10 +1962,11 @@ ApplicationWindow {
 
                                 MouseArea {
                                     id: _browseNavArea
+                                    objectName: "browseNavArea"
                                     anchors.fill:  parent
                                     hoverEnabled:  true
                                     cursorShape:   Qt.PointingHandCursor
-                                    onClicked: {
+                                    function navigateToBrowse() {
                                         var targetId = model.imageId
                                         var folder = model.path.replace(/[/\\][^/\\]*$/, "")
                                         // Select this card BEFORE switching tabs so enterBrowseTab
@@ -1976,6 +1977,7 @@ ApplicationWindow {
                                         mainTabBar.currentIndex = 1
                                         controller.browseFolder(folder, targetId)
                                     }
+                                    onClicked: navigateToBrowse()
                                 }
                             }
                         }

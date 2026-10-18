@@ -705,9 +705,13 @@ def test_sets_action_separators_wrapping_hides_row_end_diamonds(
     assert reapply_separator is not None
     tab_bar.setProperty("currentIndex", 3)
     root.showNormal()
+    sets_page = root.findChild(QObject, "setsPage")
+    assert sets_page is not None
+    sets_page.setProperty("setListPaneWidth", 220)
+    for group in (add_group, filter_group, reapply_group):
+        group.setWidth(200)
 
     # Act / Assert
-    root.resize(2000, 900)
     qtbot.waitUntil(
         lambda: abs(reapply_group.y() - add_group.y()) < 2
         and bool(filter_separator.property("visible"))
@@ -724,18 +728,16 @@ def test_sets_action_separators_wrapping_hides_row_end_diamonds(
         diamond_center = diamond.mapToScene(QPointF(diamond.width() / 2, diamond.height() / 2))
         button_center = button.mapToScene(QPointF(button.width() / 2, button.height() / 2))
         assert diamond_center.y() == pytest.approx(button_center.y(), abs=0.5)
-    action_flow = add_group.parentItem()
-    assert action_flow is not None
-    two_group_width = int(
-        root.width() - action_flow.width()
-        + add_group.width() + filter_group.width() + 25
-    )
-    root.resize(two_group_width, 900)
-    qtbot.waitUntil(lambda: reapply_group.y() > filter_group.y())
-    assert abs(filter_group.y() - add_group.y()) < 2
-    assert bool(filter_separator.property("visible"))
-    assert not bool(reapply_separator.property("visible"))
     root.resize(900, 900)
+    sets_page.setProperty("setListPaneWidth", 400)
+    qtbot.waitUntil(
+        lambda: abs(filter_group.y() - add_group.y()) < 2
+        and reapply_group.y() > filter_group.y()
+        and bool(filter_separator.property("visible"))
+        and not bool(reapply_separator.property("visible"))
+    )
+
+    sets_page.setProperty("setListPaneWidth", 600)
     qtbot.waitUntil(lambda: filter_group.y() > add_group.y())
     qtbot.waitUntil(lambda: reapply_group.y() > filter_group.y())
     assert not bool(filter_separator.property("visible"))
