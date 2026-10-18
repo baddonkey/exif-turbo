@@ -93,6 +93,7 @@ class DerivativeExportWorker(QThread):
                 self._output_root,
                 image_paths=image_paths,
             )
+            self.progress.emit(0, len(plan.items), None)
             self.result = service.export(
                 plan,
                 on_progress=self._emit_progress,

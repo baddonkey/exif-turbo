@@ -560,6 +560,7 @@ class TaggingController(QObject):
         worker.finished.connect(
             lambda: self._release_worker("_derivative_worker", worker)
         )
+        self._derivative_progress = (0, 0)
         self._derivative_operation = True
         self._derivative_summary = ""
         self.derivativeOperationChanged.emit()

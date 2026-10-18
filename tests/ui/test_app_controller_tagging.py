@@ -1736,6 +1736,34 @@ def test_app_controller_derivative_slot_converts_url_and_all_indexed_roots(
     assert worker.started is True
 
 
+def test_app_controller_new_derivative_export_resets_initial_progress(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    controller, _, _, _ = tagging_controller
+    controller._tagging._derivative_progress = (7, 12)
+    progress_updates: list[tuple[int, int]] = []
+    controller.derivativeOperationChanged.connect(
+        lambda: progress_updates.append(
+            (controller.derivativeCurrent, controller.derivativeTotal)
+        )
+    )
+    FakeDerivativeWorker.instances.clear()
+    monkeypatch.setattr(
+        app_controller_module, "DerivativeExportWorker", FakeDerivativeWorker
+    )
+
+    # Act
+    controller.generateDerivativesForMarked(
+        QUrl.fromLocalFile(str(tmp_path / "output")).toString()
+    )
+
+    # Assert
+    assert progress_updates == [(0, 0)]
+
+
 @pytest.mark.parametrize("image_set_id", [None, 7])
 def test_app_controller_current_results_forwards_complete_search_scope(
     tagging_controller: tuple[AppController, SearchListModel, Path, Path],
