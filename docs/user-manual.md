@@ -18,12 +18,13 @@ thumbnails and previews extracted from the embedded thumbnail or a frame at
 5. [Indexing Progress](#5-indexing-progress)
 6. [Searching](#6-searching)
 7. [Browsing by Folder](#7-browsing-by-folder)
-8. [Viewing Metadata and EXIF Tags](#8-viewing-metadata-and-exif-tags)
-9. [Marking Images & Bulk Actions](#9-marking-images--bulk-actions)
-10. [Custom Tags and Derivatives](#10-custom-tags-and-derivatives)
-11. [Settings](#11-settings)
-12. [Keyboard Shortcuts](#12-keyboard-shortcuts)
-13. [FAQ](#13-faq)
+8. [Image Sets](#8-image-sets)
+9. [Viewing Metadata and EXIF Tags](#9-viewing-metadata-and-exif-tags)
+10. [Marking Images & Bulk Actions](#10-marking-images--bulk-actions)
+11. [Custom Tags and Derivatives](#11-custom-tags-and-derivatives)
+12. [Settings](#12-settings)
+13. [Keyboard Shortcuts](#13-keyboard-shortcuts)
+14. [FAQ](#14-faq)
 
 ---
 
@@ -257,7 +258,7 @@ Switch to **Expert** to expose the individual operations on each row:
 | **AI-Scan** | Build missing CLIP vector embeddings for this folder only (incremental semantic-index build). While running, the same button reads **Cancel AI-Scan**. Visible only when AI features are enabled in Settings. |
 | **AI Full Scan** | Rebuild every CLIP vector embedding for this folder from scratch. While running, the same button reads **Cancel AI Full Scan**. Visible only when AI features are enabled. |
 | **Clear Previews** | Delete all cached previews for this folder. Hidden (kept invisible for layout alignment) when nothing is cached. A confirmation dialog asks *"Delete N cached preview(s) for \"<folder>\"? Thumbnails are unaffected."* |
-| **Remove** | Remove the folder and delete all its indexed images. A **Remove Folder** confirmation dialog asks before deletion. The original files on disk are not touched. The removal then runs on a background worker behind the modal **bulk-op progress overlay** (see [section 9](#9-marking-images--bulk-actions)), which reports each sub-step — *"Clearing preview cache…"* (cancelable, with an `X / Y` count) followed by *"Deleting index entries…"*. |
+| **Remove** | Remove the folder and delete all its indexed images. A **Remove Folder** confirmation dialog asks before deletion. The original files on disk are not touched. The removal then runs on a background worker behind the modal **bulk-op progress overlay** (see [section 10](#10-marking-images--bulk-actions)), which reports each sub-step — *"Clearing preview cache…"* (cancelable, with an `X / Y` count) followed by *"Deleting index entries…"*. |
 
 ---
 
@@ -638,7 +639,85 @@ previously-selected image — no need to re-enter the search query.
 
 ---
 
-## 8. Viewing Metadata and EXIF Tags
+## 8. Image Sets
+
+Image Sets are named collections of references to images in the current
+database. They do not copy, move, or modify image files. Membership stays fixed
+across searches and restarts until you change it or explicitly reapply the set's
+optional saved filter.
+
+![Sets tab with named collections and image members](screenshots/10_sets_overview.png)
+
+*Photo: [Wild Red Deer Switzerland](https://commons.wikimedia.org/wiki/File:014_Wild_Red_Deer_Switzerland_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
+
+### Create and manage sets
+
+Open the **Sets** tab. Click **+** to create an empty set, then select it to
+view its members. Set names must be unique within the database, ignoring letter
+case. Use **Rename** or **Delete** on a set row to manage it. Deleting a set
+removes only its name, saved filter, and memberships; images, sidecars, and tags
+are not changed.
+
+Use the **Add** scope to add the selected image, marked images, all current
+Search results, or every image in the current Browse folder. Search-result and
+folder operations include the complete scope, not only rows currently loaded or
+visible. Click **Remove** on a member row to remove that image from the set;
+removing it does not delete the image from the database or disk. Repeating an
+add or remove is safe. Removing an image from the index also removes its set
+memberships.
+
+### Search by set
+
+The **Set** filter in the Search toolbar controls which set members appear:
+
+- **Ignore** applies no set filter, so Search can return any indexed image.
+- **All sets** returns images belonging to at least one set.
+- A named set returns only that set's members.
+
+Changing the Search filter never changes set membership. Returning to Search
+from Browse restores the previous set filter with the rest of the Search state.
+
+### Saved filters
+
+A set can store one optional filter. Choose **Save current Search** to save the
+current Search conditions, or **Edit filter** to build conditions directly.
+The editor supports indexed text, folders, file type, capture date, marked
+state, and named metadata fields. Combine conditions with nested **All** and
+**Any** groups. A saved filter is not applied automatically and does not change
+membership until you choose **Add matches** or **Replace members**.
+
+- **Add matches** adds matching images and keeps existing members.
+- **Replace members** makes membership equal to the filter matches. Confirm if
+  the filter matches no images before the set is emptied.
+
+Reapplying checks the whole active database, independent of Search filters and
+pagination. Long operations show progress and can be canceled; changes already
+completed are not rolled back.
+
+![Set filter editor](screenshots/11_set_filter_editor.png)
+
+*Photo: [Wild Red Deer Switzerland](https://commons.wikimedia.org/wiki/File:014_Wild_Red_Deer_Switzerland_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Visible in the background; screenshot composite licensed CC BY-SA 4.0.*
+
+### Actions and tagging in Sets
+
+On the **Sets** tab, the **Action** menu targets the selected set, independent
+of Search filters. Current-results derivative generation uses all set members;
+marked-image actions use only marked members of that set. JSON export uses
+marked set members when any are marked, otherwise all members. Mark images from
+Search or Browse before using a marked-image action in Sets.
+
+![Action menu scoped to a selected image set](screenshots/14_set_action_menu.png)
+
+*Photo: [Wild Red Deer Switzerland](https://commons.wikimedia.org/wiki/File:014_Wild_Red_Deer_Switzerland_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
+
+The tagging drawer and **Copy tags and descriptions** panel are also available
+in Sets. Select a member first; double-clicking a member selects it and opens
+the tagging drawer. See [Custom Tags and Derivatives](#11-custom-tags-and-derivatives)
+for single-image tagging, set copy targets, and derivative actions.
+
+---
+
+## 9. Viewing Metadata and EXIF Tags
 
 Selecting any image in the result list populates three panels:
 
@@ -797,7 +876,7 @@ By default they start at **50 % / 50 %**.
 
 ---
 
-## 9. Marking Images & Bulk Actions
+## 10. Marking Images & Bulk Actions
 
 Every result card has a **checkbox** in its bottom-right corner. Tick it to
 *mark* that image — marks persist across searches, tab switches, and app
@@ -829,15 +908,17 @@ database vacuum during a reset) it hides the **Cancel** button and shows a
 
 ### Action menu
 
-The Action menu operates on whatever is currently marked across the entire
-database — not just the visible results.
+On Search and Browse, the Action menu uses the marked images or the complete
+current result scope, as described below. On Sets, it is restricted to the
+selected set: marked-image actions use only marked members, and current-results
+actions use all set members.
 
 | Action | What it does |
 |--------|--------------|
-| **Export Metadata as JSON…** | Writes the EXIF metadata of every marked image to a JSON file you choose via a Save dialog. The export honours the current **Sort** order (date taken, filename, path, or size). When nothing is marked, the menu label changes to *"Export Metadata as JSON… (all results)"* and the action exports every image matching the current filters instead. The on-disk layout is controlled by **Settings → JSON Export Formatting** (see *Settings*). |
-| **Generate Tagged Derivatives for Current Results…** | Asks for a target folder, then generates derivatives for every image matching the current search and filters, including result pages that have not been loaded into the view. |
-| **Generate Tagged Derivatives for Marked Images…** | Asks for a target folder, then generates derivatives for all marked images in enabled indexed folders. Disabled when nothing is marked. |
-| **Delete Marked Images…** | Permanently deletes every marked image **from disk** and removes its row from the index. Cached thumbnails (`.png` / `.enc`), `.skip` sentinels, and any rendered preview (`.jpg` / `.jpg.enc`) for the deleted images are also cleaned up. Disabled when nothing is marked. The menu label includes the current count, e.g. *"Delete Marked Images… (12 selected)"*. |
+| **Export Metadata as JSON…** | Writes the EXIF metadata of every marked image to a JSON file you choose via a Save dialog. The export honours the current **Sort** order (date taken, filename, path, or size). When nothing is marked, it exports all current results. On Sets, it exports marked members when present, otherwise all members of the selected set. The on-disk layout is controlled by **Settings → JSON Export Formatting** (see *Settings*). |
+| **Generate Tagged Derivatives for Current Results…** | Asks for a target folder, then generates derivatives for every image matching the current Search filters, including unloaded pages. On Sets, it processes every member of the selected set. |
+| **Generate Tagged Derivatives for Marked Images…** | Asks for a target folder, then generates derivatives for marked images. On Sets, only marked members of the selected set are used. Disabled when the current scope has no marked images. |
+| **Delete Marked Images…** | Permanently deletes marked images **from disk** and removes their rows from the index. On Sets, only marked members of the selected set are targeted. Cached thumbnails (`.png` / `.enc`), `.skip` sentinels, and rendered previews (`.jpg` / `.jpg.enc`) are also cleaned up. Disabled when the current scope has nothing marked. |
 
 Long-running actions show progress and support cancellation. Any completed
 derivatives remain in the target folder, and any deletions already made stay
@@ -876,7 +957,7 @@ shown in full and never truncated.
 
 ---
 
-## 10. Custom Tags and Derivatives
+## 11. Custom Tags and Derivatives
 
 Tagging is optional for each database. Enable **Custom Tags** in Settings, then
 open the drawer from Search, Browse, or Sets with the tag button or **Ctrl+T**. Add
@@ -923,6 +1004,11 @@ columns: **Existing image tags** followed by **Custom tags** on the left;
 side by side at the bottom, below both scrollable columns.
 When the Search or Browse image list has focus, arrow keys continue to select
 images and update the preview, metadata, and tagging panel while it is open.
+
+![Tagging drawer showing custom tags and derivative previews](screenshots/12_tagging_drawer.png)
+
+*Photo: [Wild Red Deer Switzerland](https://commons.wikimedia.org/wiki/File:014_Wild_Red_Deer_Switzerland_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
+
 It contains these controls:
 
 - **Existing image keywords** lists keywords already embedded in the original
@@ -995,6 +1081,10 @@ right. **Final derivative tags** and **Final derivative description** remain
 read-only at the bottom. Unsaved description drafts are neither displayed as
 saved text nor copied. These previews follow the selected image. To edit the
 source, switch back to the normal tagging drawer.
+
+![Copy tags and descriptions panel](screenshots/13_copy_tags_and_descriptions.png)
+
+*Photo: [Wild Red Deer Switzerland](https://commons.wikimedia.org/wiki/File:014_Wild_Red_Deer_Switzerland_Photo_by_Giles_Laurent.jpg), © [Giles Laurent](https://gileslaurent.com), License [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Scaled/cropped in the UI; screenshot composite licensed CC BY-SA 4.0.*
 
 - **Copy Tags** copies custom tags and embedded-keyword exclusions to **Marked
   images**, **Current search results** (including unloaded pages), or **Current
@@ -1070,7 +1160,7 @@ semantic index is required. Re-add and scan folders to synchronize sidecars.
 
 ---
 
-## 11. Settings
+## 12. Settings
 
 Click the **Settings** tab to configure application behaviour.
 
@@ -1079,6 +1169,28 @@ Click the **Settings** tab to configure application behaviour.
 The custom-tagging switch enables or disables the tagging drawer for this
 database. It does not affect AI image search or AI-Scan. Previously used custom
 labels remain available as suggestions while tagging is enabled.
+
+### MCP Interface
+
+The optional MCP server runs inside the desktop application and is disabled by
+default. In **Settings → MCP Interface**, enable **Enable MCP server for this
+database**. The default host is `127.0.0.1` and the default port is `8765`. When
+the server is running, copy the displayed endpoint into an MCP client configured
+for Streamable HTTP. The default endpoint is `http://127.0.0.1:8765/mcp`.
+
+Keep the loopback host unless you intentionally need access from another device.
+Changing the host may expose the interface to other machines that can reach the
+computer; the MCP endpoint does not have a separate login. The server operates
+on the currently open, unlocked database and stops with the desktop app. MCP
+write tools also require **Custom Tags** to be enabled.
+
+MCP clients can inspect the selected image, list sets, read paginated set
+members, and apply custom tags or descriptions to indexed images. They can also
+set embedded-keyword and description exclusions for derivative exports. MCP
+does not create, rename, delete, or change set membership. Batch updates use
+image IDs and paths from the active database and report per-image outcomes. See
+the [README MCP guide](../README.md#mcp-batch-selection) for tool examples and
+pagination details.
 
 ### Worker Threads
 
@@ -1209,7 +1321,7 @@ The database is vacuumed and checkpointed immediately, so the database file
 shrinks to near-zero on disk straight away.
 
 While the reset runs, the modal **bulk-op progress overlay** (see
-[section 9](#9-marking-images--bulk-actions)) covers the window and steps
+[section 10](#10-marking-images--bulk-actions)) covers the window and steps
 through each phase: *"Clearing preview cache…"* (cancelable, with a live
 `X / Y` count), *"Deleting index rows…"*, and finally *"Vacuuming database…"*.
 The vacuum phase cannot be interrupted — the overlay hides its **Cancel**
@@ -1225,7 +1337,7 @@ The **Reset Database…** button is disabled while indexing is in progress.
 
 ---
 
-## 12. Keyboard Shortcuts
+## 13. Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
@@ -1244,7 +1356,7 @@ The **Reset Database…** button is disabled while indexing is in progress.
 
 ---
 
-## 13. FAQ
+## 14. FAQ
 
 **Q: Why does the status bar say "Indexing…" even after I switch tabs?**  
 A: The indexer runs in the background across all tabs. The pulsing blue dot in
@@ -1291,7 +1403,7 @@ built and cached. They persist across sessions so subsequent launches are fast.
 
 ## Image Credits
 
-Six screenshot composites in this manual and the project README use sample photographs by
+Screenshot composites in this manual and the project README use sample photographs by
 **[Giles Laurent](https://commons.wikimedia.org/wiki/User:Giles_Laurent)**,
 published on Wikimedia Commons under the
 [Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/) license.

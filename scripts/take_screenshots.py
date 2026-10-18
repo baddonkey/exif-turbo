@@ -30,6 +30,11 @@ Output files:
     07_folder_filter.png     -- folder filter popup (Schlösser, Sky, Wildlife)
     08_gps_location_bar.png  -- GPS location bar (image with GPS coordinates selected)
     09_ai_search_mode.png    -- Search tab in AI mode (EXIF/AI toggle + precision picker)
+    10_sets_overview.png     -- Sets tab with named sets and image members
+    11_set_filter_editor.png -- Saved set filter editor
+    12_tagging_drawer.png    -- Custom tagging drawer on a set member
+    13_copy_tags_and_descriptions.png -- Bulk tag/description copy panel
+    14_set_action_menu.png   -- Action menu scoped to a selected set
     demo_indexed_folders.png -- indexed folders in a taller demo window
     demo_exif_results.png    -- broad EXIF search with bottom metadata visible
     demo_ai_mode.png         -- AI search with bottom metadata visible
@@ -39,9 +44,11 @@ Output files:
 from __future__ import annotations
 
 import ctypes
+import shutil
 import os
 import sys
 import logging
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +66,9 @@ SAMPLE_FOLDERS = [
     SAMPLE_DATA / "Wildlife",
     GPS_SAMPLE_FOLDER,
 ]
+TAGGING_SAMPLE_SOURCE = (
+    SAMPLE_DATA / "Wildlife" / "014 Wild Red Deer Switzerland Photo by Giles Laurent.jpg"
+)
 SCREENSHOTS_DIR = _REPO_ROOT / "docs" / "screenshots"
 DB_PATH = SCREENSHOTS_DIR / "demo.db"
 THUMB_CACHE = SCREENSHOTS_DIR / "thumbs"
@@ -72,6 +82,8 @@ from PySide6.QtQuickControls2 import QQuickStyle  # noqa: E402
 from exif_turbo.data.image_index_repository import ImageIndexRepository  # noqa: E402
 from exif_turbo.data.indexed_folder_repository import IndexedFolderRepository  # noqa: E402
 from exif_turbo.indexing.indexer_service import IndexerService  # noqa: E402
+from exif_turbo.tagging.sidecar_repository import FilesystemSidecarRepository  # noqa: E402
+from exif_turbo.tagging.tagging_service import TaggingService  # noqa: E402
 from exif_turbo.ui.models.checked_filter_proxy_model import CheckedFilterProxyModel  # noqa: E402
 from exif_turbo.ui.models.exif_list_model import ExifListModel  # noqa: E402
 from exif_turbo.ui.models.folder_list_model import FolderListModel  # noqa: E402
@@ -96,12 +108,17 @@ _STEPS = [
     "06_indexed_folders_expert",
     "07_folder_filter",
     "08_gps_location_bar",
+    "10_sets_overview",
+    "11_set_filter_editor",
+    "12_tagging_drawer",
+    "13_copy_tags_and_descriptions",
+    "14_set_action_menu",
 ]
 
 
 # -- Database builder ----------------------------------------------------------
 
-def build_demo_db() -> None:
+def build_demo_db(extra_folders: list[Path]) -> None:
     """Index each sample sub-folder as a separate indexed folder into the demo database."""
     if DB_PATH.exists():
         DB_PATH.unlink()
@@ -111,7 +128,7 @@ def build_demo_db() -> None:
     repo = ImageIndexRepository(DB_PATH, key="")
     service = IndexerService(repo)
     folder_counts: list[tuple[Path, int]] = []
-    for subfolder in SAMPLE_FOLDERS:
+    for subfolder in [*SAMPLE_FOLDERS, *extra_folders]:
         print(f"Indexing {subfolder.name} ...")
         count, _errors = service.build_index(
             folders=[subfolder],
@@ -129,8 +146,50 @@ def build_demo_db() -> None:
         folder_repo.update_status(folder.id, "indexed", image_count=count)
     folder_repo.close()
 
+    repo = ImageIndexRepository(DB_PATH, key="")
+    tagged_sample = next(
+        Path(path)
+        for path in repo.get_enabled_stamps()
+        if Path(path).name == TAGGING_SAMPLE_SOURCE.name
+        and Path(path).parent == extra_folders[0]
+    )
+    tagging_service = TaggingService(repo, FilesystemSidecarRepository())
+    tagging_service.add_free_tag(str(tagged_sample), "Wildlife")
+    tagging_service.add_free_tag(str(tagged_sample), "Switzerland")
+    tagging_service.set_description(
+        str(tagged_sample), "Red deer photographed in the Swiss Alps.", "replace"
+    )
+
+    wildlife_paths = sorted(
+        str(path)
+        for path in (SAMPLE_DATA / "Wildlife").rglob("*.jpg")
+    )[:5]
+    alpine_set_id = repo.create_image_set(
+        "Alpine Wildlife",
+        {
+            "op": "and",
+            "conditions": [
+                {"field": "text", "operator": "matches", "value": "deer"}
+            ],
+        },
+    )
+    repo.add_images_to_set(alpine_set_id, wildlife_paths)
+    favorites_set_id = repo.create_image_set("Weekend Favorites")
+    favorite_paths = sorted(
+        str(path)
+        for folder in (SAMPLE_DATA / "Schl\u00f6sser", SAMPLE_DATA / "Sky")
+        for path in folder.rglob("*.jpg")
+    )[:5]
+    repo.add_images_to_set(favorites_set_id, favorite_paths)
+    tagging_demo_id = repo.create_image_set("Tagging Demo")
+    repo.add_images_to_set(
+        tagging_demo_id,
+        [str(tagged_sample), str(TAGGING_SAMPLE_SOURCE)],
+    )
+    repo.close()
+
     total = sum(c for _, c in folder_counts)
-    print(f"Indexed {total} image(s) across {len(SAMPLE_FOLDERS)} folders into {DB_PATH}")
+    print(f"Indexed {total} image(s) across {len(folder_counts)} folders into {DB_PATH}")
 
 
 # -- Offline thumbnail + preview builder ---------------------------------------
@@ -305,7 +364,7 @@ def _wait_for_preview(
 
 # -- GUI runner ----------------------------------------------------------------
 
-def _run_gui(demo_only: bool = False) -> None:
+def _run_gui(demo_only: bool = False, tagged_sample: Path | None = None) -> None:
     app = QGuiApplication(sys.argv)
     app.setApplicationName("Exif-Turbo")
 
@@ -335,6 +394,7 @@ def _run_gui(demo_only: bool = False) -> None:
     exif_model = ExifListModel()
     folder_model = FolderListModel()
     settings = SettingsModel(THUMB_CACHE / "settings.json")
+    settings.setTaggingEnabled(True)
     thumb_provider = ThumbnailImageProvider()
     ctrl = AppController(
         DB_PATH,
@@ -566,6 +626,106 @@ def _run_gui(demo_only: bool = False) -> None:
 
     def step_7_gps_grab() -> None:
         _grab(root, "08_gps_location_bar")
+        QTimer.singleShot(500, step_8_sets)
+
+    def click_named(name: str) -> None:
+        from PySide6.QtCore import QObject, QMetaObject, Qt
+
+        button = root.findChild(QObject, name)
+        if button is None or not QMetaObject.invokeMethod(
+            button, "click", Qt.ConnectionType.DirectConnection
+        ):
+            raise RuntimeError(f"Unable to click QML control {name!r}")
+
+    def step_8_sets() -> None:
+        from PySide6.QtCore import QObject
+
+        if tagged_sample is None:
+            raise RuntimeError("A temporary tagged sample is required for set captures")
+        switch_tab(3)
+        sets_page = root.findChild(QObject, "setsPage")
+        if sets_page is None:
+            raise RuntimeError("Sets page not found")
+        sets_page.setProperty("selectedSetId", 1)
+        ctrl.selectImageSetMember(str(TAGGING_SAMPLE_SOURCE))
+        QTimer.singleShot(900, step_8_sets_grab)
+
+    def step_8_sets_grab() -> None:
+        _grab(root, "10_sets_overview")
+        click_named("editSetFilterButton")
+        QTimer.singleShot(500, step_8_filter_grab)
+
+    def step_8_filter_grab() -> None:
+        from PySide6.QtCore import QObject, QMetaObject, Qt
+
+        _grab(root, "11_set_filter_editor")
+        filter_dialog = root.findChild(QObject, "imageSetFilterDialog")
+        if filter_dialog is None or not QMetaObject.invokeMethod(
+            filter_dialog, "close", Qt.ConnectionType.DirectConnection
+        ):
+            raise RuntimeError("Unable to close the set filter editor")
+        QTimer.singleShot(350, step_8_tagging)
+
+    def step_8_tagging() -> None:
+        from PySide6.QtCore import QObject
+
+        sets_page = root.findChild(QObject, "setsPage")
+        if sets_page is None or tagged_sample is None:
+            raise RuntimeError("Tagging demo set is unavailable")
+        sets_page.setProperty("selectedSetId", 3)
+        ctrl.selectImageSetMember(str(tagged_sample))
+        QTimer.singleShot(500, step_8_open_tagging)
+
+    def step_8_open_tagging() -> None:
+        click_named("taggingWorkbenchButton")
+        QTimer.singleShot(650, step_8_tagging_grab)
+
+    def step_8_tagging_grab() -> None:
+        _grab(root, "12_tagging_drawer")
+        click_named("taggingWorkbenchButton")
+        QTimer.singleShot(350, step_8_copy_panel)
+
+    def step_8_copy_panel() -> None:
+        click_named("copyTaggingWorkbenchButton")
+        QTimer.singleShot(650, step_8_copy_panel_grab)
+
+    def step_8_copy_panel_grab() -> None:
+        _grab(root, "13_copy_tags_and_descriptions")
+        click_named("copyTaggingWorkbenchButton")
+        QTimer.singleShot(350, step_8_action_menu)
+
+    def step_8_action_menu() -> None:
+        from PySide6.QtCore import QObject
+
+        sets_page = root.findChild(QObject, "setsPage")
+        if sets_page is None:
+            raise RuntimeError("Sets page not found")
+        sets_page.setProperty("selectedSetId", 1)
+        ctrl.selectImageSetMember(str(TAGGING_SAMPLE_SOURCE))
+        QTimer.singleShot(500, step_8_open_action_menu)
+
+    def step_8_open_action_menu() -> None:
+        from PySide6.QtCore import QObject, QMetaObject, Qt
+
+        menu_bar = root.findChild(QObject, "mainMenuBar")
+        action_menu = None
+        if menu_bar is not None:
+            action_menu = next(
+                (
+                    child
+                    for child in menu_bar.children()
+                    if str(child.property("title") or "").replace("&", "") == "Action"
+                ),
+                None,
+            )
+        if action_menu is None or not QMetaObject.invokeMethod(
+            action_menu, "open", Qt.ConnectionType.DirectConnection
+        ):
+            raise RuntimeError("Unable to open the Action menu for the Sets capture")
+        QTimer.singleShot(350, step_8_action_grab)
+
+    def step_8_action_grab() -> None:
+        _grab(root, "14_set_action_menu")
         print(f"  Done -- screenshots in {SCREENSHOTS_DIR.relative_to(_REPO_ROOT)}/")
         QTimer.singleShot(300, app.quit)
 
@@ -580,10 +740,15 @@ def main() -> None:
     if demo_only:
         sys.argv.remove("--demo-only")
     logging.basicConfig(level=logging.WARNING)
-    build_demo_db()
-    build_thumbs_and_previews()
-    print("\nLaunching UI for screenshot capture ...")
-    _run_gui(demo_only=demo_only)
+    with tempfile.TemporaryDirectory(prefix="exif-turbo-docs-") as temp_dir:
+        tagged_folder = Path(temp_dir) / "Wildlife"
+        tagged_folder.mkdir()
+        tagged_sample = tagged_folder / TAGGING_SAMPLE_SOURCE.name
+        shutil.copy2(TAGGING_SAMPLE_SOURCE, tagged_sample)
+        build_demo_db([tagged_folder])
+        build_thumbs_and_previews()
+        print("\nLaunching UI for screenshot capture ...")
+        _run_gui(demo_only=demo_only, tagged_sample=tagged_sample)
 
 
 if __name__ == "__main__":

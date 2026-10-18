@@ -15,7 +15,7 @@ choices; the original image is never modified by tagging.
 - Users can exclude individual keywords embedded in an image, or exclude all
   embedded keywords from derivatives.
 - Copy Tags can apply custom tags and exclusion choices to marked images, the
-  complete current result set, or the current Browse folder.
+  complete current result set, the current Browse folder, or image-set members.
 - Tagged derivatives are copies. The exporter writes custom tags and included
   embedded keywords to XMP Subject and IPTC Keywords on the copy only.
 - There is no controlled vocabulary lookup, AI tag suggestion, proposal review,
@@ -123,7 +123,9 @@ finalizing the copy.
 
 ## Description Editing and MCP
 
-The tagging drawer uses two independently scrollable columns. The left contains
+The tagging drawer is available in Search, Browse, and Sets. In Sets, selecting
+a member focuses that image for tagging without changing the Search selection.
+It uses two independently scrollable columns. The left contains
 Existing image tags followed by Custom tags. The right contains Existing embedded
 description followed by Custom description.
 Final derivative tags and Final derivative description are side-by-side previews
@@ -186,6 +188,14 @@ settings. Custom tags, descriptions, drafts, originals, and source metadata/sear
 remain unchanged, and the selected image's derivative preview refreshes.
 
 ### Copying tags
+
+Copy Tags and Copy Description share the same target scopes: marked images, all
+current search results, the current Browse folder, or a named set. In Sets, the
+default target is the selected set; a separate option targets only its marked
+members. Named-set destinations are available from Search, Browse, and Sets and
+are independent of Search filters. The focused source image is excluded even
+when it belongs to the destination set. Repeated membership or tag operations
+do not change the set itself.
 
 The focused image is excluded from its own target set. In **Add** mode, custom
 tags are merged case-insensitively and embedded exclusions are merged. In

@@ -15,6 +15,11 @@ license](https://creativecommons.org/licenses/by-sa/4.0/):
 - `05_browse_tab.png`
 - `07_folder_filter.png`
 - `09_ai_search_mode.png`
+- `10_sets_overview.png`
+- `11_set_filter_editor.png`
+- `12_tagging_drawer.png`
+- `13_copy_tags_and_descriptions.png`
+- `14_set_action_menu.png`
 - `exif-turbo-demo-poster.png`
 - `exif-turbo-demo.mp4`
 
