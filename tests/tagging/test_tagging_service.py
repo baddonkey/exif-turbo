@@ -16,6 +16,7 @@ from exif_turbo.tagging.tagging_service import (
     BulkTagStatus,
     CopyTagsMode,
     TaggingConflictError,
+    TaggingError,
     TaggingFreeTagError,
     TaggingPartialFailure,
     TaggingService,
@@ -24,6 +25,306 @@ from exif_turbo.tagging.tagging_service import (
 
 
 NOW = datetime(2026, 8, 9, 12, 30, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(("mode", "source_text", "expected"), [
+    (CopyTagsMode.ADD, "Source caption", "Target caption\n\nSource caption"),
+    (CopyTagsMode.REPLACE, "Source caption", "Source caption"),
+    (CopyTagsMode.REPLACE, "", ""),
+])
+def test_copy_description_modes_preserve_target_tags_and_exclusions(
+    tmp_path: Path, mode: CopyTagsMode, source_text: str, expected: str,
+) -> None:
+    # Arrange
+    service, repository, source = _service(tmp_path)
+    target = _add_indexed_image(repository, tmp_path, "target.jpg")
+    service.set_description(str(source), source_text, "replace")
+    service.set_description(str(target), "Target caption", "replace")
+    service.add_free_tag(str(target), "Keep tag")
+    service.set_embedded_description_excluded(str(target), True)
+    service.set_all_embedded_tags_excluded(str(target), True)
+    original_source = FilesystemSidecarRepository().read(source)
+    progress: list[str] = []
+
+    # Act
+    result = service.copy_description_to_paths(
+        str(source), [str(source), str(target), str(target)], mode,
+        on_progress=lambda _done, _total, item: progress.append(item.image_path),
+    )
+    state = service.get_image_tagging_state(str(target))
+
+    # Assert
+    assert result.succeeded_count == 1
+    assert progress == [str(target)]
+    assert state.description == expected
+    assert repository.get_description(str(target)) == expected
+    assert state.free_tags == ("Keep tag",)
+    assert state.exclude_embedded_description
+    assert state.sidecar is not None and state.sidecar.exclude_all_embedded_tags
+    assert FilesystemSidecarRepository().read(source) == original_source
+    assert target.read_bytes() == b"image bytes for target.jpg"
+    repository.close()
+
+
+def test_copy_description_empty_append_reports_error_without_changes(tmp_path: Path) -> None:
+    # Arrange
+    service, repository, source = _service(tmp_path)
+    target = _add_indexed_image(repository, tmp_path, "target.jpg")
+
+    # Act / Assert
+    with pytest.raises(TaggingError, match="empty source description"):
+        service.copy_description_to_paths(str(source), [str(target)], CopyTagsMode.ADD)
+    assert not FilesystemSidecarRepository.sidecar_path(target).exists()
+    repository.close()
+
+
+def test_copy_description_failure_and_cancellation_preserve_completed_targets(tmp_path: Path) -> None:
+    # Arrange
+    service, repository, source = _service(tmp_path)
+    broken = _add_indexed_image(repository, tmp_path, "broken.jpg")
+    target = _add_indexed_image(repository, tmp_path, "target.jpg")
+    untouched = _add_indexed_image(repository, tmp_path, "untouched.jpg")
+    FilesystemSidecarRepository.sidecar_path(broken).write_text("{invalid", encoding="utf-8")
+    service.set_description(str(source), "Copied", "replace")
+    progress: list[str] = []
+
+    # Act
+    result = service.copy_description_to_paths(
+        str(source), [str(broken), str(target), str(untouched)], CopyTagsMode.REPLACE,
+        on_progress=lambda _done, _total, item: progress.append(item.image_path),
+        cancel_check=lambda: len(progress) == 2,
+    )
+
+    # Assert
+    assert result.cancelled
+    assert [item.status for item in result.items] == [BulkTagStatus.FAILED, BulkTagStatus.SUCCEEDED]
+    assert service.get_image_tagging_state(str(target)).description == "Copied"
+    assert not FilesystemSidecarRepository.sidecar_path(untouched).exists()
+    assert FilesystemSidecarRepository.sidecar_path(broken).read_text(encoding="utf-8") == "{invalid"
+    repository.close()
+
+
+def test_embedded_description_exclusion_persists_without_custom_description(tmp_path: Path) -> None:
+    # Arrange
+    service, repository, image_path = _service(tmp_path)
+    original_stat = image_path.stat()
+
+    # Act
+    result = service.set_embedded_description_excluded(str(image_path), True)
+    unchanged = service.set_embedded_description_excluded(str(image_path), True)
+    service.add_free_tag(str(image_path), "Family")
+    loaded = FilesystemSidecarRepository().read(image_path)
+    service.set_embedded_description_excluded(str(image_path), False)
+
+    # Assert
+    assert result.changed and not unchanged.changed
+    assert result.sidecar.description == ""
+    assert loaded is not None and loaded.sidecar.exclude_embedded_description
+    assert not service.get_image_tagging_state(str(image_path)).exclude_embedded_description
+    assert image_path.read_bytes() == b"original image bytes"
+    assert image_path.stat().st_mtime_ns == original_stat.st_mtime_ns
+    repository.close()
+
+
+def test_embedded_description_exclusion_preserves_custom_description_and_draft(tmp_path: Path) -> None:
+    # Arrange
+    service, repository, image_path = _service(tmp_path)
+    service.set_description(str(image_path), "Custom caption", "replace")
+
+    # Act
+    service.set_embedded_description_excluded(str(image_path), True)
+    result = service.set_description(str(image_path), "Added", "append")
+
+    # Assert
+    assert result.sidecar.exclude_embedded_description
+    assert result.sidecar.description == "Custom caption\n\nAdded"
+    assert repository.count_images("caption") == 1
+    repository.close()
+
+
+def test_description_append_preserves_paragraphs_tags_and_original(tmp_path: Path) -> None:
+    # Arrange
+    service, repository, image_path = _service(tmp_path)
+    original_stat = image_path.stat()
+    service.add_free_tag(str(image_path), "Family")
+    service.set_description(str(image_path), "First paragraph.", "replace")
+
+    # Act
+    result = service.set_description(
+        str(image_path), " Second paragraph.\r\nAnother line. ", "append"
+    )
+    service.add_free_tag(str(image_path), "Travel")
+
+    # Assert
+    assert result.changed
+    assert result.sidecar.description == "First paragraph.\n\nSecond paragraph.\nAnother line."
+    assert repository.get_description(str(image_path)) == result.sidecar.description
+    assert service.get_image_tagging_state(str(image_path)).description == result.sidecar.description
+    assert repository.count_images("paragraph") == 1
+    assert repository.get_free_tags(str(image_path)) == ("Family", "Travel")
+    assert image_path.read_bytes() == b"original image bytes"
+    assert image_path.stat().st_mtime_ns == original_stat.st_mtime_ns
+    repository.close()
+
+
+def test_description_replace_clear_removes_search_text(tmp_path: Path) -> None:
+    # Arrange
+    service, repository, image_path = _service(tmp_path)
+    service.set_description(str(image_path), "Oldcaption", "replace")
+
+    # Act
+    service.set_description(str(image_path), "Newcaption", "replace")
+    old_count = repository.count_images("Oldcaption")
+    new_count = repository.count_images("Newcaption")
+    result = service.set_description(str(image_path), "", "replace")
+
+    # Assert
+    assert old_count == 0
+    assert new_count == 1
+    assert result.changed
+    assert repository.get_description(str(image_path)) == ""
+    assert repository.count_images("Newcaption") == 0
+    assert not service.set_description(str(image_path), "", "replace").changed
+    repository.close()
+
+
+def test_description_append_without_existing_text_has_no_separator(tmp_path: Path) -> None:
+    # Arrange
+    service, repository, image_path = _service(tmp_path)
+
+    # Act
+    result = service.set_description(str(image_path), "First caption", "append")
+
+    # Assert
+    assert result.sidecar.description == "First caption"
+    assert repository.get_description(str(image_path)) == "First caption"
+    repository.close()
+
+
+def test_description_identical_replace_does_not_rewrite_sidecar(tmp_path: Path) -> None:
+    # Arrange
+    service, repository, image_path = _service(tmp_path)
+    service.set_description(str(image_path), "Saved caption", "replace")
+    sidecars = FilesystemSidecarRepository()
+    before = sidecars.read(image_path)
+
+    # Act
+    result = service.set_description(str(image_path), "Saved caption", "replace")
+    after = sidecars.read(image_path)
+
+    # Assert
+    assert not result.changed
+    assert before is not None and after is not None
+    assert before.revision == after.revision
+    repository.close()
+
+
+def test_description_malformed_sidecar_is_left_untouched(tmp_path: Path) -> None:
+    # Arrange
+    service, repository, image_path = _service(tmp_path)
+    sidecar_path = FilesystemSidecarRepository.sidecar_path(image_path)
+    sidecar_path.write_bytes(b"invalid JSON")
+
+    # Act / Assert
+    with pytest.raises(TaggingSidecarError):
+        service.set_description(str(image_path), "New caption", "replace")
+    assert sidecar_path.read_bytes() == b"invalid JSON"
+    assert repository.get_description(str(image_path)) == ""
+    repository.close()
+
+
+@pytest.mark.parametrize("mode", [CopyTagsMode.ADD, CopyTagsMode.REPLACE])
+def test_copy_tags_preserves_target_description(tmp_path: Path, mode: CopyTagsMode) -> None:
+    # Arrange
+    service, repository, source = _service(tmp_path)
+    target = _add_indexed_image(repository, tmp_path, "target.jpg")
+    service.add_free_tag(str(source), "Source tag")
+    service.set_description(str(source), "Source caption", "replace")
+    service.set_description(str(target), "Target caption", "replace")
+    service.set_embedded_description_excluded(str(target), True)
+
+    # Act
+    result = service.copy_tags_to_paths(str(source), [str(target)], mode)
+
+    # Assert
+    assert result.succeeded_count == 1
+    assert service.get_image_tagging_state(str(target)).description == "Target caption"
+    assert repository.get_description(str(target)) == "Target caption"
+    assert repository.get_free_tags(str(target)) == ("Source tag",)
+    assert service.get_image_tagging_state(str(target)).exclude_embedded_description
+    repository.close()
+
+
+@pytest.mark.parametrize(
+    ("text", "mode"),
+    [(" \n ", "append"), ("Text", "invalid"), ("Bad\x00text", "replace")],
+)
+def test_description_invalid_input_leaves_sidecar_untouched(
+    tmp_path: Path, text: str, mode: str
+) -> None:
+    # Arrange
+    service, repository, image_path = _service(tmp_path)
+    sidecar_path = FilesystemSidecarRepository.sidecar_path(image_path)
+
+    # Act / Assert
+    with pytest.raises(TaggingError):
+        service.set_description(str(image_path), text, mode)
+    assert not sidecar_path.exists()
+    repository.close()
+
+
+def test_description_stale_draft_raises_conflict(tmp_path: Path) -> None:
+    # Arrange
+    service, repository, image_path = _service(tmp_path)
+    service.set_description(str(image_path), "External change", "replace")
+
+    # Act / Assert
+    with pytest.raises(TaggingConflictError, match="changed"):
+        service.set_description(
+            str(image_path), "Draft", "replace", expected_description=""
+        )
+    assert repository.get_description(str(image_path)) == "External change"
+    repository.close()
+
+
+def test_description_external_write_race_is_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange
+    service, repository, image_path = _service(tmp_path)
+    sidecars = FilesystemSidecarRepository()
+    service.set_description(str(image_path), "Original caption", "replace")
+    original_write = sidecars.write
+
+    def conflicting_write(
+        path: Path, sidecar: ImageSidecar, expected_revision: SidecarRevision | None
+    ) -> SidecarRevision:
+        sidecars.sidecar_path(path).write_text('{"external": true}', encoding="utf-8")
+        return original_write(path, sidecar, expected_revision)
+
+    monkeypatch.setattr(service._sidecar_repository, "write", conflicting_write)
+
+    # Act / Assert
+    with pytest.raises(TaggingConflictError):
+        service.set_description(str(image_path), "Draft", "replace")
+    assert sidecars.sidecar_path(image_path).read_text(encoding="utf-8") == '{"external": true}'
+    repository.close()
+
+
+def test_description_cache_failure_reports_persisted_sidecar(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange
+    service, repository, image_path = _service(tmp_path)
+
+    def fail_cache_update(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(repository, "replace_custom_tags_and_sidecar_state", fail_cache_update)
+
+    # Act / Assert
+    with pytest.raises(TaggingPartialFailure, match="sidecar was written"):
+        service.set_description(str(image_path), "Saved caption", "replace")
+    loaded = FilesystemSidecarRepository().read(image_path)
+    assert loaded is not None
+    assert loaded.sidecar.description == "Saved caption"
+    repository.close()
 
 
 def _service(
@@ -438,5 +739,3 @@ def test_tagging_service_copy_cancellation_retains_completed_targets(
     assert progress == [str(second_path), str(third_path)]
     assert service.get_image_tagging_state(str(third_path)).free_tags == ("Family",)
     assert not FilesystemSidecarRepository.sidecar_path(fourth_path).exists()
-
-

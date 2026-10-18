@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -34,6 +35,67 @@ def _sidecar(filename: str = "photo.jpg") -> ImageSidecar:
             ),
         ),
     )
+
+
+def test_sidecar_description_unicode_round_trips_and_preserves_unknown_fields(tmp_path: Path) -> None:
+    # Arrange
+    image_path = tmp_path / "photo.jpg"
+    image_path.write_bytes(b"image")
+    repository = FilesystemSidecarRepository()
+    sidecar = replace(
+        _sidecar(), description="Cafe\u0301\r\n\tSecond line.",
+        extra={"extension": {"keep": True}},
+    )
+
+    # Act
+    repository.write(image_path, sidecar, None)
+    loaded = repository.read(image_path)
+
+    # Assert
+    assert loaded is not None
+    assert loaded.sidecar.description == "Caf\u00e9\n\tSecond line."
+    assert loaded.sidecar.extra == {"extension": {"keep": True}}
+    assert loaded.sidecar.schema_version == 1
+
+
+def test_sidecar_missing_description_defaults_to_empty() -> None:
+    # Arrange
+    data = _sidecar().to_dict()
+    data.pop("description")
+
+    # Act / Assert
+    assert ImageSidecar.from_dict(data).description == ""
+
+
+def test_sidecar_missing_description_exclusion_defaults_false() -> None:
+    # Arrange
+    data = _sidecar().to_dict()
+    data.pop("exclude_embedded_description")
+
+    # Act / Assert
+    assert not ImageSidecar.from_dict(data).exclude_embedded_description
+
+
+@pytest.mark.parametrize("excluded", [None, "true", 1, []])
+def test_sidecar_description_exclusion_requires_boolean(excluded: object) -> None:
+    # Arrange
+    data = _sidecar().to_dict()
+    data["exclude_embedded_description"] = excluded
+
+    # Act / Assert
+    with pytest.raises(SidecarValidationError, match="exclude_embedded_description"):
+        ImageSidecar.from_dict(data)
+
+
+@pytest.mark.parametrize("description", [None, [], 42, "Invalid\x00text"])
+def test_sidecar_invalid_description_raises_validation_error(description: object) -> None:
+    # Arrange
+    data = _sidecar().to_dict()
+    data["description"] = description
+
+    # Act / Assert
+    with pytest.raises(SidecarValidationError, match="description"):
+        ImageSidecar.from_dict(data)
 
 
 def test_sidecar_repository_write_and_read_round_trips_sidecar(

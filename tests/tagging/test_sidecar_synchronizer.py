@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from pathlib import Path
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
@@ -20,6 +21,60 @@ class _TrackingSidecarRepository(FilesystemSidecarRepository):
     def read(self, image_path: Path) -> LoadedSidecar | None:
         self.read_count += 1
         return super().read(image_path)
+
+
+def test_description_sync_import_external_edit_and_delete_update_search(tmp_path: Path) -> None:
+    # Arrange
+    image_path = tmp_path / "photo.jpg"
+    image_path.write_bytes(b"original")
+    repository = ImageIndexRepository(tmp_path / "index.db", key="")
+    repository.upsert_image(str(image_path), image_path.name, 0, 8, {}, "")
+    sidecars = FilesystemSidecarRepository()
+    sidecar = replace(_sidecar(image_path.name), description="Firstcaption", tags=())
+    revision = sidecars.write(image_path, sidecar, None)
+    synchronizer = SidecarSynchronizer(repository, sidecars)
+
+    # Act / Assert
+    assert synchronizer.synchronize([str(image_path)]).error_count == 0
+    assert repository.get_description(str(image_path)) == "Firstcaption"
+    assert repository.count_images("Firstcaption") == 1
+    sidecars.write(image_path, replace(sidecar, description="Secondcaption"), revision)
+    assert synchronizer.synchronize([str(image_path)], force=True).error_count == 0
+    assert repository.count_images("Firstcaption") == 0
+    assert repository.count_images("Secondcaption") == 1
+    sidecars.sidecar_path(image_path).unlink()
+    assert synchronizer.synchronize([str(image_path)]).error_count == 0
+    assert repository.get_description(str(image_path)) == ""
+    assert repository.count_images("Secondcaption") == 0
+    repository.close()
+
+
+def test_description_rebuild_and_metadata_refresh_preserve_search(tmp_path: Path) -> None:
+    # Arrange
+    image_path = tmp_path / "photo.jpg"
+    image_path.write_bytes(b"original")
+    database = tmp_path / "index.db"
+    repository = ImageIndexRepository(database, key="")
+    repository.upsert_image(str(image_path), image_path.name, 0, 8, {}, "")
+    sidecars = FilesystemSidecarRepository()
+    sidecars.write(
+        image_path, replace(_sidecar(image_path.name), description="Savedcaption"), None
+    )
+    SidecarSynchronizer(repository, sidecars).synchronize([str(image_path)])
+    repository.close()
+
+    # Act
+    repository = ImageIndexRepository(database, key="")
+    repository.clear_all()
+    repository.upsert_image(str(image_path), image_path.name, 1, 8, {}, "metadata")
+    SidecarSynchronizer(repository, sidecars).synchronize([str(image_path)])
+    repository.upsert_image(str(image_path), image_path.name, 2, 8, {}, "updated")
+
+    # Assert
+    assert repository.get_description(str(image_path)) == "Savedcaption"
+    assert repository.count_images("Savedcaption") == 1
+    assert repository.count_images("updated") == 1
+    repository.close()
 
 
 def _sidecar(filename: str) -> ImageSidecar:

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import replace
 
 import pytest
 import sqlcipher3
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.models.image_sidecar import ImageSidecar, SidecarSource
+from exif_turbo.tagging.sidecar_repository import FilesystemSidecarRepository
+from exif_turbo.tagging.sidecar_synchronizer import SidecarSynchronizer
 
 
 def _sidecar(*, free_tags: tuple[str, ...] = ()) -> ImageSidecar:
@@ -31,6 +34,34 @@ def _replace_tags(
         sidecar_checksum="sha256:sidecar",
         sync_status="synced",
     )
+
+
+def test_description_upgrade_resynchronizes_previously_unknown_field(tmp_path: Path) -> None:
+    # Arrange
+    database = tmp_path / "index.db"
+    image_path = tmp_path / "photo.jpg"
+    image_path.write_bytes(b"original")
+    sidecars = FilesystemSidecarRepository()
+    sidecars.write(
+        image_path, replace(_sidecar(), description="Previouslyunknowncaption"), None
+    )
+    repository = ImageIndexRepository(database, key="")
+    repository.upsert_image(str(image_path), image_path.name, 0, 8, {}, "")
+    SidecarSynchronizer(repository, sidecars).synchronize([str(image_path)])
+    repository.conn.execute("DROP TABLE image_descriptions")
+    repository.conn.execute("UPDATE images_fts SET tags_text = ''")
+    repository.conn.commit()
+    repository.close()
+
+    # Act
+    repository = ImageIndexRepository(database, key="")
+    result = SidecarSynchronizer(repository, sidecars).synchronize([str(image_path)])
+
+    # Assert
+    assert result.error_count == 0
+    assert repository.get_description(str(image_path)) == "Previouslyunknowncaption"
+    assert repository.count_images("Previouslyunknowncaption") == 1
+    repository.close()
 
 
 def test_init_db_legacy_fts_migration_preserves_metadata_search_and_is_idempotent(

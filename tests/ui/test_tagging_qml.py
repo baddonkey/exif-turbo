@@ -45,6 +45,9 @@ def test_tagging_qml_contract_keeps_custom_tagging_and_removes_vocabulary_sugges
         "cancelDerivativeExport(",
         "copySelectedTags(",
         "cancelBulkTagging(",
+        "updateSelectedDescriptionDraft(",
+        "saveSelectedDescription(",
+        "discardSelectedDescriptionDraft(",
     }
 
     # Act
@@ -60,6 +63,31 @@ def test_tagging_qml_contract_keeps_custom_tagging_and_removes_vocabulary_sugges
     assert 'objectName: "addFreeTagButton"' in source
     assert 'objectName: "freeTagSuggestions"' in source
     assert 'objectName: "currentFreeTags"' in source
+    assert 'objectName: "descriptionEditor"' in source
+    assert 'objectName: "finalDerivativeDescription"' in source
+    assert source.index('objectName: "derivativeDescriptionFooter"') > source.index(
+        'objectName: "derivativeTagsFooter"'
+    )
+    assert drawer_source.index('text: qsTr("Existing embedded description")') < drawer_source.index(
+        'objectName: "excludeEmbeddedDescriptionSwitch"'
+    ) < drawer_source.index('objectName: "embeddedDescriptionScrollView"') < drawer_source.index(
+        'objectName: "embeddedImageDescription"'
+    )
+    assert drawer_source.index('text: qsTr("Custom tags")') < drawer_source.index(
+        'objectName: "currentFreeTags"'
+    ) < drawer_source.index(
+        'text: qsTr("Custom description")'
+    ) < drawer_source.index('objectName: "descriptionDraftEditor"')
+    assert 'objectName: "descriptionDraftEditor"' in source
+    assert 'objectName: "saveDescriptionButton"' in source
+    assert 'objectName: "appendDescriptionButton"' not in source
+    assert 'objectName: "replaceDescriptionButton"' not in source
+    assert 'text: qsTr("Save")' in source
+    assert 'text: qsTr("Replace")' in source
+    assert "readOnly: true" in source
+    assert "wrapMode: TextEdit.Wrap" in source
+    assert 'appController.saveSelectedDescription("replace")' in source
+    assert "descriptionDraftSavedChanged" in source
     remove_button_declaration = drawer_source.split(
         'objectName: "removeFreeTagButton"', 1
     )[1].split("\n                            }", 1)[0]
@@ -112,7 +140,7 @@ def test_tagging_qml_contract_keeps_custom_tagging_and_removes_vocabulary_sugges
     assert "drawer.showFreeTagSuggestions = true" in drawer_source
     assert "drawer.showFreeTagSuggestions = activeFocus" in drawer_source
     assert "showFreeTagSuggestions = false" in drawer_source
-    assert "visible: drawer.showFreeTagSuggestions && count > 0" in drawer_source
+    assert "visible: !drawer.copyMode && drawer.showFreeTagSuggestions && count > 0" in drawer_source
     assert "onPressed: drawer.addFreeTag(label)" in drawer_source
     assert "required property string label" in drawer_source
     assert "Generate Tagged Derivatives for Current &Results..." in source
@@ -167,10 +195,12 @@ def test_main_qml_tagging_drawer_pushes_content_aside(
         controller.unlock("")
 
     drawer = root.findChild(QObject, "taggingDrawer")
+    copy_drawer = root.findChild(QObject, "copyTaggingDrawer")
     search_viewport = root.findChild(QQuickItem, "searchContentViewport")
     browse_viewport = root.findChild(QQuickItem, "browseContentViewport")
     tab_bar = root.findChild(QQuickItem, "mainTabBar")
     assert drawer is not None
+    assert copy_drawer is not None
     assert search_viewport is not None
     assert browse_viewport is not None
     assert tab_bar is not None
@@ -178,9 +208,7 @@ def test_main_qml_tagging_drawer_pushes_content_aside(
     def assert_viewports_track_drawer() -> None:
         for viewport in (search_viewport, browse_viewport):
             viewport.ensurePolished()
-        drawer_left = root.width() - float(drawer.property("width")) * float(
-            drawer.property("position")
-        )
+        drawer_left = root.width() - float(root.property("taggingPanelInset"))
         for viewport in (search_viewport, browse_viewport):
             viewport_right = viewport.x() + viewport.width()
             assert abs(viewport_right - drawer_left) < 1.5
@@ -200,11 +228,26 @@ def test_main_qml_tagging_drawer_pushes_content_aside(
         qtbot.waitUntil(lambda: float(drawer.property("position")) > 0.999, timeout=3_000)
         assert_viewports_track_drawer()
 
-        QMetaObject.invokeMethod(drawer, "close", Qt.ConnectionType.DirectConnection)
+        copy_button = root.findChild(QObject, "copyTaggingWorkbenchButton")
+        assert copy_button is not None
+        QMetaObject.invokeMethod(copy_button, "clicked", Qt.ConnectionType.DirectConnection)
+        qtbot.waitUntil(lambda: bool(copy_drawer.property("opened")), timeout=3000)
         qtbot.waitUntil(lambda: float(drawer.property("position")) < 0.001, timeout=3_000)
+        assert copy_drawer.property("copyMode") is True
+        assert_viewports_track_drawer()
+        QMetaObject.invokeMethod(drawer, "openTaggingPanel", Qt.ConnectionType.DirectConnection)
+        qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=3000)
+        qtbot.waitUntil(lambda: not bool(copy_drawer.property("visible")), timeout=3000)
+        assert_viewports_track_drawer()
+        QMetaObject.invokeMethod(drawer, "close", Qt.ConnectionType.DirectConnection)
+        qtbot.waitUntil(lambda: float(drawer.property("position")) < 0.001, timeout=3000)
         assert_viewports_track_drawer()
 
     assert root.findChild(QQuickItem, "taggingWorkbenchButton") is not None
+    tagging_button = root.findChild(QQuickItem, "taggingWorkbenchButton")
+    copy_button = root.findChild(QQuickItem, "copyTaggingWorkbenchButton")
+    assert tagging_button is not None and copy_button is not None
+    assert tagging_button.x() + tagging_button.width() < copy_button.x()
     assert root.findChild(QQuickItem, "taggingEnabledSwitch") is not None
     assert root.findChild(QQuickItem, "tagProposalsScrollBar") is None
     assert root.findChild(QQuickItem, "freeTagField") is not None

@@ -13,6 +13,7 @@ from exif_turbo.tagging.derivative_export_service import (
     DerivativeExportError,
     DerivativeExportService,
     DerivativeExportStatus,
+    extract_embedded_description,
 )
 from exif_turbo.tagging.sidecar_repository import FilesystemSidecarRepository
 
@@ -20,6 +21,7 @@ from exif_turbo.tagging.sidecar_repository import FilesystemSidecarRepository
 class FakeMetadataWriter:
     def __init__(self, *, error: Exception | None = None) -> None:
         self.error = error
+        self.description_calls: list[Path] = []
         self.calls: list[
             tuple[Path, tuple[str, ...], tuple[Path, ...], tuple[str, ...], bool]
         ] = []
@@ -45,6 +47,23 @@ class FakeMetadataWriter:
         if self.error is not None:
             raise self.error
         target.write_bytes(target.read_bytes() + b"-tagged")
+
+    def discard_embedded_description(
+        self, target: Path, *, forbidden_sources: Iterable[Path] = ()
+    ) -> None:
+        assert target not in forbidden_sources
+        self.description_calls.append(target)
+        if self.error is not None:
+            raise self.error
+        target.write_bytes(target.read_bytes() + b"-description-cleared")
+
+    def write_description(
+        self, target: Path, description: str, *, forbidden_sources: Iterable[Path] = ()
+    ) -> None:
+        assert target not in forbidden_sources
+        if self.error is not None:
+            raise self.error
+        target.write_text(description, encoding="utf-8")
 
 
 def _index_image(
@@ -76,6 +95,130 @@ def _index_image(
             sidecar_checksum=revision.sha256,
             sync_status="synced",
         )
+
+
+def test_extract_embedded_description_ifd0_carriage_returns_become_lines() -> None:
+    # Arrange
+    metadata = {
+        "IFD0:ImageDescription": 'PRC92-15\r"Desktop Universe"\rGuide Star Catalogue Compression\rrelease data 5/92\rInstrument = PDS Scanner\rInvestigator = Marc Postman\r',
+    }
+
+    # Act
+    result = extract_embedded_description(metadata)
+
+    # Assert
+    assert result == 'PRC92-15\n"Desktop Universe"\nGuide Star Catalogue Compression\nrelease data 5/92\nInstrument = PDS Scanner\nInvestigator = Marc Postman'
+
+
+@pytest.mark.parametrize("key", [
+    "XMP-dc:Description", "IPTC:Caption-Abstract", "EXIF:ImageDescription",
+    "ExifIFD:UserComment", "PNG:Description",
+])
+def test_extract_embedded_description_recognizes_supported_metadata_keys(key: str) -> None:
+    # Arrange / Act / Assert
+    assert extract_embedded_description({key: "Embedded caption"}) == "Embedded caption"
+
+
+def test_extract_embedded_description_keeps_distinct_languages_and_deduplicates() -> None:
+    # Arrange
+    metadata: dict[str, object] = {
+        "XMP-dc:Description": {"x-default": "Caption", "de": "Beschreibung"},
+        "IFD0:ImageDescription": "Caption\r",
+        "XMP-dc:Description-fr": "Description",
+        "File:Description": "Not an image description",
+        "IFD0:UserComment": None,
+    }
+
+    # Act / Assert
+    assert extract_embedded_description(metadata) == "Caption\n\nBeschreibung\n\nDescription"
+
+
+@pytest.mark.parametrize("excluded", [False, True])
+def test_export_custom_description_matches_final_preview(
+    tmp_path: Path, repo: ImageIndexRepository, excluded: bool
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    image_path = source_root / "photo.jpg"
+    image_path.write_bytes(b"original")
+    repo.upsert_image(str(image_path), image_path.name, 1, 8, {"IFD0:ImageDescription": "Embedded"}, "")
+    FilesystemSidecarRepository().write(image_path, ImageSidecar(
+        source=SidecarSource(filename=image_path.name), updated_at="2026-10-18T12:00:00Z",
+        description="Custom", exclude_embedded_description=excluded,
+    ), None)
+    service = DerivativeExportService(repo, FakeMetadataWriter())
+
+    # Act
+    plan = service.create_plan({source_root: "source"}, tmp_path / "output", image_paths=[image_path])
+    result = service.export(plan)
+
+    # Assert
+    expected = "Custom" if excluded else "Embedded\n\nCustom"
+    assert plan.items[0].description == expected
+    assert result.copied_count == 1
+    assert plan.items[0].destination.read_text(encoding="utf-8") == expected
+    assert image_path.read_bytes() == b"original"
+
+
+@pytest.mark.parametrize("excluded", [False, True])
+def test_export_description_exclusion_works_without_tags_or_replacement(
+    tmp_path: Path, repo: ImageIndexRepository, excluded: bool
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    image_path = source_root / "photo.jpg"
+    image_path.write_bytes(b"original")
+    _index_image(repo, image_path)
+    sidecars = FilesystemSidecarRepository()
+    sidecars.write(image_path, ImageSidecar(
+        source=SidecarSource(filename=image_path.name),
+        updated_at="2026-10-18T12:00:00Z",
+        exclude_embedded_description=excluded,
+    ), None)
+    writer = FakeMetadataWriter()
+    service = DerivativeExportService(repo, writer)
+    plan = service.create_plan({source_root: "source"}, tmp_path / "output", image_paths=[image_path])
+
+    # Act
+    result = service.export(plan)
+
+    # Assert
+    assert result.copied_count == 1
+    assert plan.items[0].exclude_embedded_description == excluded
+    assert len(writer.description_calls) == int(excluded)
+    assert not writer.calls
+    assert image_path.read_bytes() == b"original"
+    expected = b"original-description-cleared" if excluded else b"original"
+    assert plan.items[0].destination.read_bytes() == expected
+
+
+def test_export_description_removal_failure_does_not_finalize_copy(
+    tmp_path: Path, repo: ImageIndexRepository
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    image_path = source_root / "photo.jpg"
+    image_path.write_bytes(b"original")
+    _index_image(repo, image_path)
+    FilesystemSidecarRepository().write(image_path, ImageSidecar(
+        source=SidecarSource(filename=image_path.name),
+        updated_at="2026-10-18T12:00:00Z", exclude_embedded_description=True,
+    ), None)
+    service = DerivativeExportService(repo, FakeMetadataWriter(error=RuntimeError("description remains")))
+    plan = service.create_plan({source_root: "source"}, tmp_path / "output", image_paths=[image_path])
+
+    # Act
+    result = service.export(plan)
+
+    # Assert
+    assert result.failed_count == 1
+    assert "description remains" in (result.items[0].message or "")
+    assert not plan.items[0].destination.exists()
+    assert list(plan.output_root.iterdir()) == []
+    assert image_path.read_bytes() == b"original"
 
 
 def test_create_plan_preserves_relative_tree_and_sorts_unique_labels(

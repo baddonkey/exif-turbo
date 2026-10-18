@@ -100,6 +100,9 @@ class ImageIndexRepository:
         self.conn.execute("SELECT count(*) FROM sqlite_master").fetchone()
 
     def init_db(self) -> None:
+        had_description_cache = self.conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'image_descriptions'"
+        ).fetchone() is not None
         self.conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS images (
@@ -153,6 +156,11 @@ class ImageIndexRepository:
                 PRIMARY KEY (image_id, normalized_label)
             );
 
+            CREATE TABLE IF NOT EXISTS image_descriptions (
+                image_id INTEGER PRIMARY KEY REFERENCES images(id) ON DELETE CASCADE,
+                description TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS free_tag_catalog (
                 normalized_label TEXT PRIMARY KEY,
                 display_label TEXT NOT NULL,
@@ -178,6 +186,9 @@ class ImageIndexRepository:
             CREATE INDEX IF NOT EXISTS idx_image_folders_folder ON image_folders(folder_id);
             """
         )
+        if not had_description_cache:
+            # Older readers preserved descriptions as unknown fields but did not cache them.
+            self.conn.execute("UPDATE image_sidecar_state SET mtime_ns = -1")
         self._migrate_fts_tags_text()
         self.conn.commit()
         # Add marked column for existing databases (one-time migration).
@@ -288,7 +299,7 @@ class ImageIndexRepository:
         sync_status: str,
         sync_error: str | None = None,
     ) -> None:
-        """Atomically replace an image's custom tags, sync state, and FTS text."""
+        """Atomically replace custom tags, description, sync state, and FTS text."""
         image_row = self.conn.execute(
             "SELECT id FROM images WHERE path = ?", (image_path,)
         ).fetchone()
@@ -297,6 +308,11 @@ class ImageIndexRepository:
         image_id = int(image_row[0])
 
         with self.conn:
+            self.conn.execute(
+                "INSERT INTO image_descriptions (image_id, description) VALUES (?, ?) "
+                "ON CONFLICT(image_id) DO UPDATE SET description=excluded.description",
+                (image_id, sidecar.description),
+            )
             self.conn.execute(
                 "DELETE FROM image_free_tags WHERE image_id = ?", (image_id,)
             )
@@ -348,6 +364,14 @@ class ImageIndexRepository:
                 image_path,
                 tags_text=self._build_tags_text(image_id),
             )
+
+    def get_description(self, image_path: str) -> str:
+        row = self.conn.execute(
+            "SELECT description FROM image_descriptions "
+            "WHERE image_id = (SELECT id FROM images WHERE path = ?)",
+            (image_path,),
+        ).fetchone()
+        return "" if row is None else str(row[0])
 
     def get_free_tags(self, image_path: str) -> tuple[str, ...]:
         rows = self.conn.execute(
@@ -493,6 +517,9 @@ class ImageIndexRepository:
             return
         image_id = int(image_row[0])
         with self.conn:
+            self.conn.execute(
+                "DELETE FROM image_descriptions WHERE image_id = ?", (image_id,)
+            )
             self.conn.execute(
                 "DELETE FROM image_free_tags "
                 "WHERE image_id = ?",
@@ -2165,6 +2192,10 @@ class ImageIndexRepository:
                                SELECT display_label AS search_term
                                FROM image_free_tags
                                WHERE image_id = images.id
+                               UNION ALL
+                               SELECT description AS search_term
+                               FROM image_descriptions
+                               WHERE image_id = images.id
                            )
                        ), '')
                 FROM images
@@ -2208,10 +2239,13 @@ class ImageIndexRepository:
         )
 
     def _build_tags_text(self, image_id: int) -> str:
+        """Build the shared sidecar FTS text from custom tags and description."""
         rows = self.conn.execute(
             """
             SELECT display_label FROM image_free_tags WHERE image_id = ?
+            UNION ALL
+            SELECT description FROM image_descriptions WHERE image_id = ?
             """,
-            (image_id,),
+            (image_id, image_id),
         ).fetchall()
         return " ".join(str(row[0]) for row in rows)

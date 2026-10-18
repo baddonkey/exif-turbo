@@ -9,10 +9,11 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 from PySide6.QtCore import QObject, QPoint, QPointF, QMetaObject, Qt, QUrl, Signal
-from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtTest import QTest
 from pytestqt.qtbot import QtBot
+from shiboken6 import isValid
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.mcp.mcp_session_service import McpSessionService
@@ -23,6 +24,7 @@ from exif_turbo.tagging.derivative_export_service import (
     DerivativeExportStatus,
 )
 from exif_turbo.tagging.sidecar_repository import FilesystemSidecarRepository
+from exif_turbo.tagging.tagging_service import TaggingService
 from exif_turbo.ui.models.checked_filter_proxy_model import CheckedFilterProxyModel
 from exif_turbo.ui.models.exif_list_model import ExifListModel
 from exif_turbo.ui.models.folder_list_model import FolderListModel
@@ -35,6 +37,243 @@ from exif_turbo.ui.view_models.app_controller import AppController
 
 
 _QML_DIR = Path(__file__).resolve().parents[2] / "src" / "exif_turbo" / "ui" / "qml"
+
+
+def test_sets_and_tagging_views_null_controller_emit_no_type_errors(
+    qtbot: QtBot,
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _, _, image_path = tagging_controller
+    set_id = controller.createImageSet("Teardown set")
+    assert controller._repo is not None
+    controller._repo.add_images_to_set(set_id, [str(image_path)])
+    controller.addSelectedFreeTag("Example")
+    engine = QQmlApplicationEngine()
+    warnings: list[str] = []
+    engine.warnings.connect(lambda errors: warnings.extend(error.toString() for error in errors))
+    window = QQuickWindow()
+    window.setWidth(1200)
+    window.setHeight(800)
+    window.show()
+    components: list[QQmlComponent] = []
+    views: list[QObject] = []
+    for filename in ("SetsPage.qml", "TaggingDrawer.qml"):
+        component = QQmlComponent(engine, QUrl.fromLocalFile(str(_QML_DIR / filename)))
+        components.append(component)
+        properties: dict[str, object] = {"appController": controller}
+        if filename == "TaggingDrawer.qml":
+            properties["appSettings"] = controller._settings
+        view = component.createWithInitialProperties(properties)
+        assert view is not None, [error.toString() for error in component.errors()]
+        views.append(view)
+        if isinstance(view, QQuickItem):
+            view.setParentItem(window.contentItem())
+            view.setWidth(1200)
+            view.setHeight(800)
+        else:
+            view.setProperty("parent", window.contentItem())
+    sets_page, drawer = views
+    QMetaObject.invokeMethod(sets_page, "reloadSets", Qt.ConnectionType.DirectConnection)
+    sets_page.setProperty("selectedSetId", set_id)
+    member_list = sets_page.findChild(QQuickItem, "imageSetMemberList")
+    assert member_list is not None
+    qtbot.waitUntil(
+        lambda: int(member_list.property("count")) == 1
+            and member_list.property("currentItem") is not None,
+        timeout=3000,
+    )
+    QMetaObject.invokeMethod(drawer, "openTaggingPanel", Qt.ConnectionType.DirectConnection)
+    warnings.clear()
+
+    # Act
+    sets_page.setProperty("appController", None)
+    drawer.setProperty("appController", None)
+    qtbot.waitUntil(lambda: not bool(sets_page.property("canEditSets")), timeout=3000)
+    for view in views:
+        view.deleteLater()
+    window.close()
+    window.deleteLater()
+    qtbot.wait(100)
+
+    # Assert
+    assert [warning for warning in warnings if "TypeError" in warning] == []
+    engine.deleteLater()
+
+
+@pytest.mark.parametrize(("width", "height"), [(1200, 800), (720, 420)])
+@pytest.mark.parametrize("copy_mode", [False, True])
+def test_tagging_drawer_two_columns_group_controls_and_scroll_independently(
+    qtbot: QtBot,
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    width: int,
+    height: int,
+    copy_mode: bool,
+) -> None:
+    # Arrange
+    controller, _, _, _ = tagging_controller
+    controller.addSelectedFreeTag("Example")
+    controller._update_exif_table(json.dumps({
+        "IFD0:ImageDescription": "\n".join(f"Embedded line {index}" for index in range(80)),
+    }))
+    engine = QQmlApplicationEngine()
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(_QML_DIR / "TaggingDrawer.qml")))
+    drawer = component.createWithInitialProperties({
+        "appController": controller, "appSettings": controller._settings, "copyMode": copy_mode,
+    })
+    assert drawer is not None, [error.toString() for error in component.errors()]
+    window = QQuickWindow()
+    window.setWidth(width)
+    window.setHeight(height)
+    drawer.setProperty("parent", window.contentItem())
+    window.show()
+    qtbot.waitExposed(window)
+
+    # Act
+    QMetaObject.invokeMethod(drawer, "openTaggingPanel", Qt.ConnectionType.DirectConnection)
+    qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=3000)
+
+    # Assert
+    left = drawer.findChild(QQuickItem, "customTaggingColumn")
+    right = drawer.findChild(QQuickItem, "copyTaggingColumn" if copy_mode else "existingTaggingColumn")
+    assert left is not None and right is not None
+    copy_scroll = drawer.findChild(QQuickItem, "copyTaggingScrollView")
+    embedded_scroll = drawer.findChild(QQuickItem, "existingTaggingScrollView")
+    assert copy_scroll is not None and embedded_scroll is not None
+    assert copy_scroll.isVisible() is copy_mode
+    assert embedded_scroll.isVisible() is not copy_mode
+    left.ensurePolished()
+    right.ensurePolished()
+    assert left.width() > 300
+    assert left.width() == pytest.approx(right.width(), abs=2)
+    assert left.mapToScene(QPointF(left.width(), 0)).x() < right.mapToScene(QPointF()).x()
+    for column, names in (
+        (left, ("customTagsGroup", "descriptionEditor") if copy_mode else (
+            "existingImageTagsGroup", "customTagsGroup",
+        )),
+        (right, ("copyTagsGroup", "copyDescriptionGroup") if copy_mode else (
+            "existingEmbeddedDescriptionGroup", "descriptionEditor",
+        )),
+    ):
+        previous_bottom = 0.0
+        for name in names:
+            group = drawer.findChild(QQuickItem, name)
+            assert group is not None and group.parentItem() == column
+            assert group.isVisible() and group.height() > 0
+            assert group.y() >= previous_bottom
+            previous_bottom = group.y() + group.height()
+            assert group.x() + group.width() <= column.width() + 1
+
+    columns = drawer.findChild(QQuickItem, "taggingColumns")
+    footer = drawer.findChild(QQuickItem, "finalDerivativesFooter")
+    tags_preview = drawer.findChild(QQuickItem, "derivativeTagsFooter")
+    description_preview = drawer.findChild(QQuickItem, "derivativeDescriptionFooter")
+    assert columns is not None and footer is not None
+    assert tags_preview is not None and description_preview is not None
+    footer_parent = footer.parentItem()
+    assert footer_parent is not None and footer_parent == columns.parentItem()
+    assert footer.y() >= columns.y() + columns.height()
+    assert footer.y() + footer.height() == pytest.approx(footer_parent.height(), abs=1)
+    assert footer.width() == pytest.approx(columns.width(), abs=1)
+    assert tags_preview.parentItem() == footer and description_preview.parentItem() == footer
+    assert tags_preview.width() == pytest.approx(description_preview.width(), abs=2)
+    assert tags_preview.x() + tags_preview.width() < description_preview.x()
+    assert tags_preview.height() > 100 and description_preview.height() > 100
+
+    if height == 420:
+        flickables: list[QQuickItem] = []
+        for name in (
+            "taggingScrollView", "copyTaggingScrollView" if copy_mode else "existingTaggingScrollView",
+        ):
+            scroll = drawer.findChild(QQuickItem, name)
+            assert scroll is not None
+            flickable = scroll.property("contentItem")
+            assert isinstance(flickable, QQuickItem)
+            if not copy_mode or name == "copyTaggingScrollView":
+                assert float(flickable.property("contentHeight")) > flickable.height()
+            flickables.append(flickable)
+        left_flickable, right_flickable = flickables
+        if not copy_mode:
+            left_flickable.setProperty("contentY", 40)
+        assert float(right_flickable.property("contentY")) == 0
+        right_flickable.setProperty("contentY", 60)
+        assert float(left_flickable.property("contentY")) == (0 if copy_mode else 40)
+        assert footer.y() >= columns.y() + columns.height()
+
+    drawer.deleteLater()
+    window.close()
+    window.deleteLater()
+    qtbot.wait(100)
+    engine.deleteLater()
+
+
+def test_copy_panel_source_previews_are_read_only_and_use_saved_text(
+    qtbot: QtBot,
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _, _, path = tagging_controller
+    controller.addSelectedFreeTag("Custom tag")
+    controller._update_exif_table(json.dumps({
+        "XMP-dc:Subject": ["Embedded tag"], "IFD0:ImageDescription": "Embedded caption",
+    }))
+    controller.updateSelectedDescriptionDraft("Saved caption")
+    assert controller.saveSelectedDescription("replace")
+    controller.updateSelectedDescriptionDraft("Unsaved draft")
+    before = FilesystemSidecarRepository().read(path)
+    engine = QQmlApplicationEngine()
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(_QML_DIR / "TaggingDrawer.qml")))
+    drawer = component.createWithInitialProperties({
+        "appController": controller, "appSettings": controller._settings, "copyMode": True,
+    })
+    assert drawer is not None, [error.toString() for error in component.errors()]
+    window = QQuickWindow()
+    window.setWidth(1200)
+    window.setHeight(800)
+    drawer.setProperty("parent", window.contentItem())
+    window.show()
+    qtbot.waitExposed(window)
+    QMetaObject.invokeMethod(drawer, "openTaggingPanel", Qt.ConnectionType.DirectConnection)
+    qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=3000)
+    editor = drawer.findChild(QQuickItem, "descriptionDraftEditor")
+    preview = drawer.findChild(QQuickItem, "finalDerivativeDescription")
+    tags = drawer.findChild(QQuickItem, "currentFreeTags")
+    final_tags = drawer.findChild(QQuickItem, "finalDerivativeTags")
+    assert editor is not None and preview is not None
+    assert tags is not None and final_tags is not None
+    tags.ensurePolished()
+    final_tags.ensurePolished()
+
+    # Act
+    editor.forceActiveFocus()
+    QTest.keyClick(window, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+    QTest.keyClick(window, Qt.Key.Key_Backspace)
+    QTest.keyClick(window, Qt.Key.Key_Return)
+
+    # Assert
+    assert editor.property("readOnly") and preview.property("readOnly")
+    assert editor.property("text") == "Saved caption"
+    assert preview.property("text") == "Embedded caption\n\nSaved caption"
+    assert int(tags.property("count")) == 1
+    assert int(final_tags.property("count")) == 2
+    assert controller.descriptionDraft == "Unsaved draft"
+    assert FilesystemSidecarRepository().read(path) == before
+    for name in ("freeTagField", "saveDescriptionButton", "discardDescriptionDraftButton"):
+        control = drawer.findChild(QQuickItem, name)
+        assert control is not None and not control.isVisible() and not control.isEnabled()
+    qtbot.waitUntil(lambda: tags.property("currentItem") is not None, timeout=3000)
+    tag_item = tags.property("currentItem")
+    assert isinstance(tag_item, QQuickItem)
+    remove_button = tag_item.findChild(QQuickItem, "removeFreeTagButton")
+    assert remove_button is not None and not remove_button.isVisible() and not remove_button.isEnabled()
+    for name in ("copyTagsButton", "copyDescriptionButton"):
+        control = drawer.findChild(QQuickItem, name)
+        assert control is not None and control.isVisible() and control.isEnabled()
+    drawer.deleteLater()
+    window.close()
+    window.deleteLater()
+    qtbot.wait(100)
+    engine.deleteLater()
 
 
 @pytest.fixture
@@ -125,6 +364,51 @@ def test_app_controller_set_member_tagging_keeps_search_selection(
     controller.setActionImageSet(0)
     assert controller.taggingFilename == search_path.name
     assert controller.selectedSetMemberPath == ""
+
+
+def test_app_controller_ifd0_description_visible_without_sidecar(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, model, _, image_path = tagging_controller
+    description = 'PRC92-15\r"Desktop Universe"\rGuide Star Catalogue Compression\rrelease data 5/92\rInstrument = PDS Scanner\rInvestigator = Marc Postman\r'
+    metadata = {"IFD0:ImageDescription": description}
+    assert controller._repo is not None
+    controller._repo.upsert_image(str(image_path), image_path.name, 1, 5, metadata, description)
+    model.set_rows([SearchResult(str(image_path), image_path.name, json.dumps(metadata), 5, 1, 1)])
+
+    # Act
+    controller._select_source_row(0)
+
+    # Assert
+    assert controller.embeddedImageDescription == description.replace("\r", "\n").strip()
+    assert controller.selectedImageDescription == ""
+    assert not FilesystemSidecarRepository.sidecar_path(image_path).exists()
+
+
+def test_app_controller_embedded_description_follows_set_selection_not_search(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    controller, _, _, _ = tagging_controller
+    set_path = tmp_path / "member.jpg"
+    set_path.write_bytes(b"image")
+    assert controller._repo is not None
+    controller._repo.upsert_image(
+        str(set_path), set_path.name, 1, 5, {"IFD0:ImageDescription": "Set caption"}, ""
+    )
+    set_id = controller.createImageSet("Description set")
+    controller._repo.add_images_to_set(set_id, [str(set_path)])
+
+    # Act / Assert
+    controller.setActionImageSet(set_id)
+    assert controller.embeddedImageDescription == ""
+    controller.selectImageSetMember(str(set_path))
+    controller._update_exif_table('{"IFD0:ImageDescription": "Unrelated Search caption"}')
+    assert controller.embeddedImageDescription == "Set caption"
+    controller.selectImageSetMember("")
+    assert controller.embeddedImageDescription == ""
 
 
 @pytest.mark.parametrize("mode", ["append", "replace"])
@@ -384,6 +668,428 @@ def test_app_controller_selected_filename_comes_from_selected_model_row(
     assert controller.selectedFilename == image_path.name
 
 
+def test_app_controller_description_draft_requires_explicit_append_or_replace(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _model, _db_path, image_path = tagging_controller
+    controller.updateSelectedDescriptionDraft("First paragraph")
+
+    # Act
+    appended = controller.saveSelectedDescription("append")
+    controller.updateSelectedDescriptionDraft("Replacement")
+    replaced = controller.saveSelectedDescription("replace")
+    saved = FilesystemSidecarRepository().read(image_path)
+
+    # Assert
+    assert appended is True
+    assert replaced is True
+    assert controller.selectedImageDescription == "Replacement"
+    assert saved is not None
+    assert saved.sidecar.description == "Replacement"
+    assert controller.descriptionDraftActive is False
+
+
+def test_app_controller_description_draft_remains_bound_to_original_image(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    controller, search_model, _db_path, original_path = tagging_controller
+    other_path = tmp_path / "other.jpg"
+    other_path.write_bytes(b"image")
+    assert controller._repo is not None
+    controller._repo.upsert_image(str(other_path), other_path.name, 1.0, 5, {}, "")
+    search_model.set_rows(
+        [
+            SearchResult(str(original_path), original_path.name, "{}", 5, 1.0, 1),
+            SearchResult(str(other_path), other_path.name, "{}", 5, 1.0, 2),
+        ]
+    )
+    controller._select_source_row(0)
+    controller.updateSelectedDescriptionDraft("Draft for first image")
+
+    # Act
+    controller._select_source_row(1)
+    edited_other = controller.updateSelectedDescriptionDraft("Wrong image")
+    saved_other = controller.saveSelectedDescription("replace")
+    controller._select_source_row(0)
+
+    # Assert
+    assert edited_other is False
+    assert saved_other is False
+    assert controller.descriptionDraftMatchesSelection is True
+    assert controller.descriptionDraft == "Draft for first image"
+    assert FilesystemSidecarRepository().read(other_path) is None
+
+
+def test_app_controller_mcp_description_update_preserves_draft_and_flags_conflict(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _model, _db_path, image_path = tagging_controller
+    controller.updateSelectedDescriptionDraft("Local draft")
+    assert controller._repo is not None
+    image_id = controller._repo.get_images_by_paths([str(image_path)])[0][0]
+
+    # Act
+    saved_description, changed = controller._mcp_set_image_description(
+        image_id,
+        str(image_path),
+        "Updated through MCP",
+        "replace",
+    )
+    saved = FilesystemSidecarRepository().read(image_path)
+    result = controller.saveSelectedDescription("replace")
+
+    # Assert
+    assert saved_description == "Updated through MCP"
+    assert changed is True
+    assert controller.descriptionDraft == "Local draft"
+    assert controller.descriptionDraftSavedChanged is True
+    assert result is False
+    assert saved is not None
+    assert saved.sidecar.description == "Updated through MCP"
+
+
+def test_app_controller_mcp_description_rejects_mismatched_image_identity(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _model, _db_path, image_path = tagging_controller
+
+    # Act / Assert
+    with pytest.raises(RuntimeError, match="ID and path"):
+        controller._mcp_set_image_description(
+            987654,
+            str(image_path),
+            "Wrong target",
+            "replace",
+        )
+    assert FilesystemSidecarRepository().read(image_path) is None
+
+
+def test_app_controller_mcp_description_round_trip_and_batch_errors(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _, _, image_path = tagging_controller
+    assert controller._repo is not None
+    image_id = controller._repo.get_images_by_paths([str(image_path)])[0][0]
+    set_id = controller.createImageSet("Description set")
+    controller._repo.add_images_to_set(set_id, [str(image_path)])
+    session = McpSessionService(controller._mcp)
+
+    # Act
+    session.set_image_description(image_id, str(image_path), "First paragraph", "replace")
+    result = session.set_image_descriptions_batch([
+        {"image_id": image_id, "path": str(image_path), "description": "Second paragraph", "mode": "append"},
+        {"image_id": image_id + 99, "path": str(image_path), "description": "Wrong", "mode": "replace"},
+    ])
+
+    # Assert
+    assert result["succeeded"] == 1
+    assert result["failed"] == 1
+    expected = "First paragraph\n\nSecond paragraph"
+    assert session.get_selected_image(include_preview=False).description == expected
+    assert session.get_image_set_images(set_id)["images"][0]["description"] == expected
+    assert controller.selectedImageDescription == expected
+    assert controller._repo.count_images("Second") == 1
+
+
+def test_app_controller_mcp_tag_exclusions_round_trip_persist_and_refresh(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _, _, path = tagging_controller
+    assert controller._repo is not None
+    image_id = controller._repo.get_images_by_paths([str(path)])[0][0]
+    metadata = {"XMP-dc:Subject": ["Family", "Holiday"]}
+    controller._repo.upsert_image(str(path), path.name, 1.0, 5, metadata, "")
+    controller._update_exif_table(json.dumps(metadata))
+    controller.addSelectedFreeTag("Custom")
+    controller.updateSelectedDescriptionDraft("Saved caption")
+    assert controller.saveSelectedDescription("replace")
+    controller.updateSelectedDescriptionDraft("Unsaved draft")
+    set_id = controller.createImageSet("Exclusion set")
+    controller._repo.add_images_to_set(set_id, [str(path)])
+    session = McpSessionService(controller._mcp)
+    original_bytes = path.read_bytes()
+
+    # Act
+    individual = session.set_image_embedded_tag_excluded(image_id, str(path), "Family", True)
+    unchanged = session.set_image_embedded_tag_excluded(image_id, str(path), "family", True)
+    all_tags = session.set_image_all_embedded_tags_excluded(image_id, str(path), True)
+    unchanged_all = session.set_image_all_embedded_tags_excluded(image_id, str(path), True)
+    payload = session.get_selected_image(include_preview=False).to_dict()
+    listed = session.get_image_set_images(set_id)["images"][0]
+
+    # Assert
+    assert individual["excluded_embedded_tags"] == ["Family"] and individual["changed"]
+    assert unchanged["changed"] is False and unchanged_all["changed"] is False
+    assert all_tags["exclude_all_embedded_tags"] is True
+    for result in (payload, listed):
+        assert result["excluded_embedded_tags"] == ["Family"]
+        assert result["exclude_all_embedded_tags"] is True
+    assert controller.excludeAllEmbeddedTags
+    assert tuple(controller._tagging.derivative_tags_model._rows) == ("Custom",)
+    loaded = FilesystemSidecarRepository().read(path)
+    assert loaded is not None and loaded.sidecar.excluded_embedded_tags == ("Family",)
+    assert loaded.sidecar.exclude_all_embedded_tags
+    assert loaded.sidecar.free_tags == ("Custom",)
+    assert loaded.sidecar.description == "Saved caption"
+    assert controller.descriptionDraft == "Unsaved draft"
+    assert path.read_bytes() == original_bytes
+    assert controller._repo.get_images_by_paths([str(path)])[0][3] == json.dumps(metadata)
+
+    session.set_image_all_embedded_tags_excluded(image_id, str(path), False)
+    assert not controller.excludeAllEmbeddedTags
+    assert "Holiday" in controller._tagging.derivative_tags_model._rows
+    assert "Family" not in controller._tagging.derivative_tags_model._rows
+    restored = session.set_image_embedded_tag_excluded(image_id, str(path), "FAMILY", False)
+    assert restored["excluded_embedded_tags"] == []
+    assert "Family" in controller._tagging.derivative_tags_model._rows
+
+
+@pytest.mark.parametrize("all_tags", [False, True])
+def test_app_controller_mcp_tag_exclusions_target_explicit_nonselected_image(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+    all_tags: bool,
+) -> None:
+    # Arrange
+    controller, _, _, selected = tagging_controller
+    assert controller._repo is not None
+    target = tmp_path / "target.jpg"
+    target.write_bytes(b"image")
+    controller._repo.upsert_image(str(target), target.name, 1.0, 5, {}, "")
+    image_id = controller._repo.get_images_by_paths([str(target)])[0][0]
+    session = McpSessionService(controller._mcp)
+
+    # Act
+    if all_tags:
+        session.set_image_all_embedded_tags_excluded(image_id, str(target), True)
+    else:
+        session.set_image_embedded_tag_excluded(image_id, str(target), "Family", True)
+
+    # Assert
+    loaded = FilesystemSidecarRepository().read(target)
+    assert loaded is not None
+    assert loaded.sidecar.exclude_all_embedded_tags is all_tags
+    assert loaded.sidecar.excluded_embedded_tags == (() if all_tags else ("Family",))
+    assert FilesystemSidecarRepository().read(selected) is None
+    payload = session.get_selected_image(include_preview=False).to_dict()
+    assert payload["excluded_embedded_tags"] == []
+    assert payload["exclude_all_embedded_tags"] is False
+
+
+@pytest.mark.parametrize("all_tags", [False, True])
+@pytest.mark.parametrize("blocked_by", ["locked", "disabled", "identity"])
+def test_app_controller_mcp_tag_exclusions_reject_unavailable_or_wrong_identity(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    all_tags: bool,
+    blocked_by: str,
+) -> None:
+    # Arrange
+    controller, _, _, path = tagging_controller
+    assert controller._repo is not None
+    image_id = controller._repo.get_images_by_paths([str(path)])[0][0]
+    if blocked_by == "locked":
+        controller._is_locked = True
+    elif blocked_by == "disabled":
+        controller.setTaggingEnabled(False)
+    else:
+        image_id += 100
+    session = McpSessionService(controller._mcp)
+
+    # Act / Assert
+    with pytest.raises(RuntimeError):
+        if all_tags:
+            session.set_image_all_embedded_tags_excluded(image_id, str(path), True)
+        else:
+            session.set_image_embedded_tag_excluded(image_id, str(path), "Family", True)
+    assert FilesystemSidecarRepository().read(path) is None
+
+
+def test_app_controller_description_exclusion_without_replacement_preserves_draft(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _, _, image_path = tagging_controller
+    session = McpSessionService(controller._mcp)
+    assert controller._repo is not None
+    image_id = controller._repo.get_images_by_paths([str(image_path)])[0][0]
+    controller.updateSelectedDescriptionDraft("Unsaved draft")
+
+    # Act
+    controller.setSelectedEmbeddedDescriptionExcluded(True)
+    saved = FilesystemSidecarRepository().read(image_path)
+    payload = session.get_selected_image(include_preview=False).to_dict()
+    cleared = session.set_image_description_excluded(image_id, str(image_path), False)
+
+    # Assert
+    assert saved is not None and saved.sidecar.exclude_embedded_description
+    assert saved.sidecar.description == ""
+    assert payload["exclude_embedded_description"] is True
+    assert cleared["exclude_embedded_description"] is False
+    assert controller.excludeEmbeddedDescription is False
+    assert controller.descriptionDraft == "Unsaved draft"
+    assert not controller.descriptionDraftSavedChanged
+
+
+def test_final_derivative_description_preview_uses_saved_text_and_exclusion(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _, _, _ = tagging_controller
+    controller._update_exif_table('{"IFD0:ImageDescription": "Embedded"}')
+    controller.updateSelectedDescriptionDraft("Custom")
+
+    # Act / Assert
+    assert controller.finalDerivativeDescription == "Embedded"
+    controller.saveSelectedDescription("replace")
+    assert controller.finalDerivativeDescription == "Embedded\n\nCustom"
+    controller.setSelectedEmbeddedDescriptionExcluded(True)
+    assert controller.finalDerivativeDescription == "Custom"
+    controller.updateSelectedDescriptionDraft("")
+    controller.saveSelectedDescription("replace")
+    assert controller.finalDerivativeDescription == ""
+    controller.setSelectedEmbeddedDescriptionExcluded(False)
+    assert controller.finalDerivativeDescription == "Embedded"
+
+
+@pytest.mark.parametrize("locked", [False, True])
+def test_app_controller_mcp_description_disabled_or_locked_rejects_write(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path], locked: bool
+) -> None:
+    # Arrange
+    controller, _, _, image_path = tagging_controller
+    if locked:
+        controller._is_locked = True
+    else:
+        controller.setTaggingEnabled(False)
+    session = McpSessionService(controller._mcp)
+
+    # Act / Assert
+    with pytest.raises(RuntimeError):
+        session.set_image_description(1, str(image_path), "Caption", "replace")
+    assert FilesystemSidecarRepository().read(image_path) is None
+
+
+def test_description_qml_save_button_enter_and_shift_enter_preserve_editor(
+    qtbot: QtBot,
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, search_model, _, image_path = tagging_controller
+    controller._update_exif_table(json.dumps({
+        "IFD0:ImageDescription": 'PRC92-15\r"Desktop Universe"\rGuide Star Catalogue Compression\r',
+    }))
+    controller.updateSelectedDescriptionDraft("Saved caption")
+    controller.saveSelectedDescription("replace")
+    engine = QQmlApplicationEngine()
+    engine.addImageProvider("preview", PreviewImageProvider())
+    engine.addImageProvider("raw", RawImageProvider())
+    proxy = CheckedFilterProxyModel()
+    proxy.setSourceModel(search_model)
+    controller.set_filter_proxy(proxy)
+    exif_model = ExifListModel()
+    folder_model = FolderListModel()
+    settings = SettingsModel(image_path.parent / "description-qml-settings.json")
+    context = engine.rootContext()
+    for name, value in {
+        "controller": controller, "searchModel": search_model,
+        "filteredSearchModel": proxy, "exifModel": exif_model,
+        "folderListModel": folder_model, "settingsModel": settings,
+        "thirdPartyLicensesHtml": "", "userManualUrl": "",
+    }.items():
+        context.setContextProperty(name, value)
+    engine.load(QUrl.fromLocalFile(str(_QML_DIR / "Main.qml")))
+    qtbot.waitUntil(lambda: bool(engine.rootObjects()), timeout=5000)
+    root = engine.rootObjects()[0]
+    drawer = root.findChild(QObject, "taggingDrawer")
+    button = root.findChild(QObject, "saveDescriptionButton")
+    editor = root.findChild(QQuickItem, "descriptionDraftEditor")
+    embedded_editor = root.findChild(QQuickItem, "embeddedImageDescription")
+    exclude_switch = root.findChild(QObject, "excludeEmbeddedDescriptionSwitch")
+    assert drawer is not None and button is not None and editor is not None
+    assert exclude_switch is not None
+    assert embedded_editor is not None
+    assert embedded_editor.property("text") == 'PRC92-15\n"Desktop Universe"\nGuide Star Catalogue Compression'
+    assert embedded_editor.property("readOnly")
+    QMetaObject.invokeMethod(drawer, "openTaggingPanel", Qt.ConnectionType.DirectConnection)
+    exclude_switch.setProperty("checked", True)
+    QMetaObject.invokeMethod(exclude_switch, "toggled", Qt.ConnectionType.DirectConnection)
+    assert controller.excludeEmbeddedDescription
+    assert editor.property("text") == "Saved caption"
+    controller.updateSelectedDescriptionDraft("Replacement")
+
+    # Act / Assert
+    QMetaObject.invokeMethod(button, "clicked", Qt.ConnectionType.DirectConnection)
+    assert controller.selectedImageDescription == "Replacement"
+    assert editor.property("text") == "Replacement"
+    assert not controller.descriptionDraftActive
+    assert not button.property("enabled")
+    controller.updateSelectedDescriptionDraft("")
+    QMetaObject.invokeMethod(button, "clicked", Qt.ConnectionType.DirectConnection)
+    assert controller.selectedImageDescription == ""
+    saved = FilesystemSidecarRepository().read(image_path)
+    assert saved is not None and saved.sidecar.description == ""
+
+    # Enter saves, while Shift+Enter keeps multiline edits unsaved.
+    assert isinstance(root, QQuickWindow)
+    root.setWidth(1200)
+    root.setHeight(900)
+    root.show()
+    qtbot.waitExposed(root)
+    editor.forceActiveFocus()
+    for character in "Keyboard caption":
+        QTest.keyClick(root, character)
+    QTest.keyClick(root, Qt.Key.Key_Return, Qt.KeyboardModifier.ShiftModifier)
+    assert "\n" in controller.descriptionDraft
+    assert controller.selectedImageDescription == ""
+    QTest.keyClick(root, Qt.Key.Key_Return)
+    assert controller.selectedImageDescription == "Keyboard caption"
+    assert not controller.descriptionDraftActive
+    assert editor.property("text") == "Keyboard caption"
+
+    QTest.keyClick(root, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+    QTest.keyClick(root, Qt.Key.Key_Backspace)
+    assert controller.descriptionDraftActive
+    assert button.property("enabled")
+    QTest.keyClick(root, Qt.Key.Key_Return)
+    assert controller.selectedImageDescription == ""
+    assert not controller.descriptionDraftActive
+    saved = FilesystemSidecarRepository().read(image_path)
+    assert saved is not None and saved.sidecar.description == ""
+
+    # Long descriptions must remain reachable inside the editable and preview fields.
+    long_text = "\n".join(f"Description line {index}" for index in range(80))
+    controller._update_exif_table(json.dumps({"IFD0:ImageDescription": long_text}))
+    controller.updateSelectedDescriptionDraft(long_text)
+    assert controller.saveSelectedDescription("replace")
+    controller.updateSelectedDescriptionDraft(long_text)
+    for name in (
+        "embeddedDescriptionScrollView", "descriptionDraftScrollView",
+        "finalDescriptionScrollView",
+    ):
+        scroll = root.findChild(QQuickItem, name)
+        assert scroll is not None
+        scroll.ensurePolished()
+        flickable = scroll.property("contentItem")
+        assert isinstance(flickable, QQuickItem)
+        qtbot.waitUntil(
+            lambda: float(flickable.property("contentHeight")) > flickable.height(),
+            timeout=3000,
+        )
+        bottom = float(flickable.property("contentHeight")) - flickable.height()
+        flickable.setProperty("contentY", bottom)
+        assert float(flickable.property("contentY")) == pytest.approx(bottom, abs=1)
+
+    engine.deleteLater()
+    qtbot.wait(100)
+
+
 def test_tagging_drawer_leaving_search_or_browse_closes_drawer(
     qtbot: QtBot,
     tagging_controller: tuple[AppController, SearchListModel, Path, Path],
@@ -563,19 +1269,23 @@ def test_tag_remove_button_removes_selected_free_tag(
     assert drawer is not None
     assert current_tags is not None
     QMetaObject.invokeMethod(drawer, "openTaggingPanel", Qt.ConnectionType.DirectConnection)
-    qtbot.waitUntil(lambda: bool(drawer.property("visible")), timeout=3_000)
+    qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=3_000)
     qtbot.waitUntil(lambda: int(current_tags.property("count")) == 1, timeout=3_000)
 
-    def find_remove_button(item: QQuickItem) -> QQuickItem | None:
-        if item.objectName() == "removeFreeTagButton":
-            return item
-        for child in item.childItems():
-            found = find_remove_button(child)
-            if found is not None:
-                return found
-        return None
+    # Keep currentItem wrappers alive while Qt owns the delegates.
+    tag_delegates: list[QQuickItem] = []
 
-    remove_button = find_remove_button(current_tags)
+    def find_remove_button() -> QQuickItem | None:
+        item = current_tags.property("currentItem")
+        if not isinstance(item, QQuickItem) or not isValid(item):
+            return None
+        if item not in tag_delegates:
+            tag_delegates.append(item)
+        button = item.findChild(QQuickItem, "removeFreeTagButton")
+        return button if button is not None and isValid(button) else None
+
+    qtbot.waitUntil(lambda: find_remove_button() is not None, timeout=3000)
+    remove_button = find_remove_button()
     assert remove_button is not None
 
     # Act
@@ -585,10 +1295,12 @@ def test_tag_remove_button_removes_selected_free_tag(
         remove_button, "click", Qt.ConnectionType.DirectConnection
     )
     qtbot.waitUntil(lambda: int(current_tags.property("count")) == 0, timeout=1_000)
+    qtbot.waitUntil(lambda: current_tags.property("currentItem") is None, timeout=1000)
 
     controller.addSelectedFreeTag("Family")
     qtbot.waitUntil(lambda: int(current_tags.property("count")) == 1, timeout=1_000)
-    remove_button = find_remove_button(current_tags)
+    qtbot.waitUntil(lambda: find_remove_button() is not None, timeout=3000)
+    remove_button = find_remove_button()
     assert remove_button is not None
     if root.isActive():
         center = remove_button.mapToScene(
@@ -603,19 +1315,21 @@ def test_tag_remove_button_removes_selected_free_tag(
             and 0 <= right_edge.x() < root.width()
             and 0 <= right_edge.y() < root.height()
         ):
-            remove_mouse_area = next(
-                child
-                for child in remove_button.childItems()
-                if child.objectName() == "removeTagMouseArea"
-            )
+            def current_remove_button_hovered() -> bool:
+                button = find_remove_button()
+                if button is None:
+                    return False
+                mouse_area = button.findChild(QQuickItem, "removeTagMouseArea")
+                return mouse_area is not None and bool(
+                    mouse_area.property("containsMouse")
+                )
+
             QTest.mouseMove(root, QPoint(round(center.x()), round(center.y())))
-            qtbot.wait(100)
-            center_hovered = bool(remove_mouse_area.property("containsMouse"))
+            qtbot.waitUntil(current_remove_button_hovered, timeout=3000)
             QTest.mouseMove(root, QPoint(round(right_edge.x()), round(right_edge.y())))
-            qtbot.wait(100)
-            edge_hovered = bool(remove_mouse_area.property("containsMouse"))
-            assert center_hovered is True
-            assert edge_hovered is True
+            qtbot.waitUntil(current_remove_button_hovered, timeout=3000)
+    remove_button = find_remove_button()
+    assert remove_button is not None
     assert QMetaObject.invokeMethod(
         remove_button, "click", Qt.ConnectionType.DirectConnection
     )
@@ -695,6 +1409,124 @@ class FakeCopyTagsWorker(QObject):
 
     def isRunning(self) -> bool:
         return False
+
+
+@pytest.mark.parametrize(("source_text", "mode", "expected"), [
+    ("Saved caption", "add", "Target caption\n\nSaved caption"),
+    ("Saved caption", "replace", "Saved caption"),
+    ("", "replace", ""),
+])
+def test_copy_description_qml_modes_confirm_replacement_and_clear(
+    qtbot: QtBot,
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+    source_text: str,
+    mode: str,
+    expected: str,
+) -> None:
+    # Arrange
+    controller, _, _, source = tagging_controller
+    assert controller._repo is not None
+    target = tmp_path / "target.jpg"
+    target.write_bytes(b"image")
+    controller._repo.upsert_image(str(target), target.name, 1.0, 5, {}, "")
+    TaggingService(controller._repo, FilesystemSidecarRepository()).set_description(
+        str(target), "Target caption", "replace",
+    )
+    set_id = controller.createImageSet("Description destination")
+    controller._repo.add_images_to_set(set_id, [str(source), str(target)])
+    if source_text:
+        controller.updateSelectedDescriptionDraft(source_text)
+        assert controller.saveSelectedDescription("replace")
+    engine = QQmlApplicationEngine()
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(_QML_DIR / "TaggingDrawer.qml")))
+    drawer = component.createWithInitialProperties({
+        "appController": controller, "appSettings": controller._settings, "copyMode": True,
+    })
+    assert drawer is not None, [error.toString() for error in component.errors()]
+    window = QQuickWindow()
+    window.setWidth(1200)
+    window.setHeight(800)
+    drawer.setProperty("parent", window.contentItem())
+    window.show()
+    qtbot.waitExposed(window)
+    QMetaObject.invokeMethod(drawer, "openTaggingPanel", Qt.ConnectionType.DirectConnection)
+    qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=3000)
+    target_selector = drawer.findChild(QObject, "copyDescriptionTarget")
+    button = drawer.findChild(QObject, "copyDescriptionButton")
+    replace_mode = drawer.findChild(QObject, "copyDescriptionReplaceMode")
+    dialog = drawer.findChild(QObject, "replaceCopiedDescriptionDialog")
+    assert target_selector is not None and button is not None
+    assert replace_mode is not None and dialog is not None
+    target_selector.setProperty("currentIndex", int(target_selector.property("count")) - 1)
+    assert target_selector.property("currentValue") == f"set:{set_id}"
+    assert bool(button.property("enabled")) == bool(source_text)
+    if mode == "replace":
+        replace_mode.setProperty("checked", True)
+    assert button.property("enabled")
+
+    # Act
+    QMetaObject.invokeMethod(button, "clicked", Qt.ConnectionType.DirectConnection)
+    if mode == "replace":
+        assert dialog.property("visible")
+        assert not controller.isTaggingBulk
+        assert controller._repo.get_description(str(target)) == "Target caption"
+        QMetaObject.invokeMethod(dialog, "reject", Qt.ConnectionType.DirectConnection)
+        assert controller._repo.get_description(str(target)) == "Target caption"
+        QMetaObject.invokeMethod(button, "clicked", Qt.ConnectionType.DirectConnection)
+        QMetaObject.invokeMethod(dialog, "accept", Qt.ConnectionType.DirectConnection)
+    qtbot.waitUntil(lambda: not controller.isTaggingBulk, timeout=5000)
+
+    # Assert
+    assert controller._repo.get_description(str(target)) == expected
+    loaded = FilesystemSidecarRepository().read(target)
+    assert loaded is not None and loaded.sidecar.description == expected
+    assert controller.selectedImageDescription == source_text
+    assert "Copied description to 1 image(s)" in controller.taggingBulkSummary
+    drawer.deleteLater()
+    window.close()
+    window.deleteLater()
+    qtbot.wait(100)
+    engine.deleteLater()
+
+
+@pytest.mark.parametrize("scope", ["set", "marked", "destination"])
+def test_app_controller_copy_description_scopes_copy_saved_text_only(
+    qtbot: QtBot,
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+    scope: str,
+) -> None:
+    # Arrange
+    controller, _, _, source = tagging_controller
+    target = tmp_path / "target.jpg"
+    outside = tmp_path / "outside.jpg"
+    assert controller._repo is not None
+    for path in (target, outside):
+        path.write_bytes(b"image")
+        controller._repo.upsert_image(str(path), path.name, 1.0, 5, {}, "")
+        controller._repo.mark_image(str(path), True)
+    set_id = controller.createImageSet("Description copy set")
+    controller._repo.add_images_to_set(set_id, [str(source), str(target)])
+    controller.setActionImageSet(set_id)
+    controller.selectImageSetMember(str(source))
+    controller.updateSelectedDescriptionDraft("Saved source")
+    assert controller.saveSelectedDescription("replace")
+    controller.updateSelectedDescriptionDraft("Unsaved draft")
+    source_revision = FilesystemSidecarRepository.sidecar_path(source).stat().st_mtime_ns
+    selected_scope = f"set:{set_id}" if scope == "destination" else scope
+
+    # Act
+    controller.copySelectedDescription(selected_scope, "add")
+    qtbot.waitUntil(lambda: not controller.isTaggingBulk, timeout=5000)
+
+    # Assert
+    assert controller._repo.get_description(str(target)) == "Saved source"
+    assert controller._repo.get_description(str(outside)) == ""
+    assert not FilesystemSidecarRepository.sidecar_path(outside).exists()
+    assert controller.descriptionDraft == "Unsaved draft"
+    assert FilesystemSidecarRepository.sidecar_path(source).stat().st_mtime_ns == source_revision
+    assert "Copied description to 1 image(s)" in controller.taggingBulkSummary
 
 
 @pytest.mark.parametrize("scope, mode", [
@@ -797,10 +1629,12 @@ def test_app_controller_copy_tags_deleted_destination_does_not_start(
     assert not controller.isTaggingBulk
 
 
-def test_app_controller_copy_tags_folder_forwards_current_browse_scope(
+@pytest.mark.parametrize("copy_description", [False, True])
+def test_app_controller_copy_metadata_folder_forwards_current_browse_scope(
     tagging_controller: tuple[AppController, SearchListModel, Path, Path],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    copy_description: bool,
 ) -> None:
     # Arrange
     controller, _model, _db_path, image_path = tagging_controller
@@ -814,7 +1648,10 @@ def test_app_controller_copy_tags_folder_forwards_current_browse_scope(
     monkeypatch.setattr(app_controller_module, "CopyTagsWorker", FakeCopyTagsWorker)
 
     # Act
-    controller.copySelectedTags("folder", "replace")
+    if copy_description:
+        controller.copySelectedDescription("folder", "replace")
+    else:
+        controller.copySelectedTags("folder", "replace")
 
     # Assert
     worker = FakeCopyTagsWorker.instances[0]
@@ -828,14 +1665,17 @@ def test_app_controller_copy_tags_folder_forwards_current_browse_scope(
         "date_from": 100,
         "date_to": 200,
         "image_set_id": None,
+        **({"copy_description": True} if copy_description else {}),
     }
     assert worker.started is True
 
 
-def test_app_controller_copy_tags_results_uses_complete_ai_cache(
+@pytest.mark.parametrize("copy_description", [False, True])
+def test_app_controller_copy_metadata_results_uses_complete_ai_cache(
     tagging_controller: tuple[AppController, SearchListModel, Path, Path],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    copy_description: bool,
 ) -> None:
     # Arrange
     controller, _model, _db_path, image_path = tagging_controller
@@ -850,12 +1690,16 @@ def test_app_controller_copy_tags_results_uses_complete_ai_cache(
     monkeypatch.setattr(app_controller_module, "CopyTagsWorker", FakeCopyTagsWorker)
 
     # Act
-    controller.copySelectedTags("results", "add")
+    if copy_description:
+        controller.copySelectedDescription("results", "add")
+    else:
+        controller.copySelectedTags("results", "add")
 
     # Assert
     worker = FakeCopyTagsWorker.instances[0]
     assert worker.options == {
-        "image_paths": [str(image_path), str(second_path)]
+        "image_paths": [str(image_path), str(second_path)],
+        **({"copy_description": True} if copy_description else {}),
     }
     assert worker.started is True
 

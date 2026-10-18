@@ -3501,3 +3501,131 @@ msgstr "← Seleziona una cartella per sfogliare le immagini"
 
 #~ msgid "New set name"
 #~ msgstr "Nome raccolta"
+
+#: QML
+msgid "A draft is being kept for %1. Return to that image or discard the draft."
+msgstr "La bozza per %1 è conservata. Torna a quell'immagine o scarta la bozza."
+
+#: QML
+msgid "Append"
+msgstr "Aggiungi"
+
+#: QML
+msgid "Description"
+msgstr "Descrizione"
+
+#: QML
+msgid "Description draft"
+msgstr "Bozza descrizione"
+
+#: QML
+msgid "Discard draft"
+msgstr "Scarta bozza"
+
+#: QML
+msgid "No saved description."
+msgstr "Nessuna descrizione salvata."
+
+#: QML
+msgid "Replace the saved description?"
+msgstr "Sostituire la descrizione salvata?"
+
+#: QML
+msgid ""
+"The saved description changed while you were editing. Discard this draft "
+"before continuing."
+msgstr ""
+"La descrizione salvata è cambiata durante la modifica. Scarta questa "
+"bozza prima di continuare."
+
+#: QML
+msgid "This will clear the saved description. This cannot be undone."
+msgstr ""
+"La descrizione salvata verrà cancellata. Questa operazione non può essere"
+" annullata."
+
+#: QML
+msgid "This will replace the saved description. This cannot be undone."
+msgstr ""
+"La descrizione salvata verrà sostituita. Questa operazione non può essere"
+" annullata."
+
+#: QML
+msgid "Write a description to append or replace"
+msgstr "Scrivi una descrizione da aggiungere o sostituire"
+
+#: QML
+msgid "Ignore embedded description"
+msgstr "Ignora la descrizione incorporata"
+
+#: QML
+msgid "Embedded description"
+msgstr "Descrizione incorporata"
+
+#: QML
+msgid "Existing embedded description"
+msgstr "Descrizione incorporata esistente"
+
+#: QML
+msgid "Save"
+msgstr "Salva"
+
+msgid "Copy tags and descriptions"
+msgstr "Copia tag e descrizioni"
+
+msgid "Close copy panel"
+msgstr "Chiudi pannello di copia"
+
+msgid "Copy description to other images"
+msgstr "Copia descrizione su altre immagini"
+
+msgid "Copies the saved custom description only. Drafts, embedded descriptions, and ignore settings are not copied. The current image is excluded."
+msgstr "Copia solo la descrizione personalizzata salvata. Bozze, descrizioni incorporate e impostazioni di esclusione non vengono copiate. L'immagine corrente è esclusa."
+
+msgid "Append the source description as a new paragraph"
+msgstr "Aggiungi la descrizione sorgente come nuovo paragrafo"
+
+msgid "Replace or clear target custom descriptions"
+msgstr "Sostituisci o cancella le descrizioni personalizzate di destinazione"
+
+msgid "Copy Description"
+msgstr "Copia descrizione"
+
+msgid "Copying descriptions"
+msgstr "Copia delle descrizioni"
+
+msgid "Replace descriptions on target images?"
+msgstr "Sostituire le descrizioni delle immagini di destinazione?"
+
+msgid "The saved custom description will replace each target's custom description. An empty source clears it. This cannot be undone."
+msgstr "La descrizione personalizzata salvata sostituirà quella di ogni destinazione. Una sorgente vuota la cancella. Questa operazione non può essere annullata."
+
+msgid "Choose whether to add or replace descriptions."
+msgstr "Scegli se aggiungere o sostituire le descrizioni."
+
+msgid "Copied description to {} image(s). Unchanged: {}. Problems: {}."
+msgstr "Descrizione copiata in {} immagine/i. Invariate: {}. Problemi: {}."
+
+#: QML
+msgid "Final derivative description"
+msgstr "Descrizione finale della copia"
+
+#: QML
+msgid "No description would be written to a derivative."
+msgstr "Nessuna descrizione verrebbe scritta nella copia."
+
+#: QML
+msgid "No embedded description."
+msgstr "Nessuna descrizione incorporata."
+
+#: QML
+msgid "Custom description"
+msgstr "Descrizione personalizzata"
+
+#: QML
+msgid "No custom description."
+msgstr "Nessuna descrizione personalizzata."
+
+#: QML
+msgid "Remove embedded descriptions from exported copies, even without a replacement. Originals stay unchanged."
+msgstr "Rimuovi le descrizioni incorporate dalle copie esportate, anche senza sostituzione. Gli originali restano invariati."

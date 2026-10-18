@@ -69,6 +69,7 @@ ApplicationWindow {
     // Automation helper: used by the tagging acceptance script.
     function openTaggingSettingsForAutomation() {
         taggingDrawer.close()
+        copyTaggingDrawer.close()
         mainTabBar.currentIndex = 3
         Qt.callLater(function() {
             settingsScroll.contentItem.contentY = Math.max(0, taggingSettingsSection.y - 120)
@@ -91,6 +92,28 @@ ApplicationWindow {
     onClosing: (close) => { if (controller) controller.onAppClosing() }
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────
+    function navigateResultList(view, event, browse) {
+        var step
+        switch (event.key) {
+        case Qt.Key_Down: step = 1; break
+        case Qt.Key_Up: step = -1; break
+        case Qt.Key_PageDown: step = Math.max(1, Math.floor(view.height / 210)); break
+        case Qt.Key_PageUp: step = -Math.max(1, Math.floor(view.height / 210)); break
+        default: return
+        }
+        event.accepted = true
+        if (!controller || view.count === 0)
+            return
+        var next = Math.max(0, Math.min(view.currentIndex + step, view.count - 1))
+        if (next === view.currentIndex)
+            return
+        root._previewNavigating = true
+        controller.selectResult(next)
+        view.positionViewAtIndex(next, ListView.Contain)
+        if (browse && step > 0)
+            root._scheduleBrowseDirectionalPrefetch(1)
+    }
+
     Shortcut {
         sequences: [ StandardKey.Find ]
         onActivated: {
@@ -1294,7 +1317,7 @@ ApplicationWindow {
         id: mainTabBar
         objectName: "mainTabBar"
         anchors { top: parent.top; left: parent.left }
-        width: 700   // 5 × 140 px — left-aligned, not stretched
+        width: Math.min(700, parent.width - (taggingWorkbenchButton.visible ? 100 : 0))
         implicitHeight: 40
         visible: !_isLocked
         z: 10
@@ -1333,6 +1356,8 @@ ApplicationWindow {
             controller.setActionImageSet(currentIndex === 3 ? setsPage.selectedSetId : 0)
             if (taggingDrawer.visible)
                 taggingDrawer.close()
+            if (copyTaggingDrawer.visible)
+                copyTaggingDrawer.close()
             if (currentIndex === 1) {
                 // Entering Browse: snapshot Search filters (incl. searchField
                 // text) and clear them so Browse shows un-filtered folder
@@ -1354,9 +1379,32 @@ ApplicationWindow {
     }
 
     ToolButton {
+        id: copyTaggingWorkbenchButton
+        objectName: "copyTaggingWorkbenchButton"
+        anchors { top: parent.top; right: parent.right; rightMargin: 8 }
+        width: 40; height: 40
+        z: 11
+        visible: taggingWorkbenchButton.visible
+        enabled: !_isLocked
+        icon.source: "../../assets/multiple_tags_icon.svg"
+        icon.width: 22
+        icon.height: 22
+        onClicked: copyTaggingDrawer.opened ? copyTaggingDrawer.close() : copyTaggingDrawer.openTaggingPanel()
+        Accessible.name: qsTr("Copy tags and descriptions")
+        ToolTip.text: qsTr("Copy tags and descriptions")
+        ToolTip.visible: hovered
+        ToolTip.delay: 400
+    }
+
+    readonly property real taggingPanelInset: Math.max(
+        taggingDrawer.width * taggingDrawer.position,
+        copyTaggingDrawer.width * copyTaggingDrawer.position
+    )
+
+    ToolButton {
         id: taggingWorkbenchButton
         objectName: "taggingWorkbenchButton"
-        anchors { top: parent.top; right: parent.right; rightMargin: 8 }
+        anchors { top: parent.top; right: copyTaggingWorkbenchButton.left; rightMargin: 4 }
         width: 40; height: 40
         z: 11
         visible: !_isLocked && (root._searchOrBrowseActive || mainTabBar.currentIndex === 3)
@@ -1379,13 +1427,28 @@ ApplicationWindow {
         setMode: mainTabBar.currentIndex === 3
         setName: setsPage.selectedSet ? setsPage.selectedSet.name : ""
         currentSetId: setsPage.selectedSetId
+        onAboutToShow: copyTaggingDrawer.close()
+    }
+
+    TaggingDrawer {
+        id: copyTaggingDrawer
+        objectName: "copyTaggingDrawer"
+        copyMode: true
+        appController: controller
+        appSettings: settingsModel
+        selectedFilename: controller ? controller.taggingFilename : ""
+        browseMode: mainTabBar.currentIndex === 1
+        setMode: mainTabBar.currentIndex === 3
+        setName: setsPage.selectedSet ? setsPage.selectedSet.name : ""
+        currentSetId: setsPage.selectedSetId
+        onAboutToShow: taggingDrawer.close()
     }
 
     // ── Search tab ───────────────────────────────────────────────────────
     SplitView {
         id: mainSplit
         objectName: "searchContentViewport"
-        anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; rightMargin: taggingDrawer.width * taggingDrawer.position; bottom: parent.bottom }
+        anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; rightMargin: root.taggingPanelInset; bottom: parent.bottom }
         visible: !_isLocked && mainTabBar.currentIndex === 0
         orientation: Qt.Vertical
         handle: Rectangle {
@@ -1762,6 +1825,9 @@ ApplicationWindow {
                     ListView {
                         id: resultsList
                         objectName: "resultsList"
+                        Keys.onPressed: function(event) {
+                            root.navigateResultList(resultsList, event, false)
+                        }
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
@@ -2737,7 +2803,7 @@ ApplicationWindow {
     SplitView {
         id: browseSplit
         objectName: "browseContentViewport"
-        anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; rightMargin: taggingDrawer.width * taggingDrawer.position; bottom: parent.bottom }
+        anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; rightMargin: root.taggingPanelInset; bottom: parent.bottom }
         visible: !_isLocked && mainTabBar.currentIndex === 1
         orientation: Qt.Horizontal
 
@@ -2965,6 +3031,9 @@ ApplicationWindow {
                     ListView {
                         id: browseImageList
                         objectName: "browseImageList"
+                        Keys.onPressed: function(event) {
+                            root.navigateResultList(browseImageList, event, true)
+                        }
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
@@ -3845,7 +3914,7 @@ ApplicationWindow {
     // ── Sets tab ─────────────────────────────────────────────────────────
     SetsPage {
         id: setsPage
-        anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; rightMargin: taggingDrawer.width * taggingDrawer.position; bottom: parent.bottom }
+        anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; rightMargin: root.taggingPanelInset; bottom: parent.bottom }
         visible: !_isLocked && mainTabBar.currentIndex === 3
         appController: controller
         accentColor: root._accentColor

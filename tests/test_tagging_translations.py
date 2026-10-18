@@ -40,6 +40,8 @@ _TAGGING_MESSAGES = (
         "Choose a folder in Browse first.",
         "Choose a valid copy target.",
         "Copied tags to {} image(s). Unchanged: {}. Problems: {}.",
+        "Choose whether to add or replace descriptions.",
+        "Copied description to {} image(s). Unchanged: {}. Problems: {}.",
         "Canceled. {}",
         "Created derivative: {}",
         "Created 1 derivative.",

@@ -54,12 +54,103 @@ class _FakePort:
     ) -> tuple[str, ...]:
         return tuple(tags)
 
+    def set_image_description(
+        self, image_id: int, path: str, description: str, mode: str
+    ) -> tuple[str, bool]:
+        if path == "/tmp/fail.jpg":
+            raise RuntimeError("sidecar conflict")
+        return description, True
+
+    def set_image_description_excluded(
+        self, image_id: int, path: str, excluded: bool
+    ) -> tuple[bool, bool]:
+        return excluded, True
+
+    def set_image_embedded_tag_excluded(
+        self, image_id: int, path: str, tag: str, excluded: bool
+    ) -> tuple[tuple[str, ...], bool, bool]:
+        if path == "/tmp/fail.jpg":
+            raise RuntimeError("sidecar conflict")
+        return ((tag,) if excluded else ()), False, True
+
+    def set_image_all_embedded_tags_excluded(
+        self, image_id: int, path: str, excluded: bool
+    ) -> tuple[tuple[str, ...], bool, bool]:
+        if path == "/tmp/fail.jpg":
+            raise RuntimeError("sidecar conflict")
+        return (), excluded, True
+
+
+@pytest.mark.parametrize("all_tags", [False, True])
+def test_mcp_embedded_tag_exclusion_tools_expose_schema_and_surface_errors(all_tags: bool) -> None:
+    # Arrange
+    server = McpServerFactory(McpSessionService(_FakePort(None))).create()
+    name = "set_image_all_embedded_tags_excluded" if all_tags else "set_image_embedded_tag_excluded"
+    tool = _tool_fn(server, name)
+    arguments = {} if all_tags else {"tag": "Keyword"}
+
+    # Act
+    result = tool(image_id=3, path="/tmp/x.jpg", excluded=True, **arguments)
+    failed = tool(image_id=3, path="/tmp/fail.jpg", excluded=True, **arguments)
+    invalid = tool(image_id=3, path="/tmp/x.jpg", excluded="true", **arguments)
+    schema = next(tool.parameters for tool in server._tool_manager.list_tools() if tool.name == name)
+
+    # Assert
+    assert not result.is_error and result.structured_content is not None
+    assert result.structured_content["changed"]
+    assert result.structured_content["exclude_all_embedded_tags"] is all_tags
+    assert result.structured_content["excluded_embedded_tags"] == ([] if all_tags else ["Keyword"])
+    assert failed.is_error and invalid.is_error
+    assert set(schema["required"]) == {"image_id", "path", "excluded", *arguments}
+
 
 def _tool_fn(server: Any, name: str):
     for tool in server._tool_manager.list_tools():  # noqa: SLF001
         if tool.name == name:
             return tool.fn
     raise AssertionError(f"tool not found: {name}")
+
+
+def test_mcp_description_tools_expose_explicit_modes_and_report_errors() -> None:
+    # Arrange
+    server = McpServerFactory(McpSessionService(_FakePort(None))).create()
+    single = _tool_fn(server, "set_image_description")
+    batch = _tool_fn(server, "set_image_descriptions_batch")
+
+    # Act
+    saved = single(image_id=3, path="/tmp/x.jpg", description="Caption", mode="replace")
+    failed = single(image_id=3, path="/tmp/fail.jpg", description="Caption", mode="append")
+    mixed = batch(updates=[
+        {"image_id": 3, "path": "/tmp/x.jpg", "description": "Caption", "mode": "replace"},
+        {"image_id": 3, "path": "/tmp/fail.jpg", "description": "Caption", "mode": "append"},
+    ])
+    schema = next(tool.parameters for tool in server._tool_manager.list_tools() if tool.name == "set_image_description")
+
+    # Assert
+    assert saved.structured_content is not None
+    assert saved.structured_content["description"] == "Caption"
+    assert saved.structured_content["changed"] is True
+    assert failed.is_error
+    assert mixed.structured_content is not None
+    assert mixed.structured_content["succeeded"] == 1
+    assert mixed.structured_content["failed"] == 1
+    assert set(schema["required"]) == {"image_id", "path", "description", "mode"}
+
+
+def test_mcp_description_exclusion_tool_needs_no_description_text() -> None:
+    # Arrange
+    server = McpServerFactory(McpSessionService(_FakePort(None))).create()
+    tool = _tool_fn(server, "set_image_description_excluded")
+
+    # Act
+    result = tool(image_id=3, path="/tmp/x.jpg", excluded=True)
+    invalid = tool(image_id=3, path="/tmp/x.jpg", excluded="true")
+
+    # Assert
+    assert not result.is_error
+    assert result.structured_content is not None
+    assert result.structured_content["exclude_embedded_description"] is True
+    assert invalid.is_error
 
 
 def test_mcp_server_factory_get_selected_image_tool_returns_payload() -> None:
@@ -71,6 +162,7 @@ def test_mcp_server_factory_get_selected_image_tool_returns_payload() -> None:
         free_tags=("tag-a",),
         has_preview=True,
         metadata_json='{"A":1}',
+        description="Saved caption",
     )
     factory = McpServerFactory(McpSessionService(_FakePort(snapshot)))
     server = factory.create()
@@ -84,6 +176,7 @@ def test_mcp_server_factory_get_selected_image_tool_returns_payload() -> None:
     assert result.structured_content is not None
     assert result.structured_content["path"] == "/tmp/x.jpg"
     assert result.structured_content["free_tags"] == ["tag-a"]
+    assert result.structured_content["description"] == "Saved caption"
     assert any(getattr(c, "type", None) == "image" for c in result.content)
 
 

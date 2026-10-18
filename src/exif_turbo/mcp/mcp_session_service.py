@@ -7,6 +7,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
+from ..models.image_sidecar import ImageSidecar, normalize_free_tag
+from ..models.image_tag import SidecarValidationError
+
 from .selected_image_port import SelectedImagePort
 from .selected_image_snapshot import SelectedImageSnapshot
 
@@ -33,6 +36,10 @@ class SelectedImagePayload:
     has_preview: bool
     metadata: dict[str, Any] | None
     preview_jpeg_base64: str | None
+    description: str = ""
+    exclude_embedded_description: bool = False
+    excluded_embedded_tags: tuple[str, ...] = ()
+    exclude_all_embedded_tags: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -40,6 +47,10 @@ class SelectedImagePayload:
             "filename": self.filename,
             "image_id": self.image_id,
             "free_tags": list(self.free_tags),
+            "description": self.description,
+            "exclude_embedded_description": self.exclude_embedded_description,
+            "excluded_embedded_tags": list(self.excluded_embedded_tags),
+            "exclude_all_embedded_tags": self.exclude_all_embedded_tags,
             "has_preview": self.has_preview,
             "metadata": self.metadata,
             "preview_jpeg_base64": self.preview_jpeg_base64,
@@ -67,7 +78,131 @@ class McpSessionService:
             has_preview=snapshot.has_preview,
             metadata=self._parse_metadata(snapshot.metadata_json),
             preview_jpeg_base64=preview_b64,
+            description=snapshot.description,
+            exclude_embedded_description=snapshot.exclude_embedded_description,
+            excluded_embedded_tags=snapshot.excluded_embedded_tags,
+            exclude_all_embedded_tags=snapshot.exclude_all_embedded_tags,
         )
+
+    @staticmethod
+    def _validate_exclusion_request(image_id: int, path: str, excluded: bool) -> None:
+        if isinstance(image_id, bool) or not isinstance(image_id, int) or image_id < 1:
+            raise McpSessionError("image_id must be a positive integer.")
+        if not isinstance(path, str) or not path:
+            raise McpSessionError("path is required.")
+        if not isinstance(excluded, bool):
+            raise McpSessionError("excluded must be a boolean.")
+
+    def set_image_embedded_tag_excluded(
+        self, image_id: int, path: str, tag: str, excluded: bool
+    ) -> dict[str, Any]:
+        self._validate_exclusion_request(image_id, path, excluded)
+        if not isinstance(tag, str):
+            raise McpSessionError("tag must be a string.")
+        try:
+            normalized = normalize_free_tag(tag)
+        except SidecarValidationError as exc:
+            raise McpSessionError(str(exc)) from exc
+        result = self._port.set_image_embedded_tag_excluded(image_id, path, normalized, excluded)
+        return self._tag_exclusion_result(image_id, path, result, "set_image_embedded_tag_excluded")
+
+    def set_image_all_embedded_tags_excluded(
+        self, image_id: int, path: str, excluded: bool
+    ) -> dict[str, Any]:
+        self._validate_exclusion_request(image_id, path, excluded)
+        result = self._port.set_image_all_embedded_tags_excluded(image_id, path, excluded)
+        return self._tag_exclusion_result(image_id, path, result, "set_image_all_embedded_tags_excluded")
+
+    @staticmethod
+    def _tag_exclusion_result(
+        image_id: int, path: str, result: tuple[tuple[str, ...], bool, bool], operation: str,
+    ) -> dict[str, Any]:
+        tags, exclude_all, changed = result
+        _log.info(
+            "MCP %s succeeded: image_id=%s path=%r exclude_all=%s changed=%s",
+            operation, image_id, path, exclude_all, changed,
+        )
+        return {
+            "image_id": image_id, "path": path, "ok": True,
+            "excluded_embedded_tags": list(tags),
+            "exclude_all_embedded_tags": exclude_all, "changed": changed,
+        }
+
+    def set_image_description_excluded(
+        self, image_id: int, path: str, excluded: bool
+    ) -> dict[str, Any]:
+        self._validate_exclusion_request(image_id, path, excluded)
+        resulting, changed = self._port.set_image_description_excluded(image_id, path, excluded)
+        _log.info(
+            "MCP set_image_description_excluded succeeded: image_id=%s path=%r excluded=%s changed=%s",
+            image_id, path, resulting, changed,
+        )
+        return {
+            "image_id": image_id, "path": path, "ok": True,
+            "exclude_embedded_description": resulting, "changed": changed,
+        }
+
+    def set_image_description(
+        self, image_id: int, path: str, description: str, mode: str
+    ) -> dict[str, Any]:
+        if isinstance(image_id, bool) or not isinstance(image_id, int) or image_id < 1:
+            raise McpSessionError("image_id must be a positive integer.")
+        if not isinstance(path, str) or not path:
+            raise McpSessionError("path is required.")
+        if not isinstance(mode, str) or mode not in {"append", "replace"}:
+            raise McpSessionError("mode must be 'append' or 'replace'.")
+        try:
+            normalized = ImageSidecar.normalize_description(description)
+        except SidecarValidationError as exc:
+            raise McpSessionError(str(exc)) from exc
+        if mode == "append" and not normalized:
+            raise McpSessionError("append requires a non-empty description.")
+        resulting, changed = self._port.set_image_description(
+            image_id, path, normalized, mode
+        )
+        _log.info(
+            "MCP set_image_description succeeded: image_id=%s path=%r mode=%s changed=%s",
+            image_id, path, mode, changed,
+        )
+        return {
+            "image_id": image_id, "path": path, "ok": True,
+            "description": resulting, "changed": changed,
+        }
+
+    def set_image_descriptions_batch(self, updates: Sequence[Any]) -> dict[str, Any]:
+        if not isinstance(updates, Sequence) or isinstance(updates, (str, bytes)):
+            raise McpSessionError("updates must be a list of description operations.")
+        if len(updates) > MAX_IMAGE_TAG_BATCH_SIZE:
+            raise McpSessionError("A description batch may contain at most 100 images.")
+        results: list[dict[str, Any]] = []
+        for update in updates:
+            if not isinstance(update, Mapping):
+                results.append({"ok": False, "error": "Each update must be an object."})
+                continue
+            try:
+                image_id = update.get("image_id")
+                path = update.get("path")
+                description = update.get("description")
+                mode = update.get("mode")
+                if isinstance(image_id, bool) or not isinstance(image_id, int):
+                    raise McpSessionError("image_id must be a positive integer.")
+                if not isinstance(path, str):
+                    raise McpSessionError("path is required.")
+                if not isinstance(description, str):
+                    raise McpSessionError("description must be a string.")
+                if not isinstance(mode, str):
+                    raise McpSessionError("mode must be 'append' or 'replace'.")
+                result = self.set_image_description(
+                    image_id, path, description, mode,
+                )
+            except Exception as exc:  # noqa: BLE001 — surface per-image failures
+                result = {
+                    "image_id": update.get("image_id"), "path": update.get("path"),
+                    "ok": False, "error": str(exc),
+                }
+            results.append(result)
+        succeeded = sum(result["ok"] for result in results)
+        return {"results": results, "succeeded": succeeded, "failed": len(results) - succeeded}
 
     def add_custom_tags(self, tags: Sequence[str]) -> dict[str, Any]:
         cleaned = [tag.strip() for tag in tags if isinstance(tag, str) and tag.strip()]

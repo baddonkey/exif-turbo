@@ -1215,6 +1215,72 @@ def browse_navigation_window(
 
 
 class TestBrowseNavigationQml:
+    @pytest.mark.parametrize("tab_index", [0, 1])
+    @pytest.mark.parametrize("panel", [None, "taggingDrawer", "copyTaggingDrawer"])
+    def test_arrow_navigation_updates_selection_preview_metadata_and_tagging(
+        self,
+        qtbot: QtBot,
+        browse_navigation_window: tuple[AppController, SearchListModel, QQmlApplicationEngine, object],
+        tab_index: int,
+        panel: str | None,
+    ) -> None:
+        # Arrange
+        controller, model, engine, root = browse_navigation_window
+        assert isinstance(root, QQuickWindow)
+        tab_bar = root.findChild(QQuickItem, "mainTabBar")
+        assert tab_bar is not None
+        if tab_index == 1:
+            with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
+                tab_bar.setProperty("currentIndex", 1)
+                controller.browseFolder(str(Path(model.get_path(0)).parent))
+        controller.setTaggingEnabled(True)
+        paths = [model.get_path(row) for row in (0, 1)]
+        assert all(paths)
+        for row in (0, 1):
+            controller.selectResult(row)
+            controller.updateSelectedDescriptionDraft(f"Caption {row}")
+            assert controller.saveSelectedDescription("replace")
+        controller.selectResult(0)
+        drawer = root.findChild(QObject, panel or "taggingDrawer")
+        image_list = root.findChild(QQuickItem, "browseImageList" if tab_index else "resultsList")
+        assert drawer is not None and image_list is not None
+        root.show()
+        qtbot.waitExposed(root)
+        if panel:
+            QMetaObject.invokeMethod(drawer, "openTaggingPanel", Qt.ConnectionType.DirectConnection)
+            qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=3000)
+        root.requestActivate()
+        image_list.forceActiveFocus()
+        qtbot.waitUntil(lambda: image_list.hasActiveFocus(), timeout=3000)
+        qtbot.waitUntil(lambda: bool(controller.selectedImageSource), timeout=3000)
+
+        # Act / Assert
+        for key, row in ((Qt.Key.Key_Down, 1), (Qt.Key.Key_Up, 0)):
+            previous_preview = controller.selectedImageSource
+            QTest.keyClick(root, key)
+            assert int(image_list.property("currentIndex")) == row
+            assert controller.currentResultRow == row
+            assert controller._pending_preview_path == paths[row]
+            assert json.loads(controller._details_plain_text) == json.loads(model.get_metadata_json(row))
+            assert controller.selectedImageDescription == f"Caption {row}"
+            editor = drawer.findChild(QQuickItem, "descriptionDraftEditor")
+            assert editor is not None and editor.property("text") == f"Caption {row}"
+            assert drawer.property("opened") == bool(panel)
+            qtbot.waitUntil(
+                lambda: bool(controller.selectedImageSource)
+                    and controller.selectedImageSource != previous_preview,
+                timeout=3000,
+            )
+
+        if panel:
+            editor = drawer.findChild(QQuickItem, "descriptionDraftEditor")
+            assert editor is not None
+            editor.forceActiveFocus()
+            QTest.keyClick(root, Qt.Key.Key_Down)
+            assert controller.currentResultRow == 0
+            assert int(image_list.property("currentIndex")) == 0
+            assert controller.selectedImageDescription == "Caption 0"
+
     @pytest.mark.parametrize("cancelable", [True, False])
     def test_busy_overlay_changing_paths_preserves_panel_geometry(
         self,

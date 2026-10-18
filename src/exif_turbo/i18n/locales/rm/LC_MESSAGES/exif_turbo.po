@@ -3500,3 +3500,129 @@ msgstr "← Tscherner ina cartella per navigar ils maletgs"
 
 #~ msgid "New set name"
 #~ msgstr "Num da la collecziun"
+
+#: QML
+msgid "A draft is being kept for %1. Return to that image or discard the draft."
+msgstr ""
+"Ina sbozza vegn mantegnida per %1. Turnai a quell'immagine u stizzai la "
+"sbozza."
+
+#: QML
+msgid "Append"
+msgstr "Agiuntar"
+
+#: QML
+msgid "Description"
+msgstr "Descripziun"
+
+#: QML
+msgid "Description draft"
+msgstr "Sboz da descripziun"
+
+#: QML
+msgid "Discard draft"
+msgstr "Stizzar sbozza"
+
+#: QML
+msgid "No saved description."
+msgstr "Nagina descripziun memorisada."
+
+#: QML
+msgid "Replace the saved description?"
+msgstr "Remplazzar la descripziun memorisada?"
+
+#: QML
+msgid ""
+"The saved description changed while you were editing. Discard this draft "
+"before continuing."
+msgstr ""
+"La descripziun memorisada è sa midada durant la modificaziun. Stizzai "
+"questa sbozza avant da cuntinuar."
+
+#: QML
+msgid "This will clear the saved description. This cannot be undone."
+msgstr "La descripziun memorisada vegn stizzada. Quai na po betg vegnir revocà."
+
+#: QML
+msgid "This will replace the saved description. This cannot be undone."
+msgstr "La descripziun memorisada vegn remplazzada. Quai na po betg vegnir revocà."
+
+#: QML
+msgid "Write a description to append or replace"
+msgstr "Scriva ina descripziun per agiuntar u remplazzar"
+
+#: QML
+msgid "Ignore embedded description"
+msgstr "Ignorar la descripziun integrada"
+
+#: QML
+msgid "Embedded description"
+msgstr "Descripziun integrada"
+
+#: QML
+msgid "Existing embedded description"
+msgstr "Descripziun integrada existenta"
+
+#: QML
+msgid "Save"
+msgstr "Memorisar"
+
+msgid "Copy tags and descriptions"
+msgstr "Copiar tags e descripziuns"
+
+msgid "Close copy panel"
+msgstr "Serrar la fanestra da copiar"
+
+msgid "Copy description to other images"
+msgstr "Copiar la descripziun sin auters maletgs"
+
+msgid "Copies the saved custom description only. Drafts, embedded descriptions, and ignore settings are not copied. The current image is excluded."
+msgstr "Copia mo la descripziun persunalisada memorisada. Sbozs, descripziuns integradas e parameters d'exclusiun na vegnan betg copiads. Il maletg actual è exclus."
+
+msgid "Append the source description as a new paragraph"
+msgstr "Agiuntar la descripziun da funtauna sco nov paragraf"
+
+msgid "Replace or clear target custom descriptions"
+msgstr "Remplazzar u stizzar las descripziuns persunalisadas da destinaziun"
+
+msgid "Copy Description"
+msgstr "Copiar la descripziun"
+
+msgid "Copying descriptions"
+msgstr "Copiar las descripziuns"
+
+msgid "Replace descriptions on target images?"
+msgstr "Remplazzar las descripziuns dals maletgs da destinaziun?"
+
+msgid "The saved custom description will replace each target's custom description. An empty source clears it. This cannot be undone."
+msgstr "La descripziun persunalisada memorisada remplazza quella da mintga destinaziun. Ina funtauna vida la stizza. Quai na po betg vegnir revocà."
+
+msgid "Choose whether to add or replace descriptions."
+msgstr "Tscherna sche descripziuns duain vegnir agiuntadas u remplazzadas."
+
+msgid "Copied description to {} image(s). Unchanged: {}. Problems: {}."
+msgstr "Descripziun copiada sin {} maletg(s). Betg midà: {}. Problems: {}."
+
+#: QML
+msgid "Final derivative description"
+msgstr "Descripziun finala da la copia"
+
+#: QML
+msgid "No description would be written to a derivative."
+msgstr "Nagina descripziun na vegniss scritta en la copia."
+
+#: QML
+msgid "No embedded description."
+msgstr "Nagina descripziun integrada."
+
+#: QML
+msgid "Custom description"
+msgstr "Descripziun persunalisada"
+
+#: QML
+msgid "No custom description."
+msgstr "Nagina descripziun persunalisada."
+
+#: QML
+msgid "Remove embedded descriptions from exported copies, even without a replacement. Originals stay unchanged."
+msgstr "Allontanar las descripziuns integradas da las copias exportadas, era senza remplazzament. Ils originals restan nunmidads."

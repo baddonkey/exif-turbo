@@ -3500,3 +3500,133 @@ msgstr "← Ordner auswählen, um Bilder zu durchsuchen"
 
 #~ msgid "New set name"
 #~ msgstr "Name der Sammlung"
+
+#: QML
+msgid "A draft is being kept for %1. Return to that image or discard the draft."
+msgstr ""
+"Ein Entwurf für %1 wird beibehalten. Kehren Sie zu diesem Bild zurück "
+"oder verwerfen Sie den Entwurf."
+
+#: QML
+msgid "Append"
+msgstr "Anhängen"
+
+#: QML
+msgid "Description"
+msgstr "Beschreibung"
+
+#: QML
+msgid "Description draft"
+msgstr "Beschreibungsentwurf"
+
+#: QML
+msgid "Discard draft"
+msgstr "Entwurf verwerfen"
+
+#: QML
+msgid "No saved description."
+msgstr "Keine gespeicherte Beschreibung."
+
+#: QML
+msgid "Replace the saved description?"
+msgstr "Gespeicherte Beschreibung ersetzen?"
+
+#: QML
+msgid ""
+"The saved description changed while you were editing. Discard this draft "
+"before continuing."
+msgstr ""
+"Die gespeicherte Beschreibung wurde während der Bearbeitung geändert. "
+"Verwerfen Sie diesen Entwurf, bevor Sie fortfahren."
+
+#: QML
+msgid "This will clear the saved description. This cannot be undone."
+msgstr ""
+"Die gespeicherte Beschreibung wird gelöscht. Dieser Vorgang kann nicht "
+"rückgängig gemacht werden."
+
+#: QML
+msgid "This will replace the saved description. This cannot be undone."
+msgstr ""
+"Die gespeicherte Beschreibung wird ersetzt. Dieser Vorgang kann nicht "
+"rückgängig gemacht werden."
+
+#: QML
+msgid "Write a description to append or replace"
+msgstr "Beschreibung zum Anhängen oder Ersetzen eingeben"
+
+#: QML
+msgid "Ignore embedded description"
+msgstr "Eingebettete Beschreibung ignorieren"
+
+#: QML
+msgid "Embedded description"
+msgstr "Eingebettete Beschreibung"
+
+#: QML
+msgid "Existing embedded description"
+msgstr "Vorhandene eingebettete Beschreibung"
+
+#: QML
+msgid "Save"
+msgstr "Speichern"
+
+msgid "Copy tags and descriptions"
+msgstr "Tags und Beschreibungen kopieren"
+
+msgid "Close copy panel"
+msgstr "Kopierbereich schließen"
+
+msgid "Copy description to other images"
+msgstr "Beschreibung auf andere Bilder kopieren"
+
+msgid "Copies the saved custom description only. Drafts, embedded descriptions, and ignore settings are not copied. The current image is excluded."
+msgstr "Kopiert nur die gespeicherte benutzerdefinierte Beschreibung. Entwürfe, eingebettete Beschreibungen und Ignoriereinstellungen werden nicht kopiert. Das aktuelle Bild ist ausgeschlossen."
+
+msgid "Append the source description as a new paragraph"
+msgstr "Quellbeschreibung als neuen Absatz anhängen"
+
+msgid "Replace or clear target custom descriptions"
+msgstr "Benutzerdefinierte Zielbeschreibungen ersetzen oder löschen"
+
+msgid "Copy Description"
+msgstr "Beschreibung kopieren"
+
+msgid "Copying descriptions"
+msgstr "Beschreibungen werden kopiert"
+
+msgid "Replace descriptions on target images?"
+msgstr "Beschreibungen auf Zielbildern ersetzen?"
+
+msgid "The saved custom description will replace each target's custom description. An empty source clears it. This cannot be undone."
+msgstr "Die gespeicherte benutzerdefinierte Beschreibung ersetzt die Beschreibung jedes Zielbilds. Eine leere Quelle löscht sie. Dies kann nicht rückgängig gemacht werden."
+
+msgid "Choose whether to add or replace descriptions."
+msgstr "Wählen Sie, ob Beschreibungen hinzugefügt oder ersetzt werden sollen."
+
+msgid "Copied description to {} image(s). Unchanged: {}. Problems: {}."
+msgstr "Beschreibung auf {} Bild(er) kopiert. Unverändert: {}. Probleme: {}."
+
+#: QML
+msgid "Final derivative description"
+msgstr "Endgültige Derivat-Beschreibung"
+
+#: QML
+msgid "No description would be written to a derivative."
+msgstr "Es würde keine Beschreibung in ein Derivat geschrieben."
+
+#: QML
+msgid "No embedded description."
+msgstr "Keine eingebettete Beschreibung."
+
+#: QML
+msgid "Custom description"
+msgstr "Benutzerdefinierte Beschreibung"
+
+#: QML
+msgid "No custom description."
+msgstr "Keine benutzerdefinierte Beschreibung."
+
+#: QML
+msgid "Remove embedded descriptions from exported copies, even without a replacement. Originals stay unchanged."
+msgstr "Eingebettete Beschreibungen aus exportierten Kopien entfernen, auch ohne Ersatz. Originale bleiben unverändert."
