@@ -1216,13 +1216,13 @@ def browse_navigation_window(
 
 class TestBrowseNavigationQml:
     @pytest.mark.parametrize("tab_index", [0, 1])
-    @pytest.mark.parametrize("panel_open", [False, True])
+    @pytest.mark.parametrize("panel", [None, "taggingDrawer", "copyTaggingDrawer"])
     def test_arrow_navigation_updates_selection_preview_metadata_and_tagging(
         self,
         qtbot: QtBot,
         browse_navigation_window: tuple[AppController, SearchListModel, QQmlApplicationEngine, object],
         tab_index: int,
-        panel_open: bool,
+        panel: str | None,
     ) -> None:
         # Arrange
         controller, model, engine, root = browse_navigation_window
@@ -1241,12 +1241,12 @@ class TestBrowseNavigationQml:
             controller.updateSelectedDescriptionDraft(f"Caption {row}")
             assert controller.saveSelectedDescription("replace")
         controller.selectResult(0)
-        drawer = root.findChild(QObject, "taggingDrawer")
+        drawer = root.findChild(QObject, panel or "taggingDrawer")
         image_list = root.findChild(QQuickItem, "browseImageList" if tab_index else "resultsList")
         assert drawer is not None and image_list is not None
         root.show()
         qtbot.waitExposed(root)
-        if panel_open:
+        if panel:
             QMetaObject.invokeMethod(drawer, "openTaggingPanel", Qt.ConnectionType.DirectConnection)
             qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=3000)
         root.requestActivate()
@@ -1265,14 +1265,14 @@ class TestBrowseNavigationQml:
             assert controller.selectedImageDescription == f"Caption {row}"
             editor = drawer.findChild(QQuickItem, "descriptionDraftEditor")
             assert editor is not None and editor.property("text") == f"Caption {row}"
-            assert drawer.property("opened") == panel_open
+            assert drawer.property("opened") == bool(panel)
             qtbot.waitUntil(
                 lambda: bool(controller.selectedImageSource)
                     and controller.selectedImageSource != previous_preview,
                 timeout=3000,
             )
 
-        if panel_open:
+        if panel:
             editor = drawer.findChild(QQuickItem, "descriptionDraftEditor")
             assert editor is not None
             editor.forceActiveFocus()

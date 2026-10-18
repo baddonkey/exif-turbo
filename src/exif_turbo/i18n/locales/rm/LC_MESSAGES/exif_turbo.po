@@ -3567,6 +3567,12 @@ msgstr "Descripziun integrada existenta"
 msgid "Save"
 msgstr "Memorisar"
 
+msgid "Copy tags and descriptions"
+msgstr "Copiar tags e descripziuns"
+
+msgid "Close copy panel"
+msgstr "Serrar la fanestra da copiar"
+
 msgid "Copy description to other images"
 msgstr "Copiar la descripziun sin auters maletgs"
 

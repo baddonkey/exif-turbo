@@ -3572,6 +3572,12 @@ msgstr "Description intégrée existante"
 msgid "Save"
 msgstr "Enregistrer"
 
+msgid "Copy tags and descriptions"
+msgstr "Copier les tags et descriptions"
+
+msgid "Close copy panel"
+msgstr "Fermer le panneau de copie"
+
 msgid "Copy description to other images"
 msgstr "Copier la description vers d'autres images"
 

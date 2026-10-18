@@ -101,11 +101,13 @@ def test_sets_and_tagging_views_null_controller_emit_no_type_errors(
 
 
 @pytest.mark.parametrize(("width", "height"), [(1200, 800), (720, 420)])
+@pytest.mark.parametrize("copy_mode", [False, True])
 def test_tagging_drawer_two_columns_group_controls_and_scroll_independently(
     qtbot: QtBot,
     tagging_controller: tuple[AppController, SearchListModel, Path, Path],
     width: int,
     height: int,
+    copy_mode: bool,
 ) -> None:
     # Arrange
     controller, _, _, _ = tagging_controller
@@ -116,7 +118,7 @@ def test_tagging_drawer_two_columns_group_controls_and_scroll_independently(
     engine = QQmlApplicationEngine()
     component = QQmlComponent(engine, QUrl.fromLocalFile(str(_QML_DIR / "TaggingDrawer.qml")))
     drawer = component.createWithInitialProperties({
-        "appController": controller, "appSettings": controller._settings,
+        "appController": controller, "appSettings": controller._settings, "copyMode": copy_mode,
     })
     assert drawer is not None, [error.toString() for error in component.errors()]
     window = QQuickWindow()
@@ -132,17 +134,24 @@ def test_tagging_drawer_two_columns_group_controls_and_scroll_independently(
 
     # Assert
     left = drawer.findChild(QQuickItem, "customTaggingColumn")
-    right = drawer.findChild(QQuickItem, "existingTaggingColumn")
+    right = drawer.findChild(QQuickItem, "copyTaggingColumn" if copy_mode else "existingTaggingColumn")
     assert left is not None and right is not None
+    copy_scroll = drawer.findChild(QQuickItem, "copyTaggingScrollView")
+    embedded_scroll = drawer.findChild(QQuickItem, "existingTaggingScrollView")
+    assert copy_scroll is not None and embedded_scroll is not None
+    assert copy_scroll.isVisible() is copy_mode
+    assert embedded_scroll.isVisible() is not copy_mode
     left.ensurePolished()
     right.ensurePolished()
     assert left.width() > 300
     assert left.width() == pytest.approx(right.width(), abs=2)
     assert left.mapToScene(QPointF(left.width(), 0)).x() < right.mapToScene(QPointF()).x()
     for column, names in (
-        (left, ("customTagsGroup", "descriptionEditor", "copyTagsGroup", "copyDescriptionGroup")),
-        (right, (
-            "existingImageTagsGroup", "existingEmbeddedDescriptionGroup",
+        (left, ("customTagsGroup", "descriptionEditor") if copy_mode else (
+            "existingImageTagsGroup", "customTagsGroup",
+        )),
+        (right, ("copyTagsGroup", "copyDescriptionGroup") if copy_mode else (
+            "existingEmbeddedDescriptionGroup", "descriptionEditor",
         )),
     ):
         previous_bottom = 0.0
@@ -172,20 +181,93 @@ def test_tagging_drawer_two_columns_group_controls_and_scroll_independently(
 
     if height == 420:
         flickables: list[QQuickItem] = []
-        for name in ("taggingScrollView", "existingTaggingScrollView"):
+        for name in (
+            "taggingScrollView", "copyTaggingScrollView" if copy_mode else "existingTaggingScrollView",
+        ):
             scroll = drawer.findChild(QQuickItem, name)
             assert scroll is not None
             flickable = scroll.property("contentItem")
             assert isinstance(flickable, QQuickItem)
-            assert float(flickable.property("contentHeight")) > flickable.height()
+            if not copy_mode or name == "copyTaggingScrollView":
+                assert float(flickable.property("contentHeight")) > flickable.height()
             flickables.append(flickable)
         left_flickable, right_flickable = flickables
-        left_flickable.setProperty("contentY", 40)
+        if not copy_mode:
+            left_flickable.setProperty("contentY", 40)
         assert float(right_flickable.property("contentY")) == 0
         right_flickable.setProperty("contentY", 60)
-        assert float(left_flickable.property("contentY")) == 40
+        assert float(left_flickable.property("contentY")) == (0 if copy_mode else 40)
         assert footer.y() >= columns.y() + columns.height()
 
+    drawer.deleteLater()
+    window.close()
+    window.deleteLater()
+    qtbot.wait(100)
+    engine.deleteLater()
+
+
+def test_copy_panel_source_previews_are_read_only_and_use_saved_text(
+    qtbot: QtBot,
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+) -> None:
+    # Arrange
+    controller, _, _, path = tagging_controller
+    controller.addSelectedFreeTag("Custom tag")
+    controller._update_exif_table(json.dumps({
+        "XMP-dc:Subject": ["Embedded tag"], "IFD0:ImageDescription": "Embedded caption",
+    }))
+    controller.updateSelectedDescriptionDraft("Saved caption")
+    assert controller.saveSelectedDescription("replace")
+    controller.updateSelectedDescriptionDraft("Unsaved draft")
+    before = FilesystemSidecarRepository().read(path)
+    engine = QQmlApplicationEngine()
+    component = QQmlComponent(engine, QUrl.fromLocalFile(str(_QML_DIR / "TaggingDrawer.qml")))
+    drawer = component.createWithInitialProperties({
+        "appController": controller, "appSettings": controller._settings, "copyMode": True,
+    })
+    assert drawer is not None, [error.toString() for error in component.errors()]
+    window = QQuickWindow()
+    window.setWidth(1200)
+    window.setHeight(800)
+    drawer.setProperty("parent", window.contentItem())
+    window.show()
+    qtbot.waitExposed(window)
+    QMetaObject.invokeMethod(drawer, "openTaggingPanel", Qt.ConnectionType.DirectConnection)
+    qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=3000)
+    editor = drawer.findChild(QQuickItem, "descriptionDraftEditor")
+    preview = drawer.findChild(QQuickItem, "finalDerivativeDescription")
+    tags = drawer.findChild(QQuickItem, "currentFreeTags")
+    final_tags = drawer.findChild(QQuickItem, "finalDerivativeTags")
+    assert editor is not None and preview is not None
+    assert tags is not None and final_tags is not None
+    tags.ensurePolished()
+    final_tags.ensurePolished()
+
+    # Act
+    editor.forceActiveFocus()
+    QTest.keyClick(window, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+    QTest.keyClick(window, Qt.Key.Key_Backspace)
+    QTest.keyClick(window, Qt.Key.Key_Return)
+
+    # Assert
+    assert editor.property("readOnly") and preview.property("readOnly")
+    assert editor.property("text") == "Saved caption"
+    assert preview.property("text") == "Embedded caption\n\nSaved caption"
+    assert int(tags.property("count")) == 1
+    assert int(final_tags.property("count")) == 2
+    assert controller.descriptionDraft == "Unsaved draft"
+    assert FilesystemSidecarRepository().read(path) == before
+    for name in ("freeTagField", "saveDescriptionButton", "discardDescriptionDraftButton"):
+        control = drawer.findChild(QQuickItem, name)
+        assert control is not None and not control.isVisible() and not control.isEnabled()
+    qtbot.waitUntil(lambda: tags.property("currentItem") is not None, timeout=3000)
+    tag_item = tags.property("currentItem")
+    assert isinstance(tag_item, QQuickItem)
+    remove_button = tag_item.findChild(QQuickItem, "removeFreeTagButton")
+    assert remove_button is not None and not remove_button.isVisible() and not remove_button.isEnabled()
+    for name in ("copyTagsButton", "copyDescriptionButton"):
+        control = drawer.findChild(QQuickItem, name)
+        assert control is not None and control.isVisible() and control.isEnabled()
     drawer.deleteLater()
     window.close()
     window.deleteLater()
@@ -1350,7 +1432,7 @@ def test_copy_description_qml_modes_confirm_replacement_and_clear(
     engine = QQmlApplicationEngine()
     component = QQmlComponent(engine, QUrl.fromLocalFile(str(_QML_DIR / "TaggingDrawer.qml")))
     drawer = component.createWithInitialProperties({
-        "appController": controller, "appSettings": controller._settings,
+        "appController": controller, "appSettings": controller._settings, "copyMode": True,
     })
     assert drawer is not None, [error.toString() for error in component.errors()]
     window = QQuickWindow()

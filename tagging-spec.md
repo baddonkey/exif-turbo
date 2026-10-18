@@ -124,10 +124,19 @@ finalizing the copy.
 ## Description Editing and MCP
 
 The tagging drawer uses two independently scrollable columns. The left contains
-Custom tags, Custom description, Copy Tags, and Copy Description. The right
-contains Existing image tags and Existing embedded description, in that order.
+Existing image tags followed by Custom tags. The right contains Existing embedded
+description followed by Custom description.
 Final derivative tags and Final derivative description are side-by-side previews
 in a shared, always-visible bottom row outside both scrollable columns.
+
+Copy Tags and Copy Description live in a separate non-modal panel opened by a
+multiple-tags toolbar icon in Search, Browse, and Sets. It shows saved custom
+tags and description read-only on the left, copy controls on the right, and
+read-only final derivative tags and description at the bottom. It never shows
+an unsaved draft as the saved source description. Opening either panel closes
+the other, and the main content reserves space for the active panel. Source
+previews follow the current selection; editing remains in the normal tagging
+drawer.
 
 The tagging drawer shows the saved custom description in one multiline editor.
 Save replaces the entire custom description; saving empty text clears it.

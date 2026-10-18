@@ -3570,6 +3570,12 @@ msgstr "Descrizione incorporata esistente"
 msgid "Save"
 msgstr "Salva"
 
+msgid "Copy tags and descriptions"
+msgstr "Copia tag e descrizioni"
+
+msgid "Close copy panel"
+msgstr "Chiudi pannello di copia"
+
 msgid "Copy description to other images"
 msgstr "Copia descrizione su altre immagini"
 

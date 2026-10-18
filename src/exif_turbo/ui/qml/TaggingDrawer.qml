@@ -16,6 +16,7 @@ Drawer {
 
     required property var appController
     required property var appSettings
+    property bool copyMode: false
     property string selectedFilename: ""
     property bool browseMode: false
     property bool setMode: false
@@ -140,7 +141,7 @@ Drawer {
     function openTaggingPanel() {
         refreshCopyTargets()
         open()
-        if (appController && appController.freeTaggingAvailable)
+        if (!copyMode && appController && appController.freeTaggingAvailable)
             appController.searchFreeTags("")
     }
 
@@ -160,7 +161,7 @@ Drawer {
             return
         drawer.syncingDescription = true
         try {
-            descriptionDraftEditor.text = drawer.appController.descriptionDraftMatchesSelection
+            descriptionDraftEditor.text = !drawer.copyMode && drawer.appController.descriptionDraftMatchesSelection
                 ? drawer.appController.descriptionDraft
                 : drawer.appController.selectedImageDescription
         } finally {
@@ -204,7 +205,7 @@ Drawer {
                     Layout.fillWidth: true
                     spacing: 1
                     Label {
-                        text: qsTr("TAGGING")
+                        text: drawer.copyMode ? qsTr("Copy tags and descriptions") : qsTr("TAGGING")
                         color: Material.accent
                         font.pixelSize: 13
                         font.weight: Font.DemiBold
@@ -225,7 +226,7 @@ Drawer {
                     text: "\u2715"
                     implicitWidth: 36; implicitHeight: 36
                     onClicked: drawer.close()
-                    ToolTip.text: qsTr("Close tagging")
+                    ToolTip.text: drawer.copyMode ? qsTr("Close copy panel") : qsTr("Close tagging")
                     ToolTip.visible: hovered
                 }
 
@@ -250,6 +251,7 @@ Drawer {
                 ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
                 ColumnLayout {
+                    id: customTaggingColumn
                     objectName: "customTaggingColumn"
                     width: parent.width
                     spacing: 0
@@ -282,6 +284,66 @@ Drawer {
                     }
 
                     ColumnLayout {
+                        objectName: "existingImageTagsGroup"
+                        visible: !drawer.copyMode && drawer.hasSelection
+                        Layout.fillWidth: true
+                        Layout.margins: 14
+                        spacing: 6
+
+                        Label {
+                            text: qsTr("Existing image tags")
+                            font.pixelSize: 13
+                            font.weight: Font.DemiBold
+                        }
+                        Switch {
+                            objectName: "excludeAllEmbeddedTagsSwitch"
+                            Layout.fillWidth: true
+                            visible: embeddedTags.count > 0
+                            text: qsTr("Ignore all existing tags")
+                            checked: appController ? appController.excludeAllEmbeddedTags : false
+                            onToggled: appController.setExcludeAllSelectedEmbeddedTags(checked)
+                        }
+                        Label {
+                            visible: embeddedTags.count === 0
+                            text: qsTr("No embedded tags found.")
+                            font.pixelSize: 11
+                            opacity: 0.55
+                        }
+                        ListView {
+                            id: embeddedTags
+                            objectName: "embeddedTags"
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.min(contentHeight, 120)
+                            visible: count > 0
+                            clip: true
+                            interactive: contentHeight > height
+                            model: appController ? appController.embeddedTagsModel : null
+                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                            delegate: ItemDelegate {
+                                required property string label
+                                required property bool excluded
+                                readonly property bool effectivelyExcluded: excluded
+                                    || (!!drawer.appController && drawer.appController.excludeAllEmbeddedTags)
+                                width: embeddedTags.width
+                                height: 34
+                                highlighted: effectivelyExcluded
+                                enabled: !!drawer.appController && !drawer.appController.excludeAllEmbeddedTags
+                                onClicked: appController.setSelectedEmbeddedTagExcluded(
+                                    label, !excluded
+                                )
+                                contentItem: Label {
+                                    text: label
+                                    elide: Text.ElideRight
+                                    verticalAlignment: Text.AlignVCenter
+                                    font.pixelSize: 12
+                                    font.strikeout: effectivelyExcluded
+                                    opacity: effectivelyExcluded ? 0.55 : 0.85
+                                }
+                            }
+                        }
+                    }
+
+                    ColumnLayout {
                         objectName: "customTagsGroup"
                         visible: appController && appController.freeTaggingAvailable
                         Layout.fillWidth: true
@@ -295,6 +357,8 @@ Drawer {
                         }
 
                         RowLayout {
+                            visible: !drawer.copyMode
+                            enabled: !drawer.copyMode
                             Layout.fillWidth: true
                             spacing: 6
                             TextField {
@@ -330,7 +394,7 @@ Drawer {
                         }
 
                         Label {
-                            visible: drawer.showFreeTagSuggestions && freeTagSuggestions.count > 0
+                            visible: !drawer.copyMode && drawer.showFreeTagSuggestions && freeTagSuggestions.count > 0
                             text: qsTr("Remembered tags")
                             font.pixelSize: 10
                             opacity: 0.6
@@ -340,7 +404,7 @@ Drawer {
                             objectName: "freeTagSuggestions"
                             Layout.fillWidth: true
                             Layout.preferredHeight: Math.min(contentHeight, 120)
-                            visible: drawer.showFreeTagSuggestions && count > 0
+                            visible: !drawer.copyMode && drawer.showFreeTagSuggestions && count > 0
                             clip: true
                             model: appController ? appController.freeTagSuggestionsModel : null
                             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
@@ -384,6 +448,8 @@ Drawer {
                                 ToolButton {
                                     id: removeFreeTagButton
                                     objectName: "removeFreeTagButton"
+                                    visible: !drawer.copyMode
+                                    enabled: !drawer.copyMode
                                     anchors.right: parent.right
                                     anchors.rightMargin: 20
                                     anchors.verticalCenter: parent.verticalCenter
@@ -421,100 +487,39 @@ Drawer {
                         }
                     }
 
-                    ColumnLayout {
-                        objectName: "descriptionEditor"
-                        visible: drawer.hasSelection
+                    Label {
                         Layout.fillWidth: true
-                        Layout.margins: 14
-                        spacing: 8
-
-                        Label {
-                            text: qsTr("Custom description")
-                            font.pixelSize: 13
-                            font.weight: Font.DemiBold
-                        }
-                        ScrollView {
-                            objectName: "descriptionDraftScrollView"
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: Math.min(
-                                Math.max(descriptionDraftEditor.implicitHeight, 72), 160
-                            )
-                            clip: true
-                            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-                            ScrollBar.vertical.policy: ScrollBar.AsNeeded
-
-                            TextArea {
-                                id: descriptionDraftEditor
-                                objectName: "descriptionDraftEditor"
-                                enabled: drawer.hasSelection && drawer.appController
-                                    && !drawer.locallyBusy
-                                    && drawer.appController.descriptionDraftCanEdit
-                                    && drawer.appController.freeTaggingAvailable
-                                placeholderText: qsTr("Custom description")
-                                textFormat: TextEdit.PlainText
-                                selectByMouse: true
-                                wrapMode: TextEdit.Wrap
-                                onTextChanged: {
-                                    if (!drawer.syncingDescription && activeFocus && enabled)
-                                        drawer.appController.updateSelectedDescriptionDraft(text)
-                                }
-                                Keys.onPressed: function(event) {
-                                    if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
-                                            && !(event.modifiers & Qt.ShiftModifier)) {
-                                        event.accepted = true
-                                        if (saveDescriptionButton.enabled)
-                                            drawer.appController.saveSelectedDescription("replace")
-                                    }
-                                }
-                                Component.onCompleted: drawer.syncDescriptionDraftField()
-                            }
-                        }
-                        Label {
-                            visible: drawer.appController
-                                && drawer.appController.descriptionDraftActive
-                                && !drawer.appController.descriptionDraftMatchesSelection
-                            text: qsTr("A draft is being kept for %1. Return to that image or discard the draft.")
-                                .arg(drawer.appController ? drawer.appController.descriptionDraftFilename : "")
-                            wrapMode: Text.WordWrap
-                            Layout.fillWidth: true
-                            color: Material.color(Material.Orange)
-                        }
-                        Label {
-                            visible: drawer.appController
-                                && drawer.appController.descriptionDraftSavedChanged
-                            text: qsTr("The saved description changed while you were editing. Discard this draft before continuing.")
-                            wrapMode: Text.WordWrap
-                            Layout.fillWidth: true
-                            color: Material.color(Material.Orange)
-                        }
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Button {
-                                id: saveDescriptionButton
-                                objectName: "saveDescriptionButton"
-                                text: qsTr("Save")
-                                enabled: drawer.appController && drawer.appController.freeTaggingAvailable
-                                    && !drawer.locallyBusy
-                                    && drawer.appController.descriptionDraftActive
-                                    && drawer.appController.descriptionDraftMatchesSelection
-                                    && !drawer.appController.descriptionDraftSavedChanged
-                                onClicked: drawer.appController.saveSelectedDescription("replace")
-                            }
-                            Button {
-                                objectName: "discardDescriptionDraftButton"
-                                text: qsTr("Discard draft")
-                                visible: drawer.appController && drawer.appController.descriptionDraftActive
-                                onClicked: drawer.appController.discardSelectedDescriptionDraft()
-                            }
-                        }
+                        Layout.leftMargin: 14; Layout.rightMargin: 14; Layout.bottomMargin: 10
+                        visible: appController && appController.selectedTaggingError !== ""
+                        text: drawer.appController ? drawer.appController.selectedTaggingError : ""
+                        color: Material.color(Material.Red)
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: 11
                     }
+                }
+            }
 
-                    Rectangle {
-                        visible: appController && appController.freeTaggingAvailable
-                        Layout.fillWidth: true
-                        height: 1
-                        color: Material.dividerColor
-                    }
+            Rectangle {
+                Layout.fillHeight: true
+                Layout.preferredWidth: 1
+                color: Material.dividerColor
+            }
+
+            ScrollView {
+                objectName: "copyTaggingScrollView"
+                visible: drawer.copyMode
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredWidth: 1
+                Layout.minimumWidth: 0
+                contentWidth: availableWidth
+                clip: true
+                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+                ColumnLayout {
+                    objectName: "copyTaggingColumn"
+                    width: parent.width
+                    spacing: 0
 
                     ColumnLayout {
                         objectName: "copyTagsGroup"
@@ -718,26 +723,12 @@ Drawer {
                         }
                     }
 
-                    Label {
-                        Layout.fillWidth: true
-                        Layout.leftMargin: 14; Layout.rightMargin: 14; Layout.bottomMargin: 10
-                        visible: appController && appController.selectedTaggingError !== ""
-                        text: drawer.appController ? drawer.appController.selectedTaggingError : ""
-                        color: Material.color(Material.Red)
-                        wrapMode: Text.WordWrap
-                        font.pixelSize: 11
-                    }
                 }
-            }
-
-            Rectangle {
-                Layout.fillHeight: true
-                Layout.preferredWidth: 1
-                color: Material.dividerColor
             }
 
             ScrollView {
                 objectName: "existingTaggingScrollView"
+                visible: !drawer.copyMode
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
@@ -747,69 +738,10 @@ Drawer {
                 ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
                 ColumnLayout {
+                    id: existingTaggingColumn
                     objectName: "existingTaggingColumn"
                     width: parent.width
                     spacing: 0
-
-                    ColumnLayout {
-                        objectName: "existingImageTagsGroup"
-                        Layout.fillWidth: true
-                        Layout.margins: 14
-                        spacing: 6
-                        visible: drawer.hasSelection
-
-                        Label {
-                            text: qsTr("Existing image tags")
-                            font.pixelSize: 13
-                            font.weight: Font.DemiBold
-                        }
-                        Switch {
-                            objectName: "excludeAllEmbeddedTagsSwitch"
-                            Layout.fillWidth: true
-                            visible: embeddedTags.count > 0
-                            text: qsTr("Ignore all existing tags")
-                            checked: appController ? appController.excludeAllEmbeddedTags : false
-                            onToggled: appController.setExcludeAllSelectedEmbeddedTags(checked)
-                        }
-                        Label {
-                            visible: embeddedTags.count === 0
-                            text: qsTr("No embedded tags found.")
-                            font.pixelSize: 11
-                            opacity: 0.55
-                        }
-                        ListView {
-                            id: embeddedTags
-                            objectName: "embeddedTags"
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: Math.min(contentHeight, 120)
-                            visible: count > 0
-                            clip: true
-                            interactive: contentHeight > height
-                            model: appController ? appController.embeddedTagsModel : null
-                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-                            delegate: ItemDelegate {
-                                required property string label
-                                required property bool excluded
-                                readonly property bool effectivelyExcluded: excluded
-                                    || (!!drawer.appController && drawer.appController.excludeAllEmbeddedTags)
-                                width: embeddedTags.width
-                                height: 34
-                                highlighted: effectivelyExcluded
-                                enabled: !!drawer.appController && !drawer.appController.excludeAllEmbeddedTags
-                                onClicked: appController.setSelectedEmbeddedTagExcluded(
-                                    label, !excluded
-                                )
-                                contentItem: Label {
-                                    text: label
-                                    elide: Text.ElideRight
-                                    verticalAlignment: Text.AlignVCenter
-                                    font.pixelSize: 12
-                                    font.strikeout: effectivelyExcluded
-                                    opacity: effectivelyExcluded ? 0.55 : 0.85
-                                }
-                            }
-                        }
-                    }
 
                     ColumnLayout {
                         objectName: "existingEmbeddedDescriptionGroup"
@@ -829,6 +761,16 @@ Drawer {
                             text: qsTr("No embedded description.")
                             opacity: 0.55
                             font.pixelSize: 11
+                        }
+                        Switch {
+                            objectName: "excludeEmbeddedDescriptionSwitch"
+                            Layout.fillWidth: true
+                            text: qsTr("Ignore embedded description")
+                            checked: drawer.appController
+                                ? drawer.appController.excludeEmbeddedDescription : false
+                            enabled: drawer.hasSelection && !drawer.locallyBusy
+                                && drawer.appController && drawer.appController.freeTaggingAvailable
+                            onToggled: drawer.appController.setSelectedEmbeddedDescriptionExcluded(checked)
                         }
                         ScrollView {
                             objectName: "embeddedDescriptionScrollView"
@@ -851,22 +793,104 @@ Drawer {
                                     && drawer.appController.excludeEmbeddedDescription
                             }
                         }
-                        Switch {
-                            objectName: "excludeEmbeddedDescriptionSwitch"
-                            Layout.fillWidth: true
-                            text: qsTr("Ignore embedded description")
-                            checked: drawer.appController
-                                ? drawer.appController.excludeEmbeddedDescription : false
-                            enabled: drawer.hasSelection && !drawer.locallyBusy
-                                && drawer.appController && drawer.appController.freeTaggingAvailable
-                            onToggled: drawer.appController.setSelectedEmbeddedDescriptionExcluded(checked)
-                        }
                         Label {
                             Layout.fillWidth: true
                             text: qsTr("Remove embedded descriptions from exported copies, even without a replacement. Originals stay unchanged.")
                             wrapMode: Text.WordWrap
                             font.pixelSize: 11
                             opacity: 0.65
+                        }
+                    }
+
+                    ColumnLayout {
+                        objectName: "descriptionEditor"
+                        parent: drawer.copyMode ? customTaggingColumn : existingTaggingColumn
+                        visible: drawer.hasSelection
+                        Layout.fillWidth: true
+                        Layout.margins: 14
+                        spacing: 8
+
+                        Label {
+                            text: qsTr("Custom description")
+                            font.pixelSize: 13
+                            font.weight: Font.DemiBold
+                        }
+                        ScrollView {
+                            objectName: "descriptionDraftScrollView"
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.min(
+                                Math.max(descriptionDraftEditor.implicitHeight, 72), 160
+                            )
+                            clip: true
+                            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                            ScrollBar.vertical.policy: ScrollBar.AsNeeded
+
+                            TextArea {
+                                id: descriptionDraftEditor
+                                objectName: "descriptionDraftEditor"
+                                readOnly: drawer.copyMode
+                                enabled: drawer.hasSelection && drawer.appController
+                                    && drawer.appController.freeTaggingAvailable
+                                    && (drawer.copyMode || (!drawer.locallyBusy
+                                        && drawer.appController.descriptionDraftCanEdit))
+                                placeholderText: qsTr("Custom description")
+                                textFormat: TextEdit.PlainText
+                                selectByMouse: true
+                                wrapMode: TextEdit.Wrap
+                                onTextChanged: {
+                                    if (!drawer.copyMode && !drawer.syncingDescription && activeFocus && enabled)
+                                        drawer.appController.updateSelectedDescriptionDraft(text)
+                                }
+                                Keys.onPressed: function(event) {
+                                    if (!drawer.copyMode && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                                            && !(event.modifiers & Qt.ShiftModifier)) {
+                                        event.accepted = true
+                                        if (saveDescriptionButton.enabled)
+                                            drawer.appController.saveSelectedDescription("replace")
+                                    }
+                                }
+                                Component.onCompleted: drawer.syncDescriptionDraftField()
+                            }
+                        }
+                        Label {
+                            visible: !drawer.copyMode && drawer.appController
+                                && drawer.appController.descriptionDraftActive
+                                && !drawer.appController.descriptionDraftMatchesSelection
+                            text: qsTr("A draft is being kept for %1. Return to that image or discard the draft.")
+                                .arg(drawer.appController ? drawer.appController.descriptionDraftFilename : "")
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                            color: Material.color(Material.Orange)
+                        }
+                        Label {
+                            visible: !drawer.copyMode && drawer.appController
+                                && drawer.appController.descriptionDraftSavedChanged
+                            text: qsTr("The saved description changed while you were editing. Discard this draft before continuing.")
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                            color: Material.color(Material.Orange)
+                        }
+                        RowLayout {
+                            visible: !drawer.copyMode
+                            enabled: !drawer.copyMode
+                            Layout.fillWidth: true
+                            Button {
+                                id: saveDescriptionButton
+                                objectName: "saveDescriptionButton"
+                                text: qsTr("Save")
+                                enabled: drawer.appController && drawer.appController.freeTaggingAvailable
+                                    && !drawer.locallyBusy
+                                    && drawer.appController.descriptionDraftActive
+                                    && drawer.appController.descriptionDraftMatchesSelection
+                                    && !drawer.appController.descriptionDraftSavedChanged
+                                onClicked: drawer.appController.saveSelectedDescription("replace")
+                            }
+                            Button {
+                                objectName: "discardDescriptionDraftButton"
+                                text: qsTr("Discard draft")
+                                visible: drawer.appController && drawer.appController.descriptionDraftActive
+                                onClicked: drawer.appController.discardSelectedDescriptionDraft()
+                            }
                         }
                     }
 
@@ -997,10 +1021,10 @@ Drawer {
                             selectByMouse: true
                             wrapMode: TextEdit.Wrap
                             font.pixelSize: 11
+                        }
+                    }
                 }
             }
-        }
-    }
         }
     }
 }

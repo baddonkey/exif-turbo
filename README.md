@@ -113,7 +113,10 @@ objects containing `image_id`, `path`, `description`, and explicit `mode`.
 Results are reported per image, including the resulting description and a
 `changed` flag. Existing descriptions are included in selected-image metadata
 and set-image listings. Description editing in the tagging drawer uses the same
-sidecar operations. **Copy Description** can append or replace saved custom
+sidecar operations. A separate **Copy tags and descriptions** panel, opened
+with the multiple-tags toolbar icon, provides read-only custom and derivative
+metadata previews alongside the bulk copy controls. The normal tagging panel
+remains editable. **Copy Description** can append or replace saved custom
 descriptions on the same targets as Copy Tags. Replace requires confirmation
 and can clear target descriptions when the source is empty; drafts and embedded
 metadata are not copied. Copy Tags remains unchanged. Derivative exports include the

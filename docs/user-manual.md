@@ -917,9 +917,8 @@ From the **Search**, **Browse**, or **Sets** tab, click the tag button at the up
 right or press **Ctrl+T**. In Sets, select an image in the member list first, or
 double-click a member to select it and open tagging. This does not change the
 focused Search image. The non-modal drawer has two independently scrollable
-columns: **Custom tags**, **Custom description**, **Copy tags to other images**,
-and **Copy description to other images** on the left;
-**Existing image tags** and **Existing embedded description** on the right.
+columns: **Existing image tags** followed by **Custom tags** on the left;
+**Existing embedded description** followed by **Custom description** on the right.
 **Final derivative tags** and **Final derivative description** remain visible
 side by side at the bottom, below both scrollable columns.
 When the Search or Browse image list has focus, arrow keys continue to select
@@ -983,6 +982,20 @@ It contains these controls:
   and writes/verifies the combined text in XMP-dc Description on the copy.
   With no custom text, embedded descriptions are retained unchanged unless
   ignored. Original files are never modified.
+### Copy panel
+
+Click the **multiple-tags icon** beside the tagging icon in Search, Browse, or
+Sets to open **Copy tags and descriptions**. This separate non-modal panel
+replaces the tagging drawer while open; the original tagging drawer remains
+editable when reopened.
+
+The copy panel shows the selected source's **Custom tags** and saved **Custom
+description** as read-only previews on the left, with copy controls on the
+right. **Final derivative tags** and **Final derivative description** remain
+read-only at the bottom. Unsaved description drafts are neither displayed as
+saved text nor copied. These previews follow the selected image. To edit the
+source, switch back to the normal tagging drawer.
+
 - **Copy Tags** copies custom tags and embedded-keyword exclusions to **Marked
   images**, **Current search results** (including unloaded pages), or **Current
   folder** while browsing. Individual exclusions transfer only when the same
@@ -996,7 +1009,7 @@ It contains these controls:
   regardless of current Search filters. The focused source image is excluded
   even if it belongs to the destination set.
   Copy Tags does not copy custom descriptions.
-- **Copy Description**, below Copy Tags, copies the saved custom description
+- **Copy Description**, below Copy Tags in the copy panel, copies the saved custom description
   using the same target choices. **Add** appends it as a new paragraph, separated
   by one blank line; it is disabled when the source description is empty.
   **Replace** overwrites each target's custom description, or clears it when
@@ -1010,7 +1023,7 @@ sections at the bottom are read-only previews.
 
 ### Marks and bulk scopes
 
-Custom-tag add and remove edit only the focused image. The drawer's **Copy
+Custom-tag add and remove edit only the focused image. The copy panel's **Copy
 Tags** action can use the persistent marked set as a bulk target, while marks
 also remain available as a derivative scope. Press
 **Space** to toggle the focused image's mark, then choose **Marked images** in
