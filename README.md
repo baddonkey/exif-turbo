@@ -4,6 +4,8 @@ Find photos by their metadata or by describing what they show. exif-turbo is a
 local-first desktop app for searching and browsing large photo and video
 collections on Windows, macOS, and Linux.
 
+For AI assisted tagging, watch out the companion project [Exif Turbo AI Tagger](https://github.com/baddonkey/tag-exif-turbo).
+
 [Download the latest release](https://github.com/baddonkey/exif-turbo/releases) ·
 [Read the User Manual](docs/user-manual.md)
 
