@@ -69,6 +69,8 @@ class ImageSidecar:
     exclude_all_embedded_tags: bool = False
     schema_version: int = 1
     extra: dict[str, Any] = field(default_factory=dict)
+    description: str = ""
+    exclude_embedded_description: bool = False
 
     def __post_init__(self) -> None:
         if self.schema_version not in {1, 2}:
@@ -82,6 +84,9 @@ class ImageSidecar:
                 "Wikidata and mixed controlled tags require sidecar schema version 2"
             )
         validate_utc_timestamp(self.updated_at, "updated_at")
+        if not isinstance(self.exclude_embedded_description, bool):
+            raise SidecarValidationError("exclude_embedded_description must be a boolean")
+        object.__setattr__(self, "description", self.normalize_description(self.description))
         concept_ids = [tag.concept_id for tag in self.tags]
         if len(concept_ids) != len(set(concept_ids)):
             raise SidecarValidationError("tags must be unique by concept_id")
@@ -135,6 +140,8 @@ class ImageSidecar:
             "free_tags",
             "excluded_embedded_tags",
             "exclude_all_embedded_tags",
+            "description",
+            "exclude_embedded_description",
         }
         return cls(
             schema_version=schema_version,
@@ -145,7 +152,21 @@ class ImageSidecar:
             excluded_embedded_tags=tuple(raw_excluded_embedded_tags),
             exclude_all_embedded_tags=exclude_all_embedded_tags,
             extra={key: value for key, value in data.items() if key not in known},
+            description=data.get("description", ""),
+            exclude_embedded_description=data.get("exclude_embedded_description", False),
         )
+
+    @staticmethod
+    def normalize_description(value: str) -> str:
+        if not isinstance(value, str):
+            raise SidecarValidationError("description must be a string")
+        normalized = unicodedata.normalize("NFC", value.replace("\r\n", "\n").replace("\r", "\n"))
+        if any(
+            unicodedata.category(character) == "Cc" and character not in "\n\t"
+            for character in normalized
+        ):
+            raise SidecarValidationError("description must not contain control characters")
+        return normalized.strip()
 
     def to_dict(self) -> dict[str, Any]:
         ordered_tags = sorted(
@@ -169,4 +190,6 @@ class ImageSidecar:
             "free_tags": ordered_free_tags,
             "excluded_embedded_tags": ordered_excluded_embedded_tags,
             "exclude_all_embedded_tags": self.exclude_all_embedded_tags,
+            "description": self.description,
+            "exclude_embedded_description": self.exclude_embedded_description,
         }

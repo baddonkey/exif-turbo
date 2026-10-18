@@ -252,7 +252,7 @@ Switch to **Expert** to expose the individual operations on each row:
 |--------|--------|
 | **Scan** | Incrementally re-index this folder (only files whose modification time changed). |
 | **Full Scan** | Force re-extract EXIF for every file in this folder. |
-| **Refresh Tags** | Force re-read sidecar tag files for this folder's indexed images without re-extracting EXIF or rebuilding previews. Newly added and changed sidecars update the tag/search cache; deleted sidecars remove their sidecar-managed tags from the cache. Malformed sidecars are left untouched and reported as errors. The operation appears in the persistent activity panel and can be canceled there. |
+| **Refresh Tags** | Force re-read sidecar files for this folder's indexed images without re-extracting EXIF or rebuilding previews. Newly added and changed sidecars update cached custom tags and descriptions, including search text; deleted sidecars remove both from the cache. Malformed sidecars are left untouched and reported as errors. The operation appears in the persistent activity panel and can be canceled there. |
 | **Build Previews** | Render preview-cache JPEGs for every image in this folder. While the build is running on this folder the same button reads **Cancel Previews**. Disabled while another folder's preview build is in progress. |
 | **AI-Scan** | Build missing CLIP vector embeddings for this folder only (incremental semantic-index build). While running, the same button reads **Cancel AI-Scan**. Visible only when AI features are enabled in Settings. |
 | **AI Full Scan** | Rebuild every CLIP vector embedding for this folder from scratch. While running, the same button reads **Cancel AI Full Scan**. Visible only when AI features are enabled. |
@@ -880,7 +880,8 @@ shown in full and never truncated.
 
 Tagging is optional for each database. Enable **Custom Tags** in Settings, then
 open the drawer from Search, Browse, or Sets with the tag button or **Ctrl+T**. Add
-your own labels, reuse remembered labels, and control which embedded keywords
+your own labels, append or replace a custom description, reuse remembered labels,
+and control which embedded keywords
 are included in derivative copies. There are no vocabulary lookups or AI tag
 suggestions. AI image search and AI-Scan are separate features.
 
@@ -888,13 +889,14 @@ suggestions. AI image search and AI-Scan are separate features.
 
 The first tagging change for `photo.jpg` creates `photo.jpg.sidecar.json` beside
 the image. Sidecars are deterministic UTF-8 JSON and the authoritative store for
-custom tags and derivative exclusions. They are plain text: SQLCipher database
+custom tags, descriptions, and derivative exclusions. They are plain text: SQLCipher database
 encryption does **not** encrypt them, so they inherit the source folder's
 permissions and backup policy. Tagging never changes the original image's bytes
 or timestamp.
 
 Custom labels are copied into the encrypted database's reusable tag catalog and
-FTS5 cache. Search uses the normal EXIF query box and syntax. Folder scans and
+FTS5 cache. Custom descriptions are also cached and searchable using the normal
+EXIF query box and syntax. Folder scans and
 **Refresh Tags** synchronize new, changed, and deleted sidecars without
 re-extracting EXIF. Malformed sidecars are reported and left untouched.
 
@@ -907,14 +909,22 @@ later unlock.
 Move or rename a sidecar together with its image. EXIF Turbo does not infer an
 external rename. Removing an image or indexed folder clears only database
 cache rows; it does not delete a sidecar. Deleting a sidecar removes its custom
-tags from FTS after the next synchronization.
+tags and custom description from FTS after the next synchronization.
 
 ### Tagging drawer
 
 From the **Search**, **Browse**, or **Sets** tab, click the tag button at the upper
 right or press **Ctrl+T**. In Sets, select an image in the member list first, or
 double-click a member to select it and open tagging. This does not change the
-focused Search image. The non-modal drawer contains these controls:
+focused Search image. The non-modal drawer has two independently scrollable
+columns: **Custom tags**, **Custom description**, **Copy tags to other images**,
+and **Copy description to other images** on the left;
+**Existing image tags** and **Existing embedded description** on the right.
+**Final derivative tags** and **Final derivative description** remain visible
+side by side at the bottom, below both scrollable columns.
+When the Search or Browse image list has focus, arrow keys continue to select
+images and update the preview, metadata, and tagging panel while it is open.
+It contains these controls:
 
 - **Existing image keywords** lists keywords already embedded in the original
   image's XMP or IPTC metadata. Select individual tags to exclude them from
@@ -927,8 +937,52 @@ focused Search image. The non-modal drawer contains these controls:
 - **Tags on current image** lists custom tags assigned to the focused image. Use
   the remove button to remove a tag from that image; the remembered suggestion
   remains available.
+- **Existing embedded description** groups the original description and its
+  **Ignore embedded description** switch. **Custom description** is a separate
+  section below **Custom tags**, with one editor showing text saved in the
+  sidecar and a **Save** button. Embedded text includes EXIF
+  ImageDescription (including `IFD0:ImageDescription`), IPTC captions, XMP
+  descriptions and language variants, and supported PNG/QuickTime descriptions.
+  Carriage-return line breaks are displayed as separate lines. The
+  **Ignore embedded description** switch strikes out embedded text as a preview
+  of its exclusion from exported copies; it remains visible for inspection.
+  An empty custom editor means that no sidecar description was saved.
+  Long embedded descriptions and custom descriptions have their
+  own vertical scrollbars so the entire text stays accessible.
+  The custom description is edited using a multiline
+  draft. **Save** replaces the entire custom description; saving empty text
+  clears it. **Enter** saves, while **Shift+Enter** inserts a newline.
+  Text is never saved automatically on focus loss. The MCP interface retains
+  explicit append and replace modes.
+  Unsaved drafts are protected when the selected image changes; an external or
+  MCP update does not silently overwrite a draft. Custom descriptions are
+  separate from embedded EXIF/IPTC/XMP descriptions, which remain untouched.
+- **Ignore embedded description** saves an independent sidecar flag. When
+  enabled, exported copies have their embedded XMP/IPTC/EXIF, PNG, and QuickTime
+  description fields removed and verified, even if no custom description is
+  supplied. Originals and source metadata search stay unchanged. Custom text and
+  unsaved description drafts are not cleared. Disable the switch to retain
+  embedded descriptions in subsequent exports. Copy Tags does not copy this
+  flag. If removal fails, the exporter reports an error and does not finalize
+  that copy.
 - **Final derivative keywords** previews the deduplicated custom tags and
   included embedded keywords that a derivative will receive.
+  MCP clients can control these exclusions with
+  `set_image_embedded_tag_excluded(image_id, path, tag, excluded)` for one keyword
+  or `set_image_all_embedded_tags_excluded(image_id, path, excluded)` for all
+  embedded keywords. Use `excluded=False` to restore inclusion. Individual
+  exclusions remain saved when ignore-all is toggled; restoring one keyword
+  does not override ignore-all. Both settings are returned in MCP image reads
+  and set-image listings. Originals and custom tags remain untouched.
+- **Final derivative description**, at the bottom beside the keyword preview,
+  shows the included embedded description followed by the saved custom
+  description, separated by one blank line. Ignoring the embedded description
+  leaves only custom text; with neither, the preview shows an empty-state
+  message. Unsaved drafts are not included. The preview is scrollable.
+  When custom text is present, export clears old embedded description fields
+  and writes/verifies the combined text in XMP-dc Description on the copy.
+  With no custom text, embedded descriptions are retained unchanged unless
+  ignored. Original files are never modified.
 - **Copy Tags** copies custom tags and embedded-keyword exclusions to **Marked
   images**, **Current search results** (including unloaded pages), or **Current
   folder** while browsing. Individual exclusions transfer only when the same
@@ -941,9 +995,18 @@ focused Search image. The non-modal drawer contains these controls:
   Sets. Choosing another set copies only to that destination's members,
   regardless of current Search filters. The focused source image is excluded
   even if it belongs to the destination set.
+  Copy Tags does not copy custom descriptions.
+- **Copy Description**, below Copy Tags, copies the saved custom description
+  using the same target choices. **Add** appends it as a new paragraph, separated
+  by one blank line; it is disabled when the source description is empty.
+  **Replace** overwrites each target's custom description, or clears it when
+  the source is empty. Replacement and clearing require confirmation.
+  Embedded descriptions, ignore settings, tags, and unsaved drafts are not
+  copied. The source image is excluded. Progress, cancellation, and per-image
+  error reporting work like Copy Tags; completed writes remain if canceled.
 
-Derivative generation starts from the **Action** menu. The drawer footer is a
-read-only preview.
+Derivative generation starts from the **Action** menu. The final derivative
+sections at the bottom are read-only previews.
 
 ### Marks and bulk scopes
 

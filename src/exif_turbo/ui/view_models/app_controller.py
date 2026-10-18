@@ -56,6 +56,7 @@ from ...models.indexed_folder import IndexedFolder
 from ...models.search_result import SearchResult
 from ...tagging.derivative_export_service import (
     extract_embedded_keyword_labels,
+    extract_embedded_description,
 )
 from ...tagging.custom_tag_migration import CustomTagMigrationService
 from ...utils.preview_cache import (
@@ -417,6 +418,8 @@ class AppController(QObject):
             selected_metadata_json=self._mcp_selected_metadata_json,
             selected_has_preview=self._mcp_selected_has_preview,
             selected_free_tags=self._mcp_selected_free_tags,
+            selected_description=self._mcp_selected_description,
+            selected_description_excluded=self._mcp_selected_description_excluded,
             load_preview_image=self._mcp_load_preview_image,
             get_tagging_service=lambda: self._tagging.service,
             tagging_available=lambda: self._tagging.free_tagging_available,
@@ -425,6 +428,11 @@ class AppController(QObject):
             get_image_set_images=self._mcp_get_image_set_images,
             load_indexed_preview_image=self._mcp_load_indexed_preview_image,
             set_image_custom_tags=self._mcp_set_image_custom_tags,
+            set_image_description=self._mcp_set_image_description,
+            set_image_description_excluded=self._mcp_set_image_description_excluded,
+            selected_tag_exclusions=self._mcp_selected_tag_exclusions,
+            set_image_embedded_tag_excluded=self._mcp_set_image_embedded_tag_excluded,
+            set_image_all_embedded_tags_excluded=self._mcp_set_image_all_embedded_tags_excluded,
             parent=self,
         )
         self._mcp.mcpStatusChanged.connect(self.mcpStatusChanged)
@@ -644,6 +652,27 @@ class AppController(QObject):
                 _log.exception("Failed to read free tags for MCP selection")
         return tuple(self._tagging.free_tags_model._rows)
 
+    def _mcp_selected_description(self) -> str:
+        path = self._tagging_selected_path()
+        service = self._tagging.service
+        if not path or service is None:
+            return ""
+        return service.get_image_tagging_state(path).description
+
+    def _mcp_selected_description_excluded(self) -> bool:
+        path = self._tagging_selected_path()
+        service = self._tagging.service
+        return bool(path and service and service.get_image_tagging_state(path).exclude_embedded_description)
+
+    def _mcp_selected_tag_exclusions(self) -> tuple[tuple[str, ...], bool]:
+        path = self._tagging_selected_path()
+        service = self._tagging.service
+        sidecar = service.get_image_tagging_state(path).sidecar if path and service else None
+        return (
+            ((), False) if sidecar is None
+            else (sidecar.excluded_embedded_tags, sidecar.exclude_all_embedded_tags)
+        )
+
     def _mcp_load_preview_image(self) -> PilImage.Image | None:
         path = self._tagging_selected_path()
         if not path:
@@ -676,8 +705,20 @@ class AppController(QObject):
         images = self._repo.get_image_set_members(
             set_id, limit=limit, offset=offset
         )
+        service = self._tagging.service
         for image in images:
-            image["free_tags"] = list(self._repo.get_free_tags(str(image["path"])))
+            image_path = str(image["path"])
+            image["free_tags"] = list(self._repo.get_free_tags(image_path))
+            state = None if service is None else service.get_image_tagging_state(image_path)
+            image["description"] = "" if state is None else state.description
+            image["exclude_embedded_description"] = bool(
+                state and state.exclude_embedded_description
+            )
+            sidecar = None if state is None else state.sidecar
+            image["excluded_embedded_tags"] = (
+                [] if sidecar is None else list(sidecar.excluded_embedded_tags)
+            )
+            image["exclude_all_embedded_tags"] = bool(sidecar and sidecar.exclude_all_embedded_tags)
         return images
 
     def _mcp_load_indexed_preview_image(
@@ -730,6 +771,92 @@ class AppController(QObject):
         self._refresh_after_tag_mutation()
         return result.sidecar.free_tags
 
+    def _mcp_set_image_description(
+        self,
+        image_id: int,
+        image_path: str,
+        description: str,
+        mode: str,
+    ) -> tuple[str, bool]:
+        if not self._tagging.free_tagging_available:
+            raise RuntimeError(
+                "Custom tagging is disabled. Enable it in Settings before editing descriptions."
+            )
+        if self._repo is None or self._is_locked:
+            raise RuntimeError("The active database is not available.")
+        if self._repo.get_indexed_image_path(image_id) != image_path:
+            raise RuntimeError("The image ID and path do not identify the same indexed image.")
+        service = self._tagging.service
+        if service is None:
+            raise RuntimeError("Tagging service is not available.")
+        result = service.set_description(image_path, description, mode)
+        self._refresh_after_tag_mutation()
+        return result.sidecar.description, result.changed
+
+    def _mcp_set_image_description_excluded(
+        self, image_id: int, image_path: str, excluded: bool
+    ) -> tuple[bool, bool]:
+        if not self._tagging.free_tagging_available:
+            raise RuntimeError("Custom tagging is disabled or the database is locked.")
+        if self._repo is None or self._is_locked:
+            raise RuntimeError("The active database is not available.")
+        if self._repo.get_indexed_image_path(image_id) != image_path:
+            raise RuntimeError("The image ID and path do not identify the same indexed image.")
+        service = self._tagging.service
+        if service is None:
+            raise RuntimeError("Tagging service is not available.")
+        result = service.set_embedded_description_excluded(image_path, excluded)
+        self._refresh_after_tag_mutation()
+        return result.sidecar.exclude_embedded_description, result.changed
+
+    def _mcp_set_image_embedded_tag_excluded(
+        self, image_id: int, image_path: str, tag: str, excluded: bool
+    ) -> tuple[tuple[str, ...], bool, bool]:
+        return self._mcp_set_image_tag_exclusion(image_id, image_path, excluded, tag=tag)
+
+    def _mcp_set_image_all_embedded_tags_excluded(
+        self, image_id: int, image_path: str, excluded: bool
+    ) -> tuple[tuple[str, ...], bool, bool]:
+        return self._mcp_set_image_tag_exclusion(image_id, image_path, excluded)
+
+    def _mcp_set_image_tag_exclusion(
+        self, image_id: int, image_path: str, excluded: bool, *, tag: str | None = None,
+    ) -> tuple[tuple[str, ...], bool, bool]:
+        if not self._tagging.free_tagging_available:
+            raise RuntimeError("Custom tagging is disabled or the database is locked.")
+        if self._repo is None or self._is_locked:
+            raise RuntimeError("The active database is not available.")
+        if self._repo.get_indexed_image_path(image_id) != image_path:
+            raise RuntimeError("The image ID and path do not identify the same indexed image.")
+        service = self._tagging.service
+        if service is None:
+            raise RuntimeError("Tagging service is not available.")
+        result = (
+            service.set_all_embedded_tags_excluded(image_path, excluded) if tag is None
+            else service.set_embedded_tag_excluded(image_path, tag, excluded)
+        )
+        self._refresh_after_tag_mutation()
+        return (
+            result.sidecar.excluded_embedded_tags,
+            result.sidecar.exclude_all_embedded_tags, result.changed,
+        )
+
+    @Property(bool, notify=taggingStateChanged)
+    def excludeEmbeddedDescription(self) -> bool:
+        return self._tagging.exclude_embedded_description
+
+    @Property(str, notify=taggingStateChanged)
+    def embeddedImageDescription(self) -> str:
+        return self._tagging.embedded_description
+
+    @Property(str, notify=taggingStateChanged)
+    def finalDerivativeDescription(self) -> str:
+        return self._tagging.derivative_description
+
+    @Slot(bool)
+    def setSelectedEmbeddedDescriptionExcluded(self, excluded: bool) -> None:
+        self._tagging.set_embedded_description_excluded(excluded)
+
     @Property(QObject, constant=True)
     def embeddedTagsModel(self) -> QObject:
         return self._tagging.embedded_tags_model
@@ -754,9 +881,41 @@ class AppController(QObject):
     def selectedTaggingError(self) -> str:
         return self._tagging.selected_error
 
+    @Property(str, notify=taggingStateChanged)
+    def selectedImageDescription(self) -> str:
+        return self._tagging.selected_description
+
+    @Property(str, notify=taggingStateChanged)
+    def descriptionDraft(self) -> str:
+        return self._tagging.description_draft
+
+    @Property(bool, notify=taggingStateChanged)
+    def descriptionDraftActive(self) -> bool:
+        return self._tagging.description_draft_active
+
+    @Property(bool, notify=taggingStateChanged)
+    def descriptionDraftMatchesSelection(self) -> bool:
+        return self._tagging.description_draft_matches_selection
+
+    @Property(bool, notify=taggingStateChanged)
+    def descriptionDraftCanEdit(self) -> bool:
+        return self._tagging.description_draft_can_edit
+
+    @Property(str, notify=taggingStateChanged)
+    def descriptionDraftFilename(self) -> str:
+        return self._tagging.description_draft_filename
+
+    @Property(bool, notify=taggingStateChanged)
+    def descriptionDraftSavedChanged(self) -> bool:
+        return self._tagging.description_draft_saved_changed
+
     @Property(bool, notify=bulkTagOperationChanged)
     def isTaggingBulk(self) -> bool:
         return self._tagging.is_bulk_operation
+
+    @Property(bool, notify=bulkTagOperationChanged)
+    def isCopyingDescription(self) -> bool:
+        return self._tagging.is_copying_description
 
     @Property(int, notify=bulkTagOperationChanged)
     def taggingBulkCurrent(self) -> int:
@@ -1229,6 +1388,9 @@ class AppController(QObject):
             metadata = {}
         self._tagging.set_embedded_tags(
             extract_embedded_keyword_labels(metadata) if isinstance(metadata, dict) else ()
+        )
+        self._tagging.set_embedded_description(
+            extract_embedded_description(metadata) if isinstance(metadata, dict) else ""
         )
         self._tagging.refresh_selected_state()
         self.taggingSelectionChanged.emit()
@@ -4490,6 +4652,18 @@ class AppController(QObject):
     def setExcludeAllSelectedEmbeddedTags(self, excluded: bool) -> None:
         self._tagging.set_all_embedded_tags_excluded(excluded)
 
+    @Slot(str, result=bool)
+    def updateSelectedDescriptionDraft(self, description: str) -> bool:
+        return self._tagging.update_description_draft(description)
+
+    @Slot()
+    def discardSelectedDescriptionDraft(self) -> None:
+        self._tagging.discard_description_draft()
+
+    @Slot(str, result=bool)
+    def saveSelectedDescription(self, mode: str) -> bool:
+        return self._tagging.save_description_draft(mode)
+
     def _mutate_selected_free_tag(self, label: str, *, remove: bool) -> None:
         self._tagging.mutate_selected_free_tag(label, remove=remove)
 
@@ -4843,11 +5017,23 @@ class AppController(QObject):
 
     @Slot(str, str)
     def copySelectedTags(self, target_scope: str, mode: str) -> None:
+        self._copy_selected_metadata(target_scope, mode)
+
+    @Slot(str, str)
+    def copySelectedDescription(self, target_scope: str, mode: str) -> None:
+        self._copy_selected_metadata(target_scope, mode, copy_description=True)
+
+    def _copy_selected_metadata(
+        self, target_scope: str, mode: str, *, copy_description: bool = False,
+    ) -> None:
         source_path = self._tagging_selected_path()
-        if not self._tagging.can_copy_tags(source_path):
+        if source_path is None or not self._tagging.can_copy_metadata(source_path):
             return
         if mode not in {"add", "replace"}:
-            self._tagging.show_copy_error(_("Choose whether to add or replace tags."))
+            self._tagging.show_copy_error(
+                _("Choose whether to add or replace descriptions.") if copy_description
+                else _("Choose whether to add or replace tags.")
+            )
             return
         worker_kwargs: dict[str, object] = {}
         if target_scope.startswith("set:"):
@@ -4896,7 +5082,9 @@ class AppController(QObject):
         else:
             self._tagging.show_copy_error(_("Choose a valid copy target."))
             return
-        self._tagging.copy_selected_tags(source_path, mode, worker_kwargs)
+        if copy_description:
+            worker_kwargs["copy_description"] = True
+        self._tagging.copy_selected_metadata(source_path, mode, worker_kwargs)
 
     @Slot()
     def cancelBulkTagging(self) -> None:
@@ -5150,6 +5338,9 @@ class AppController(QObject):
                 if self._action_image_set_id is None:
                     self._tagging.set_embedded_tags(
                         extract_embedded_keyword_labels(parsed)
+                    )
+                    self._tagging.set_embedded_description(
+                        extract_embedded_description(parsed)
                     )
                 rows = sorted(
                     [(str(k), str(v)) for k, v in parsed.items()],

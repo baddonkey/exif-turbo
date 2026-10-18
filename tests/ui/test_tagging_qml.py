@@ -45,6 +45,9 @@ def test_tagging_qml_contract_keeps_custom_tagging_and_removes_vocabulary_sugges
         "cancelDerivativeExport(",
         "copySelectedTags(",
         "cancelBulkTagging(",
+        "updateSelectedDescriptionDraft(",
+        "saveSelectedDescription(",
+        "discardSelectedDescriptionDraft(",
     }
 
     # Act
@@ -60,6 +63,29 @@ def test_tagging_qml_contract_keeps_custom_tagging_and_removes_vocabulary_sugges
     assert 'objectName: "addFreeTagButton"' in source
     assert 'objectName: "freeTagSuggestions"' in source
     assert 'objectName: "currentFreeTags"' in source
+    assert 'objectName: "descriptionEditor"' in source
+    assert 'objectName: "finalDerivativeDescription"' in source
+    assert source.index('objectName: "derivativeDescriptionFooter"') > source.index(
+        'objectName: "derivativeTagsFooter"'
+    )
+    assert drawer_source.index('text: qsTr("Existing embedded description")') < drawer_source.index(
+        'objectName: "embeddedImageDescription"'
+    ) < drawer_source.index('objectName: "excludeEmbeddedDescriptionSwitch"')
+    assert drawer_source.index('text: qsTr("Custom tags")') < drawer_source.index(
+        'objectName: "currentFreeTags"'
+    ) < drawer_source.index(
+        'text: qsTr("Custom description")'
+    ) < drawer_source.index('objectName: "descriptionDraftEditor"')
+    assert 'objectName: "descriptionDraftEditor"' in source
+    assert 'objectName: "saveDescriptionButton"' in source
+    assert 'objectName: "appendDescriptionButton"' not in source
+    assert 'objectName: "replaceDescriptionButton"' not in source
+    assert 'text: qsTr("Save")' in source
+    assert 'text: qsTr("Replace")' in source
+    assert "readOnly: true" in source
+    assert "wrapMode: TextEdit.Wrap" in source
+    assert 'appController.saveSelectedDescription("replace")' in source
+    assert "descriptionDraftSavedChanged" in source
     remove_button_declaration = drawer_source.split(
         'objectName: "removeFreeTagButton"', 1
     )[1].split("\n                            }", 1)[0]

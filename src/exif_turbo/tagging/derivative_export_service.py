@@ -14,7 +14,7 @@ from typing import Callable, Iterable, Mapping, Protocol, Sequence
 
 from ..data.image_index_repository import ImageIndexRepository
 from .exif_metadata_writer import ExifMetadataWriter
-from .sidecar_repository import FilesystemSidecarRepository
+from .sidecar_repository import FilesystemSidecarRepository, LoadedSidecar
 
 
 _EMBEDDED_KEYWORD_KEYS = (
@@ -55,6 +55,37 @@ def extract_embedded_keyword_labels(
     return merge_keyword_labels(labels)
 
 
+def extract_embedded_description(metadata: Mapping[str, object]) -> str:
+    descriptions: list[str] = []
+    for key, value in metadata.items():
+        group, _, name = key.rpartition(":")
+        supported = (
+            (group in {"IFD0", "IFD1", "EXIF"} and name == "ImageDescription")
+            or (group in {"ExifIFD", "EXIF", "XMP-exif", "XMP"} and name == "UserComment")
+            or (group == "IPTC" and name == "Caption-Abstract")
+            or (
+                group in {"XMP-dc", "XMP", "PNG", "QuickTime", "ItemList", "Keys", "UserData"}
+                and (name == "Description" or name.startswith("Description-"))
+            )
+        )
+        if not supported:
+            continue
+        values = value.values() if isinstance(value, dict) else (value,)
+        for candidate in values:
+            if not isinstance(candidate, str):
+                continue
+            text = candidate.replace("\r\n", "\n").replace("\r", "\n").strip()
+            if text and text not in descriptions:
+                descriptions.append(text)
+    return "\n\n".join(descriptions)
+
+
+def final_derivative_description(
+    embedded: str, custom: str, exclude_embedded: bool
+) -> str:
+    return "\n\n".join(text for text in ("" if exclude_embedded else embedded, custom) if text)
+
+
 class DerivativeExportError(ValueError):
     """Raised when a derivative export plan is unsafe or ambiguous."""
 
@@ -76,6 +107,8 @@ class DerivativeExportPlanItem:
     exclude_all_embedded_tags: bool = False
     planned_status: DerivativeExportStatus | None = None
     message: str | None = None
+    exclude_embedded_description: bool = False
+    description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -130,6 +163,14 @@ CancelCheck = Callable[[], bool]
 
 
 class MetadataWriter(Protocol):
+    def write_description(
+        self, target: Path, description: str, *, forbidden_sources: Iterable[Path] = ()
+    ) -> None: ...
+
+    def discard_embedded_description(
+        self, target: Path, *, forbidden_sources: Iterable[Path] = ()
+    ) -> None: ...
+
     def write_keywords(
         self,
         target: Path,
@@ -212,7 +253,18 @@ class DerivativeExportService:
                     f"multiple sources resolve to destination: {destination}"
                 )
             destination_keys.add(destination_key)
-            labels, excluded_labels, exclude_all = self._derivative_labels(source)
+            loaded = self._sidecar_repository.read(source)
+            labels, excluded_labels, exclude_all, exclude_description = self._derivative_labels(source, loaded)
+            description: str | None = None
+            if loaded is not None and loaded.sidecar.description:
+                rows = self._image_repository.get_images_by_paths([str(source)])
+                metadata = json.loads(rows[0][3]) if rows else {}
+                if not isinstance(metadata, dict):
+                    raise DerivativeExportError(f"invalid indexed metadata for {source}")
+                description = final_derivative_description(
+                    extract_embedded_description(metadata),
+                    loaded.sidecar.description, exclude_description,
+                )
             status: DerivativeExportStatus | None = None
             message: str | None = None
             if destination.exists():
@@ -227,6 +279,8 @@ class DerivativeExportService:
                     exclude_all_embedded_tags=exclude_all,
                     planned_status=status,
                     message=message,
+                    exclude_embedded_description=exclude_description,
+                    description=description,
                 )
             )
         return DerivativeExportPlan(resolved_output, sources, tuple(items))
@@ -287,6 +341,14 @@ class DerivativeExportService:
                     excluded_labels=item.excluded_embedded_tags,
                     preserve_existing_keywords=not item.exclude_all_embedded_tags,
                 )
+            if item.description is not None:
+                self._metadata_writer.write_description(
+                    temporary, item.description, forbidden_sources=sources
+                )
+            elif item.exclude_embedded_description:
+                self._metadata_writer.discard_embedded_description(
+                    temporary, forbidden_sources=sources
+                )
             if cancel_check is not None and cancel_check():
                 return self._result(
                     item, DerivativeExportStatus.CANCELED, "export canceled"
@@ -310,10 +372,10 @@ class DerivativeExportService:
     def _derivative_labels(
         self,
         source: Path,
-    ) -> tuple[tuple[str, ...], tuple[str, ...], bool]:
-        loaded_sidecar = self._sidecar_repository.read(source)
+        loaded_sidecar: LoadedSidecar | None,
+    ) -> tuple[tuple[str, ...], tuple[str, ...], bool, bool]:
         if loaded_sidecar is None:
-            return (), (), False
+            return (), (), False, False
         custom_labels = [
             label.strip()
             for label in loaded_sidecar.sidecar.free_tags
@@ -323,6 +385,7 @@ class DerivativeExportService:
             return (
                 (), loaded_sidecar.sidecar.excluded_embedded_tags,
                 loaded_sidecar.sidecar.exclude_all_embedded_tags,
+                loaded_sidecar.sidecar.exclude_embedded_description,
             )
         embedded_labels: tuple[str, ...] = ()
         if not loaded_sidecar.sidecar.exclude_all_embedded_tags:
@@ -347,6 +410,7 @@ class DerivativeExportService:
             merge_keyword_labels(custom_labels, embedded_labels),
             loaded_sidecar.sidecar.excluded_embedded_tags,
             loaded_sidecar.sidecar.exclude_all_embedded_tags,
+            loaded_sidecar.sidecar.exclude_embedded_description,
         )
 
     @classmethod

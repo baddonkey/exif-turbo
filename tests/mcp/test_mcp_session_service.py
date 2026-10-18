@@ -24,6 +24,8 @@ class _FakePort:
         self.image_set_images: list[dict[str, object]] = []
         self.previews: dict[int, bytes] = {}
         self.image_tag_updates: list[tuple[int, str, tuple[str, ...], str]] = []
+        self.tag_exclusions: tuple[str, ...] = ()
+        self.exclude_all = False
 
     def get_selected_image(self) -> SelectedImageSnapshot | None:
         return self._snapshot
@@ -61,6 +63,88 @@ class _FakePort:
             raise RuntimeError("sidecar conflict")
         return tuple(tags)
 
+    def set_image_description(
+        self, image_id: int, path: str, description: str, mode: str
+    ) -> tuple[str, bool]:
+        if path == "/photos/fail.jpg":
+            raise RuntimeError("sidecar conflict")
+        return description, True
+
+    def set_image_description_excluded(
+        self, image_id: int, path: str, excluded: bool
+    ) -> tuple[bool, bool]:
+        return excluded, True
+
+    def set_image_embedded_tag_excluded(
+        self, image_id: int, path: str, tag: str, excluded: bool
+    ) -> tuple[tuple[str, ...], bool, bool]:
+        self.tag_exclusions = (tag,) if excluded else ()
+        return self.tag_exclusions, self.exclude_all, True
+
+    def set_image_all_embedded_tags_excluded(
+        self, image_id: int, path: str, excluded: bool
+    ) -> tuple[tuple[str, ...], bool, bool]:
+        self.exclude_all = excluded
+        return self.tag_exclusions, self.exclude_all, True
+
+
+@pytest.mark.parametrize("all_tags", [False, True])
+@pytest.mark.parametrize("arguments", [
+    {"image_id": True, "path": "/photos/a.jpg", "excluded": True},
+    {"image_id": 0, "path": "/photos/a.jpg", "excluded": True},
+    {"image_id": 1, "path": "", "excluded": True},
+    {"image_id": 1, "path": "/photos/a.jpg", "excluded": "false"},
+])
+def test_mcp_tag_exclusion_invalid_input_rejected(all_tags: bool, arguments: dict[str, object]) -> None:
+    # Arrange
+    port = _FakePort()
+    service = McpSessionService(port)
+    operation = (
+        service.set_image_all_embedded_tags_excluded if all_tags
+        else service.set_image_embedded_tag_excluded
+    )
+    if not all_tags:
+        arguments = {**arguments, "tag": "Keyword"}
+
+    # Act / Assert
+    with pytest.raises(McpSessionError):
+        operation(**arguments)  # type: ignore[arg-type]
+    assert port.tag_exclusions == () and not port.exclude_all
+
+
+@pytest.mark.parametrize("tag", ["", "  ", "\x00", 42])
+def test_mcp_individual_tag_exclusion_invalid_tag_rejected(tag: object) -> None:
+    # Arrange
+    service = McpSessionService(_FakePort())
+
+    # Act / Assert
+    with pytest.raises(McpSessionError):
+        service.set_image_embedded_tag_excluded(1, "/photos/a.jpg", tag, True)  # type: ignore[arg-type]
+
+
+def test_mcp_tag_exclusions_readback_and_state_are_independent() -> None:
+    # Arrange
+    snapshot = SelectedImageSnapshot(
+        path="/photos/a.jpg", filename="a.jpg", image_id=1, free_tags=(),
+        has_preview=False, metadata_json=None,
+        excluded_embedded_tags=("Keyword",), exclude_all_embedded_tags=True,
+    )
+    service = McpSessionService(_FakePort(snapshot))
+
+    # Act
+    individual = service.set_image_embedded_tag_excluded(1, snapshot.path, " Keyword ", True)
+    all_tags = service.set_image_all_embedded_tags_excluded(1, snapshot.path, True)
+    restored = service.set_image_all_embedded_tags_excluded(1, snapshot.path, False)
+    payload = service.get_selected_image(include_preview=False).to_dict()
+
+    # Assert
+    assert individual["excluded_embedded_tags"] == ["Keyword"]
+    assert all_tags["exclude_all_embedded_tags"] is True
+    assert restored["excluded_embedded_tags"] == ["Keyword"]
+    assert restored["exclude_all_embedded_tags"] is False
+    assert payload["excluded_embedded_tags"] == ["Keyword"]
+    assert payload["exclude_all_embedded_tags"] is True
+
 
 def test_mcp_session_service_get_selected_image_without_selection_raises() -> None:
     # Arrange
@@ -69,6 +153,74 @@ def test_mcp_session_service_get_selected_image_without_selection_raises() -> No
     # Act / Assert
     with pytest.raises(McpSessionError, match="No image is currently selected"):
         service.get_selected_image()
+
+
+def test_mcp_description_readback_includes_saved_text() -> None:
+    # Arrange
+    snapshot = SelectedImageSnapshot(
+        path="/photos/a.jpg", filename="a.jpg", image_id=1, free_tags=(),
+        has_preview=False, metadata_json=None, description="Saved caption",
+    )
+    service = McpSessionService(_FakePort(snapshot))
+
+    # Act / Assert
+    assert service.get_selected_image(include_preview=False).to_dict()["description"] == "Saved caption"
+
+
+def test_mcp_description_batch_reports_mixed_success_and_failure() -> None:
+    # Arrange
+    service = McpSessionService(_FakePort())
+
+    # Act
+    result = service.set_image_descriptions_batch([
+        {"image_id": 1, "path": "/photos/a.jpg", "description": "Caption", "mode": "append"},
+        {"image_id": 2, "path": "/photos/fail.jpg", "description": "Caption", "mode": "replace"},
+        {"image_id": 3, "path": "/photos/a.jpg", "description": "Caption"},
+        {"image_id": 4, "path": "/photos/a.jpg", "description": "", "mode": "replace"},
+    ])
+
+    # Assert
+    assert result["succeeded"] == 2
+    assert result["failed"] == 2
+    assert result["results"][0]["description"] == "Caption"
+    assert result["results"][0]["changed"] is True
+    assert result["results"][1]["error"] == "sidecar conflict"
+    assert "mode" in result["results"][2]["error"]
+    assert result["results"][3]["description"] == ""
+
+
+@pytest.mark.parametrize(
+    "update",
+    [
+        {"image_id": True, "path": "/photos/a.jpg", "description": "Caption", "mode": "replace"},
+        {"image_id": 1, "path": "", "description": "Caption", "mode": "replace"},
+        {"image_id": 1, "path": "/photos/a.jpg", "description": "", "mode": "append"},
+        {"image_id": 1, "path": "/photos/a.jpg", "description": None, "mode": "replace"},
+        {"image_id": 1, "path": "/photos/a.jpg", "description": "Bad\x00text", "mode": "replace"},
+    ],
+)
+def test_mcp_description_invalid_batch_input_returns_explicit_error(update: dict[str, object]) -> None:
+    # Arrange
+    service = McpSessionService(_FakePort())
+
+    # Act
+    result = service.set_image_descriptions_batch([update])
+
+    # Assert
+    assert result["failed"] == 1
+    assert result["results"][0]["ok"] is False
+    assert result["results"][0]["error"]
+
+
+def test_mcp_description_batch_limit_is_exactly_one_hundred() -> None:
+    # Arrange
+    service = McpSessionService(_FakePort())
+    update = {"image_id": 1, "path": "/photos/a.jpg", "description": "Caption", "mode": "replace"}
+
+    # Act / Assert
+    assert service.set_image_descriptions_batch([update] * 100)["succeeded"] == 100
+    with pytest.raises(McpSessionError, match="at most 100"):
+        service.set_image_descriptions_batch([update] * 101)
 
 
 def test_mcp_session_service_get_selected_image_includes_preview_base64() -> None:

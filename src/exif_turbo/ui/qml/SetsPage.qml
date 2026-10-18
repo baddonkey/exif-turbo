@@ -10,6 +10,7 @@ Item {
     objectName: "setsPage"
 
     required property var appController
+    readonly property bool canEditSets: !!appController && !appController.imageSetOperationRunning
     signal taggingRequested()
     property color accentColor: Material.accent
     property var sets: []
@@ -71,7 +72,7 @@ Item {
     }
 
     function applyFilter(mode, confirmed) {
-        if (appController.reapplyImageSetFilter(selectedSetId, mode, confirmed))
+        if (appController && appController.reapplyImageSetFilter(selectedSetId, mode, confirmed))
             reloadSets()
     }
 
@@ -164,7 +165,7 @@ Item {
                         font.pixelSize: 26
                         font.weight: Font.DemiBold
                         padding: 0
-                        enabled: !root.appController.imageSetOperationRunning
+                        enabled: root.canEditSets
                         onClicked: root.beginCreateSet()
                         ToolTip.text: qsTr("Create set")
                         ToolTip.visible: hovered
@@ -202,7 +203,7 @@ Item {
                         ToolButton {
                             objectName: "setRowRenameButton"
                             text: qsTr("Rename")
-                            enabled: !root.appController.imageSetOperationRunning
+                            enabled: root.canEditSets
                             onClicked: root.beginRenameSet(
                                 setDelegate.modelData.id,
                                 setDelegate.modelData.name
@@ -211,7 +212,7 @@ Item {
                         ToolButton {
                             objectName: "setRowDeleteButton"
                             text: qsTr("Delete")
-                            enabled: !root.appController.imageSetOperationRunning
+                            enabled: root.canEditSets
                             onClicked: root.confirmDeleteSet(setDelegate.modelData.id)
                         }
                     }
@@ -295,7 +296,7 @@ Item {
                             id: targetScope
                             width: Math.min(300, parent.width)
                             enabled: root.selectedSet !== null
-                                     && !root.appController.imageSetOperationRunning
+                                     && root.canEditSets
                             model: [
                                 { text: qsTr("Selected image"), value: "selected" },
                                 { text: qsTr("Marked images"), value: "marked" },
@@ -309,7 +310,7 @@ Item {
                             id: addMembersButton
                             text: qsTr("Add")
                             enabled: root.selectedSet !== null
-                                     && !root.appController.imageSetOperationRunning
+                                     && root.canEditSets
                             onClicked: root.appController.changeImageSetMembers(
                                 root.selectedSetId, targetScope.currentValue, true
                             )
@@ -355,20 +356,20 @@ Item {
                             objectName: "editSetFilterButton"
                             text: qsTr("Edit filter")
                             enabled: root.selectedSet !== null
-                                     && !root.appController.imageSetOperationRunning
+                                     && root.canEditSets
                             onClicked: filterDialog.open()
                         }
                         Button {
                             id: saveFilterButton
                             text: qsTr("Save current Search")
                             enabled: root.selectedSet !== null
-                                     && !root.appController.imageSetOperationRunning
+                                     && root.canEditSets
                             onClicked: root.appController.saveCurrentSearchAsImageSetFilter(root.selectedSetId)
                         }
                         Button {
                             id: clearFilterButton
                             enabled: root.selectedSet !== null && !!root.selectedSet.apply_filter
-                                     && !root.appController.imageSetOperationRunning
+                                     && root.canEditSets
                             text: qsTr("Clear filter")
                             onClicked: root.appController.clearImageSetFilter(root.selectedSetId)
                         }
@@ -382,7 +383,7 @@ Item {
                         addMatchesButton.implicitWidth + replaceMatchesButton.implicitWidth + 8)
                     spacing: 4
                     enabled: root.selectedSet !== null && !!root.selectedSet.apply_filter
-                             && !root.appController.imageSetOperationRunning
+                             && root.canEditSets
                     Label {
                         width: parent.width
                         text: qsTr("Reapply saved filter")
@@ -431,17 +432,17 @@ Item {
                 Layout.leftMargin: 12
                 Layout.rightMargin: 12
                 Layout.bottomMargin: 6
-                visible: root.appController.imageSetOperationRunning
+                visible: !!root.appController && root.appController.imageSetOperationRunning
                 ProgressBar {
                     objectName: "imageSetOperationProgressBar"
                     Layout.fillWidth: true
                     from: 0
-                    to: root.appController.imageSetOperationProgressTotal
-                    value: root.appController.imageSetOperationProgress
+                    to: root.appController ? root.appController.imageSetOperationProgressTotal : 0
+                    value: root.appController ? root.appController.imageSetOperationProgress : 0
                     indeterminate: to <= 0
                 }
                 Label {
-                    text: root.appController.imageSetOperationProgressTotal > 0
+                    text: root.appController && root.appController.imageSetOperationProgressTotal > 0
                           ? qsTr("%1 / %2").arg(root.appController.imageSetOperationProgress)
                                 .arg(root.appController.imageSetOperationProgressTotal)
                           : qsTr("Preparing")
@@ -472,7 +473,9 @@ Item {
                     rightPadding: 14
                     topPadding: 0
                     bottomPadding: 0
-                    highlighted: modelData.path === root.appController.selectedSetMemberPath
+                    highlighted: !!root.appController
+                        && modelData.path === root.appController.selectedSetMemberPath
+                    enabled: !!root.appController
                     onClicked: root.appController.selectImageSetMember(modelData.path)
                     onDoubleClicked: {
                         root.appController.selectImageSetMember(modelData.path)
@@ -486,9 +489,9 @@ Item {
                             color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.08)
                             Image {
                                 anchors.fill: parent
-                                source: root.appController.imageSetMemberThumbnailSource(
+                                source: root.appController ? root.appController.imageSetMemberThumbnailSource(
                                     memberDelegate.modelData.id
-                                )
+                                ) : ""
                                 fillMode: Image.PreserveAspectCrop
                                 smooth: true
                                 visible: source.toString().length > 0
@@ -520,7 +523,7 @@ Item {
                         }
                         Button {
                             text: qsTr("Remove")
-                            enabled: !root.appController.imageSetOperationRunning
+                            enabled: root.canEditSets
                             onClicked: root.appController.removeImageSetMember(
                                 root.selectedSetId, memberDelegate.modelData.path
                             )
@@ -642,7 +645,7 @@ Item {
                     text: qsTr("Rename")
                     highlighted: true
                     enabled: renameSetNameField.text.trim().length > 0
-                             && !root.appController.imageSetOperationRunning
+                             && root.canEditSets
                     onClicked: {
                         if (root.appController.renameImageSet(
                                     root.renamingSetId, renameSetNameField.text))

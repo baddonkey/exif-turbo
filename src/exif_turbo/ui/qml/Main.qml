@@ -91,6 +91,28 @@ ApplicationWindow {
     onClosing: (close) => { if (controller) controller.onAppClosing() }
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────
+    function navigateResultList(view, event, browse) {
+        var step
+        switch (event.key) {
+        case Qt.Key_Down: step = 1; break
+        case Qt.Key_Up: step = -1; break
+        case Qt.Key_PageDown: step = Math.max(1, Math.floor(view.height / 210)); break
+        case Qt.Key_PageUp: step = -Math.max(1, Math.floor(view.height / 210)); break
+        default: return
+        }
+        event.accepted = true
+        if (!controller || view.count === 0)
+            return
+        var next = Math.max(0, Math.min(view.currentIndex + step, view.count - 1))
+        if (next === view.currentIndex)
+            return
+        root._previewNavigating = true
+        controller.selectResult(next)
+        view.positionViewAtIndex(next, ListView.Contain)
+        if (browse && step > 0)
+            root._scheduleBrowseDirectionalPrefetch(1)
+    }
+
     Shortcut {
         sequences: [ StandardKey.Find ]
         onActivated: {
@@ -1762,6 +1784,9 @@ ApplicationWindow {
                     ListView {
                         id: resultsList
                         objectName: "resultsList"
+                        Keys.onPressed: function(event) {
+                            root.navigateResultList(resultsList, event, false)
+                        }
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
@@ -2965,6 +2990,9 @@ ApplicationWindow {
                     ListView {
                         id: browseImageList
                         objectName: "browseImageList"
+                        Keys.onPressed: function(event) {
+                            root.navigateResultList(browseImageList, event, true)
+                        }
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true

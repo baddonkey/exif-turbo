@@ -29,6 +29,9 @@ def test_mcp_controller_set_operations_dispatch_to_owner_thread(
         selected_metadata_json=lambda: None,
         selected_has_preview=lambda: False,
         selected_free_tags=lambda: (),
+        selected_description=lambda: "",
+        selected_description_excluded=lambda: False,
+        selected_tag_exclusions=lambda: ((), False),
         load_preview_image=lambda: None,
         get_tagging_service=lambda: None,
         tagging_available=lambda: False,
@@ -41,6 +44,12 @@ def test_mcp_controller_set_operations_dispatch_to_owner_thread(
         set_image_custom_tags=lambda image_id, path, tags, mode: observe(
             tuple(tags)
         ),
+        set_image_description=lambda image_id, path, description, mode: observe(
+            (description, True)
+        ),
+        set_image_description_excluded=lambda image_id, path, excluded: observe((excluded, True)),
+        set_image_embedded_tag_excluded=lambda image_id, path, tag, excluded: observe(((tag,), False, True)),
+        set_image_all_embedded_tags_excluded=lambda image_id, path, excluded: observe(((), excluded, True)),
     )
 
     def call_mcp_operations() -> None:
@@ -53,6 +62,10 @@ def test_mcp_controller_set_operations_dispatch_to_owner_thread(
                     controller.set_image_custom_tags(
                         7, "/photos/a.jpg", ["family"], "append"
                     ),
+                    controller.set_image_description(7, "/photos/a.jpg", "Caption", "append"),
+                    controller.set_image_description_excluded(7, "/photos/a.jpg", True),
+                    controller.set_image_embedded_tag_excluded(7, "/photos/a.jpg", "Keyword", True),
+                    controller.set_image_all_embedded_tags_excluded(7, "/photos/a.jpg", True),
                 ]
             )
         except BaseException as exc:  # noqa: BLE001
@@ -66,10 +79,14 @@ def test_mcp_controller_set_operations_dispatch_to_owner_thread(
     controller.close()
 
     # Assert
-    assert len(results) == 4
+    assert len(results) == 8
     assert not isinstance(results[0], BaseException)
     assert results[0] == [{"id": 1, "name": "Family"}]
     assert results[1] == [{"id": 7, "limit": 10, "offset": 20}]
     assert results[2] is None
     assert results[3] == ("family",)
-    assert observed_threads == [owner_thread, owner_thread, owner_thread, owner_thread]
+    assert results[4] == ("Caption", True)
+    assert results[5] == (True, True)
+    assert results[6] == (("Keyword",), False, True)
+    assert results[7] == ((), True, True)
+    assert observed_threads == [owner_thread] * 8

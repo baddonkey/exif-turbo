@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -15,8 +16,81 @@ class ExifMetadataWriteError(RuntimeError):
 
 
 class ExifMetadataWriter:
+    _DESCRIPTION_FIELDS = (
+        "XMP-dc:Description", "IPTC:Caption-Abstract", "EXIF:ImageDescription",
+        "EXIF:UserComment", "XMP-exif:UserComment", "PNG:Description",
+        "QuickTime:Description",
+    )
+
     def __init__(self, *, timeout_seconds: float = 30.0) -> None:
         self._timeout_seconds = timeout_seconds
+
+    def write_description(
+        self, target: Path, description: str, *, forbidden_sources: Iterable[Path] = ()
+    ) -> None:
+        self.discard_embedded_description(target, forbidden_sources=forbidden_sources)
+        with tempfile.TemporaryDirectory(prefix="exif-turbo-description-") as directory:
+            text_path = Path(directory) / "description.txt"
+            text_path.write_text(description, encoding="utf-8", newline="")
+            result = self._run([
+                find_exiftool(), "-overwrite_original",
+                f"-XMP-dc:Description<={text_path}", str(target),
+            ])
+        if result.returncode != 0:
+            raise ExifMetadataWriteError(
+                f"ExifTool description write failed: {result.stderr.strip() or result.stdout.strip()}"
+            )
+        readback = self._run([
+            find_exiftool(), "-json", "-G1", "-XMP-dc:Description", str(target),
+        ])
+        if readback.returncode != 0:
+            raise ExifMetadataWriteError(
+                f"ExifTool description readback failed: {readback.stderr.strip() or readback.stdout.strip()}"
+            )
+        try:
+            records = json.loads(readback.stdout)
+            if records[0].get("XMP-dc:Description") != description:
+                raise ExifMetadataWriteError("description readback did not match requested text")
+        except (ValueError, TypeError, IndexError, AttributeError) as exc:
+            raise ExifMetadataWriteError("ExifTool returned invalid description readback") from exc
+
+    def discard_embedded_description(
+        self, target: Path, *, forbidden_sources: Iterable[Path] = ()
+    ) -> None:
+        if target.resolve() in {source.resolve() for source in forbidden_sources}:
+            raise ExifMetadataWriteError(f"refusing to write metadata to source image: {target}")
+        result = self._run([
+            find_exiftool(), "-overwrite_original",
+            *(f"-{field}=" for field in self._DESCRIPTION_FIELDS), str(target),
+        ])
+        if result.returncode != 0:
+            raise ExifMetadataWriteError(
+                f"ExifTool description clear failed: {result.stderr.strip() or result.stdout.strip()}"
+            )
+        readback = self._run([
+            find_exiftool(), "-json", "-G1", "-a",
+            *(f"-{field}*" if field == "XMP-dc:Description" else f"-{field}"
+              for field in self._DESCRIPTION_FIELDS), str(target),
+        ])
+        if readback.returncode != 0:
+            raise ExifMetadataWriteError(
+                f"ExifTool description readback failed: {readback.stderr.strip() or readback.stdout.strip()}"
+            )
+        try:
+            records = json.loads(readback.stdout)
+            if not isinstance(records, list) or not records or not all(
+                isinstance(record, dict) for record in records
+            ):
+                raise ValueError("expected metadata records")
+            if any(
+                value not in (None, "", [])
+                for record in records
+                for key, value in record.items()
+                if key != "SourceFile"
+            ):
+                raise ExifMetadataWriteError("embedded description remains after clearing")
+        except (ValueError, TypeError) as exc:
+            raise ExifMetadataWriteError("ExifTool returned invalid description readback") from exc
 
     def write_keywords(
         self,

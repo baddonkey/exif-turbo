@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import logging
 from pathlib import Path
 from typing import Callable
 
@@ -9,7 +10,7 @@ from PySide6.QtCore import QObject, QThread, QUrl, Signal
 from ...data.image_index_repository import ImageIndexRepository
 from ...data.indexed_folder_repository import IndexedFolderRepository
 from ...i18n import _
-from ...tagging.derivative_export_service import merge_keyword_labels
+from ...tagging.derivative_export_service import merge_keyword_labels, final_derivative_description
 from ...tagging.sidecar_repository import FilesystemSidecarRepository
 from ...tagging.tagging_service import TaggingService
 from ..models.embedded_tag_list_model import EmbeddedTagListModel
@@ -17,6 +18,8 @@ from ..models.free_tag_list_model import FreeTagListModel
 from ..models.settings_model import SettingsModel
 from ..workers.copy_tags_worker import CopyTagsWorker
 from ..workers.derivative_export_worker import DerivativeExportWorker
+
+_log = logging.getLogger(__name__)
 
 
 class TaggingController(QObject):
@@ -56,9 +59,16 @@ class TaggingController(QObject):
         self.free_tags_model = FreeTagListModel()
         self.free_tag_suggestions_model = FreeTagListModel()
         self._embedded_tags: tuple[str, ...] = ()
+        self._embedded_description = ""
         self._excluded_embedded_tags: tuple[str, ...] = ()
         self._exclude_all_embedded_tags = False
         self._selected_error = ""
+        self._selected_description = ""
+        self._exclude_embedded_description = False
+        self._selected_description_path: str | None = None
+        self._description_draft = ""
+        self._description_draft_path: str | None = None
+        self._description_draft_baseline: str | None = None
         self._bulk_operation = False
         self._bulk_progress = (0, 0)
         self._bulk_summary = ""
@@ -66,6 +76,7 @@ class TaggingController(QObject):
         self._derivative_progress = (0, 0)
         self._derivative_summary = ""
         self._copy_worker: CopyTagsWorker | None = None
+        self._copying_description = False
         self._derivative_worker: DerivativeExportWorker | None = None
 
     @property
@@ -85,8 +96,91 @@ class TaggingController(QObject):
         return self._selected_error
 
     @property
+    def selected_description(self) -> str:
+        return self._selected_description
+
+    @property
+    def embedded_description(self) -> str:
+        return self._embedded_description
+
+    @property
+    def derivative_description(self) -> str:
+        return final_derivative_description(
+            self._embedded_description, self._selected_description,
+            self._exclude_embedded_description,
+        )
+
+    def set_embedded_description(self, description: str) -> None:
+        self._embedded_description = description
+        self.taggingStateChanged.emit()
+
+    @property
+    def exclude_embedded_description(self) -> bool:
+        return self._exclude_embedded_description
+
+    def set_embedded_description_excluded(self, excluded: bool) -> None:
+        path = self._selected_path()
+        if path is None or self._service is None or not self.free_tagging_available:
+            return
+        try:
+            self._service.set_embedded_description_excluded(path, excluded)
+            self._selected_error = ""
+            self._refresh_after_mutation()
+        except Exception as exc:  # noqa: BLE001 — report sidecar failures in the drawer
+            self._selected_error = str(exc)
+            self.taggingStateChanged.emit()
+
+    @property
+    def description_draft(self) -> str:
+        return self._description_draft
+
+    @property
+    def description_draft_active(self) -> bool:
+        return self._description_draft_baseline is not None
+
+    @property
+    def description_draft_path(self) -> str | None:
+        return self._description_draft_path
+
+    @property
+    def description_draft_filename(self) -> str:
+        return (
+            Path(self._description_draft_path).name
+            if self._description_draft_path
+            else ""
+        )
+
+    @property
+    def description_draft_matches_selection(self) -> bool:
+        path = self._selected_path()
+        return (
+            self.description_draft_active
+            and path is not None
+            and path == self._description_draft_path
+        )
+
+    @property
+    def description_draft_can_edit(self) -> bool:
+        return self.free_tagging_available and (
+            not self.description_draft_active
+            or self.description_draft_matches_selection
+        )
+
+    @property
+    def description_draft_saved_changed(self) -> bool:
+        return (
+            self.description_draft_matches_selection
+            and self._selected_description_path == self._description_draft_path
+            and self._selected_description != self._description_draft_baseline
+        )
+
+    @property
     def is_bulk_operation(self) -> bool:
         return self._bulk_operation
+
+    @property
+    def is_copying_description(self) -> bool:
+        return self._copying_description
 
     @property
     def bulk_progress(self) -> tuple[int, int]:
@@ -129,9 +223,14 @@ class TaggingController(QObject):
         self.embedded_tags_model.set_rows([])
         self.derivative_tags_model.set_rows([])
         self._embedded_tags = ()
+        self._embedded_description = ""
         self._excluded_embedded_tags = ()
         self._exclude_all_embedded_tags = False
         self._selected_error = ""
+        self._selected_description = ""
+        self._exclude_embedded_description = False
+        self._selected_description_path = None
+        self.discard_description_draft()
         self.taggingStateChanged.emit()
 
     def close(self) -> None:
@@ -152,6 +251,7 @@ class TaggingController(QObject):
 
     def clear_embedded_tags(self) -> None:
         self._embedded_tags = ()
+        self._embedded_description = ""
         self._excluded_embedded_tags = ()
         self._exclude_all_embedded_tags = False
         self.embedded_tags_model.set_rows([])
@@ -182,14 +282,20 @@ class TaggingController(QObject):
     def refresh_selected_state(self) -> None:
         path = self._selected_path()
         if not path or self._service is None:
+            self._exclude_embedded_description = False
             self.free_tags_model.set_rows([])
             self._excluded_embedded_tags = ()
             self._exclude_all_embedded_tags = False
             self._refresh_embedded_tag_rows()
             self.derivative_tags_model.set_rows(self._embedded_tags if path else ())
+            if path != self._selected_description_path:
+                self._set_selected_description(path, "")
+            self.taggingStateChanged.emit()
             return
         try:
             state = self._service.get_image_tagging_state(path)
+            self._exclude_embedded_description = state.exclude_embedded_description
+            self._set_selected_description(path, state.description)
             self.free_tags_model.set_rows(state.free_tags)
             sidecar = state.sidecar
             self._excluded_embedded_tags = (
@@ -207,9 +313,93 @@ class TaggingController(QObject):
             self._selected_error = ""
         except Exception as exc:  # noqa: BLE001
             self.free_tags_model.set_rows([])
+            self._exclude_embedded_description = False
             self.derivative_tags_model.set_rows(self._included_embedded_tags())
+            self._set_selected_description(path, "")
             self._selected_error = str(exc)
         self.taggingStateChanged.emit()
+
+    def update_description_draft(self, description: str) -> bool:
+        path = self._selected_path()
+        if (
+            not self.free_tagging_available
+            or path is None
+            or self._service is None
+            or (
+                self.description_draft_active
+                and path != self._description_draft_path
+            )
+        ):
+            return False
+        try:
+            if not self.description_draft_active:
+                state = self._service.get_image_tagging_state(path)
+                self._set_selected_description(path, state.description)
+                self._description_draft_path = path
+                self._description_draft_baseline = state.description
+            self._description_draft = description
+            self._selected_error = ""
+        except Exception as exc:  # noqa: BLE001
+            self._selected_error = str(exc)
+            self.taggingStateChanged.emit()
+            return False
+        self.taggingStateChanged.emit()
+        return True
+
+    def discard_description_draft(self) -> None:
+        self._description_draft = ""
+        self._description_draft_path = None
+        self._description_draft_baseline = None
+        self.taggingStateChanged.emit()
+
+    def save_description_draft(self, mode: str) -> bool:
+        path = self._selected_path()
+        if (
+            mode not in {"append", "replace"}
+            or not self.free_tagging_available
+            or self._service is None
+            or path is None
+            or not self.description_draft_active
+            or path != self._description_draft_path
+        ):
+            return False
+        try:
+            result = self._service.set_description(
+                path,
+                self._description_draft,
+                mode,
+                expected_description=self._description_draft_baseline,
+            )
+            self._set_selected_description(
+                path,
+                result.sidecar.description,
+            )
+            self._description_draft = ""
+            self._description_draft_path = None
+            self._description_draft_baseline = None
+            self._selected_error = ""
+            self._refresh_after_mutation()
+        except Exception as exc:  # noqa: BLE001
+            try:
+                state = self._service.get_image_tagging_state(path)
+                self._set_selected_description(path, state.description)
+            except Exception:  # noqa: BLE001
+                _log.exception("Unable to refresh description after a failed save")
+            self._selected_error = str(exc)
+            self.taggingStateChanged.emit()
+            return False
+        self.taggingStateChanged.emit()
+        return True
+
+    def _set_selected_description(
+        self,
+        path: str | None,
+        description: str,
+    ) -> None:
+        self._selected_description_path = path
+        self._selected_description = description
+        if path is None:
+            self._exclude_embedded_description = False
 
     def set_embedded_tag_excluded(self, label: str, excluded: bool) -> None:
         path = self._selected_path()
@@ -253,7 +443,7 @@ class TaggingController(QObject):
             self._selected_error = str(exc)
             self.taggingStateChanged.emit()
 
-    def can_copy_tags(self, source_path: str | None) -> bool:
+    def can_copy_metadata(self, source_path: str | None) -> bool:
         return (
             source_path is not None
             and self.free_tagging_available
@@ -265,14 +455,15 @@ class TaggingController(QObject):
         self._bulk_summary = message
         self.bulkTagOperationChanged.emit()
 
-    def copy_selected_tags(
+    def copy_selected_metadata(
         self,
         source_path: str,
         mode: str,
         worker_options: dict[str, object],
     ) -> None:
-        if not self.can_copy_tags(source_path):
+        if not self.can_copy_metadata(source_path):
             return
+        self._copying_description = bool(worker_options.get("copy_description", False))
         worker = self._copy_worker_factory(
             self._db_path,
             self._get_key(),
@@ -304,7 +495,12 @@ class TaggingController(QObject):
             getattr(result, "conflicted_count", 0)
             + getattr(result, "failed_count", 0)
         )
-        summary = _("Copied tags to {} image(s). Unchanged: {}. Problems: {}.").format(
+        summary_template = (
+            _("Copied description to {} image(s). Unchanged: {}. Problems: {}.")
+            if self._copying_description
+            else _("Copied tags to {} image(s). Unchanged: {}. Problems: {}.")
+        )
+        summary = summary_template.format(
             changed_count, unchanged_count, problem_count
         )
         if getattr(result, "cancelled", False):

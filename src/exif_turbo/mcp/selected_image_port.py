@@ -47,3 +47,27 @@ class SelectedImagePort(Protocol):
     ) -> tuple[str, ...]:
         """Apply custom tags to an indexed image after verifying its identity."""
         ...
+
+    def set_image_description(
+        self, image_id: int, path: str, description: str, mode: str
+    ) -> tuple[str, bool]:
+        """Update a verified indexed image; return its description and changed flag."""
+        ...
+
+    def set_image_description_excluded(
+        self, image_id: int, path: str, excluded: bool
+    ) -> tuple[bool, bool]:
+        """Set the independent embedded-description exclusion flag."""
+        ...
+
+    def set_image_embedded_tag_excluded(
+        self, image_id: int, path: str, tag: str, excluded: bool
+    ) -> tuple[tuple[str, ...], bool, bool]:
+        """Return individual exclusions, ignore-all flag, and changed flag."""
+        ...
+
+    def set_image_all_embedded_tags_excluded(
+        self, image_id: int, path: str, excluded: bool
+    ) -> tuple[tuple[str, ...], bool, bool]:
+        """Toggle ignore-all without clearing individual exclusions."""
+        ...

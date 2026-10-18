@@ -33,6 +33,7 @@ class CopyTagsWorker(QThread):
         date_from: int | None = None,
         date_to: int | None = None,
         image_set_id: int | None = None,
+        copy_description: bool = False,
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -48,6 +49,7 @@ class CopyTagsWorker(QThread):
         self._date_from = date_from
         self._date_to = date_to
         self._image_set_id = image_set_id
+        self._copy_description = copy_description
         self._cancel_event = threading.Event()
 
     def cancel(self) -> None:
@@ -74,7 +76,12 @@ class CopyTagsWorker(QThread):
                         date_to=self._date_to,
                         image_set_id=self._image_set_id,
                     )
-            result = TaggingService(image_repository, FilesystemSidecarRepository()).copy_tags_to_paths(
+            service = TaggingService(image_repository, FilesystemSidecarRepository())
+            copy_to_paths = (
+                service.copy_description_to_paths if self._copy_description
+                else service.copy_tags_to_paths
+            )
+            result = copy_to_paths(
                 self._source_image_path,
                 image_paths,
                 self._mode,

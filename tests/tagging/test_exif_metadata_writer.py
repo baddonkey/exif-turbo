@@ -85,6 +85,98 @@ def test_write_keywords_builds_exact_arguments_with_target_last_and_verifies(
     ]
 
 
+def test_discard_description_clears_all_supported_fields_and_verifies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange
+    target = tmp_path / "copy.jpg"
+    target.write_bytes(b"copy")
+    calls: list[list[str]] = []
+
+    def fake_run(arguments: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(arguments)
+        return subprocess.CompletedProcess(arguments, 0, '[{"SourceFile":"copy.jpg"}]' if "-json" in arguments else "updated", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr("exif_turbo.tagging.exif_metadata_writer.find_exiftool", lambda: "exiftool")
+
+    # Act
+    ExifMetadataWriter().discard_embedded_description(target)
+
+    # Assert
+    assert "-XMP-dc:Description=" in calls[0]
+    assert "-IPTC:Caption-Abstract=" in calls[0]
+    assert "-EXIF:ImageDescription=" in calls[0]
+    assert calls[0][-1] == str(target)
+    assert "-json" in calls[1]
+
+
+def test_discard_description_refuses_source_and_reports_failed_verification(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Arrange
+    target = tmp_path / "photo.jpg"
+    target.write_bytes(b"image")
+
+    def fake_run(arguments: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(arguments, 0, '[{"XMP-dc:Description":"Still present"}]', "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr("exif_turbo.tagging.exif_metadata_writer.find_exiftool", lambda: "exiftool")
+    writer = ExifMetadataWriter()
+
+    # Act / Assert
+    with pytest.raises(ExifMetadataWriteError, match="source image"):
+        writer.discard_embedded_description(target, forbidden_sources=[target])
+    with pytest.raises(ExifMetadataWriteError, match="remains"):
+        writer.discard_embedded_description(target)
+
+
+def test_discard_description_real_exiftool_removes_multilingual_description(tmp_path: Path) -> None:
+    # Arrange
+    from PIL import Image
+    from exif_turbo.indexing.exif_metadata_extractor import find_exiftool, is_exiftool_available
+
+    if not is_exiftool_available():
+        pytest.skip("ExifTool is required for the metadata integration test")
+    target = tmp_path / "copy.jpg"
+    Image.new("RGB", (8, 8)).save(target)
+    executable = find_exiftool()
+    subprocess.run([
+        executable, "-overwrite_original", "-XMP-dc:Description=Default caption",
+        "-XMP-dc:Description-de=German caption", "-IPTC:Caption-Abstract=Caption",
+        "-EXIF:ImageDescription=Description", "-EXIF:UserComment=Comment",
+        str(target),
+    ], check=True, capture_output=True)
+
+    # Act
+    ExifMetadataWriter().discard_embedded_description(target)
+
+    # Assert
+    result = subprocess.run([
+        executable, "-json", "-G1", "-XMP-dc:Description*", "-IPTC:Caption-Abstract",
+        "-EXIF:ImageDescription", "-EXIF:UserComment", str(target),
+    ], check=True, capture_output=True, text=True)
+    assert json.loads(result.stdout) == [{"SourceFile": str(target).replace("\\", "/")}]
+
+
+def test_write_description_real_exiftool_matches_multiline_unicode(tmp_path: Path) -> None:
+    # Arrange
+    from PIL import Image
+    from exif_turbo.indexing.exif_metadata_extractor import find_exiftool, is_exiftool_available
+
+    if not is_exiftool_available():
+        pytest.skip("ExifTool is required for the metadata integration test")
+    target = tmp_path / "copy.jpg"
+    Image.new("RGB", (8, 8)).save(target)
+    text = "Embedded caption\n\nCustom caf\u00e9 caption"
+
+    # Act
+    ExifMetadataWriter().write_description(target, text)
+
+    # Assert
+    result = subprocess.run([
+        find_exiftool(), "-json", "-G1", "-XMP-dc:Description", str(target),
+    ], check=True, capture_output=True, text=True, encoding="utf-8")
+    assert json.loads(result.stdout)[0]["XMP-dc:Description"] == text
+
+
 def test_write_keywords_excluded_existing_labels_are_not_merged_back(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

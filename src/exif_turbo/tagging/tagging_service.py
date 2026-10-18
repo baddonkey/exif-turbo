@@ -75,6 +75,14 @@ class ImageTaggingState:
     def free_tags(self) -> tuple[str, ...]:
         return () if self.sidecar is None else self.sidecar.free_tags
 
+    @property
+    def description(self) -> str:
+        return "" if self.sidecar is None else self.sidecar.description
+
+    @property
+    def exclude_embedded_description(self) -> bool:
+        return self.sidecar is not None and self.sidecar.exclude_embedded_description
+
 
 @dataclass(frozen=True)
 class BulkTagItemResult:
@@ -148,6 +156,58 @@ class TaggingService:
             sidecar,
             updated_at=self._timestamp(),
             free_tags=(*sidecar.free_tags, normalized_label),
+        )
+        revision = self._write_sidecar(path, updated, loaded)
+        self._update_cache(image_path, updated, revision)
+        return TagMutationResult(image_path, True, updated)
+
+    def set_embedded_description_excluded(
+        self, image_path: str, excluded: bool
+    ) -> TagMutationResult:
+        if not isinstance(excluded, bool):
+            raise TaggingError("excluded must be a boolean")
+        path = Path(image_path)
+        loaded = self._read_sidecar(path)
+        sidecar = self._load_or_create_sidecar(path, loaded)
+        if sidecar.exclude_embedded_description == excluded:
+            return TagMutationResult(image_path, False, sidecar)
+        updated = replace(
+            sidecar, updated_at=self._timestamp(), exclude_embedded_description=excluded
+        )
+        revision = self._write_sidecar(path, updated, loaded)
+        self._update_cache(image_path, updated, revision)
+        return TagMutationResult(image_path, True, updated)
+
+    def set_description(
+        self,
+        image_path: str,
+        description: str,
+        mode: str,
+        *,
+        expected_description: str | None = None,
+    ) -> TagMutationResult:
+        if mode not in {"append", "replace"}:
+            raise TaggingError("mode must be 'append' or 'replace'")
+        try:
+            normalized = ImageSidecar.normalize_description(description)
+        except SidecarValidationError as exc:
+            raise TaggingError(str(exc)) from exc
+        if mode == "append" and not normalized:
+            raise TaggingError("append requires a non-empty description")
+        path = Path(image_path)
+        loaded = self._read_sidecar(path)
+        sidecar = self._load_or_create_sidecar(path, loaded)
+        if expected_description is not None and sidecar.description != expected_description:
+            raise TaggingConflictError("description changed since editing began")
+        replacement = (
+            f"{sidecar.description}\n\n{normalized}"
+            if mode == "append" and sidecar.description
+            else normalized
+        )
+        if replacement == sidecar.description:
+            return TagMutationResult(image_path, False, sidecar)
+        updated = replace(
+            sidecar, updated_at=self._timestamp(), description=replacement
         )
         revision = self._write_sidecar(path, updated, loaded)
         self._update_cache(image_path, updated, revision)
@@ -251,6 +311,29 @@ class TaggingService:
         revision = self._write_sidecar(path, updated, loaded)
         self._update_cache(image_path, updated, revision)
         return TagMutationResult(image_path, True, updated)
+
+    def copy_description_to_paths(
+        self,
+        source_image_path: str,
+        target_image_paths: Iterable[str],
+        mode: CopyTagsMode,
+        *,
+        on_progress: BulkProgress | None = None,
+        cancel_check: Callable[[], bool] | None = None,
+    ) -> BulkTagResult:
+        if mode not in {CopyTagsMode.ADD, CopyTagsMode.REPLACE}:
+            raise ValueError(f"unknown copy description mode: {mode}")
+        description = self.get_image_tagging_state(source_image_path).description
+        if mode is CopyTagsMode.ADD and not description:
+            raise TaggingError("cannot append an empty source description")
+        return self._bulk_apply(
+            (path for path in target_image_paths if path != source_image_path),
+            lambda path: self.set_description(
+                path, description, "append" if mode is CopyTagsMode.ADD else "replace",
+            ),
+            on_progress=on_progress,
+            cancel_check=cancel_check,
+        )
 
     def copy_tags_to_paths(
         self,
@@ -482,4 +565,3 @@ class TaggingService:
         if value.tzinfo is None or value.utcoffset() is None:
             raise TaggingError("tagging clock must return a timezone-aware datetime")
         return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
-

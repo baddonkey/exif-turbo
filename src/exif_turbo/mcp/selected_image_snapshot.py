@@ -13,3 +13,7 @@ class SelectedImageSnapshot:
     free_tags: tuple[str, ...]
     has_preview: bool
     metadata_json: str | None
+    description: str = ""
+    exclude_embedded_description: bool = False
+    excluded_embedded_tags: tuple[str, ...] = ()
+    exclude_all_embedded_tags: bool = False

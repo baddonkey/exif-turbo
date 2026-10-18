@@ -48,6 +48,13 @@ class McpController(QObject):
         set_image_custom_tags: Callable[
             [int, str, Sequence[str], str], tuple[str, ...]
         ],
+        selected_description: Callable[[], str],
+        set_image_description: Callable[[int, str, str, str], tuple[str, bool]],
+        selected_description_excluded: Callable[[], bool],
+        set_image_description_excluded: Callable[[int, str, bool], tuple[bool, bool]],
+        selected_tag_exclusions: Callable[[], tuple[tuple[str, ...], bool]],
+        set_image_embedded_tag_excluded: Callable[[int, str, str, bool], tuple[tuple[str, ...], bool, bool]],
+        set_image_all_embedded_tags_excluded: Callable[[int, str, bool], tuple[tuple[str, ...], bool, bool]],
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -66,6 +73,13 @@ class McpController(QObject):
         self._get_image_set_images = get_image_set_images
         self._load_indexed_preview_image = load_indexed_preview_image
         self._set_image_custom_tags = set_image_custom_tags
+        self._selected_description = selected_description
+        self._set_image_description = set_image_description
+        self._selected_description_excluded = selected_description_excluded
+        self._set_image_description_excluded = set_image_description_excluded
+        self._selected_tag_exclusions = selected_tag_exclusions
+        self._set_image_embedded_tag_excluded = set_image_embedded_tag_excluded
+        self._set_image_all_embedded_tags_excluded = set_image_all_embedded_tags_excluded
         self._dispatcher = MainThreadDispatcher(self)
         self._runtime = McpServerRuntime()
         self._status_message = ""
@@ -192,9 +206,12 @@ class McpController(QObject):
         )
 
     def _get_selected_image_main(self) -> SelectedImageSnapshot | None:
+        if self._is_locked():
+            raise McpSessionError("The active database is locked.")
         path = self._selected_path()
         if not path:
             return None
+        excluded_tags, exclude_all = self._selected_tag_exclusions()
         return SelectedImageSnapshot(
             path=path,
             filename=Path(path).name,
@@ -202,6 +219,38 @@ class McpController(QObject):
             free_tags=self._selected_free_tags(),
             has_preview=self._selected_has_preview(),
             metadata_json=self._selected_metadata_json(),
+            description=self._selected_description(),
+            exclude_embedded_description=self._selected_description_excluded(),
+            excluded_embedded_tags=excluded_tags,
+            exclude_all_embedded_tags=exclude_all,
+        )
+
+    def set_image_embedded_tag_excluded(
+        self, image_id: int, path: str, tag: str, excluded: bool
+    ) -> tuple[tuple[str, ...], bool, bool]:
+        return self._dispatcher.call(
+            lambda: self._set_image_embedded_tag_excluded(image_id, path, tag, excluded)
+        )
+
+    def set_image_all_embedded_tags_excluded(
+        self, image_id: int, path: str, excluded: bool
+    ) -> tuple[tuple[str, ...], bool, bool]:
+        return self._dispatcher.call(
+            lambda: self._set_image_all_embedded_tags_excluded(image_id, path, excluded)
+        )
+
+    def set_image_description(
+        self, image_id: int, path: str, description: str, mode: str
+    ) -> tuple[str, bool]:
+        return self._dispatcher.call(
+            lambda: self._set_image_description(image_id, path, description, mode)
+        )
+
+    def set_image_description_excluded(
+        self, image_id: int, path: str, excluded: bool
+    ) -> tuple[bool, bool]:
+        return self._dispatcher.call(
+            lambda: self._set_image_description_excluded(image_id, path, excluded)
         )
 
     def _load_preview_jpeg_main(self) -> bytes | None:
