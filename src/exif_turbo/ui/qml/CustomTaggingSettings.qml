@@ -4,6 +4,7 @@ import QtQuick.Controls.Material
 import QtQuick.Layouts
 
 ColumnLayout {
+    id: root
     required property var appController
     required property var appSettings
     Layout.fillWidth: true
@@ -19,27 +20,27 @@ ColumnLayout {
         id: taggingEnabledSwitch
         objectName: "taggingEnabledSwitch"
         text: qsTr("Enable tagging for this database")
-        checked: appSettings ? appSettings.taggingEnabled : false
-        onToggled: appController.setTaggingEnabled(checked)
+        checked: root.appSettings ? root.appSettings.taggingEnabled : false
+        onToggled: root.appController.setTaggingEnabled(checked)
     }
 
     Switch {
         objectName: "autoRepairDerivativeTagsSwitch"
         text: qsTr("Auto-Repair Tags for Derivatives")
-        checked: appSettings ? appSettings.autoRepairDerivativeTags : true
+        checked: root.appSettings ? root.appSettings.autoRepairDerivativeTags : true
         onToggled: {
-            if (appSettings)
-                appSettings.setAutoRepairDerivativeTags(checked)
+            if (root.appSettings)
+                root.appSettings.setAutoRepairDerivativeTags(checked)
         }
     }
 
     Switch {
         objectName: "writeDescriptionToXpCommentSwitch"
         text: qsTr("Write Description to EXIF XPComment")
-        checked: appSettings ? appSettings.writeDescriptionToXpComment : true
+        checked: root.appSettings ? root.appSettings.writeDescriptionToXpComment : true
         onToggled: {
-            if (appSettings)
-                appSettings.setWriteDescriptionToXpComment(checked)
+            if (root.appSettings)
+                root.appSettings.setWriteDescriptionToXpComment(checked)
         }
     }
 }
