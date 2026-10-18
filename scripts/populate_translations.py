@@ -1391,6 +1391,9 @@ TRANSLATIONS["de"].update({
     "{} destination file(s) already existed.": "{} Zieldatei(en) war(en) bereits vorhanden.",
     "{} derivative(s) failed.": "{} Derivat(e) fehlgeschlagen.",
     "First failure ({}): {}": "Erster Fehler ({}): {}",
+    "{} derivative(s) exported with metadata warnings.": "{} Derivat(e) mit Metadatenwarnungen exportiert.",
+    "Derivative export error report: {}": "Fehlerbericht zum Derivateexport: {}",
+    "Unable to write derivative export error report: {}": "Der Fehlerbericht zum Derivateexport konnte nicht geschrieben werden: {}",
     "%1 of %2 marked images": "%1 von %2 markierten Bildern",
     "All marked images": "Alle markierten Bilder",
     "Bulk tagging: %1": "Stapelverschlagwortung: %1",
@@ -1412,6 +1415,9 @@ TRANSLATIONS["fr"].update({
     "{} destination file(s) already existed.": "{} fichier(s) de destination existaient d\u00e9j\u00e0.",
     "{} derivative(s) failed.": "{} d\u00e9riv\u00e9(s) ont \u00e9chou\u00e9.",
     "First failure ({}): {}": "Premier échec ({}): {}",
+    "{} derivative(s) exported with metadata warnings.": "{} dérivé(s) exporté(s) avec des avertissements de métadonnées.",
+    "Derivative export error report: {}": "Rapport d’erreurs de l’export des dérivés : {}",
+    "Unable to write derivative export error report: {}": "Impossible d’écrire le rapport d’erreurs de l’export des dérivés : {}",
     "%1 of %2 marked images": "%1 sur %2 images marqu\u00e9es",
     "All marked images": "Toutes les images marqu\u00e9es",
     "Bulk tagging: %1": "\u00c9tiquetage group\u00e9 : %1",
@@ -1433,6 +1439,9 @@ TRANSLATIONS["it"].update({
     "{} destination file(s) already existed.": "{} file di destinazione esisteva/no gi\u00e0.",
     "{} derivative(s) failed.": "{} derivato/i non riuscito/i.",
     "First failure ({}): {}": "Primo errore ({}): {}",
+    "{} derivative(s) exported with metadata warnings.": "{} derivato/i esportato/i con avvisi sui metadati.",
+    "Derivative export error report: {}": "Rapporto errori esportazione derivati: {}",
+    "Unable to write derivative export error report: {}": "Impossibile scrivere il rapporto errori esportazione derivati: {}",
     "%1 of %2 marked images": "%1 di %2 immagini contrassegnate",
     "All marked images": "Tutte le immagini contrassegnate",
     "Bulk tagging: %1": "Tag in blocco: %1",
@@ -1454,6 +1463,9 @@ TRANSLATIONS["rm"].update({
     "{} destination file(s) already existed.": "{} datoteca(s) da destinaziun existiva(n) gia.",
     "{} derivative(s) failed.": "{} derivat(s) n'\u00e8(n) betg reuss\u00ec(s).",
     "First failure ({}): {}": "Emprim sbagl ({}): {}",
+    "{} derivative(s) exported with metadata warnings.": "{} derivat(s) exportà(s) cun avis da metadatas.",
+    "Derivative export error report: {}": "Rapport d'errors per l'export da derivats: {}",
+    "Unable to write derivative export error report: {}": "Impussibel da scriver il rapport d'errors per l'export da derivats: {}",
     "%1 of %2 marked images": "%1 da %2 maletgs marcads",
     "All marked images": "Tut ils maletgs marcads",
     "Bulk tagging: %1": "Chavazzins en bloc: %1",
@@ -1872,6 +1884,7 @@ TRANSLATIONS["de"].update({
     "Metadata language (independent of interface)": "Metadatensprache (unabh\u00e4ngig von der Oberfl\u00e4che)",
     "Snapshot date: %1": "Snapshot-Datum: %1",
     "Custom Tagging": "Benutzerdefinierte Tags",
+    "Auto-Repair Tags for Derivatives": "Tags für Derivate automatisch reparieren",
     "Wikidata vectors are current": "Wikidata-Vektoren sind aktuell",
     "Wikidata vectors are required": "Wikidata-Vektoren sind erforderlich",
 })
@@ -1887,6 +1900,7 @@ TRANSLATIONS["fr"].update({
     "Metadata language (independent of interface)": "Langue des m\u00e9tadonn\u00e9es (ind\u00e9pendante de l\u2019interface)",
     "Snapshot date: %1": "Date de l\u2019instantan\u00e9 : %1",
     "Custom Tagging": "Tags personnalis\u00e9s",
+    "Auto-Repair Tags for Derivatives": "Réparer automatiquement les tags des dérivés",
     "Wikidata vectors are current": "Les vecteurs Wikidata sont \u00e0 jour",
     "Wikidata vectors are required": "Les vecteurs Wikidata sont requis",
 })
@@ -1902,6 +1916,7 @@ TRANSLATIONS["it"].update({
     "Metadata language (independent of interface)": "Lingua dei metadati (indipendente dall\u2019interfaccia)",
     "Snapshot date: %1": "Data snapshot: %1",
     "Custom Tagging": "Tag personalizzati",
+    "Auto-Repair Tags for Derivatives": "Ripara automaticamente i tag dei derivati",
     "Wikidata vectors are current": "I vettori Wikidata sono aggiornati",
     "Wikidata vectors are required": "Sono necessari i vettori Wikidata",
 })
@@ -1917,6 +1932,7 @@ TRANSLATIONS["rm"].update({
     "Metadata language (independent of interface)": "Lingua da las metadatas (independenta da l\u2019interfatscha)",
     "Snapshot date: %1": "Data dal snapshot: %1",
     "Custom Tagging": "Tags persunalisads",
+    "Auto-Repair Tags for Derivatives": "Reparar automaticamain ils tags per derivats",
     "Wikidata vectors are current": "Ils vectors Wikidata \u00e8n actuals",
     "Wikidata vectors are required": "Ils vectors Wikidata \u00e8n necessaris",
 })
@@ -2635,6 +2651,18 @@ TRANSLATIONS["rm"].update({
     "This will clear the saved description. This cannot be undone.": "La descripziun memorisada vegn stizzada. Quai na po betg vegnir revocà.",
     "This will replace the saved description. This cannot be undone.": "La descripziun memorisada vegn remplazzada. Quai na po betg vegnir revocà.",
 })
+TRANSLATIONS["de"]["Write Description to EXIF XPComment"] = (
+    "Beschreibung auch in EXIF XPComment schreiben"
+)
+TRANSLATIONS["fr"]["Write Description to EXIF XPComment"] = (
+    "Écrire aussi la description dans EXIF XPComment"
+)
+TRANSLATIONS["it"]["Write Description to EXIF XPComment"] = (
+    "Scrivi la descrizione anche in EXIF XPComment"
+)
+TRANSLATIONS["rm"]["Write Description to EXIF XPComment"] = (
+    "Scriver la descripziun era en EXIF XPComment"
+)
 
 
 def populate(lang: str, translations: dict[str, str]) -> None:

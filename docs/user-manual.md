@@ -966,6 +966,12 @@ and control which embedded keywords
 are included in derivative copies. There are no vocabulary lookups or AI tag
 suggestions. AI image search and AI-Scan are separate features.
 
+In Settings, **Auto-Repair Tags for Derivatives** is enabled by default and can
+be changed per database. It repairs a known malformed JPEG XMP header before
+writing derivative metadata. **Write Description to EXIF XPComment** is also
+enabled by default; turn it off to write the final derivative description only
+to XMP.
+
 ### Sidecars and search
 
 The first tagging change for `photo.jpg` creates `photo.jpg.sidecar.json` beside
@@ -1137,14 +1143,25 @@ exporter:
 - reads the copied file immediately before writing so non-excluded keywords
   changed since the last index scan are preserved, then verifies both fields
   with ExifTool;
-- removes an incomplete temporary copy after a write or verification failure;
+- writes the final derivative description to **XMP Description** and, when the
+  setting is enabled, **EXIF XPComment**, and also writes it to **IPTC Caption**;
+- combines distinct embedded XMP descriptions and IPTC captions into one source
+  description, avoids duplicating identical values, and honors the per-image
+  embedded-description exclusion;
+- keeps the derivative copy if keyword or description metadata cannot be
+  written or verified; those derivatives may have incomplete metadata, and
+  details are saved in a `derivative-export-errors*.json` report in the output
+  root;
+- still reports file-copy and finalization failures, and removes their
+  incomplete temporary copies;
 - never copies sidecars into the derivative tree.
 
 Originals are explicitly forbidden as metadata-write targets. Other copied
 metadata is preserved, but version 1 does not convert formats, provide custom
 metadata mappings, or overwrite existing derivatives. Some source formats may
-not support the requested writable metadata; those items are reported as
-failures and the source remains unchanged.
+not support the requested writable metadata; the derivative is still copied
+and the metadata issue is recorded in the error report. The source remains
+unchanged.
 
 ### Lifecycle and reset
 

@@ -56,6 +56,10 @@ def test_tagging_qml_contract_keeps_custom_tagging_and_removes_vocabulary_sugges
     # Assert
     assert missing == []
     assert 'objectName: "taggingEnabledSwitch"' in settings_source
+    assert 'objectName: "autoRepairDerivativeTagsSwitch"' in settings_source
+    assert 'text: qsTr("Auto-Repair Tags for Derivatives")' in settings_source
+    assert 'objectName: "writeDescriptionToXpCommentSwitch"' in settings_source
+    assert 'text: qsTr("Write Description to EXIF XPComment")' in settings_source
     assert 'text: qsTr("Custom Tagging")' in settings_source
     assert "Wikidata" not in source
     assert "TGM" not in source

@@ -51,6 +51,8 @@ _VALID_SORTS = {
 # JSON export formatting defaults — compact (one record per line) keeps the
 # historical output unchanged unless the user opts in to pretty-printing.
 _DEFAULT_JSON_PRETTY = False
+_DEFAULT_AUTO_REPAIR_DERIVATIVE_TAGS = True
+_DEFAULT_WRITE_DESCRIPTION_TO_XPCOMMENT = True
 _VALID_INDENT_STYLES = {"space", "tab"}
 _DEFAULT_JSON_INDENT_STYLE = "space"
 _DEFAULT_JSON_INDENT_SIZE = 2
@@ -113,6 +115,8 @@ class SettingsModel(QObject):
         self._gpu_install_status: str = ""
         self._gpu_restart_required: bool = False
         self._tagging_enabled: bool = False
+        self._auto_repair_derivative_tags = _DEFAULT_AUTO_REPAIR_DERIVATIVE_TAGS
+        self._write_description_to_xpcomment = _DEFAULT_WRITE_DESCRIPTION_TO_XPCOMMENT
         self._json_pretty: bool = _DEFAULT_JSON_PRETTY
         self._json_indent_style: str = _DEFAULT_JSON_INDENT_STYLE
         self._json_indent_size: int = _DEFAULT_JSON_INDENT_SIZE
@@ -327,11 +331,43 @@ class SettingsModel(QObject):
     def tagging_enabled(self) -> bool:
         return self._tagging_enabled
 
+    @Property(bool, notify=taggingSettingsChanged)
+    def autoRepairDerivativeTags(self) -> bool:
+        return self._auto_repair_derivative_tags
+
+    @property
+    def auto_repair_derivative_tags(self) -> bool:
+        return self._auto_repair_derivative_tags
+
+    @Property(bool, notify=taggingSettingsChanged)
+    def writeDescriptionToXpComment(self) -> bool:
+        return self._write_description_to_xpcomment
+
+    @property
+    def write_description_to_xpcomment(self) -> bool:
+        return self._write_description_to_xpcomment
+
     @Slot(bool)
     def setTaggingEnabled(self, value: bool) -> None:
         if self._tagging_enabled == value:
             return
         self._tagging_enabled = value
+        self.taggingSettingsChanged.emit()
+        self._save()
+
+    @Slot(bool)
+    def setAutoRepairDerivativeTags(self, value: bool) -> None:
+        if self._auto_repair_derivative_tags == value:
+            return
+        self._auto_repair_derivative_tags = value
+        self.taggingSettingsChanged.emit()
+        self._save()
+
+    @Slot(bool)
+    def setWriteDescriptionToXpComment(self, value: bool) -> None:
+        if self._write_description_to_xpcomment == value:
+            return
+        self._write_description_to_xpcomment = value
         self.taggingSettingsChanged.emit()
         self._save()
 
@@ -625,6 +661,10 @@ class SettingsModel(QObject):
                 }
             if isinstance(data.get("taggingEnabled"), bool):
                 self._tagging_enabled = data["taggingEnabled"]
+            if isinstance(data.get("autoRepairDerivativeTags"), bool):
+                self._auto_repair_derivative_tags = data["autoRepairDerivativeTags"]
+            if isinstance(data.get("writeDescriptionToXpComment"), bool):
+                self._write_description_to_xpcomment = data["writeDescriptionToXpComment"]
             if isinstance(data.get("jsonExportPretty"), bool):
                 self._json_pretty = data["jsonExportPretty"]
             if data.get("jsonExportIndentStyle") in _VALID_INDENT_STYLES:
@@ -662,6 +702,8 @@ class SettingsModel(QObject):
                         "gpuAccelerationEnabled": self._gpu_acceleration_enabled,
                         "gpuConsentBackends": sorted(self._gpu_consent_backends),
                         "taggingEnabled": self._tagging_enabled,
+                        "autoRepairDerivativeTags": self._auto_repair_derivative_tags,
+                        "writeDescriptionToXpComment": self._write_description_to_xpcomment,
                         "jsonExportPretty": self._json_pretty,
                         "jsonExportIndentStyle": self._json_indent_style,
                         "jsonExportIndentSize": self._json_indent_size,

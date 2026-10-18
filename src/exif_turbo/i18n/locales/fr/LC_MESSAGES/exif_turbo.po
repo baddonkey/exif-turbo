@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-17 17:10+0200\n"
+"POT-Creation-Date: 2026-10-18 23:48+0200\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: fr\n"
@@ -18,206 +18,206 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: src/exif_turbo/ui/models/settings_model.py:70
+#: src/exif_turbo/ui/models/settings_model.py:72
 msgid "PyTorch is not available on macOS Intel for Python 3.13+."
 msgstr "PyTorch n’est pas disponible sur macOS Intel pour Python 3.13+."
 
-#: src/exif_turbo/ui/models/settings_model.py:205
+#: src/exif_turbo/ui/models/settings_model.py:209
 #, python-brace-format
 msgid ""
 "The installed AMD ROCm runtime does not support GPU architecture(s): "
 "{architectures}. AI features will run on CPU."
 msgstr ""
 
-#: src/exif_turbo/ui/models/settings_model.py:287
+#: src/exif_turbo/ui/models/settings_model.py:291
 msgid "Starting download..."
 msgstr ""
 
-#: src/exif_turbo/ui/models/settings_model.py:313
+#: src/exif_turbo/ui/models/settings_model.py:317
 msgid "Installed — restart exif-turbo to enable GPU acceleration."
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:219
+#: src/exif_turbo/ui/view_models/app_controller.py:222
 msgid "Enter the database password to continue"
 msgstr "Saisir le mot de passe de la base de données pour continuer"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1137
+#: src/exif_turbo/ui/view_models/app_controller.py:1422
 msgid "Selecting all matching images…"
 msgstr "Sélection de toutes les images correspondantes…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1152
+#: src/exif_turbo/ui/view_models/app_controller.py:1437
 msgid "Deselecting all matching images…"
 msgstr "Désélection de toutes les images correspondantes…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1162
+#: src/exif_turbo/ui/view_models/app_controller.py:1447
 msgid "Inverting selection…"
 msgstr "Inversion de la sélection…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1176
+#: src/exif_turbo/ui/view_models/app_controller.py:1461
 msgid "Selecting images without a cached thumbnail…"
 msgstr "Sélection des images sans miniature en cache…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1191
+#: src/exif_turbo/ui/view_models/app_controller.py:1476
 msgid "No marked images to delete."
 msgstr "Aucune image marquée à supprimer."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1195
+#: src/exif_turbo/ui/view_models/app_controller.py:1480
 msgid "Deleting marked images…"
 msgstr "Suppression des images marquées…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1205
+#: src/exif_turbo/ui/view_models/app_controller.py:1494
 msgid "No marked images to export."
 msgstr "Aucune image marquée à exporter."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1210
+#: src/exif_turbo/ui/view_models/app_controller.py:1499
 msgid "Exporting metadata…"
 msgstr "Exportation des métadonnées…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1320
+#: src/exif_turbo/ui/view_models/app_controller.py:1614
 #, python-brace-format
 msgid "Deleted {n} image(s)."
 msgstr "{n} image(s) supprimée(s)."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1324
+#: src/exif_turbo/ui/view_models/app_controller.py:1618
 #, python-brace-format
 msgid "{n} were already missing."
 msgstr "{n} étaient déjà manquantes."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1330
+#: src/exif_turbo/ui/view_models/app_controller.py:1624
 #, python-brace-format
 msgid "{n} could not be deleted."
 msgstr "{n} n’ont pas pu être supprimées."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1340
+#: src/exif_turbo/ui/view_models/app_controller.py:1634
 #, python-brace-format
 msgid "Exported {count} image(s) to {name}"
 msgstr "{count} image(s) exportée(s) vers {name}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1348
-#: src/exif_turbo/ui/view_models/app_controller.py:1500
+#: src/exif_turbo/ui/view_models/app_controller.py:1642
+#: src/exif_turbo/ui/view_models/app_controller.py:1794
 #, python-brace-format
 msgid "Operation failed: {}"
 msgstr "Opération échouée : {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1354
-#: src/exif_turbo/ui/view_models/app_controller.py:1524
+#: src/exif_turbo/ui/view_models/app_controller.py:1648
+#: src/exif_turbo/ui/view_models/app_controller.py:1818
 msgid "Operation canceled."
 msgstr "Opération annulée."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1374
-#: src/exif_turbo/ui/view_models/app_controller.py:3134
-#: src/exif_turbo/ui/view_models/app_controller.py:3144
+#: src/exif_turbo/ui/view_models/app_controller.py:1668
+#: src/exif_turbo/ui/view_models/app_controller.py:3429
+#: src/exif_turbo/ui/view_models/app_controller.py:3439
 msgid "Refresh Tags"
 msgstr "Actualiser les tags"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1375
-#: src/exif_turbo/ui/view_models/app_controller.py:1456
+#: src/exif_turbo/ui/view_models/app_controller.py:1669
+#: src/exif_turbo/ui/view_models/app_controller.py:1750
 msgid "Remove Folder"
 msgstr "Supprimer le dossier"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1406
-#: src/exif_turbo/ui/view_models/app_controller.py:3411
-#: src/exif_turbo/ui/view_models/app_controller.py:3698
-#: src/exif_turbo/ui/view_models/app_controller.py:3759
-#: src/exif_turbo/ui/view_models/app_controller.py:5161
+#: src/exif_turbo/ui/view_models/app_controller.py:1700
+#: src/exif_turbo/ui/view_models/app_controller.py:3706
+#: src/exif_turbo/ui/view_models/app_controller.py:3993
+#: src/exif_turbo/ui/view_models/app_controller.py:4054
+#: src/exif_turbo/ui/view_models/app_controller.py:5517
 msgid "Starting..."
 msgstr "Démarrage..."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1419
-#: src/exif_turbo/ui/view_models/app_controller.py:3826
-#: src/exif_turbo/ui/view_models/app_controller.py:3916
+#: src/exif_turbo/ui/view_models/app_controller.py:1713
+#: src/exif_turbo/ui/view_models/app_controller.py:4121
+#: src/exif_turbo/ui/view_models/app_controller.py:4211
 #, python-brace-format
 msgid "{done} / {total}"
 msgstr "{done} / {total}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1456
+#: src/exif_turbo/ui/view_models/app_controller.py:1750
 msgid "Removed"
 msgstr "Supprimé"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1465
+#: src/exif_turbo/ui/view_models/app_controller.py:1759
 #, python-brace-format
 msgid ""
 "Removed cached vocabulary tags, but {count} sidecar(s) could not be "
 "cleaned; cleanup will retry on next unlock."
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1496
-#: src/exif_turbo/ui/view_models/app_controller.py:3539
-#: src/exif_turbo/ui/view_models/app_controller.py:3875
-#: src/exif_turbo/ui/view_models/app_controller.py:3972
-#: src/exif_turbo/ui/view_models/app_controller.py:4034
-#: src/exif_turbo/ui/view_models/app_controller.py:4044
-#: src/exif_turbo/ui/view_models/app_controller.py:5295
+#: src/exif_turbo/ui/view_models/app_controller.py:1790
+#: src/exif_turbo/ui/view_models/app_controller.py:3834
+#: src/exif_turbo/ui/view_models/app_controller.py:4170
+#: src/exif_turbo/ui/view_models/app_controller.py:4267
+#: src/exif_turbo/ui/view_models/app_controller.py:4329
+#: src/exif_turbo/ui/view_models/app_controller.py:4339
+#: src/exif_turbo/ui/view_models/app_controller.py:5651
 #, python-brace-format
 msgid "Failed: {error}"
 msgstr "Échec : {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1522
+#: src/exif_turbo/ui/view_models/app_controller.py:1816
 msgid "Canceled"
 msgstr "Annulé"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1539
-#: src/exif_turbo/ui/view_models/app_controller.py:1561
+#: src/exif_turbo/ui/view_models/app_controller.py:1833
+#: src/exif_turbo/ui/view_models/app_controller.py:1855
 msgid "Password must not be empty."
 msgstr "Le mot de passe ne doit pas être vide."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1643
+#: src/exif_turbo/ui/view_models/app_controller.py:1937
 msgid "Removing legacy vocabulary tags…"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1646
+#: src/exif_turbo/ui/view_models/app_controller.py:1940
 msgid "Wrong password — please try again."
 msgstr "Mot de passe incorrect — veuillez réessayer."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1658
+#: src/exif_turbo/ui/view_models/app_controller.py:1952
 #, python-brace-format
 msgid "Failed to open database: {error}"
 msgstr "Échec de l’ouverture de la base de données : {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1692
+#: src/exif_turbo/ui/view_models/app_controller.py:1986
 #, python-brace-format
 msgid "Could not remove legacy vocabulary tags: {error}"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1711
+#: src/exif_turbo/ui/view_models/app_controller.py:2005
 msgid "Database is locked."
 msgstr "La base de données est verrouillée."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1724
+#: src/exif_turbo/ui/view_models/app_controller.py:2018
 msgid "Cannot change password while indexing or thumb-building is running."
 msgstr ""
 "Impossible de changer le mot de passe pendant l’indexation ou la création"
 " des miniatures."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1728
+#: src/exif_turbo/ui/view_models/app_controller.py:2022
 msgid "Current password is incorrect."
 msgstr "Le mot de passe actuel est incorrect."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1737
+#: src/exif_turbo/ui/view_models/app_controller.py:2031
 msgid "New password must differ from the current password."
 msgstr "Le nouveau mot de passe doit être différent de l’actuel."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1755
+#: src/exif_turbo/ui/view_models/app_controller.py:2049
 msgid "Changing password…"
 msgstr "Changement du mot de passe…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1799
+#: src/exif_turbo/ui/view_models/app_controller.py:2093
 #, python-brace-format
 msgid "Database password changed, but reopening failed: {error}"
 msgstr ""
 "Mot de passe de la base de données modifié, mais la réouverture a échoué "
 ": {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1809
+#: src/exif_turbo/ui/view_models/app_controller.py:2103
 msgid "Password changed successfully."
 msgstr "Mot de passe modifié avec succès."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1850
+#: src/exif_turbo/ui/view_models/app_controller.py:2144
 #, python-brace-format
 msgid "Failed to change password: {error}"
 msgstr "Échec du changement de mot de passe : {error}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1855
+#: src/exif_turbo/ui/view_models/app_controller.py:2149
 #, python-brace-format
 msgid ""
 "Password changed but thumbnail cache could not be re-wrapped ({error}). "
@@ -226,323 +226,322 @@ msgstr ""
 "Mot de passe modifié, mais le cache des miniatures n’a pas pu être "
 "rechiffré ({error}). Le cache a été effacé et sera reconstruit."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1910
+#: src/exif_turbo/ui/view_models/app_controller.py:2204
 msgid "The selected image set filter is invalid."
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:1917
+#: src/exif_turbo/ui/view_models/app_controller.py:2211
 msgid "The selected image set no longer exists."
 msgstr "La collection sélectionnée n’existe plus."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:2762
+#: src/exif_turbo/ui/view_models/app_controller.py:3057
 msgid "Folder list reloaded."
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3000
+#: src/exif_turbo/ui/view_models/app_controller.py:3295
 #, python-brace-format
 msgid "Folder already tracked: {}"
 msgstr "Dossier déjà suivi : {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3018
-#: src/exif_turbo/ui/view_models/app_controller.py:3174
+#: src/exif_turbo/ui/view_models/app_controller.py:3313
+#: src/exif_turbo/ui/view_models/app_controller.py:3469
 msgid "Wait for the current folder operation to finish."
 msgstr "Attendez la fin de l'opération en cours sur le dossier."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3034
+#: src/exif_turbo/ui/view_models/app_controller.py:3329
 msgid "Removing folder…"
 msgstr "Suppression du dossier…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3113
+#: src/exif_turbo/ui/view_models/app_controller.py:3408
 msgid "Refreshing sidecar tags…"
 msgstr "Actualisation des tags sidecar…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3135
+#: src/exif_turbo/ui/view_models/app_controller.py:3430
 #, python-brace-format
 msgid "{count} images refreshed; {errors} sidecars had errors"
 msgstr ""
 "{count} images actualisées ; {errors} fichiers annexes comportaient des "
 "erreurs"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3145
+#: src/exif_turbo/ui/view_models/app_controller.py:3440
 #, python-brace-format
 msgid "{count} images refreshed"
 msgstr "{count} images actualisées"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3379
-#: src/exif_turbo/ui/view_models/app_controller.py:3387
+#: src/exif_turbo/ui/view_models/app_controller.py:3674
+#: src/exif_turbo/ui/view_models/app_controller.py:3682
 msgid "Folder not accessible"
 msgstr "Dossier inaccessible"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3386
-#: src/exif_turbo/ui/view_models/app_controller.py:3411
-#: src/exif_turbo/ui/view_models/app_controller.py:3484
-#: src/exif_turbo/ui/view_models/app_controller.py:3538
-#: src/exif_turbo/ui/view_models/app_controller.py:3595
-#: src/exif_turbo/ui/view_models/app_controller.py:3621
-#: src/exif_turbo/ui/view_models/app_controller.py:5080
-#: src/exif_turbo/ui/view_models/app_controller.py:5089
-#: src/exif_turbo/ui/view_models/app_controller.py:5119
+#: src/exif_turbo/ui/view_models/app_controller.py:3681
+#: src/exif_turbo/ui/view_models/app_controller.py:3706
+#: src/exif_turbo/ui/view_models/app_controller.py:3779
+#: src/exif_turbo/ui/view_models/app_controller.py:3833
+#: src/exif_turbo/ui/view_models/app_controller.py:3890
+#: src/exif_turbo/ui/view_models/app_controller.py:3916
+#: src/exif_turbo/ui/view_models/app_controller.py:5436
+#: src/exif_turbo/ui/view_models/app_controller.py:5445
+#: src/exif_turbo/ui/view_models/app_controller.py:5475
 msgid "Indexing"
 msgstr "Indexation"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3474
+#: src/exif_turbo/ui/view_models/app_controller.py:3769
 #, python-brace-format
 msgid "{count} images indexed; {errors} skipped due to errors"
 msgstr "{count} images indexées ; {errors} ignorées en raison d'erreurs"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3479
+#: src/exif_turbo/ui/view_models/app_controller.py:3774
 #, python-brace-format
 msgid "{count} images indexed"
 msgstr "{count} images indexées"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3596
+#: src/exif_turbo/ui/view_models/app_controller.py:3891
 #, python-brace-format
 msgid "Canceled after {count} images"
 msgstr "Annulé après {count} images"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3621
+#: src/exif_turbo/ui/view_models/app_controller.py:3916
 msgid "Canceling..."
 msgstr "Annulation..."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3698
-#: src/exif_turbo/ui/view_models/app_controller.py:3915
-#: src/exif_turbo/ui/view_models/app_controller.py:3952
-#: src/exif_turbo/ui/view_models/app_controller.py:3971
-#: src/exif_turbo/ui/view_models/app_controller.py:3998
+#: src/exif_turbo/ui/view_models/app_controller.py:3993
+#: src/exif_turbo/ui/view_models/app_controller.py:4210
+#: src/exif_turbo/ui/view_models/app_controller.py:4247
+#: src/exif_turbo/ui/view_models/app_controller.py:4266
+#: src/exif_turbo/ui/view_models/app_controller.py:4293
 msgid "Previews"
 msgstr "Aperçus"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3758
-#: src/exif_turbo/ui/view_models/app_controller.py:3825
-#: src/exif_turbo/ui/view_models/app_controller.py:3855
-#: src/exif_turbo/ui/view_models/app_controller.py:3874
-#: src/exif_turbo/ui/view_models/app_controller.py:3898
+#: src/exif_turbo/ui/view_models/app_controller.py:4053
+#: src/exif_turbo/ui/view_models/app_controller.py:4120
+#: src/exif_turbo/ui/view_models/app_controller.py:4150
+#: src/exif_turbo/ui/view_models/app_controller.py:4169
+#: src/exif_turbo/ui/view_models/app_controller.py:4193
 msgid "AI Full Scan"
 msgstr "Analyse IA complète"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3758
-#: src/exif_turbo/ui/view_models/app_controller.py:3825
-#: src/exif_turbo/ui/view_models/app_controller.py:3855
-#: src/exif_turbo/ui/view_models/app_controller.py:3874
-#: src/exif_turbo/ui/view_models/app_controller.py:3898
+#: src/exif_turbo/ui/view_models/app_controller.py:4053
+#: src/exif_turbo/ui/view_models/app_controller.py:4120
+#: src/exif_turbo/ui/view_models/app_controller.py:4150
+#: src/exif_turbo/ui/view_models/app_controller.py:4169
+#: src/exif_turbo/ui/view_models/app_controller.py:4193
 msgid "AI-Scan"
 msgstr "Analyse IA"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3850
+#: src/exif_turbo/ui/view_models/app_controller.py:4145
 #, python-brace-format
 msgid "{n} images vectorised"
 msgstr "{n} images vectorisées"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3852
+#: src/exif_turbo/ui/view_models/app_controller.py:4147
 #, python-brace-format
 msgid "{n} files could not be processed"
 msgstr "{n} fichiers n'ont pas pu être traités"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3899
+#: src/exif_turbo/ui/view_models/app_controller.py:4194
 #, python-brace-format
 msgid "Canceled after {n} images"
 msgstr "Annulé après {n} images"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3945
+#: src/exif_turbo/ui/view_models/app_controller.py:4240
 #, python-brace-format
 msgid "{built} / {total} built"
 msgstr "{built} / {total} créés"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3949
+#: src/exif_turbo/ui/view_models/app_controller.py:4244
 #, python-brace-format
 msgid "{n} image(s) skipped — too large to decode safely."
 msgstr ""
 "{n} image(s) ignorée(s) — trop volumineuse(s) pour être décodée(s) sans "
 "risque."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:3999
+#: src/exif_turbo/ui/view_models/app_controller.py:4294
 #, python-brace-format
 msgid "Canceled after {built} / {total}"
 msgstr "Annulé après {built} / {total}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4022
-#: src/exif_turbo/ui/view_models/app_controller.py:4033
-#: src/exif_turbo/ui/view_models/app_controller.py:4043
-#: src/exif_turbo/ui/view_models/app_controller.py:4051
+#: src/exif_turbo/ui/view_models/app_controller.py:4317
+#: src/exif_turbo/ui/view_models/app_controller.py:4328
+#: src/exif_turbo/ui/view_models/app_controller.py:4338
+#: src/exif_turbo/ui/view_models/app_controller.py:4346
 msgid "Clear Previews"
 msgstr "Effacer les aperçus"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4023
+#: src/exif_turbo/ui/view_models/app_controller.py:4318
 msgid "Cancel the running preview build first"
 msgstr "Annulez d'abord la création d'aperçus en cours"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4052
+#: src/exif_turbo/ui/view_models/app_controller.py:4347
 #, python-brace-format
 msgid "{n} cached previews removed"
 msgstr "{n} aperçus en cache supprimés"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4178
+#: src/exif_turbo/ui/view_models/app_controller.py:4473
 msgid "Image copied to clipboard"
 msgstr "Image copiée dans le presse-papiers"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4182
+#: src/exif_turbo/ui/view_models/app_controller.py:4477
 msgid "Path copied to clipboard"
 msgstr "Chemin copié dans le presse-papiers"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4191
+#: src/exif_turbo/ui/view_models/app_controller.py:4486
 msgid "Copied to clipboard"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4204
+#: src/exif_turbo/ui/view_models/app_controller.py:4499
 msgid "Preview source file not accessible"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4211
+#: src/exif_turbo/ui/view_models/app_controller.py:4506
 msgid "Preview saved"
 msgstr "Prévisualisation enregistrée"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4223
-#: src/exif_turbo/ui/view_models/app_controller.py:4232
+#: src/exif_turbo/ui/view_models/app_controller.py:4518
+#: src/exif_turbo/ui/view_models/app_controller.py:4527
 msgid "File not accessible"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4228
+#: src/exif_turbo/ui/view_models/app_controller.py:4523
 msgid "Original saved"
 msgstr "Original enregistré"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4292
+#: src/exif_turbo/ui/view_models/app_controller.py:4587
 msgid "Resetting database…"
 msgstr "Réinitialisation de la base de données…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4317
+#: src/exif_turbo/ui/view_models/app_controller.py:4612
 msgid "Database reset"
 msgstr "Base de données réinitialisée"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4370
-#: src/exif_turbo/ui/view_models/app_controller.py:4385
-#: src/exif_turbo/ui/view_models/app_controller.py:4399
-#: src/exif_turbo/ui/view_models/app_controller.py:4425
-#: src/exif_turbo/ui/view_models/app_controller.py:4561
-#: src/exif_turbo/ui/view_models/app_controller.py:4578
-#: src/exif_turbo/ui/view_models/app_controller.py:4594
-#: src/exif_turbo/ui/view_models/app_controller.py:4632
-#: src/exif_turbo/ui/view_models/app_controller.py:4689
-#: src/exif_turbo/ui/view_models/app_controller.py:4706
+#: src/exif_turbo/ui/view_models/app_controller.py:4680
+#: src/exif_turbo/ui/view_models/app_controller.py:4695
+#: src/exif_turbo/ui/view_models/app_controller.py:4709
+#: src/exif_turbo/ui/view_models/app_controller.py:4735
+#: src/exif_turbo/ui/view_models/app_controller.py:4863
+#: src/exif_turbo/ui/view_models/app_controller.py:4880
+#: src/exif_turbo/ui/view_models/app_controller.py:4896
+#: src/exif_turbo/ui/view_models/app_controller.py:4934
+#: src/exif_turbo/ui/view_models/app_controller.py:4991
+#: src/exif_turbo/ui/view_models/app_controller.py:5008
 msgid "Unlock the database to manage sets."
 msgstr "Déverrouillez la base de données pour gérer les collections."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4377
+#: src/exif_turbo/ui/view_models/app_controller.py:4687
 msgid "Set created."
 msgstr "Collection créée."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4392
+#: src/exif_turbo/ui/view_models/app_controller.py:4702
 msgid "Set renamed."
 msgstr "Collection renommée."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4407
+#: src/exif_turbo/ui/view_models/app_controller.py:4717
 msgid "Set deleted."
 msgstr "Collection supprimée."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4428
-#: src/exif_turbo/ui/view_models/app_controller.py:4600
+#: src/exif_turbo/ui/view_models/app_controller.py:4738
+#: src/exif_turbo/ui/view_models/app_controller.py:4902
 msgid "A set operation is already running."
 msgstr "Une opération sur une collection est déjà en cours."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4463
+#: src/exif_turbo/ui/view_models/app_controller.py:4773
 msgid "Adding"
 msgstr "Ajout"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4463
+#: src/exif_turbo/ui/view_models/app_controller.py:4773
 msgid "Removing"
 msgstr "Suppression"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4464
+#: src/exif_turbo/ui/view_models/app_controller.py:4774
 #, python-brace-format
 msgid "{} images from set…"
 msgstr "{} images ajoutées à/retirées de la collection…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4474
+#: src/exif_turbo/ui/view_models/app_controller.py:4784
 msgid "Cancellation requested…"
 msgstr "Annulation demandée…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4492
+#: src/exif_turbo/ui/view_models/app_controller.py:4802
 #, python-brace-format
 msgid "Filter matched {} images; {} added, {} removed."
 msgstr "Le filtre trouve {} images ; {} ajoutées, {} retirées."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4498
+#: src/exif_turbo/ui/view_models/app_controller.py:4808
 #, python-brace-format
 msgid "{} images processed; {} added, {} removed."
 msgstr "{} images traitées ; {} ajoutées, {} retirées."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4509
+#: src/exif_turbo/ui/view_models/app_controller.py:4819
 #, python-brace-format
 msgid "Set operation failed: {}"
 msgstr "Échec de l’opération sur la collection : {}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4521
-#, python-brace-format
-msgid "Filter reapply canceled after {} matches; changes rolled back."
-msgstr ""
-"Réapplication annulée après {} résultats ; les changements ont été "
-"annulés."
-
-#: src/exif_turbo/ui/view_models/app_controller.py:4527
+#: src/exif_turbo/ui/view_models/app_controller.py:4829
 #, python-brace-format
 msgid "Canceled after {} images; {} added, {} removed."
 msgstr "Annulé après {} images ; {} ajoutées, {} retirées."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4546
+#: src/exif_turbo/ui/view_models/app_controller.py:4848
 msgid "This filter matches no images. Confirm to empty the set."
 msgstr "Ce filtre ne trouve aucune image. Confirmez pour vider la collection."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4568
+#: src/exif_turbo/ui/view_models/app_controller.py:4870
 msgid "Image removed from set."
 msgstr "Image retirée de la collection."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4597
+#: src/exif_turbo/ui/view_models/app_controller.py:4899
 msgid "Choose Add or Replace for filter reapply."
 msgstr "Choisissez Ajouter ou Remplacer pour réappliquer le filtre."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4623
+#: src/exif_turbo/ui/view_models/app_controller.py:4925
 msgid "Applying saved filter…"
 msgstr "Application du filtre enregistré…"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4636
+#: src/exif_turbo/ui/view_models/app_controller.py:4938
 msgid "Semantic AI queries cannot be saved as text filters."
 msgstr ""
 "Les recherches sémantiques par IA ne peuvent pas être enregistrées comme "
 "filtres texte."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4671
+#: src/exif_turbo/ui/view_models/app_controller.py:4973
 msgid "Add a search condition before saving a filter."
 msgstr "Ajoutez un critère de recherche avant d’enregistrer un filtre."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4682
+#: src/exif_turbo/ui/view_models/app_controller.py:4984
 msgid "Current search saved as the set filter."
 msgstr "Recherche actuelle enregistrée comme filtre de collection."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4699
+#: src/exif_turbo/ui/view_models/app_controller.py:5001
 msgid "Set filter saved."
 msgstr "Filtre de collection enregistré."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4713
+#: src/exif_turbo/ui/view_models/app_controller.py:5015
 msgid "Set filter cleared."
 msgstr "Filtre de collection effacé."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4723
+#: src/exif_turbo/ui/view_models/app_controller.py:5035
+msgid "Choose whether to add or replace descriptions."
+msgstr "Choisissez d'ajouter ou de remplacer les descriptions."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:5036
 msgid "Choose whether to add or replace tags."
 msgstr "Choisissez d’ajouter ou de remplacer les tags."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4733
-msgid "Choose a folder in Browse first."
-msgstr "Choisissez d’abord un dossier dans Parcourir."
-
-#: src/exif_turbo/ui/view_models/app_controller.py:4750
+#: src/exif_turbo/ui/view_models/app_controller.py:5049
+#: src/exif_turbo/ui/view_models/app_controller.py:5054
+#: src/exif_turbo/ui/view_models/app_controller.py:5084
 msgid "Choose a valid copy target."
 msgstr "Choisissez une cible de copie valide."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4863
+#: src/exif_turbo/ui/view_models/app_controller.py:5067
+msgid "Choose a folder in Browse first."
+msgstr "Choisissez d’abord un dossier dans Parcourir."
+
+#: src/exif_turbo/ui/view_models/app_controller.py:5213
 #, python-brace-format
 msgid "{folder}, {operation}: {detail}"
 msgstr "{folder}, {operation} : {detail}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4921
+#: src/exif_turbo/ui/view_models/app_controller.py:5271
 #, python-brace-format
 msgid ""
 "Original data source not attached: {source} — attach or mount this folder"
@@ -551,123 +550,143 @@ msgstr ""
 "Source de données d'origine non rattachée : {source} — rattachez ou "
 "montez ce dossier pour ouvrir les fichiers."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:4928
+#: src/exif_turbo/ui/view_models/app_controller.py:5278
 #, python-brace-format
 msgid "File not found: {}"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:5080
+#: src/exif_turbo/ui/view_models/app_controller.py:5436
 msgid "Cleaning up cache..."
 msgstr "Nettoyage du cache..."
 
-#: src/exif_turbo/ui/view_models/app_controller.py:5090
+#: src/exif_turbo/ui/view_models/app_controller.py:5446
 #, python-brace-format
 msgid "Synchronizing tags: {current} / {total}"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/app_controller.py:5113
+#: src/exif_turbo/ui/view_models/app_controller.py:5469
 #, python-brace-format
 msgid "{current} found while scanning"
 msgstr "{current} trouvées pendant l'analyse"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:5115
+#: src/exif_turbo/ui/view_models/app_controller.py:5471
 #, python-brace-format
 msgid "0 / {total}"
 msgstr "0 / {total}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:5117
-#: src/exif_turbo/ui/view_models/app_controller.py:5143
+#: src/exif_turbo/ui/view_models/app_controller.py:5473
+#: src/exif_turbo/ui/view_models/app_controller.py:5499
 #, python-brace-format
 msgid "{current} / {total}"
 msgstr "{current} / {total}"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:5142
-#: src/exif_turbo/ui/view_models/app_controller.py:5161
-#: src/exif_turbo/ui/view_models/app_controller.py:5274
-#: src/exif_turbo/ui/view_models/app_controller.py:5294
-#: src/exif_turbo/ui/view_models/app_controller.py:5311
+#: src/exif_turbo/ui/view_models/app_controller.py:5498
+#: src/exif_turbo/ui/view_models/app_controller.py:5517
+#: src/exif_turbo/ui/view_models/app_controller.py:5630
+#: src/exif_turbo/ui/view_models/app_controller.py:5650
+#: src/exif_turbo/ui/view_models/app_controller.py:5667
 msgid "Thumbnails"
 msgstr "Vignettes"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:5275
+#: src/exif_turbo/ui/view_models/app_controller.py:5631
 #, python-brace-format
 msgid "{cached} / {total} built"
 msgstr "{cached} / {total} créés"
 
-#: src/exif_turbo/ui/view_models/app_controller.py:5312
+#: src/exif_turbo/ui/view_models/app_controller.py:5668
 #, python-brace-format
 msgid "Canceled after {cached} / {total}"
 msgstr "Annulé après {cached} / {total}"
 
-#: src/exif_turbo/ui/view_models/mcp_controller.py:110
+#: src/exif_turbo/ui/view_models/mcp_controller.py:124
 msgid "Unlock the database to start the MCP server."
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/mcp_controller.py:121
-#: src/exif_turbo/ui/view_models/mcp_controller.py:127
+#: src/exif_turbo/ui/view_models/mcp_controller.py:135
+#: src/exif_turbo/ui/view_models/mcp_controller.py:141
 #, python-brace-format
 msgid "MCP server failed to start: {error}"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/mcp_controller.py:132
+#: src/exif_turbo/ui/view_models/mcp_controller.py:146
 #, python-brace-format
 msgid "MCP server listening on {url}"
 msgstr ""
 
-#: src/exif_turbo/ui/view_models/tagging_controller.py:307
+#: src/exif_turbo/ui/view_models/tagging_controller.py:499
+#, python-brace-format
+msgid "Copied description to {} image(s). Unchanged: {}. Problems: {}."
+msgstr "Description copiée vers {} image(s). Inchangées : {}. Problèmes : {}."
+
+#: src/exif_turbo/ui/view_models/tagging_controller.py:501
 #, python-brace-format
 msgid "Copied tags to {} image(s). Unchanged: {}. Problems: {}."
 msgstr "Tags copiés vers {} image(s). Inchangées : {}. Problèmes : {}."
 
-#: src/exif_turbo/ui/view_models/tagging_controller.py:311
+#: src/exif_turbo/ui/view_models/tagging_controller.py:507
 #, python-brace-format
 msgid "Canceled. {}"
 msgstr "Annulé. {}"
 
-#: src/exif_turbo/ui/view_models/tagging_controller.py:381
+#: src/exif_turbo/ui/view_models/tagging_controller.py:590
 #, python-brace-format
 msgid "Created derivative: {}"
 msgstr "Dérivé créé : {}"
 
-#: src/exif_turbo/ui/view_models/tagging_controller.py:383
+#: src/exif_turbo/ui/view_models/tagging_controller.py:592
 msgid "Created 1 derivative."
 msgstr "1 dérivé créé."
 
-#: src/exif_turbo/ui/view_models/tagging_controller.py:387
+#: src/exif_turbo/ui/view_models/tagging_controller.py:596
 #, python-brace-format
 msgid "Created {} derivatives in {}."
 msgstr "{} dérivés créés dans {}."
 
-#: src/exif_turbo/ui/view_models/tagging_controller.py:392
+#: src/exif_turbo/ui/view_models/tagging_controller.py:601
 #, python-brace-format
 msgid "Created {} derivatives."
 msgstr "{} dérivés créés."
 
-#: src/exif_turbo/ui/view_models/tagging_controller.py:394
+#: src/exif_turbo/ui/view_models/tagging_controller.py:603
 msgid "No derivatives were created."
 msgstr "Aucun dérivé n'a été créé."
 
-#: src/exif_turbo/ui/view_models/tagging_controller.py:396
+#: src/exif_turbo/ui/view_models/tagging_controller.py:605
 #, python-brace-format
 msgid "{} image(s) had no tags."
 msgstr "{} image(s) sans tags."
 
-#: src/exif_turbo/ui/view_models/tagging_controller.py:398
+#: src/exif_turbo/ui/view_models/tagging_controller.py:607
 #, python-brace-format
 msgid "{} destination file(s) already existed."
 msgstr "{} fichier(s) de destination existaient déjà."
 
-#: src/exif_turbo/ui/view_models/tagging_controller.py:400
+#: src/exif_turbo/ui/view_models/tagging_controller.py:609
 #, python-brace-format
 msgid "{} derivative(s) failed."
 msgstr "{} dérivé(s) ont échoué."
 
-#: src/exif_turbo/ui/view_models/tagging_controller.py:413
+#: src/exif_turbo/ui/view_models/tagging_controller.py:622
 #, python-brace-format
 msgid "First failure ({}): {}"
 msgstr "Premier échec ({}): {}"
 
-#: src/exif_turbo/ui/view_models/tagging_controller.py:415
+#: src/exif_turbo/ui/view_models/tagging_controller.py:625
+#, python-brace-format
+msgid "{} derivative(s) exported with metadata warnings."
+msgstr "{} dérivé(s) exporté(s) avec des avertissements de métadonnées."
+
+#: src/exif_turbo/ui/view_models/tagging_controller.py:630
+#, python-brace-format
+msgid "Derivative export error report: {}"
+msgstr "Rapport d’erreurs de l’export des dérivés : {}"
+
+#: src/exif_turbo/ui/view_models/tagging_controller.py:633
+#, python-brace-format
+msgid "Unable to write derivative export error report: {}"
+msgstr "Impossible d’écrire le rapport d’erreurs de l’export des dérivés : {}"
+
+#: src/exif_turbo/ui/view_models/tagging_controller.py:638
 #, python-brace-format
 msgid "{} derivative(s) canceled."
 msgstr "{} dérivé(s) annulé(s)."
@@ -764,6 +783,12 @@ msgid "&User Manual"
 msgstr "&Manuel utilisateur"
 
 #: QML
+msgid "A draft is being kept for %1. Return to that image or discard the draft."
+msgstr ""
+"Un brouillon est conservé pour %1. Revenez à cette image ou supprimez le "
+"brouillon."
+
+#: QML
 msgid "AI"
 msgstr ""
 
@@ -838,6 +863,14 @@ msgstr "Toutes les collections"
 #: QML
 msgid "Any condition"
 msgstr "Au moins une condition"
+
+#: QML
+msgid "Append the source description as a new paragraph"
+msgstr "Ajouter la description source dans un nouveau paragraphe"
+
+#: QML
+msgid "Auto-Repair Tags for Derivatives"
+msgstr "Réparer automatiquement les tags des dérivés"
 
 #: QML
 msgid "Balanced — score ≥ 0.20"
@@ -952,6 +985,10 @@ msgid "Close"
 msgstr "Fermer"
 
 #: QML
+msgid "Close copy panel"
+msgstr "Fermer le panneau de copie"
+
+#: QML
 msgid "Close tagging"
 msgstr "Fermer l’étiquetage"
 
@@ -981,8 +1018,21 @@ msgid "Copies accepted and custom tags. The current image is excluded."
 msgstr "Copie les tags acceptés et personnalisés. L’image actuelle est exclue."
 
 #: QML
+msgid ""
+"Copies the saved custom description only. Drafts, embedded descriptions, "
+"and ignore settings are not copied. The current image is excluded."
+msgstr ""
+"Copie uniquement la description personnalisée enregistrée. Les "
+"brouillons, descriptions intégrées et paramètres d'exclusion ne sont pas "
+"copiés. L'image actuelle est exclue."
+
+#: QML
 msgid "Copy"
 msgstr "Copier"
+
+#: QML
+msgid "Copy Description"
+msgstr "Copier la description"
 
 #: QML
 msgid "Copy Image to Clipboard"
@@ -997,12 +1047,24 @@ msgid "Copy Tags"
 msgstr "Copier les tags"
 
 #: QML
+msgid "Copy description to other images"
+msgstr "Copier la description vers d'autres images"
+
+#: QML
 msgid "Copy preview image to clipboard"
 msgstr "Copier l’aperçu dans le presse-papiers"
 
 #: QML
+msgid "Copy tags and descriptions"
+msgstr "Copier les tags et descriptions"
+
+#: QML
 msgid "Copy tags to other images"
 msgstr "Copier les tags vers d’autres images"
+
+#: QML
+msgid "Copying descriptions"
+msgstr "Copie des descriptions"
 
 #: QML
 msgid "Copying tags"
@@ -1051,6 +1113,10 @@ msgstr "Résultats de recherche actuels (%1)"
 #: QML
 msgid "Custom Tagging"
 msgstr "Tags personnalisés"
+
+#: QML
+msgid "Custom description"
+msgstr "Description personnalisée"
 
 #: QML
 msgid "Custom tags"
@@ -1113,6 +1179,10 @@ msgid "Disabled"
 msgstr ""
 
 #: QML
+msgid "Discard draft"
+msgstr "Supprimer le brouillon"
+
+#: QML
 msgid "Download ExifTool from:"
 msgstr "Télécharger ExifTool sur :"
 
@@ -1131,10 +1201,6 @@ msgstr ""
 #: QML
 msgid "EXIF TAGS"
 msgstr "TAGS EXIF"
-
-#: QML
-msgid "Filter"
-msgstr "Filtre"
 
 #: QML
 msgid "Edit filter"
@@ -1217,6 +1283,10 @@ msgstr ""
 "PATH."
 
 #: QML
+msgid "Existing embedded description"
+msgstr "Description intégrée existante"
+
+#: QML
 msgid "Existing image tags"
 msgstr "Tags existants de l’image"
 
@@ -1282,12 +1352,20 @@ msgid "File type"
 msgstr "Type de fichier"
 
 #: QML
+msgid "Filter"
+msgstr "Filtre"
+
+#: QML
 msgid ""
 "Filter by capture date — click a year to select it, Shift-click to extend"
 " the range"
 msgstr ""
 "Filtrer par date de prise de vue — cliquez sur une année pour la "
 "sélectionner, Maj+clic pour étendre la plage"
+
+#: QML
+msgid "Final derivative description"
+msgstr "Description finale de la copie"
 
 #: QML
 msgid "Final derivative tags"
@@ -1428,6 +1506,10 @@ msgstr "Ignorer"
 #: QML
 msgid "Ignore all existing tags"
 msgstr "Ignorer tous les tags existants"
+
+#: QML
+msgid "Ignore embedded description"
+msgstr "Ignorer la description intégrée"
 
 #: QML
 msgid "Indent size"
@@ -1600,6 +1682,14 @@ msgid "No GPU backend installed yet — an optional download can add %1 support.
 msgstr ""
 
 #: QML
+msgid "No description would be written to a derivative."
+msgstr "Aucune description ne serait écrite dans la copie."
+
+#: QML
+msgid "No embedded description."
+msgstr "Aucune description intégrée."
+
+#: QML
 msgid "No embedded tags found."
 msgstr "Aucun tag intégré trouvé."
 
@@ -1618,10 +1708,6 @@ msgstr ""
 #: QML
 msgid "No image selected"
 msgstr "Aucune image sélectionnée"
-
-#: QML
-msgid "No saved apply filter"
-msgstr "Aucun filtre enregistré"
 
 #: QML
 msgid "No sets yet"
@@ -1821,6 +1907,14 @@ msgid "Remove custom tag from selected image"
 msgstr "Supprimer le tag personnalisé de l’image sélectionnée"
 
 #: QML
+msgid ""
+"Remove embedded descriptions from exported copies, even without a "
+"replacement. Originals stay unchanged."
+msgstr ""
+"Supprimer les descriptions intégrées des copies exportées, même sans "
+"remplacement. Les originaux restent inchangés."
+
+#: QML
 msgid "Remove target tags before copying source tags"
 msgstr "Supprimer les tags cibles avant de copier les tags source"
 
@@ -1854,8 +1948,16 @@ msgid "Replace"
 msgstr "Remplacer"
 
 #: QML
+msgid "Replace descriptions on target images?"
+msgstr "Remplacer les descriptions des images cibles ?"
+
+#: QML
 msgid "Replace members"
 msgstr "Remplacer les membres"
+
+#: QML
+msgid "Replace or clear target custom descriptions"
+msgstr "Remplacer ou effacer les descriptions personnalisées cibles"
 
 #: QML
 msgid "Replace tags on target images?"
@@ -1896,6 +1998,10 @@ msgid "Sample library"
 msgstr ""
 
 #: QML
+msgid "Save"
+msgstr "Enregistrer"
+
+#: QML
 msgid "Save Original As…"
 msgstr "Enregistrer l’original sous…"
 
@@ -1918,10 +2024,6 @@ msgstr "Enregistrer le fichier original sous…"
 #: QML
 msgid "Save preview image as…"
 msgstr "Enregistrer la prévisualisation sous…"
-
-#: QML
-msgid "Saved apply filter"
-msgstr "Filtre enregistré"
 
 #: QML
 msgid "Scan"
@@ -2083,6 +2185,22 @@ msgstr ""
 
 #: QML
 msgid ""
+"The saved custom description will replace each target's custom "
+"description. An empty source clears it. This cannot be undone."
+msgstr ""
+"La description personnalisée enregistrée remplacera celle de chaque "
+"cible. Une source vide l'efface. Cette action est irréversible."
+
+#: QML
+msgid ""
+"The saved description changed while you were editing. Discard this draft "
+"before continuing."
+msgstr ""
+"La description enregistrée a changé pendant la modification. Supprimez ce"
+" brouillon avant de continuer."
+
+#: QML
+msgid ""
 "The set and its membership will be deleted. Image files and tags will not"
 " change."
 msgstr ""
@@ -2180,6 +2298,10 @@ msgstr "Valeur"
 #: QML
 msgid "Worker Threads"
 msgstr "Threads de travail"
+
+#: QML
+msgid "Write Description to EXIF XPComment"
+msgstr "Écrire aussi la description dans EXIF XPComment"
 
 #: QML
 msgid "XMP Subject / IPTC Keywords"
@@ -3506,128 +3628,45 @@ msgstr "← Sélectionner un dossier pour parcourir les images"
 #~ msgid "New set name"
 #~ msgstr "Nom de la collection"
 
-#: QML
-msgid "A draft is being kept for %1. Return to that image or discard the draft."
-msgstr ""
-"Un brouillon est conservé pour %1. Revenez à cette image ou supprimez le "
-"brouillon."
+#~ msgid "Filter reapply canceled after {} matches; changes rolled back."
+#~ msgstr ""
+#~ "Réapplication annulée après {} résultats "
+#~ "; les changements ont été annulés."
 
-#: QML
-msgid "Append"
-msgstr "Ajouter"
+#~ msgid "No saved apply filter"
+#~ msgstr "Aucun filtre enregistré"
 
-#: QML
-msgid "Description"
-msgstr "Description"
+#~ msgid "Saved apply filter"
+#~ msgstr "Filtre enregistré"
 
-#: QML
-msgid "Description draft"
-msgstr "Brouillon de description"
+#~ msgid "Append"
+#~ msgstr "Ajouter"
 
-#: QML
-msgid "Discard draft"
-msgstr "Supprimer le brouillon"
+#~ msgid "Description"
+#~ msgstr "Description"
 
-#: QML
-msgid "No saved description."
-msgstr "Aucune description enregistrée."
+#~ msgid "Description draft"
+#~ msgstr "Brouillon de description"
 
-#: QML
-msgid "Replace the saved description?"
-msgstr "Remplacer la description enregistrée ?"
+#~ msgid "No saved description."
+#~ msgstr "Aucune description enregistrée."
 
-#: QML
-msgid ""
-"The saved description changed while you were editing. Discard this draft "
-"before continuing."
-msgstr ""
-"La description enregistrée a changé pendant la modification. Supprimez ce"
-" brouillon avant de continuer."
+#~ msgid "Replace the saved description?"
+#~ msgstr "Remplacer la description enregistrée ?"
 
-#: QML
-msgid "This will clear the saved description. This cannot be undone."
-msgstr "La description enregistrée sera effacée. Cette action est irréversible."
+#~ msgid "This will clear the saved description. This cannot be undone."
+#~ msgstr "La description enregistrée sera effacée. Cette action est irréversible."
 
-#: QML
-msgid "This will replace the saved description. This cannot be undone."
-msgstr "La description enregistrée sera remplacée. Cette action est irréversible."
+#~ msgid "This will replace the saved description. This cannot be undone."
+#~ msgstr ""
+#~ "La description enregistrée sera remplacée. "
+#~ "Cette action est irréversible."
 
-#: QML
-msgid "Write a description to append or replace"
-msgstr "Saisissez une description à ajouter ou remplacer"
+#~ msgid "Write a description to append or replace"
+#~ msgstr "Saisissez une description à ajouter ou remplacer"
 
-#: QML
-msgid "Ignore embedded description"
-msgstr "Ignorer la description intégrée"
+#~ msgid "Embedded description"
+#~ msgstr "Description intégrée"
 
-#: QML
-msgid "Embedded description"
-msgstr "Description intégrée"
-
-#: QML
-msgid "Existing embedded description"
-msgstr "Description intégrée existante"
-
-#: QML
-msgid "Save"
-msgstr "Enregistrer"
-
-msgid "Copy tags and descriptions"
-msgstr "Copier les tags et descriptions"
-
-msgid "Close copy panel"
-msgstr "Fermer le panneau de copie"
-
-msgid "Copy description to other images"
-msgstr "Copier la description vers d'autres images"
-
-msgid "Copies the saved custom description only. Drafts, embedded descriptions, and ignore settings are not copied. The current image is excluded."
-msgstr "Copie uniquement la description personnalisée enregistrée. Les brouillons, descriptions intégrées et paramètres d'exclusion ne sont pas copiés. L'image actuelle est exclue."
-
-msgid "Append the source description as a new paragraph"
-msgstr "Ajouter la description source dans un nouveau paragraphe"
-
-msgid "Replace or clear target custom descriptions"
-msgstr "Remplacer ou effacer les descriptions personnalisées cibles"
-
-msgid "Copy Description"
-msgstr "Copier la description"
-
-msgid "Copying descriptions"
-msgstr "Copie des descriptions"
-
-msgid "Replace descriptions on target images?"
-msgstr "Remplacer les descriptions des images cibles ?"
-
-msgid "The saved custom description will replace each target's custom description. An empty source clears it. This cannot be undone."
-msgstr "La description personnalisée enregistrée remplacera celle de chaque cible. Une source vide l'efface. Cette action est irréversible."
-
-msgid "Choose whether to add or replace descriptions."
-msgstr "Choisissez d'ajouter ou de remplacer les descriptions."
-
-msgid "Copied description to {} image(s). Unchanged: {}. Problems: {}."
-msgstr "Description copiée vers {} image(s). Inchangées : {}. Problèmes : {}."
-
-#: QML
-msgid "Final derivative description"
-msgstr "Description finale de la copie"
-
-#: QML
-msgid "No description would be written to a derivative."
-msgstr "Aucune description ne serait écrite dans la copie."
-
-#: QML
-msgid "No embedded description."
-msgstr "Aucune description intégrée."
-
-#: QML
-msgid "Custom description"
-msgstr "Description personnalisée"
-
-#: QML
-msgid "No custom description."
-msgstr "Aucune description personnalisée."
-
-#: QML
-msgid "Remove embedded descriptions from exported copies, even without a replacement. Originals stay unchanged."
-msgstr "Supprimer les descriptions intégrées des copies exportées, même sans remplacement. Les originaux restent inchangés."
+#~ msgid "No custom description."
+#~ msgstr "Aucune description personnalisée."

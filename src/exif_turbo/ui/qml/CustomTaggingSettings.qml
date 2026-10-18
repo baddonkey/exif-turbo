@@ -22,4 +22,24 @@ ColumnLayout {
         checked: appSettings ? appSettings.taggingEnabled : false
         onToggled: appController.setTaggingEnabled(checked)
     }
+
+    Switch {
+        objectName: "autoRepairDerivativeTagsSwitch"
+        text: qsTr("Auto-Repair Tags for Derivatives")
+        checked: appSettings ? appSettings.autoRepairDerivativeTags : true
+        onToggled: {
+            if (appSettings)
+                appSettings.setAutoRepairDerivativeTags(checked)
+        }
+    }
+
+    Switch {
+        objectName: "writeDescriptionToXpCommentSwitch"
+        text: qsTr("Write Description to EXIF XPComment")
+        checked: appSettings ? appSettings.writeDescriptionToXpComment : true
+        onToggled: {
+            if (appSettings)
+                appSettings.setWriteDescriptionToXpComment(checked)
+        }
+    }
 }
