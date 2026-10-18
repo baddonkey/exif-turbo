@@ -39,6 +39,8 @@ class ExifMetadataWriter:
         self, target: Path, description: str, *, forbidden_sources: Iterable[Path] = ()
     ) -> None:
         self.discard_embedded_description(target, forbidden_sources=forbidden_sources)
+        if not description.isascii():
+            self._ensure_iptc_utf8(target)
         with tempfile.TemporaryDirectory(prefix="exif-turbo-description-") as directory:
             text_path = Path(directory) / "description.txt"
             text_path.write_text(description, encoding="utf-8", newline="")
@@ -155,6 +157,8 @@ class ExifMetadataWriter:
             label for label in current_labels if label.casefold() not in excluded_keys
         )
         labels = self._merge_labels(labels, current_labels)
+        if "IPTC:Keywords" in fields and any(not label.isascii() for label in labels):
+            self._ensure_iptc_utf8(target)
         clear_arguments = [
             find_exiftool(),
             "-m",
@@ -294,6 +298,15 @@ class ExifMetadataWriter:
                 f"unable to normalize JPEG XMP header: {exc}"
             ) from exc
 
+    def _ensure_iptc_utf8(self, target: Path) -> None:
+        result = self._run([
+            find_exiftool(), "-overwrite_original", "-tagsFromFile", "@",
+            "-IPTC:All", "-IPTC:CodedCharacterSet=UTF8", str(target),
+        ])
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip() or "unknown error"
+            raise ExifMetadataWriteError(f"ExifTool IPTC UTF-8 conversion failed: {detail}")
+
     def _run(self, arguments: list[str]) -> subprocess.CompletedProcess[str]:
         platform_arguments: dict[str, Any] = (
             {"creationflags": 0x08000000}
@@ -301,6 +314,31 @@ class ExifMetadataWriter:
             else {"start_new_session": True}
         )
         try:
+            if os.name == "nt" and any(
+                not argument.isascii() for argument in arguments[1:]
+            ):
+                with tempfile.TemporaryDirectory(
+                    prefix="exif-turbo-exiftool-args-"
+                ) as directory:
+                    argument_file = Path(directory) / "args.txt"
+                    argument_file.write_text(
+                        "\n".join(arguments[1:]) + "\n",
+                        encoding="utf-8",
+                        newline="\n",
+                    )
+                    return subprocess.run(
+                        [
+                            arguments[0], "-charset", "filename=UTF8", "-@",
+                            str(argument_file),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        check=False,
+                        timeout=self._timeout_seconds,
+                        **platform_arguments,
+                    )
             return subprocess.run(
                 arguments,
                 capture_output=True,

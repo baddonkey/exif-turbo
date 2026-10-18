@@ -525,6 +525,82 @@ def test_write_keywords_real_exiftool_stores_xmp_subject_as_rdf_bag(
     ]
 
 
+def test_write_keywords_real_exiftool_preserves_unicode_labels(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    from PIL import Image
+    from exif_turbo.indexing.exif_metadata_extractor import find_exiftool, is_exiftool_available
+
+    if not is_exiftool_available():
+        pytest.skip("ExifTool is required for the metadata integration test")
+    target = tmp_path / "unicode-keywords.jpg"
+    Image.new("RGB", (8, 8)).save(target)
+    subprocess.run(
+        [
+            find_exiftool(), "-overwrite_original",
+            "-IPTC:Caption-Abstract=Existing caption", str(target),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    labels = ("'Ōhi'a lehua", "Halemaʻumaʻu")
+
+    # Act
+    ExifMetadataWriter().write_keywords(target, labels)
+
+    # Assert
+    result = subprocess.run(
+        [
+            find_exiftool(), "-json", "-G1", "-a", "-s",
+                "-Subject", "-Keywords", "-IPTC:Caption-Abstract",
+                "-IPTC:CodedCharacterSet", str(target),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    record = json.loads(result.stdout)[0]
+    assert record["XMP-dc:Subject"] == ["'Ōhi'a lehua", "Halemaʻumaʻu"]
+    assert record["IPTC:Keywords"] == ["'Ōhi'a lehua", "Halemaʻumaʻu"]
+    assert record["IPTC:Caption-Abstract"] == "Existing caption"
+    assert record["IPTC:CodedCharacterSet"] == "UTF8"
+
+
+def test_write_description_real_exiftool_preserves_unicode_in_iptc_caption(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    from PIL import Image
+    from exif_turbo.indexing.exif_metadata_extractor import find_exiftool, is_exiftool_available
+
+    if not is_exiftool_available():
+        pytest.skip("ExifTool is required for the metadata integration test")
+    target = tmp_path / "unicode-caption.jpg"
+    Image.new("RGB", (8, 8)).save(target)
+    description = "Ōhi'a lehua; Halemaʻumaʻu"
+
+    # Act
+    ExifMetadataWriter().write_description(target, description)
+
+    # Assert
+    result = subprocess.run(
+        [
+            find_exiftool(), "-json", "-G1", "-XMP-dc:Description",
+            "-IPTC:Caption-Abstract", "-IPTC:CodedCharacterSet", str(target),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    record = json.loads(result.stdout)[0]
+    assert record["XMP-dc:Description"] == description
+    assert record["IPTC:Caption-Abstract"] == description
+    assert record["IPTC:CodedCharacterSet"] == "UTF8"
+
+
 def test_normalize_nonstandard_xmp_app1_header_replaces_only_header(
     tmp_path: Path,
 ) -> None:
