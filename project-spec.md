@@ -6,7 +6,8 @@ EXIF Turbo is a cross-platform desktop application and CLI for indexing,
 searching, browsing, and non-destructively tagging image libraries. It extracts
 metadata with ExifTool, stores the searchable index in SQLCipher, and exposes
 full-text search through SQLite FTS5. Optional CLIP image vectors support
-semantic image search and AI-Scan.
+semantic image search and AI-Scan. Named Image Sets organize indexed images
+into persistent collections, with optional saved filters and set-scoped actions.
 
 Tagging is custom-only. Users create their own text labels, reuse remembered
 labels, exclude embedded keywords from derivatives, and copy tag settings
@@ -20,6 +21,7 @@ proposal-review workflow. AI image search and AI-Scan are unaffected.
 - Keep original media files unchanged during indexing, tagging, and derivatives.
 - Store custom tags and embedded-keyword exclusions in adjacent sidecars.
 - Generate tagged derivative copies outside indexed source folders.
+- Organize indexed images into named sets and optionally reapply saved filters.
 - Keep the application and its search index local to the user's machine.
 
 ## 3. Technology
@@ -41,13 +43,13 @@ separate from the Qt/QML adapter.
 
 ```text
 src/exif_turbo/
-  data/                 SQLCipher repositories and connection helpers
+  data/                 SQLCipher repositories, image sets, and connection helpers
   indexing/             filesystem scan, metadata extraction, image AI indexing
   models/               image, folder, search, and sidecar data types
   tagging/              sidecar I/O, synchronization, custom tags, derivatives
   ui/
     models/             Qt list models
-    qml/                Search, Browse, settings, and custom-tag drawer
+    qml/                Search, Browse, Sets, settings, and tagging panels
     view_models/        AppController and settings adapter
     workers/            indexing, search, maintenance, and export workers
   utils/                AI device, cache, rendering, and path helpers
@@ -70,6 +72,8 @@ text. Custom tagging adds:
 - `free_tag_catalog`: remembered labels and their preferred spelling.
 - `image_sidecar_state`: sidecar path, revision, schema version, and sync status.
 - `completed_migrations`: one-time application data migrations.
+- `image_sets` and `image_set_members`: per-database set definitions, saved
+  filters, and memberships that reference indexed image records.
 
 New databases do not create controlled-tag, alias, vocabulary-search, or AI
 proposal tables. Legacy databases drop those tables during the custom-only
@@ -101,7 +105,7 @@ and backup policy follows the containing source folder.
 
 ## 7. Custom Tag Workflows
 
-The Search/Browse tagging drawer supports:
+The Search/Browse/Sets tagging drawer supports:
 
 - Add/remove custom labels and reuse remembered labels.
 - Exclude individual embedded keywords or ignore all embedded keywords for
@@ -112,6 +116,20 @@ The Search/Browse tagging drawer supports:
   target.
 - Preview the final deduplicated custom and embedded keyword set for a
   derivative.
+
+Sets are persistent collections of indexed-image references. Users can create,
+rename, and delete sets, add the selected image, marked images, all current
+search results, or all images in the current Browse folder, and remove
+individual members. The UI does not currently expose bulk removal scopes. Users
+can optionally reapply a saved structured filter in Add or Replace mode. Search
+can also be filtered to a selected set. Set-specific Action-menu operations use
+the selected set as their scope; set membership is not changed by searching or
+running derivative actions.
+
+The opt-in local MCP interface can list sets and read their members in bounded
+pages, including metadata, descriptions, custom tags, and previews. It can apply
+custom tags and descriptions to indexed images using verified image IDs and
+paths. MCP does not create, rename, delete, or change set membership.
 
 Tagged derivatives preserve source formats and relative folder structure.
 The output folder must be outside indexed roots. Existing destinations and

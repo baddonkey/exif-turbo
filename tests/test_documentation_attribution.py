@@ -11,6 +11,11 @@ CC_BY_SA_SCREENSHOTS = (
     "05_browse_tab",
     "07_folder_filter",
     "09_ai_search_mode",
+    "10_sets_overview",
+    "11_set_filter_editor",
+    "12_tagging_drawer",
+    "13_copy_tags_and_descriptions",
+    "14_set_action_menu",
 )
 CC0_SCREENSHOTS = ("08_gps_location_bar",)
 
@@ -50,6 +55,11 @@ def test_user_manual_photo_screenshots_credit_immediately_after_image() -> None:
             "07_folder_filter",
             "08_gps_location_bar",
             "09_ai_search_mode",
+            "10_sets_overview",
+            "11_set_filter_editor",
+            "12_tagging_drawer",
+            "13_copy_tags_and_descriptions",
+            "14_set_action_menu",
         ),
     }
 

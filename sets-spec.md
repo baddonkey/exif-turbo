@@ -1,32 +1,35 @@
 # Image Sets Specification
 
-Status: Proposed
+Status: Implemented
 
 ## 1. Purpose
 
 Image Sets let users organize indexed images into named, persistent collections.
-A set has fixed membership that changes only through explicit member actions or
-when the user reapplies its optional saved filter. Sets can also be shared with
-local MCP clients, which can read image information and apply custom tags.
+A set has fixed membership that changes through explicit member actions or when
+the user reapplies its optional saved filter. Sets are available in Search,
+Browse, and the Sets tab. The opt-in local MCP interface can list sets, read
+their images, and apply custom tags to indexed images.
 
 Sets organize references to indexed images. They do not copy, move, edit, or
 delete image files, and they do not replace the existing custom-tag workflow.
 
 ## 2. Scope
 
-- Add a **Sets** tab to the desktop application.
-- Create, rename, and delete sets; view their members and optional saved filter.
-- Add or remove the selected image, marked images, all current search results,
-  or all images in the current Browse folder.
-- Optionally define a structured filter and explicitly reapply it in Add or
+- The desktop application provides a **Sets** tab.
+- Users create, rename, and delete sets; view their members and optional saved filter.
+- Users add the selected image, marked images, all current search results, or all
+  images in the current Browse folder.
+- Users remove individual members from a set. The current Sets UI does not expose
+  bulk removal scopes.
+- Users define an optional structured filter and explicitly reapply it in Add or
   Replace mode.
-- Store sets and their memberships in the currently open image-index database.
-- Extend the MCP interface to enumerate sets, page through a set's images and
-  previews, and write custom tags to indexed images.
+- Sets and memberships are stored in the currently open image-index database.
+- The MCP interface enumerates sets, pages through a set's images and
+  previews, and writes custom tags to indexed images.
 
-MCP set creation, editing, deletion, and membership mutation are not in scope.
-Image file mutation, embedded-keyword editing, and tag suggestions are not in
-scope.
+The MCP interface does not create, edit, or delete sets or change their
+membership. Sets do not modify image files, embedded keywords, or tag
+suggestions.
 
 ## 3. Set Management
 
@@ -47,11 +50,15 @@ scope.
   until the user explicitly edits it or reapplies the saved filter.
 
 The Sets tab shows the set list and the selected set's members. Set names and
-member filenames must remain inspectable without opening each image. A member
-can be added from the current selection, the marked images, the complete current
-search result set, or the current Browse folder; the same scopes are available
-for removal. Bulk actions operate on the complete scope, not only currently
-loaded or visible rows.
+member filenames must remain inspectable without opening each image. The Add
+control can target the current selection, marked images, the complete current
+search result set, or the current Browse folder. These bulk operations include
+the complete scope, not only currently loaded or visible rows. Each member row
+has a **Remove** control for removing that image from the set.
+
+Search also provides a set filter. **All sets** includes every indexed image;
+selecting a named set restricts results to its members. Search filters do not
+change membership.
 
 The Action menu is available on Sets and targets the selected set, independent
 of Search filters. Current-results derivative generation uses all set members;
@@ -182,10 +189,12 @@ existing enablement and database-lock behavior.
   has a saved filter.
 - A read operation accepts a set ID and pagination information and returns one
   page of members. Each member includes its indexed image ID, path, filename,
-  current custom tags, and parsed indexed metadata.
-- Pages have a deterministic ordering and a continuation mechanism. Responses
-  are bounded to 50 images per page. Inline previews are limited to 5 images
-  per request, and a tag batch is limited to 100 image updates.
+  current custom tags and description, embedded-tag and description exclusion
+  settings, and parsed indexed metadata.
+- Pages have a deterministic ordering and return `next_offset` for continuation.
+  Without previews, the default page size is 25 and the maximum is 50. With
+  inline previews, both the default and maximum are 5 images. A custom-tag batch
+  is limited to 100 image updates.
 - Image previews are available through image-specific MCP resources. A page
   may also request inline preview data. Missing or unavailable previews are
   reported per image without failing the rest of the page.
@@ -225,9 +234,10 @@ caller omits the mode.
 - A user can create, rename, and delete a set without modifying media files.
 - Set names are unique ignoring case within one database; the same name may be
   used in another database.
-- A user can add and remove the selected image, marked images, all current
-  search results, and all images in the current Browse folder.
-- Bulk scope operations include off-screen and not-yet-loaded rows, and repeat
+- A user can add the selected image, marked images, all current search results,
+  and all images in the current Browse folder.
+- A user can remove an individual member without deleting its image.
+- Bulk additions include off-screen and not-yet-loaded rows, and repeat
   operations are safe and report their outcomes.
 - Membership and saved filters persist across application restarts and remain
   isolated between databases.
@@ -235,7 +245,7 @@ caller omits the mode.
   or Replace semantics. An empty Replace cannot happen without confirmation.
 - Image-index deletion cleans up corresponding membership records.
 - An MCP client can list sets, read a set in bounded pages, retrieve previews,
-  and receive per-image metadata and custom tags.
+  and receive per-image metadata, custom tags, descriptions, and exclusion state.
 - MCP tag batches verify image identity, support append and replace, continue
   after per-image failures, and return an outcome for every item.
 - MCP mutations use the existing sidecar/tagging behavior and never modify the

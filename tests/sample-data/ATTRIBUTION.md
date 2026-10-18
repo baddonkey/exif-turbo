@@ -79,6 +79,11 @@ are distributed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/
 | `docs/screenshots/05_browse_tab.png` | `schweiz/Wildlife/002 Wild Alpine Ibex Swiss Alps and Creux du Van Photo by Giles Laurent.jpg`; `schweiz/Wildlife/Birds/015 Wild Golden Eagle in flight at Pfyn-Finges (Switzerland) Photo by Giles Laurent.jpg` |
 | `docs/screenshots/07_folder_filter.png` | `schweiz/Schlösser/001 Chateau de Chillon and Dents du Midi Photo by Giles Laurent.jpg` |
 | `docs/screenshots/09_ai_search_mode.png` | `schweiz/Schlösser/001 Chateau de Chillon and Dents du Midi Photo by Giles Laurent.jpg` |
+| `docs/screenshots/10_sets_overview.png` | `schweiz/Wildlife/014 Wild Red Deer Switzerland Photo by Giles Laurent.jpg` |
+| `docs/screenshots/11_set_filter_editor.png` | `schweiz/Wildlife/014 Wild Red Deer Switzerland Photo by Giles Laurent.jpg` |
+| `docs/screenshots/12_tagging_drawer.png` | `schweiz/Wildlife/014 Wild Red Deer Switzerland Photo by Giles Laurent.jpg` |
+| `docs/screenshots/13_copy_tags_and_descriptions.png` | `schweiz/Wildlife/014 Wild Red Deer Switzerland Photo by Giles Laurent.jpg` |
+| `docs/screenshots/14_set_action_menu.png` | `schweiz/Wildlife/014 Wild Red Deer Switzerland Photo by Giles Laurent.jpg` |
 | `docs/screenshots/08_gps_location_bar.png` | `gps/Xenakis_UPIC_system_computer_unit_2.jpg` (CC0) |
 
 `01_lock_screen.png`, `06_indexed_folders_basic.png`,
