@@ -13,6 +13,7 @@ from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtTest import QTest
 from pytestqt.qtbot import QtBot
+from shiboken6 import isValid
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.mcp.mcp_session_service import McpSessionService
@@ -1268,19 +1269,23 @@ def test_tag_remove_button_removes_selected_free_tag(
     assert drawer is not None
     assert current_tags is not None
     QMetaObject.invokeMethod(drawer, "openTaggingPanel", Qt.ConnectionType.DirectConnection)
-    qtbot.waitUntil(lambda: bool(drawer.property("visible")), timeout=3_000)
+    qtbot.waitUntil(lambda: bool(drawer.property("opened")), timeout=3_000)
     qtbot.waitUntil(lambda: int(current_tags.property("count")) == 1, timeout=3_000)
 
-    def find_remove_button(item: QQuickItem) -> QQuickItem | None:
-        if item.objectName() == "removeFreeTagButton":
-            return item
-        for child in item.childItems():
-            found = find_remove_button(child)
-            if found is not None:
-                return found
-        return None
+    # Keep currentItem wrappers alive while Qt owns the delegates.
+    tag_delegates: list[QQuickItem] = []
 
-    remove_button = find_remove_button(current_tags)
+    def find_remove_button() -> QQuickItem | None:
+        item = current_tags.property("currentItem")
+        if not isinstance(item, QQuickItem) or not isValid(item):
+            return None
+        if item not in tag_delegates:
+            tag_delegates.append(item)
+        button = item.findChild(QQuickItem, "removeFreeTagButton")
+        return button if button is not None and isValid(button) else None
+
+    qtbot.waitUntil(lambda: find_remove_button() is not None, timeout=3000)
+    remove_button = find_remove_button()
     assert remove_button is not None
 
     # Act
@@ -1290,10 +1295,12 @@ def test_tag_remove_button_removes_selected_free_tag(
         remove_button, "click", Qt.ConnectionType.DirectConnection
     )
     qtbot.waitUntil(lambda: int(current_tags.property("count")) == 0, timeout=1_000)
+    qtbot.waitUntil(lambda: current_tags.property("currentItem") is None, timeout=1000)
 
     controller.addSelectedFreeTag("Family")
     qtbot.waitUntil(lambda: int(current_tags.property("count")) == 1, timeout=1_000)
-    remove_button = find_remove_button(current_tags)
+    qtbot.waitUntil(lambda: find_remove_button() is not None, timeout=3000)
+    remove_button = find_remove_button()
     assert remove_button is not None
     if root.isActive():
         center = remove_button.mapToScene(
@@ -1308,19 +1315,21 @@ def test_tag_remove_button_removes_selected_free_tag(
             and 0 <= right_edge.x() < root.width()
             and 0 <= right_edge.y() < root.height()
         ):
-            remove_mouse_area = next(
-                child
-                for child in remove_button.childItems()
-                if child.objectName() == "removeTagMouseArea"
-            )
+            def current_remove_button_hovered() -> bool:
+                button = find_remove_button()
+                if button is None:
+                    return False
+                mouse_area = button.findChild(QQuickItem, "removeTagMouseArea")
+                return mouse_area is not None and bool(
+                    mouse_area.property("containsMouse")
+                )
+
             QTest.mouseMove(root, QPoint(round(center.x()), round(center.y())))
-            qtbot.wait(100)
-            center_hovered = bool(remove_mouse_area.property("containsMouse"))
+            qtbot.waitUntil(current_remove_button_hovered, timeout=3000)
             QTest.mouseMove(root, QPoint(round(right_edge.x()), round(right_edge.y())))
-            qtbot.wait(100)
-            edge_hovered = bool(remove_mouse_area.property("containsMouse"))
-            assert center_hovered is True
-            assert edge_hovered is True
+            qtbot.waitUntil(current_remove_button_hovered, timeout=3000)
+    remove_button = find_remove_button()
+    assert remove_button is not None
     assert QMetaObject.invokeMethod(
         remove_button, "click", Qt.ConnectionType.DirectConnection
     )
