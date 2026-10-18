@@ -24,6 +24,7 @@ class YearCountsWorker(QThread):
         ext_filter: str,
         path_filter: List[str] | None,
         restrict_to_enabled_folders: bool,
+        image_set_id: int | None = None,
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -33,6 +34,7 @@ class YearCountsWorker(QThread):
         self._ext_filter = ext_filter
         self._path_filter = path_filter
         self._restrict = restrict_to_enabled_folders
+        self._image_set_id = image_set_id
 
     def run(self) -> None:
         try:
@@ -42,6 +44,7 @@ class YearCountsWorker(QThread):
                 ext_filter=self._ext_filter,
                 path_filter=self._path_filter,
                 restrict_to_enabled_folders=self._restrict,
+                image_set_id=self._image_set_id,
             )
             repo.close()
             self.results_ready.emit(counts, self._serial)
