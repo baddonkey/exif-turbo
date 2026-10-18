@@ -24,7 +24,15 @@ from unittest.mock import patch
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPoint, QPointF, Qt, QUrl
+from PySide6.QtCore import (
+    QCoreApplication,
+    QEvent,
+    QMetaObject,
+    QObject,
+    QPointF,
+    Qt,
+    QUrl,
+)
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtTest import QTest
@@ -1122,19 +1130,22 @@ def search_model_path(controller: AppController) -> str | None:
     return model.get_path(controller.currentResultRow)
 
 
-def click_search_result_browse_button(window: QQuickWindow, results_list: QQuickItem) -> None:
-    """Click the Browse pill on the first visible Search-result card."""
-    click_pos = results_list.mapToScene(
-        QPointF(
-            float(results_list.property("width")) - 72.0,
-            190.0,
-        )
-    )
-    QTest.mouseClick(
-        window,
-        Qt.MouseButton.LeftButton,
-        Qt.KeyboardModifier.NoModifier,
-        QPoint(int(click_pos.x()), int(click_pos.y())),
+def activate_search_result_browse_action(results_list: QQuickItem) -> None:
+    """Activate the Browse pill handler without relying on desktop input delivery."""
+
+    def find_browse_area(item: QQuickItem) -> QQuickItem | None:
+        if item.objectName() == "browseNavArea":
+            return item
+        for child in item.childItems():
+            found = find_browse_area(child)
+            if found is not None:
+                return found
+        return None
+
+    browse_area = find_browse_area(results_list)
+    assert browse_area is not None
+    assert QMetaObject.invokeMethod(
+        browse_area, "navigateToBrowse", Qt.ConnectionType.DirectConnection
     )
 
 
@@ -1554,7 +1565,7 @@ class TestBrowseNavigationQml:
         qtbot.wait(_PAUSE_MS)
         assert search_model.rowCount() == 1
 
-        click_search_result_browse_button(qml_window, results_list)
+        activate_search_result_browse_action(results_list)
         qtbot.waitUntil(lambda: tab_bar.property("currentIndex") == 1, timeout=5000)
         qtbot.waitUntil(lambda: root.property("_pendingBrowseTargetId") == -1, timeout=5000)
         wait_for_browse_jump(qtbot, root, browse_list)
@@ -1663,7 +1674,7 @@ class TestBrowseNavigationQml:
         assert search_model.get_path(controller.currentResultRow) == target_path
 
         # Act
-        click_search_result_browse_button(qml_window, results_list)
+        activate_search_result_browse_action(results_list)
         qtbot.waitUntil(lambda: tab_bar.property("currentIndex") == 1, timeout=5000)
         qtbot.waitUntil(lambda: root.property("_pendingBrowseTargetId") == -1, timeout=5000)
         wait_for_browse_jump(qtbot, root, browse_list)
@@ -1965,4 +1976,3 @@ class TestBrowseNavigationQml:
         # Assert
         assert search_model.rowCount() == initial_count + 50
         assert controller.currentResultRow == 49
-

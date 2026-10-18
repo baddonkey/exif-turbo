@@ -46,6 +46,22 @@ ApplicationWindow {
         var p = controller ? controller.pendingPreviewPath : ""
         return p ? _nativePathToFileUrl(p) : ""
     }
+    function _refreshSearchSetOptions() {
+        searchSetOptionsModel.clear()
+        searchSetOptionsModel.append({ id: -2, name: qsTr("Ignore") })
+        searchSetOptionsModel.append({ id: -1, name: qsTr("All sets") })
+        if (controller) {
+            try {
+                var storedSets = JSON.parse(controller.imageSetsJson)
+                for (var i = 0; i < storedSets.length; i++)
+                    searchSetOptionsModel.append({
+                        id: storedSets[i].id,
+                        name: storedSets[i].name
+                    })
+            } catch (error) {
+            }
+        }
+    }
     // Automation helper: used by the screenshot script to open the folder filter popup
     function openFolderFilterPopup() { folderMultiCombo.popup.open() }
     // Automation helper: used by the screenshot script to close the folder filter popup
@@ -63,7 +79,14 @@ ApplicationWindow {
     readonly property string _licenseBorderColor: _toRgb(Qt.darker(Material.background, 1.4))
     readonly property string _licenseHeaderBg: _toRgb(Qt.darker(Material.background, 1.1))
 
-    Component.onCompleted: showMaximized()
+    Component.onCompleted: {
+        _refreshSearchSetOptions()
+        showMaximized()
+    }
+
+    ListModel {
+        id: searchSetOptionsModel
+    }
 
     onClosing: (close) => { if (controller) controller.onAppClosing() }
 
@@ -175,7 +198,7 @@ ApplicationWindow {
     }
     Shortcut {
         sequence: "Ctrl+T"
-        enabled: !_isLocked && (mainTabBar.currentIndex === 0 || mainTabBar.currentIndex === 1)
+        enabled: !_isLocked && (root._searchOrBrowseActive || mainTabBar.currentIndex === 3)
         onActivated: taggingDrawer.opened ? taggingDrawer.close() : taggingDrawer.openTaggingPanel()
     }
 
@@ -187,6 +210,9 @@ ApplicationWindow {
     readonly property bool _aiEnabled: controller ? controller.aiEnabled : true
     readonly property bool _searchOrBrowseActive:
         mainTabBar.currentIndex === 0 || mainTabBar.currentIndex === 1
+    readonly property bool _actionsActive: _searchOrBrowseActive
+        || (mainTabBar.currentIndex === 3 && setsPage.selectedSet !== null
+            && !controller.imageSetOperationRunning)
 
 
     // ── Null-safe proxies ─────────────────────────────────────────────────
@@ -196,6 +222,7 @@ ApplicationWindow {
         target: controller
         function onIsLockedChanged() {
             if (!controller.isLocked) {
+                root._refreshSearchSetOptions()
                 root.requestActivate()
                 searchToolbar.focusQuery()
             }
@@ -208,6 +235,9 @@ ApplicationWindow {
         }
         function onFolderFilterChanged() {
             root._scrollBrowseTreeToFolder()
+        }
+        function onImageSetsChanged() {
+            root._refreshSearchSetOptions()
         }
         // Called after every search finishes (Browse folder load or Search tab restore).
         // Called after every search finishes (Browse folder load or Search tab restore).
@@ -230,6 +260,13 @@ ApplicationWindow {
             if (!root._restoreSearchPosition || mainTabBar.currentIndex !== 0) return
             root._searchRestoreAttempts = 0
             root._tryRestoreSearchPosition()
+        }
+    }
+
+    Connections {
+        target: settingsModel
+        function onLanguageChanged() {
+            root._refreshSearchSetOptions()
         }
     }
 
@@ -768,11 +805,15 @@ ApplicationWindow {
             Action {
                 id: exportJsonItem
                 objectName: "exportJsonAction"
-                readonly property int _cnt: controller ? controller.checkedCount : 0
+                readonly property int _cnt: controller ? controller.actionMarkedCount : 0
                 text: _cnt > 0
                       ? qsTr("Export Metadata as &JSON (%1 selected)").arg(_cnt)
+                                            : mainTabBar.currentIndex === 3 && setsPage.selectedSet
+                                                ? qsTr("Export Metadata as &JSON (%1)").arg(
+                                                        setsPage.selectedSet.name.replace(/&/g, "&&"))
                       : qsTr("Export Metadata as &JSON (all results)")
-                enabled: !_isLocked && root._searchOrBrowseActive
+                enabled: !_isLocked && root._actionsActive
+                         && (mainTabBar.currentIndex !== 3 || controller.actionImageCount > 0)
                 onTriggered: if (!_isLocked) exportJsonDialog.open()
             }
             MenuSeparator {}
@@ -780,8 +821,8 @@ ApplicationWindow {
                 id: derivativeResultsItem
                 objectName: "derivativeResultsAction"
                 text: qsTr("Generate Tagged Derivatives for Current &Results...")
-                enabled: !_isLocked && root._searchOrBrowseActive
-                         && _derivativeAvailable && _totalResults > 0
+                enabled: !_isLocked && root._actionsActive
+                         && _derivativeAvailable && controller.actionImageCount > 0
                          && !_isExportingDerivatives
                 onTriggered: {
                     derivativeTargetDialog.scope = "results"
@@ -791,9 +832,9 @@ ApplicationWindow {
             Action {
                 id: derivativeMarkedItem
                 objectName: "derivativeMarkedAction"
-                readonly property int _cnt: controller ? controller.checkedCount : 0
+                readonly property int _cnt: controller ? controller.actionMarkedCount : 0
                 text: qsTr("Generate Tagged Derivatives for &Marked Images (%1 selected)").arg(_cnt)
-                enabled: !_isLocked && root._searchOrBrowseActive
+                enabled: !_isLocked && root._actionsActive
                          && _derivativeAvailable && _cnt > 0
                          && !_isExportingDerivatives
                 onTriggered: {
@@ -805,9 +846,9 @@ ApplicationWindow {
             Action {
                 id: deleteMarkedItem
                 objectName: "deleteMarkedAction"
-                readonly property int _cnt: controller ? controller.checkedCount : 0
+                readonly property int _cnt: controller ? controller.actionMarkedCount : 0
                 text: qsTr("&Delete Marked Images (%1 selected)").arg(_cnt)
-                enabled: !_isLocked && root._searchOrBrowseActive && _cnt > 0
+                enabled: !_isLocked && root._actionsActive && _cnt > 0
                 onTriggered: if (!_isLocked && _cnt > 0) deleteMarkedDialog.open()
             }
         }
@@ -930,7 +971,7 @@ ApplicationWindow {
         modal: true
         width: 460
 
-        readonly property int expectedCount: controller ? controller.checkedCount : 0
+        readonly property int expectedCount: controller ? controller.actionMarkedCount : 0
         readonly property bool _confirmed:
             parseInt(confirmCountField.text, 10) === expectedCount && expectedCount > 0
 
@@ -1253,14 +1294,14 @@ ApplicationWindow {
         id: mainTabBar
         objectName: "mainTabBar"
         anchors { top: parent.top; left: parent.left }
-        width: 560   // 4 × 140 px — left-aligned, not stretched
+        width: 700   // 5 × 140 px — left-aligned, not stretched
         implicitHeight: 40
         visible: !_isLocked
         z: 10
         background: Item {}  // transparent; background rect above covers the row
 
         Repeater {
-            model: [ qsTr("Search"), qsTr("Browse"), qsTr("Indexed Folders"), qsTr("Settings") ]
+            model: [ qsTr("Search"), qsTr("Browse"), qsTr("Indexed Folders"), qsTr("Sets"), qsTr("Settings") ]
             TabButton {
                 text: modelData
                 implicitWidth: 140
@@ -1289,7 +1330,8 @@ ApplicationWindow {
         }
 
         onCurrentIndexChanged: {
-            if (taggingDrawer.opened)
+            controller.setActionImageSet(currentIndex === 3 ? setsPage.selectedSetId : 0)
+            if (taggingDrawer.visible)
                 taggingDrawer.close()
             if (currentIndex === 1) {
                 // Entering Browse: snapshot Search filters (incl. searchField
@@ -1317,7 +1359,7 @@ ApplicationWindow {
         anchors { top: parent.top; right: parent.right; rightMargin: 8 }
         width: 40; height: 40
         z: 11
-        visible: !_isLocked && (mainTabBar.currentIndex === 0 || mainTabBar.currentIndex === 1)
+        visible: !_isLocked && (root._searchOrBrowseActive || mainTabBar.currentIndex === 3)
         enabled: !_isLocked
         icon.source: "../../assets/tag_icon.svg"
         icon.width: 20
@@ -1332,8 +1374,11 @@ ApplicationWindow {
         id: taggingDrawer
         appController: controller
         appSettings: settingsModel
-        selectedFilename: controller ? controller.selectedFilename : ""
+        selectedFilename: controller ? controller.taggingFilename : ""
         browseMode: mainTabBar.currentIndex === 1
+        setMode: mainTabBar.currentIndex === 3
+        setName: setsPage.selectedSet ? setsPage.selectedSet.name : ""
+        currentSetId: setsPage.selectedSetId
     }
 
     // ── Search tab ───────────────────────────────────────────────────────
@@ -1518,6 +1563,36 @@ ApplicationWindow {
                             }
 
                             Label {
+                                text: qsTr("Set")
+                                font.pixelSize: 11
+                                opacity: 0.6
+                            }
+
+                            ComboBox {
+                                id: searchSetCombo
+                                objectName: "searchSetCombo"
+                                Layout.preferredWidth: 150
+                                Layout.maximumWidth: 190
+                                implicitHeight: 28
+                                font.pixelSize: 11
+                                textRole: "name"
+                                valueRole: "id"
+                                model: searchSetOptionsModel
+                                currentIndex: {
+                                    var selectedId = controller ? controller.searchImageSetId : -2
+                                    for (var i = 0; i < searchSetOptionsModel.count; i++) {
+                                        if (searchSetOptionsModel.get(i).id === selectedId)
+                                            return i
+                                    }
+                                    return 0
+                                }
+                                onActivated: controller.setSearchImageSetFilter(currentValue)
+                                ToolTip.text: qsTr("Show images from one set")
+                                ToolTip.visible: hovered
+                                ToolTip.delay: 500
+                            }
+
+                            Label {
                                 text: qsTr("Sort")
                                 font.pixelSize: 11
                                 opacity: 0.6
@@ -1653,6 +1728,7 @@ ApplicationWindow {
                         onDateFilterRequested: (from, to) => controller.setDateFilter(from, to)
                         onDateFilterCleared: controller.clearDateFilter()
                     }
+
                     // Search error banner — replaces results when a query
                     // fails (e.g. malformed FTS expression).
                     Item {
@@ -1886,10 +1962,11 @@ ApplicationWindow {
 
                                 MouseArea {
                                     id: _browseNavArea
+                                    objectName: "browseNavArea"
                                     anchors.fill:  parent
                                     hoverEnabled:  true
                                     cursorShape:   Qt.PointingHandCursor
-                                    onClicked: {
+                                    function navigateToBrowse() {
                                         var targetId = model.imageId
                                         var folder = model.path.replace(/[/\\][^/\\]*$/, "")
                                         // Select this card BEFORE switching tabs so enterBrowseTab
@@ -1900,6 +1977,7 @@ ApplicationWindow {
                                         mainTabBar.currentIndex = 1
                                         controller.browseFolder(folder, targetId)
                                     }
+                                    onClicked: navigateToBrowse()
                                 }
                             }
                         }
@@ -3764,10 +3842,20 @@ ApplicationWindow {
         demoMode: root._demoMode
     }
 
+    // ── Sets tab ─────────────────────────────────────────────────────────
+    SetsPage {
+        id: setsPage
+        anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; rightMargin: taggingDrawer.width * taggingDrawer.position; bottom: parent.bottom }
+        visible: !_isLocked && mainTabBar.currentIndex === 3
+        appController: controller
+        accentColor: root._accentColor
+        onTaggingRequested: taggingDrawer.openTaggingPanel()
+    }
+
     // ── Settings tab ─────────────────────────────────────────────────────
     Item {
         anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; bottom: parent.bottom }
-        visible: !_isLocked && mainTabBar.currentIndex === 3
+        visible: !_isLocked && mainTabBar.currentIndex === 4
 
         ScrollView {
             id: settingsScroll

@@ -110,6 +110,41 @@ def test_derivative_export_worker_emits_result_and_progress(tmp_path: Path) -> N
     assert (tmp_path / "output" / "photo.jpg").read_bytes() == b"original-tagged"
 
 
+def test_derivative_export_worker_selected_set_exports_untagged_members(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    db_path = tmp_path / "images.db"
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    repository = ImageIndexRepository(db_path, key="")
+    for name in ("member.jpg", "outside.jpg"):
+        image_path = source_root / name
+        image_path.write_bytes(b"untagged image")
+        repository.upsert_image(str(image_path), name, 1.0, 14, {}, "")
+    set_id = repository.create_image_set("Untagged set")
+    repository.add_images_to_set(set_id, [str(source_root / "member.jpg")])
+    repository.close()
+    output_root = tmp_path / "output"
+    worker = DerivativeExportWorker(
+        db_path, "", {source_root: "source"}, output_root,
+        matching_results=True, image_set_id=set_id,
+    )
+    progress: list[tuple[int, int]] = []
+    worker.progress.connect(lambda done, total, _item: progress.append((done, total)))
+
+    # Act
+    worker.run()
+
+    # Assert
+    assert worker.result is not None
+    assert worker.result.copied_count == 1
+    assert worker.result.failed_count == 0
+    assert progress == [(1, 1)]
+    assert (output_root / "member.jpg").read_bytes() == b"untagged image"
+    assert not (output_root / "outside.jpg").exists()
+
+
 def test_derivative_export_worker_matching_results_exports_all_database_rows(
     tmp_path: Path,
 ) -> None:

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from os.path import commonpath
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Tuple
 
 import sqlcipher3
 
@@ -21,6 +22,28 @@ _DIM_KEY_PAIRS: tuple[tuple[str, str], ...] = (
     ("IFD0:ImageWidth", "IFD0:ImageHeight"),
     ("PNG:ImageWidth", "PNG:ImageHeight"),
 )
+
+
+class EmptyImageSetReplaceError(ValueError):
+    """Raised when replacing a set with an empty filter result needs consent."""
+
+
+class ImageSetFilterReapplyCanceled(Exception):
+    def __init__(self, processed: int, added: int = 0, removed: int = 0) -> None:
+        super().__init__("Image-set filter reapply was canceled.")
+        self.processed = processed
+        self.added = added
+        self.removed = removed
+
+
+def _try_parse_number(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
 
 
 def _pixel_count_from_meta(meta_json: str) -> int:
@@ -49,6 +72,7 @@ class ImageIndexRepository:
             cache_size_kb=32_000,
             extra_pragmas=("PRAGMA mmap_size=268435456;",),
         )
+        self.conn.create_function("try_number", 1, _try_parse_number)
         self.init_db()
 
     def change_password(self, new_password: str) -> None:
@@ -87,6 +111,25 @@ class ImageIndexRepository:
                 size INTEGER NOT NULL,
                 metadata_json TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS image_sets (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                normalized_name TEXT NOT NULL UNIQUE,
+                apply_filter_json TEXT,
+                apply_filter_version INTEGER,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS image_set_members (
+                set_id INTEGER NOT NULL REFERENCES image_sets(id) ON DELETE CASCADE,
+                image_id INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE,
+                PRIMARY KEY (set_id, image_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_image_set_members_image
+                ON image_set_members(image_id);
 
             CREATE VIRTUAL TABLE IF NOT EXISTS images_fts
             USING fts5(path, filename, metadata_text, tags_text);
@@ -317,6 +360,23 @@ class ImageIndexRepository:
             (image_path,),
         ).fetchall()
         return tuple(str(row[0]) for row in rows)
+
+    def get_indexed_image_path(self, image_id: int) -> str | None:
+        row = self.conn.execute(
+            "SELECT path FROM images WHERE id = ?", (image_id,)
+        ).fetchone()
+        return None if row is None else str(row[0])
+
+    def get_indexed_image_preview_info(
+        self,
+        image_id: int,
+    ) -> tuple[str, float, int] | None:
+        row = self.conn.execute(
+            "SELECT path, mtime, size FROM images WHERE id = ?", (image_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return str(row[0]), float(row[1]), int(row[2])
 
     def search_free_tags(self, query: str, *, limit: int = 20) -> tuple[str, ...]:
         normalized_query = query.strip().casefold()
@@ -580,6 +640,472 @@ class ImageIndexRepository:
                 )
             self.conn.execute("DROP TABLE IF EXISTS _keep_paths")
 
+    @staticmethod
+    def _normalize_image_set_name(name: str) -> tuple[str, str]:
+        if not isinstance(name, str):
+            raise ValueError("Set name must be text.")
+        display_name = name.strip()
+        if not display_name or any(ord(character) < 32 for character in display_name):
+            raise ValueError("Set name must not be empty or contain control characters.")
+        return display_name, display_name.casefold()
+
+    @staticmethod
+    def _serialize_image_set_filter(
+        apply_filter: Mapping[str, Any] | None,
+    ) -> str | None:
+        if apply_filter is None:
+            return None
+        return json.dumps(apply_filter, ensure_ascii=False, sort_keys=True)
+
+    def create_image_set(
+        self,
+        name: str,
+        apply_filter: Mapping[str, Any] | None = None,
+    ) -> int:
+        display_name, normalized_name = self._normalize_image_set_name(name)
+        filter_json = self._serialize_image_set_filter(apply_filter)
+        try:
+            with self.conn:
+                cursor = self.conn.execute(
+                    "INSERT INTO image_sets "
+                    "(name, normalized_name, apply_filter_json, apply_filter_version) "
+                    "VALUES (?, ?, ?, ?)",
+                    (display_name, normalized_name, filter_json, 1 if filter_json else None),
+                )
+                return int(cursor.lastrowid)
+        except Exception as exc:  # noqa: BLE001 — translate only the name constraint
+            if "image_sets.normalized_name" not in str(exc):
+                raise
+            raise ValueError(f"A set named '{display_name}' already exists.") from exc
+
+    def rename_image_set(self, set_id: int, name: str) -> None:
+        display_name, normalized_name = self._normalize_image_set_name(name)
+        try:
+            with self.conn:
+                cursor = self.conn.execute(
+                    "UPDATE image_sets SET name = ?, normalized_name = ?, "
+                    "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (display_name, normalized_name, set_id),
+                )
+                if cursor.rowcount == 0:
+                    raise KeyError(f"Image set {set_id} does not exist.")
+        except Exception as exc:  # noqa: BLE001 — translate only the name constraint
+            if "image_sets.normalized_name" not in str(exc):
+                raise
+            raise ValueError(f"A set named '{display_name}' already exists.") from exc
+
+    def delete_image_set(self, set_id: int) -> bool:
+        with self.conn:
+            cursor = self.conn.execute("DELETE FROM image_sets WHERE id = ?", (set_id,))
+            return cursor.rowcount > 0
+
+    def set_image_set_filter(
+        self,
+        set_id: int,
+        apply_filter: Mapping[str, Any] | None,
+    ) -> None:
+        if apply_filter is not None:
+            self._compile_image_set_filter_node(apply_filter)
+        filter_json = self._serialize_image_set_filter(apply_filter)
+        with self.conn:
+            cursor = self.conn.execute(
+                "UPDATE image_sets SET apply_filter_json = ?, "
+                "apply_filter_version = ?, updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = ?",
+                (filter_json, 1 if filter_json else None, set_id),
+            )
+            if cursor.rowcount == 0:
+                raise KeyError(f"Image set {set_id} does not exist.")
+
+    def list_image_sets(self) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT s.id, s.name, s.apply_filter_json, s.apply_filter_version, "
+            "COUNT(m.image_id) "
+            "FROM image_sets s LEFT JOIN image_set_members m ON m.set_id = s.id "
+            "GROUP BY s.id ORDER BY s.normalized_name, s.id"
+        ).fetchall()
+        return [
+            {
+                "id": int(set_id),
+                "name": str(name),
+                "apply_filter": json.loads(filter_json) if filter_json is not None else None,
+                "apply_filter_version": filter_version,
+                "member_count": int(member_count),
+            }
+            for set_id, name, filter_json, filter_version, member_count in rows
+        ]
+
+    def image_set_contains_path(self, set_id: int, path: str) -> bool:
+        return bool(self.conn.execute(
+            "SELECT EXISTS(SELECT 1 FROM image_set_members AS members "
+            "JOIN images ON images.id = members.image_id "
+            "WHERE members.set_id = ? AND images.path = ?)",
+            (set_id, path),
+        ).fetchone()[0])
+
+    def add_images_to_set(self, set_id: int, image_paths: Iterable[str]) -> int:
+        if self.conn.execute(
+            "SELECT 1 FROM image_sets WHERE id = ?", (set_id,)
+        ).fetchone() is None:
+            raise KeyError(f"Image set {set_id} does not exist.")
+        added = 0
+        with self.conn:
+            for image_path in image_paths:
+                cursor = self.conn.execute(
+                    "INSERT OR IGNORE INTO image_set_members (set_id, image_id) "
+                    "SELECT ?, id FROM images WHERE path = ?",
+                    (set_id, image_path),
+                )
+                added += max(cursor.rowcount, 0)
+        return added
+
+    def remove_images_from_set(self, set_id: int, image_paths: Iterable[str]) -> int:
+        if self.conn.execute(
+            "SELECT 1 FROM image_sets WHERE id = ?", (set_id,)
+        ).fetchone() is None:
+            raise KeyError(f"Image set {set_id} does not exist.")
+        removed = 0
+        with self.conn:
+            for image_path in image_paths:
+                cursor = self.conn.execute(
+                    "DELETE FROM image_set_members WHERE set_id = ? AND image_id = "
+                    "(SELECT id FROM images WHERE path = ?)",
+                    (set_id, image_path),
+                )
+                removed += max(cursor.rowcount, 0)
+        return removed
+
+    def get_image_set_members(
+        self,
+        set_id: int,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        if limit < 1 or offset < 0:
+            raise ValueError("limit must be positive and offset must not be negative.")
+        if self.conn.execute(
+            "SELECT 1 FROM image_sets WHERE id = ?", (set_id,)
+        ).fetchone() is None:
+            raise KeyError(f"Image set {set_id} does not exist.")
+        rows = self.conn.execute(
+            "SELECT i.id, i.path, i.filename, i.ext, i.mtime, i.size, "
+            "i.metadata_json, i.captured_at, i.marked "
+            "FROM image_set_members m JOIN images i ON i.id = m.image_id "
+            "WHERE m.set_id = ? ORDER BY i.path COLLATE NOCASE, i.id "
+            "LIMIT ? OFFSET ?",
+            (set_id, limit, offset),
+        ).fetchall()
+        return [
+            {
+                "id": int(image_id),
+                "path": str(path),
+                "filename": str(filename),
+                "ext": str(ext),
+                "mtime": float(mtime),
+                "size": int(size),
+                "metadata": json.loads(metadata_json or "{}"),
+                "captured_at": captured_at,
+                "marked": bool(marked),
+            }
+            for image_id, path, filename, ext, mtime, size, metadata_json, captured_at, marked in rows
+        ]
+
+    def _compile_image_set_filter_node(
+        self,
+        node: Mapping[str, Any],
+    ) -> tuple[str, tuple[Any, ...]]:
+        if not isinstance(node, Mapping):
+            raise ValueError("Each filter node must be an object.")
+        group_operator = node.get("op")
+        if isinstance(group_operator, str) and group_operator in {"and", "or"}:
+            conditions = node.get("conditions")
+            if not isinstance(conditions, list) or not conditions:
+                raise ValueError("Filter groups must contain at least one condition.")
+            compiled = [self._compile_image_set_filter_node(item) for item in conditions]
+            joiner = " AND " if group_operator == "and" else " OR "
+            return (
+                "(" + joiner.join(sql for sql, _ in compiled) + ")",
+                tuple(value for _, values in compiled for value in values),
+            )
+
+        field = node.get("field")
+        operator = node.get("operator")
+        value = node.get("value")
+        if field == "text" and operator == "matches":
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError("Text conditions require a non-empty query.")
+            query = self._sanitize_fts_query(value)
+            return (
+                "images.id IN (SELECT rowid FROM images_fts WHERE images_fts MATCH ?)",
+                (query,),
+            )
+        if field == "folder" and operator == "within_any":
+            if not isinstance(value, list) or not value or not all(
+                isinstance(path, str) and path.strip() for path in value
+            ):
+                raise ValueError("Folder conditions require one or more folder paths.")
+            normalized_paths = (os.path.normpath(path) for path in value)
+            prefixes = tuple(
+                path if path.endswith(os.sep) else path + os.sep
+                for path in normalized_paths
+            )
+            clauses = ["instr(lower(images.path), lower(?)) = 1" for _ in prefixes]
+            return "(" + " OR ".join(clauses) + ")", prefixes
+        if field == "file_type" and operator in {"equals", "one_of"}:
+            if operator == "equals":
+                if not isinstance(value, str) or not value.strip():
+                    raise ValueError("File-type conditions require valid extensions.")
+                extensions = [value]
+            else:
+                if not isinstance(value, list) or not value or not all(
+                    isinstance(extension, str) and extension.strip()
+                    for extension in value
+                ):
+                    raise ValueError(
+                        "File-type conditions require one or more extensions."
+                    )
+                extensions = [extension for extension in value if isinstance(extension, str)]
+            canonical = tuple(self._canonical_ext(extension) for extension in extensions)
+            if any(not extension for extension in canonical):
+                raise ValueError("File-type conditions require valid extensions.")
+            placeholders = ", ".join("?" for _ in canonical)
+            if len(canonical) == 1:
+                return "images.ext = ?", canonical
+            return f"images.ext IN ({placeholders})", canonical
+        if field == "capture_date" and operator == "between":
+            if not isinstance(value, Mapping):
+                raise ValueError("Capture-date conditions require from/to bounds.")
+            date_from = value.get("from")
+            date_to = value.get("to")
+            if date_from is None and date_to is None:
+                raise ValueError("Capture-date conditions require at least one bound.")
+            if any(
+                bound is not None and (isinstance(bound, bool) or not isinstance(bound, int))
+                for bound in (date_from, date_to)
+            ):
+                raise ValueError("Capture-date bounds must be integer timestamps or null.")
+            clauses = ["images.captured_at IS NOT NULL"]
+            values: list[int] = []
+            if date_from is not None:
+                clauses.append("images.captured_at >= ?")
+                values.append(date_from)
+            if date_to is not None:
+                clauses.append("images.captured_at <= ?")
+                values.append(date_to)
+            return "(" + " AND ".join(clauses) + ")", tuple(values)
+        if field == "marked" and operator == "equals":
+            if not isinstance(value, bool):
+                raise ValueError("Marked conditions require a boolean value.")
+            return "images.marked = ?", (1 if value else 0,)
+        if field == "metadata":
+            key = node.get("key")
+            if not isinstance(key, str) or not key:
+                raise ValueError("Metadata conditions require a field key.")
+            json_path = '$."' + key.replace("\\", "\\\\").replace('"', '\\"') + '"'
+            metadata_value = "json_extract(images.metadata_json, ?)"
+            if operator in {"exists", "missing"}:
+                json_type = "json_type(images.metadata_json, ?)"
+                return (
+                    f"{json_type} IS {'NOT ' if operator == 'exists' else ''}NULL",
+                    (json_path,),
+                )
+            if operator in {"equals", "not_equals", "contains", "not_contains"}:
+                if not isinstance(value, (str, int, float)) or isinstance(value, bool):
+                    raise ValueError("Metadata text comparisons require a scalar value.")
+                text_value = str(value)
+                expression = f"lower(CAST({metadata_value} AS TEXT))"
+                if operator in {"equals", "not_equals"}:
+                    comparison = "=" if operator == "equals" else "!="
+                    return (
+                        f"({metadata_value} IS NOT NULL AND {expression} {comparison} lower(?))",
+                        (json_path, json_path, text_value),
+                    )
+                comparison = "> 0" if operator == "contains" else "= 0"
+                return (
+                    f"({metadata_value} IS NOT NULL AND "
+                    f"instr({expression}, lower(?)) {comparison})",
+                    (json_path, json_path, json_path, text_value),
+                )
+            numeric_operators = {
+                "greater_than": ">",
+                "greater_than_or_equal": ">=",
+                "less_than": "<",
+                "less_than_or_equal": "<=",
+            }
+            if operator in numeric_operators:
+                number = _try_parse_number(value)
+                if number is None:
+                    raise ValueError("Numeric comparisons require a finite number.")
+                return (
+                    f"try_number({metadata_value}) {numeric_operators[operator]} ?",
+                    (json_path, number),
+                )
+        raise ValueError(f"Unsupported image-set filter condition: {field}/{operator}.")
+
+    def _get_image_set_filter_clause(self, set_id: int) -> tuple[str, tuple[Any, ...]]:
+        row = self.conn.execute(
+            "SELECT apply_filter_json, apply_filter_version FROM image_sets WHERE id = ?",
+            (set_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Image set {set_id} does not exist.")
+        filter_json, filter_version = row
+        if filter_json is None:
+            raise ValueError("This image set has no saved filter.")
+        if filter_version != 1:
+            raise ValueError(f"Unsupported image-set filter version: {filter_version}.")
+        try:
+            filter_data = json.loads(filter_json)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("The saved image-set filter is invalid JSON.") from exc
+        return self._compile_image_set_filter_node(filter_data)
+
+    def count_image_set_filter_matches(self, set_id: int) -> int:
+        clause, values = self._get_image_set_filter_clause(set_id)
+        row = self.conn.execute(
+            f"SELECT COUNT(*) FROM images WHERE {clause}", values
+        ).fetchone()
+        return int(row[0])
+
+    def reapply_image_set_filter(
+        self,
+        set_id: int,
+        *,
+        mode: str,
+        confirm_empty_replace: bool = False,
+    ) -> dict[str, int]:
+        if mode not in {"add", "replace"}:
+            raise ValueError("mode must be 'add' or 'replace'.")
+        clause, values = self._get_image_set_filter_clause(set_id)
+        with self.conn:
+            matched = int(
+                self.conn.execute(
+                    f"SELECT COUNT(*) FROM images WHERE {clause}", values
+                ).fetchone()[0]
+            )
+            previous = int(
+                self.conn.execute(
+                    "SELECT COUNT(*) FROM image_set_members WHERE set_id = ?",
+                    (set_id,),
+                ).fetchone()[0]
+            )
+            if mode == "replace" and matched == 0 and not confirm_empty_replace:
+                raise EmptyImageSetReplaceError(
+                    "Replacing members with an empty result requires confirmation."
+                )
+            if mode == "add":
+                cursor = self.conn.execute(
+                    "INSERT OR IGNORE INTO image_set_members (set_id, image_id) "
+                    f"SELECT ?, id FROM images WHERE {clause}",
+                    (set_id, *values),
+                )
+                added = max(cursor.rowcount, 0)
+                removed = 0
+            else:
+                removed = int(
+                    self.conn.execute(
+                        "SELECT COUNT(*) FROM image_set_members "
+                        "WHERE set_id = ? AND image_id NOT IN "
+                        f"(SELECT id FROM images WHERE {clause})",
+                        (set_id, *values),
+                    ).fetchone()[0]
+                )
+                self.conn.execute(
+                    "DELETE FROM image_set_members WHERE set_id = ?", (set_id,)
+                )
+                self.conn.execute(
+                    "INSERT INTO image_set_members (set_id, image_id) "
+                    f"SELECT ?, id FROM images WHERE {clause}",
+                    (set_id, *values),
+                )
+                added = max(matched - (previous - removed), 0)
+        return {"matched": matched, "added": added, "removed": removed}
+
+    def reapply_image_set_filter_with_progress(
+        self,
+        set_id: int,
+        *,
+        mode: str,
+        confirm_empty_replace: bool = False,
+        cancel_check: Callable[[], bool] | None = None,
+        on_progress: Callable[[int, int], None] | None = None,
+        batch_size: int = 500,
+    ) -> dict[str, int]:
+        if mode not in {"add", "replace"}:
+            raise ValueError("mode must be 'add' or 'replace'.")
+        if batch_size < 1:
+            raise ValueError("batch_size must be positive.")
+        clause, values = self._get_image_set_filter_clause(set_id)
+        processed = 0
+        self.conn.execute("BEGIN")
+        try:
+            matched = int(
+                self.conn.execute(
+                    f"SELECT COUNT(*) FROM images WHERE {clause}", values
+                ).fetchone()[0]
+            )
+            if mode == "replace" and matched == 0 and not confirm_empty_replace:
+                raise EmptyImageSetReplaceError(
+                    "Replacing members with an empty result requires confirmation."
+                )
+            removed = 0
+            added = 0
+            if on_progress is not None:
+                on_progress(0, matched)
+            if cancel_check is not None and cancel_check():
+                raise ImageSetFilterReapplyCanceled(processed, added, removed)
+            if mode == "replace":
+                removed = int(
+                    self.conn.execute(
+                        "SELECT COUNT(*) FROM image_set_members "
+                        "WHERE set_id = ? AND image_id NOT IN "
+                        f"(SELECT id FROM images WHERE {clause})",
+                        (set_id, *values),
+                    ).fetchone()[0]
+                )
+                self.conn.execute(
+                    "DELETE FROM image_set_members WHERE set_id = ? AND image_id NOT IN "
+                    f"(SELECT id FROM images WHERE {clause})",
+                    (set_id, *values),
+                )
+
+            cursor = self.conn.execute(
+                f"SELECT id FROM images WHERE {clause} ORDER BY id",
+                values,
+            )
+            while True:
+                if cancel_check is not None and cancel_check():
+                    raise ImageSetFilterReapplyCanceled(processed, added, removed)
+                rows = cursor.fetchmany(batch_size)
+                if not rows:
+                    break
+                previous_changes = self.conn.total_changes
+                self.conn.executemany(
+                    "INSERT OR IGNORE INTO image_set_members (set_id, image_id) "
+                    "VALUES (?, ?)",
+                    ((set_id, int(row[0])) for row in rows),
+                )
+                added += self.conn.total_changes - previous_changes
+                processed += len(rows)
+                if on_progress is not None:
+                    on_progress(processed, matched)
+            if cancel_check is not None and cancel_check():
+                raise ImageSetFilterReapplyCanceled(processed, added, removed)
+            self.conn.commit()
+            return {
+                "matched": matched,
+                "added": added,
+                "removed": removed,
+            }
+        except ImageSetFilterReapplyCanceled:
+            self.conn.commit()
+            raise
+        except BaseException:
+            if self.conn.in_transaction:
+                self.conn.rollback()
+            raise
+
     # ── Marks ────────────────────────────────────────────────────────────────
 
     def mark_image(self, path: str, marked: bool) -> None:
@@ -609,6 +1135,7 @@ class ImageIndexRepository:
         marked_only: bool = False,
         date_from: int | None = None,
         date_to: int | None = None,
+        image_set_id: int | None = None,
     ) -> list[str]:
         """Set or clear the mark on all matching images in a single SQL UPDATE.
 
@@ -623,6 +1150,7 @@ class ImageIndexRepository:
         date_clause, date_args = self._build_date_clause(date_from, date_to)
         marks_clause = "AND images.marked = 1" if marked_only else ""
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
+        set_clause, set_args = self._build_image_set_clause(image_set_id)
 
         if query.strip():
             fts_query = self._sanitize_fts_query(query)
@@ -631,16 +1159,16 @@ class ImageIndexRepository:
                 "WHERE id IN ("
                 "  SELECT images.id FROM images_fts "
                 "  JOIN images ON images_fts.rowid = images.id "
-                f" WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+                f" WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
                 ")"
             )
-            args: tuple = (fts_query,) + ext_args + path_args + date_args
+            args: tuple = (fts_query,) + ext_args + path_args + date_args + set_args
         else:
             sql = (
                 f"UPDATE images SET marked = {val} "
-                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
             )
-            args = ext_args + path_args + date_args
+            args = ext_args + path_args + date_args + set_args
 
         sql_returning = sql + " RETURNING path"
         with self.conn:
@@ -659,6 +1187,7 @@ class ImageIndexRepository:
         marked_only: bool = False,
         date_from: int | None = None,
         date_to: int | None = None,
+        image_set_id: int | None = None,
     ) -> tuple[list[str], list[str]]:
         """Flip the mark on all matching images in a single SQL UPDATE.
 
@@ -672,6 +1201,7 @@ class ImageIndexRepository:
         date_clause, date_args = self._build_date_clause(date_from, date_to)
         marks_clause = "AND images.marked = 1" if marked_only else ""
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
+        set_clause, set_args = self._build_image_set_clause(image_set_id)
 
         if query.strip():
             fts_query = self._sanitize_fts_query(query)
@@ -680,16 +1210,16 @@ class ImageIndexRepository:
                 "WHERE id IN ("
                 "  SELECT images.id FROM images_fts "
                 "  JOIN images ON images_fts.rowid = images.id "
-                f" WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+                f" WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
                 ")"
             )
-            args: tuple = (fts_query,) + ext_args + path_args + date_args
+            args: tuple = (fts_query,) + ext_args + path_args + date_args + set_args
         else:
             sql = (
                 "UPDATE images SET marked = 1 - marked "
-                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
             )
-            args = ext_args + path_args + date_args
+            args = ext_args + path_args + date_args + set_args
 
         sql_returning = sql + " RETURNING path, marked"
         with self.conn:
@@ -706,6 +1236,7 @@ class ImageIndexRepository:
         self,
         *,
         restrict_to_enabled_folders: bool = False,
+        image_set_id: int | None = None,
     ) -> List[str]:
         """Return currently marked image paths.
 
@@ -713,8 +1244,10 @@ class ImageIndexRepository:
         enabled indexed folders are returned.
         """
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
+        set_clause, set_args = self._build_image_set_clause(image_set_id)
         cur = self.conn.execute(
-            f"SELECT path FROM images WHERE marked = 1 {enabled_clause}"
+            f"SELECT path FROM images WHERE marked = 1 {enabled_clause} {set_clause}",
+            set_args,
         )
         return [row[0] for row in cur.fetchall()]
 
@@ -723,17 +1256,24 @@ class ImageIndexRepository:
         sort_by: str = "path_asc",
         *,
         restrict_to_enabled_folders: bool = False,
+        image_set_id: int | None = None,
+        include_unmarked: bool = False,
     ) -> List[dict]:
         """Return export records for marked images in the requested order.
 
         When *restrict_to_enabled_folders* is true, only marks belonging to
         enabled indexed folders are exported.
+        *image_set_id* restricts records to that set. *include_unmarked* also
+        includes its unmarked members for whole-set export.
         """
         order = self._resolve_sort(sort_by, "images.path COLLATE NOCASE ASC")
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
+        set_clause, set_args = self._build_image_set_clause(image_set_id)
         cur = self.conn.execute(
             f"SELECT path, filename, metadata_json FROM images "
-            f"WHERE marked = 1 {enabled_clause} ORDER BY {order}"
+            f"WHERE {'1=1' if include_unmarked else 'marked = 1'} "
+            f"{enabled_clause} {set_clause} ORDER BY {order}",
+            set_args,
         )
         result: List[dict] = []
         for path, filename, metadata_json in cur.fetchall():
@@ -936,6 +1476,7 @@ class ImageIndexRepository:
         marked_only: bool = False,
         date_from: int | None = None,
         date_to: int | None = None,
+        image_set_id: int | None = None,
     ) -> List[Tuple[int, str, str, str, int, float]]:
         order = self._resolve_sort(sort_by)
         ext_clause, ext_args = self._build_ext_clause(ext_filter)
@@ -945,6 +1486,7 @@ class ImageIndexRepository:
         date_clause, date_args = self._build_date_clause(date_from, date_to)
         marks_clause = "AND images.marked = 1" if marked_only else ""
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
+        set_clause, set_args = self._build_image_set_clause(image_set_id)
 
         if query.strip():
             fts_query = self._sanitize_fts_query(query)
@@ -954,21 +1496,21 @@ class ImageIndexRepository:
                 "SELECT images.id, images.path, images.filename, images.metadata_json, images.size, images.mtime "
                 "FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} "
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause} "
                 f"{order_expr} "
                 "LIMIT ? OFFSET ?"
             )
-            args = (fts_query,) + ext_args + path_args + date_args + (limit, offset)
+            args = (fts_query,) + ext_args + path_args + date_args + set_args + (limit, offset)
             cur = self._execute_fts_query(sql, args, fts_query)
         else:
             sql = (
                 "SELECT id, path, filename, metadata_json, size, mtime "
                 "FROM images "
-                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} "
+                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause} "
                 f"ORDER BY {order} "
                 "LIMIT ? OFFSET ?"
             )
-            args = ext_args + path_args + date_args + (limit, offset)
+            args = ext_args + path_args + date_args + set_args + (limit, offset)
             cur = self.conn.execute(sql, args)
         return cur.fetchall()
 
@@ -981,6 +1523,7 @@ class ImageIndexRepository:
         marked_only: bool = False,
         date_from: int | None = None,
         date_to: int | None = None,
+        image_set_id: int | None = None,
     ) -> int:
         ext_clause, ext_args = self._build_ext_clause(ext_filter)
 
@@ -989,22 +1532,23 @@ class ImageIndexRepository:
         date_clause, date_args = self._build_date_clause(date_from, date_to)
         marks_clause = "AND images.marked = 1" if marked_only else ""
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
+        set_clause, set_args = self._build_image_set_clause(image_set_id)
 
         if query.strip():
             fts_query = self._sanitize_fts_query(query)
             sql = (
                 "SELECT COUNT(*) FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
             )
-            args = (fts_query,) + ext_args + path_args + date_args
+            args = (fts_query,) + ext_args + path_args + date_args + set_args
             cur = self._execute_fts_query(sql, args, fts_query)
         else:
             sql = (
                 f"SELECT COUNT(*) FROM images "
-                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
             )
-            args = ext_args + path_args + date_args
+            args = ext_args + path_args + date_args + set_args
             cur = self.conn.execute(sql, args)
         return int(cur.fetchone()[0])
 
@@ -1019,6 +1563,7 @@ class ImageIndexRepository:
         marked_only: bool = False,
         date_from: int | None = None,
         date_to: int | None = None,
+        image_set_id: int | None = None,
     ) -> int | None:
         """Return the zero-based offset of *image_id* in the filtered result set."""
         if image_id <= 0:
@@ -1030,6 +1575,7 @@ class ImageIndexRepository:
         date_clause, date_args = self._build_date_clause(date_from, date_to)
         marks_clause = "AND images.marked = 1" if marked_only else ""
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
+        set_clause, set_args = self._build_image_set_clause(image_set_id)
 
         if query.strip():
             fts_query = self._sanitize_fts_query(query)
@@ -1044,11 +1590,11 @@ class ImageIndexRepository:
                 f"         ROW_NUMBER() OVER (ORDER BY {order_expr}) - 1 AS row_offset "
                 "  FROM images_fts "
                 "  JOIN images ON images_fts.rowid = images.id "
-                f"  WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+                f"  WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
                 ") ranked "
                 "WHERE image_id = ?"
             )
-            args = (fts_query,) + ext_args + path_args + date_args + (image_id,)
+            args = (fts_query,) + ext_args + path_args + date_args + set_args + (image_id,)
             row = self._execute_fts_query(sql, args, fts_query).fetchone()
         else:
             sql = (
@@ -1056,11 +1602,11 @@ class ImageIndexRepository:
                 "  SELECT images.id AS image_id, "
                 f"         ROW_NUMBER() OVER (ORDER BY {order}, images.id ASC) - 1 AS row_offset "
                 "  FROM images "
-                f"  WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+                f"  WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
                 ") ranked "
                 "WHERE image_id = ?"
             )
-            args = ext_args + path_args + date_args + (image_id,)
+            args = ext_args + path_args + date_args + set_args + (image_id,)
             row = self.conn.execute(sql, args).fetchone()
         if row is None:
             return None
@@ -1075,6 +1621,7 @@ class ImageIndexRepository:
         marked_only: bool = False,
         date_from: int | None = None,
         date_to: int | None = None,
+        image_set_id: int | None = None,
     ) -> List[str]:
         """Return all paths matching the current filter — no LIMIT."""
         ext_clause, ext_args = self._build_ext_clause(ext_filter)
@@ -1084,22 +1631,23 @@ class ImageIndexRepository:
         date_clause, date_args = self._build_date_clause(date_from, date_to)
         marks_clause = "AND images.marked = 1" if marked_only else ""
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
+        set_clause, set_args = self._build_image_set_clause(image_set_id)
 
         if query.strip():
             fts_query = self._sanitize_fts_query(query)
             sql = (
                 "SELECT images.path FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
             )
-            args = (fts_query,) + ext_args + path_args + date_args
+            args = (fts_query,) + ext_args + path_args + date_args + set_args
             cur = self._execute_fts_query(sql, args, fts_query)
         else:
             sql = (
                 "SELECT path FROM images "
-                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause}"
+                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
             )
-            args = ext_args + path_args + date_args
+            args = ext_args + path_args + date_args + set_args
             cur = self.conn.execute(sql, args)
         return [row[0] for row in cur.fetchall()]
 
@@ -1148,12 +1696,33 @@ class ImageIndexRepository:
             args.append(date_to)
         return " ".join(parts), tuple(args)
 
+    @staticmethod
+    def _build_image_set_clause(
+        image_set_id: int | None,
+    ) -> tuple[str, tuple[int, ...]]:
+        if image_set_id is None:
+            return "", ()
+        if isinstance(image_set_id, bool) or image_set_id < -1 or image_set_id == 0:
+            raise ValueError("image_set_id must be -1 or a positive integer.")
+        if image_set_id == -1:
+            return (
+                "AND EXISTS (SELECT 1 FROM image_set_members ism "
+                "WHERE ism.image_id = images.id)",
+                (),
+            )
+        return (
+            "AND EXISTS (SELECT 1 FROM image_set_members ism "
+            "WHERE ism.set_id = ? AND ism.image_id = images.id)",
+            (image_set_id,),
+        )
+
     def get_year_counts(
         self,
         query: str = "",
         ext_filter: str = "",
         path_filter: List[str] | None = None,
         restrict_to_enabled_folders: bool = False,
+        image_set_id: int | None = None,
     ) -> List[Tuple[int, int]]:
         """Return [(year, count)] for all images that have a captured_at value.
 
@@ -1165,6 +1734,7 @@ class ImageIndexRepository:
         path_clause, path_args = self._build_path_clause(path_filter)
 
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
+        set_clause, set_args = self._build_image_set_clause(image_set_id)
 
         if query.strip():
             fts_query = self._sanitize_fts_query(query)
@@ -1173,20 +1743,20 @@ class ImageIndexRepository:
                 "COUNT(*) AS cnt "
                 "FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                f"WHERE images_fts MATCH ? AND images.captured_at IS NOT NULL {ext_clause} {path_clause} {enabled_clause} "
+                f"WHERE images_fts MATCH ? AND images.captured_at IS NOT NULL {ext_clause} {path_clause} {enabled_clause} {set_clause} "
                 "GROUP BY yr ORDER BY yr"
             )
-            args = (fts_query,) + ext_args + path_args
+            args = (fts_query,) + ext_args + path_args + set_args
             cur = self._execute_fts_query(sql, args, fts_query)
         else:
             sql = (
                 "SELECT CAST(strftime('%Y', datetime(captured_at, 'unixepoch')) AS INTEGER) AS yr, "
                 "COUNT(*) AS cnt "
                 "FROM images "
-                f"WHERE captured_at IS NOT NULL {ext_clause} {path_clause} {enabled_clause} "
+                f"WHERE captured_at IS NOT NULL {ext_clause} {path_clause} {enabled_clause} {set_clause} "
                 "GROUP BY yr ORDER BY yr"
             )
-            args = ext_args + path_args
+            args = ext_args + path_args + set_args
             cur = self.conn.execute(sql, args)
         return [(int(row[0]), int(row[1])) for row in cur.fetchall()]
 
@@ -1200,6 +1770,7 @@ class ImageIndexRepository:
         restrict_to_enabled_folders: bool = False,
         date_from: int | None = None,
         date_to: int | None = None,
+        image_set_id: int | None = None,
     ) -> List[Tuple[str, int]]:
         """Return [(extension, count)] sorted by count descending.
 
@@ -1212,6 +1783,7 @@ class ImageIndexRepository:
 
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
         date_clause, date_args = self._build_date_clause(date_from, date_to)
+        set_clause, set_args = self._build_image_set_clause(image_set_id)
 
         if query.strip():
             fts_query = self._sanitize_fts_query(query)
@@ -1219,20 +1791,20 @@ class ImageIndexRepository:
                 "SELECT images.ext, COUNT(*) AS cnt FROM images_fts"
                 " JOIN images ON images_fts.rowid = images.id"
                 f" WHERE images_fts MATCH ? AND images.ext <> ''"
-                f" {path_clause} {enabled_clause} {date_clause}"
+                f" {path_clause} {enabled_clause} {date_clause} {set_clause}"
                 " GROUP BY images.ext"
                 " ORDER BY cnt DESC, images.ext ASC"
             )
-            args = (fts_query,) + path_args + date_args
+            args = (fts_query,) + path_args + date_args + set_args
             cur = self._execute_fts_query(sql, args, fts_query)
         else:
             sql = (
                 "SELECT ext, COUNT(*) AS cnt FROM images"
-                f" WHERE ext <> '' {path_clause} {enabled_clause} {date_clause}"
+                f" WHERE ext <> '' {path_clause} {enabled_clause} {date_clause} {set_clause}"
                 " GROUP BY ext"
                 " ORDER BY cnt DESC, ext ASC"
             )
-            args = path_args + date_args
+            args = path_args + date_args + set_args
             cur = self.conn.execute(sql, args)
         return [(str(row[0]), int(row[1])) for row in cur.fetchall()]
 
@@ -1440,6 +2012,7 @@ class ImageIndexRepository:
         restrict_to_enabled_folders: bool = False,
         date_from: int | None = None,
         date_to: int | None = None,
+        image_set_id: int | None = None,
     ) -> List[Tuple[int, str, str, str, int, float]]:
         """Fetch full image rows for a list of *paths*, preserving order.
 
@@ -1455,6 +2028,7 @@ class ImageIndexRepository:
         path_clause, path_args = self._build_path_clause(path_filter)
         ext_clause, ext_args = self._build_ext_clause(ext_filter)
         date_clause, date_args = self._build_date_clause(date_from, date_to)
+        set_clause, set_args = self._build_image_set_clause(image_set_id)
         enabled_clause = (
             f" {self._ENABLED_CLAUSE}"
             if restrict_to_enabled_folders and self._has_indexed_folders_table()
@@ -1462,8 +2036,8 @@ class ImageIndexRepository:
         )
         cur = self.conn.execute(
             f"SELECT id, path, filename, metadata_json, size, mtime "
-            f"FROM images WHERE path IN ({placeholders}) {path_clause} {ext_clause} {date_clause}{enabled_clause}",
-            tuple(paths) + path_args + ext_args + date_args,
+            f"FROM images WHERE path IN ({placeholders}) {path_clause} {ext_clause} {date_clause}{enabled_clause} {set_clause}",
+            tuple(paths) + path_args + ext_args + date_args + set_args,
         )
         by_path: dict[str, Tuple[int, str, str, str, int, float]] = {}
         for row in cur.fetchall():
@@ -1478,19 +2052,21 @@ class ImageIndexRepository:
         restrict_to_enabled_folders: bool = False,
         date_from: int | None = None,
         date_to: int | None = None,
+        image_set_id: int | None = None,
     ) -> set[str]:
         """Return image paths matching the current search-related filters."""
         path_clause, path_args = self._build_path_clause(path_filter)
         ext_clause, ext_args = self._build_ext_clause(ext_filter)
         date_clause, date_args = self._build_date_clause(date_from, date_to)
+        set_clause, set_args = self._build_image_set_clause(image_set_id)
         enabled_clause = (
             f" {self._ENABLED_CLAUSE}"
             if restrict_to_enabled_folders and self._has_indexed_folders_table()
             else ""
         )
         cur = self.conn.execute(
-            f"SELECT path FROM images WHERE 1=1 {path_clause} {ext_clause} {date_clause}{enabled_clause}",
-            path_args + ext_args + date_args,
+            f"SELECT path FROM images WHERE 1=1 {path_clause} {ext_clause} {date_clause}{enabled_clause} {set_clause}",
+            path_args + ext_args + date_args + set_args,
         )
         result: set[str] = set()
         while True:

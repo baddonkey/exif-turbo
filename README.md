@@ -30,6 +30,35 @@ Download the installer for your platform from [GitHub Releases](https://github.c
 
 See the [User Manual](docs/user-manual.md#2-installation) for setup and first-run instructions.
 
+## MCP batch selection
+
+The running desktop app's MCP interface lets an assistant choose an image set
+before applying custom tags to a batch:
+
+```python
+list_image_sets()
+get_image_set_images(set_id=1, include_previews=True)
+```
+
+The first call lists sets with their IDs, names, and member counts. The second
+returns a page of images with existing custom tags, metadata, and available JPEG
+previews. With previews enabled, the default and maximum page size is 5 images;
+without previews, the default is 25 and the maximum is 50. Pass the returned
+`next_offset` as `offset` to fetch another page until `next_offset` is `null`.
+Use the chosen image IDs and paths with `set_custom_tags_batch` to append or
+replace custom tags.
+
+The single-image tools `get_selected_image` and `add_custom_tags` follow the
+tagging drawer's selection. In Sets, select a member first; they never fall back
+to an unrelated Search selection while a set is active. `add_custom_tags` updates
+only that selected image, not the entire set. Check the path returned by
+`get_selected_image` before tagging, and use `set_custom_tags_batch` with explicit
+image IDs and paths for batch updates.
+
+Successful MCP tag updates write an INFO log entry per image with the tool name,
+image ID, target path, append/replace mode, requested tags, and resulting custom
+tags. Failed updates are not logged as successes.
+
 ## Privacy
 
 Indexing and search run locally. Password protection covers the database and

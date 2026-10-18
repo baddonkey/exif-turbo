@@ -88,6 +88,26 @@ def test_tagging_service_embedded_exclusions_persist_in_sidecar(
     assert loaded.sidecar.exclude_all_embedded_tags is True
 
 
+def test_tagging_service_replace_free_tags_deduplicates_and_can_clear(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    service, image_repository, image_path = _service(tmp_path)
+    service.add_free_tag(str(image_path), "Family")
+    service.add_free_tag(str(image_path), "Old")
+
+    # Act
+    replacement = service.replace_free_tags(
+        str(image_path), [" family ", "Travel", "travel"]
+    )
+    cleared = service.replace_free_tags(str(image_path), [])
+
+    # Assert
+    assert replacement.sidecar.free_tags == ("Family", "Travel")
+    assert cleared.sidecar.free_tags == ()
+    assert image_repository.get_free_tags(str(image_path)) == ()
+
+
 def test_tagging_service_db_failure_leaves_sidecar_and_raises_partial_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

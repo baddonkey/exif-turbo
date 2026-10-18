@@ -23,6 +23,37 @@ class _FakePort:
     def add_custom_tags(self, tags: Sequence[str]) -> tuple[str, ...]:
         return tuple(tags)
 
+    def list_image_sets(self) -> list[dict[str, Any]]:
+        return [{"id": 4, "name": "Family", "member_count": 1}]
+
+    def get_image_set_images(
+        self,
+        set_id: int,
+        limit: int,
+        offset: int,
+    ) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": 3,
+                "path": "/tmp/x.jpg",
+                "filename": "x.jpg",
+                "metadata": {"A": 1},
+                "free_tags": ["tag-a"],
+            }
+        ][offset : offset + limit]
+
+    def load_image_preview_jpeg(self, image_id: int) -> bytes | None:
+        return b"\xff\xd8fakejpeg" if image_id == 3 else None
+
+    def set_image_custom_tags(
+        self,
+        image_id: int,
+        path: str,
+        tags: Sequence[str],
+        mode: str,
+    ) -> tuple[str, ...]:
+        return tuple(tags)
+
 
 def _tool_fn(server: Any, name: str):
     for tool in server._tool_manager.list_tools():  # noqa: SLF001
@@ -94,3 +125,64 @@ def test_mcp_server_factory_add_custom_tags_tool_returns_tags() -> None:
         "added": ["one", "two"],
         "free_tags": ["one", "two"],
     }
+
+
+def test_mcp_server_factory_lists_sets_and_returns_paged_images() -> None:
+    # Arrange
+    factory = McpServerFactory(McpSessionService(_FakePort(None)))
+    server = factory.create()
+    list_tool = _tool_fn(server, "list_image_sets")
+    page_tool = _tool_fn(server, "get_image_set_images")
+
+    # Act
+    sets_result = list_tool()
+    page_result = page_tool(set_id=4, limit=1, include_previews=True)
+
+    # Assert
+    assert sets_result.structured_content == {
+        "sets": [{"id": 4, "name": "Family", "member_count": 1}]
+    }
+    assert page_result.is_error is False
+    assert page_result.structured_content["images"][0]["preview_uri"] == (
+        "exif-turbo://images/3/preview"
+    )
+    assert any(getattr(block, "type", None) == "image" for block in page_result.content)
+
+
+def test_mcp_server_factory_returns_per_image_tag_batch_results() -> None:
+    # Arrange
+    factory = McpServerFactory(McpSessionService(_FakePort(None)))
+    server = factory.create()
+    tool = _tool_fn(server, "set_custom_tags_batch")
+
+    # Act
+    result = tool(
+        updates=[
+            {
+                "image_id": 3,
+                "path": "/tmp/x.jpg",
+                "tags": ["family"],
+                "mode": "append",
+            }
+        ]
+    )
+
+    # Assert
+    assert result.is_error is False
+    assert result.structured_content["succeeded"] == 1
+    assert result.structured_content["results"][0]["free_tags"] == ["family"]
+
+
+def test_mcp_server_factory_image_set_previews_without_limit_returns_images() -> None:
+    # Arrange
+    factory = McpServerFactory(McpSessionService(_FakePort(None)))
+    tool = _tool_fn(factory.create(), "get_image_set_images")
+
+    # Act
+    result = tool(set_id=4, include_previews=True)
+
+    # Assert
+    assert result.is_error is False
+    assert result.structured_content["limit"] == 5
+    assert result.structured_content["images"][0]["free_tags"] == ["tag-a"]
+    assert any(getattr(block, "type", None) == "image" for block in result.content)

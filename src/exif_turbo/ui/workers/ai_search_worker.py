@@ -55,6 +55,7 @@ class AiSearchWorker(QThread):
         ext_filter: str = "",
         date_from: int | None = None,
         date_to: int | None = None,
+        image_set_id: int | None = None,
         session: AiSearchSession | None = None,
     ) -> None:
         super().__init__()
@@ -67,6 +68,7 @@ class AiSearchWorker(QThread):
         self._ext_filter = ext_filter
         self._date_from = date_from
         self._date_to = date_to
+        self._image_set_id = image_set_id
         self._session = session or AiSearchSession(
             ai_index_path(db_path), ai_id_map_path(db_path), ai_vector_metadata_path(db_path),
             repository_factory=AiVectorRepository,
@@ -100,6 +102,7 @@ class AiSearchWorker(QThread):
                 path_filter=self._path_filter,
                 ext_filter=self._ext_filter,
                 restrict_to_enabled_folders=True,
+                image_set_id=self._image_set_id,
             )
             if not facet_allowed_paths:
                 self.facet_paths = []
@@ -114,6 +117,7 @@ class AiSearchWorker(QThread):
                     restrict_to_enabled_folders=True,
                     date_from=self._date_from,
                     date_to=self._date_to,
+                    image_set_id=self._image_set_id,
                 )
 
             query_text = self._query_text.strip()
@@ -148,6 +152,7 @@ class AiSearchWorker(QThread):
                 restrict_to_enabled_folders=True,
                 date_from=self._date_from,
                 date_to=self._date_to,
+                image_set_id=self._image_set_id,
             )
         finally:
             image_repo.close()

@@ -218,9 +218,6 @@ class DerivativeExportService:
             if destination.exists():
                 status = DerivativeExportStatus.SKIPPED_EXISTING
                 message = "destination already exists"
-            elif not labels:
-                status = DerivativeExportStatus.SKIPPED_UNTAGGED
-                message = "image has no tags"
             items.append(
                 DerivativeExportPlanItem(
                     source=source,
@@ -282,13 +279,14 @@ class DerivativeExportService:
                 return self._result(
                     item, DerivativeExportStatus.CANCELED, "export canceled"
                 )
-            self._metadata_writer.write_keywords(
-                temporary,
-                item.labels,
-                forbidden_sources=sources,
-                excluded_labels=item.excluded_embedded_tags,
-                preserve_existing_keywords=not item.exclude_all_embedded_tags,
-            )
+            if item.labels or item.excluded_embedded_tags or item.exclude_all_embedded_tags:
+                self._metadata_writer.write_keywords(
+                    temporary,
+                    item.labels,
+                    forbidden_sources=sources,
+                    excluded_labels=item.excluded_embedded_tags,
+                    preserve_existing_keywords=not item.exclude_all_embedded_tags,
+                )
             if cancel_check is not None and cancel_check():
                 return self._result(
                     item, DerivativeExportStatus.CANCELED, "export canceled"
@@ -322,7 +320,10 @@ class DerivativeExportService:
             if label.strip()
         ]
         if not custom_labels:
-            return (), (), loaded_sidecar.sidecar.exclude_all_embedded_tags
+            return (
+                (), loaded_sidecar.sidecar.excluded_embedded_tags,
+                loaded_sidecar.sidecar.exclude_all_embedded_tags,
+            )
         embedded_labels: tuple[str, ...] = ()
         if not loaded_sidecar.sidecar.exclude_all_embedded_tags:
             rows = self._image_repository.get_images_by_paths([str(source)])

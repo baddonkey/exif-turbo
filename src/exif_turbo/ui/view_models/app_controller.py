@@ -11,7 +11,7 @@ import sys
 import time
 import urllib.parse
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Tuple
+from typing import TYPE_CHECKING, List, Sequence, Tuple
 
 if TYPE_CHECKING:
     from PIL import Image as PilImage
@@ -38,7 +38,9 @@ from ...config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
 from ...data.ai_search_session import AiSearchSession
 from ...data.ai_vector_storage import AiVectorStorage
 from .search_coordinator import SearchCoordinator
-from ...data.image_index_repository import ImageIndexRepository
+from ...data.image_index_repository import (
+    ImageIndexRepository,
+)
 from ...data.indexed_folder_repository import IndexedFolderRepository
 from ...data.password_policy import validate_new_database_password
 from ...data._connection import is_plaintext_database
@@ -78,6 +80,7 @@ from ..workers.copy_tags_worker import CopyTagsWorker
 from ..workers.derivative_export_worker import DerivativeExportWorker
 from ..workers.derivative_export_worker import DerivativeExportWorker
 from ..workers.folder_tree_worker import FolderTreeWorker
+from ..workers.image_set_membership_worker import ImageSetMembershipWorker
 from ..workers.index_worker import IndexWorker
 from ..workers.maintenance_worker import MaintenanceWorker
 from ..workers.password_change_worker import PasswordChangeWorker
@@ -149,6 +152,7 @@ class AppController(QObject):
     thumbCurrentFileChanged = Signal()
     sortByChanged = Signal()
     extFilterChanged = Signal()
+    searchImageSetFilterChanged = Signal()
     currentResultRowChanged = Signal()
     availableFormatsChanged = Signal()
     folderTreeChanged = Signal()
@@ -180,6 +184,14 @@ class AppController(QObject):
     bulkTagOperationChanged = Signal()
     derivativeOperationChanged = Signal()
     mcpStatusChanged = Signal()
+    imageSetsChanged = Signal()
+    imageSetMembersChanged = Signal()
+    imageSetStatusChanged = Signal()
+    imageSetOperationChanged = Signal()
+    imageSetOperationProgressChanged = Signal()
+    imageSetEmptyReplaceConfirmationRequired = Signal()
+    actionScopeChanged = Signal()
+    taggingSelectionChanged = Signal()
 
     def __init__(
         self,
@@ -244,8 +256,10 @@ class AppController(QObject):
         self._find_index = -1
         self._sort_by = self._settings.sort_by if self._settings else "captured_desc"
         self._ext_filter = ""
+        self._search_image_set_id: int | None = None
         self._available_formats: str = "[]"
         self._folder_filter: str = ""
+        self._image_set_status = ""
         self._search_folder_filters: set[str] = set()
         # Snapshot of Search-tab filter state, captured when the user switches
         # to the Browse tab so the Browse view can show un-filtered folder
@@ -352,6 +366,19 @@ class AppController(QObject):
         self._bulk_progress: int = 0
         self._bulk_progress_total: int = 0
         self._bulk_worker: BulkOpWorker | None = None
+        self._image_set_worker: ImageSetMembershipWorker | None = None
+        self._action_image_set_id: int | None = None
+        self._set_tagging_path: str | None = None
+        self.currentResultRowChanged.connect(self.taggingSelectionChanged.emit)
+        self.imageSetMembersChanged.connect(self._validate_set_tagging_selection)
+        self.imageSetsChanged.connect(self._validate_set_tagging_selection)
+        self.imageSetsChanged.connect(self.actionScopeChanged.emit)
+        self.imageSetMembersChanged.connect(self.actionScopeChanged.emit)
+        self.checkedCountChanged.connect(self.actionScopeChanged.emit)
+        self.totalResultsChanged.connect(self.actionScopeChanged.emit)
+        self.isLockedChanged.connect(self.actionScopeChanged.emit)
+        self._image_set_progress = 0
+        self._image_set_progress_total = 0
         self._maint_worker: MaintenanceWorker | None = None
         self._maint_operation: str = ""
         self._maint_folder_name: str = ""
@@ -371,7 +398,7 @@ class AppController(QObject):
             is_locked=lambda: self._is_locked,
             get_repository=lambda: self._repo,
             get_folder_repository=lambda: self._folder_repo,
-            selected_path=lambda: self._search_model.get_path(self._current_result_row),
+            selected_path=self._tagging_selected_path,
             refresh_after_mutation=self._refresh_after_tag_mutation,
             copy_worker_factory=lambda *args, **kwargs: CopyTagsWorker(*args, **kwargs),
             derivative_worker_factory=lambda *args, **kwargs: DerivativeExportWorker(
@@ -385,19 +412,19 @@ class AppController(QObject):
         self._mcp = McpController(
             settings=settings,
             is_locked=lambda: self._is_locked,
-            selected_path=lambda: self._search_model.get_path(self._current_result_row),
-            selected_image_id=lambda: self._search_model.get_image_id(
-                self._current_result_row
-            ),
-            selected_metadata_json=lambda: self._search_model.get_metadata_json(
-                self._current_result_row
-            ),
-            selected_has_preview=lambda: self._selected_has_preview,
+            selected_path=self._tagging_selected_path,
+            selected_image_id=self._mcp_selected_image_id,
+            selected_metadata_json=self._mcp_selected_metadata_json,
+            selected_has_preview=self._mcp_selected_has_preview,
             selected_free_tags=self._mcp_selected_free_tags,
             load_preview_image=self._mcp_load_preview_image,
             get_tagging_service=lambda: self._tagging.service,
             tagging_available=lambda: self._tagging.free_tagging_available,
             refresh_after_mutation=self._refresh_after_tag_mutation,
+            list_image_sets=self._mcp_list_image_sets,
+            get_image_set_images=self._mcp_get_image_set_images,
+            load_indexed_preview_image=self._mcp_load_indexed_preview_image,
+            set_image_custom_tags=self._mcp_set_image_custom_tags,
             parent=self,
         )
         self._mcp.mcpStatusChanged.connect(self.mcpStatusChanged)
@@ -579,8 +606,35 @@ class AppController(QObject):
     def mcpStatusMessage(self) -> str:
         return self._mcp.status_message
 
+    def _mcp_selected_image_row(
+        self,
+    ) -> tuple[int, str, str, str, int, float] | None:
+        path = self._tagging_selected_path()
+        if not path or self._repo is None:
+            return None
+        rows = self._repo.get_images_by_paths([path])
+        return rows[0] if rows else None
+
+    def _mcp_selected_image_id(self) -> int | None:
+        if self._action_image_set_id is None:
+            return self._search_model.get_image_id(self._current_result_row)
+        row = self._mcp_selected_image_row()
+        return None if row is None else row[0]
+
+    def _mcp_selected_metadata_json(self) -> str | None:
+        if self._action_image_set_id is None:
+            return self._search_model.get_metadata_json(self._current_result_row)
+        row = self._mcp_selected_image_row()
+        return None if row is None else row[3]
+
+    def _mcp_selected_has_preview(self) -> bool:
+        if self._action_image_set_id is None:
+            return self._selected_has_preview
+        row = self._mcp_selected_image_row()
+        return row is not None and self._compute_has_preview(row[1], (row[5], row[4]))
+
     def _mcp_selected_free_tags(self) -> tuple[str, ...]:
-        path = self._search_model.get_path(self._current_result_row)
+        path = self._tagging_selected_path()
         if not path:
             return ()
         if self._repo is not None:
@@ -591,16 +645,90 @@ class AppController(QObject):
         return tuple(self._tagging.free_tags_model._rows)
 
     def _mcp_load_preview_image(self) -> PilImage.Image | None:
-        path = self._pending_preview_path or self._search_model.get_path(
-            self._current_result_row
-        )
+        path = self._tagging_selected_path()
         if not path:
             return None
+        if self._action_image_set_id is not None:
+            image_id = self._mcp_selected_image_id()
+            return (
+                None if image_id is None
+                else self._mcp_load_indexed_preview_image(image_id)
+            )
         try:
             return self._load_preview_for_clipboard(path)
         except Exception:  # noqa: BLE001
             _log.exception("Failed to load preview image for MCP")
             return None
+
+    def _mcp_list_image_sets(self) -> list[dict[str, object]]:
+        if self._repo is None or self._is_locked:
+            raise RuntimeError("The active database is not available.")
+        return self._repo.list_image_sets()
+
+    def _mcp_get_image_set_images(
+        self,
+        set_id: int,
+        limit: int,
+        offset: int,
+    ) -> list[dict[str, object]]:
+        if self._repo is None or self._is_locked:
+            raise RuntimeError("The active database is not available.")
+        images = self._repo.get_image_set_members(
+            set_id, limit=limit, offset=offset
+        )
+        for image in images:
+            image["free_tags"] = list(self._repo.get_free_tags(str(image["path"])))
+        return images
+
+    def _mcp_load_indexed_preview_image(
+        self,
+        image_id: int,
+    ) -> PilImage.Image | None:
+        if self._repo is None or self._is_locked:
+            return None
+        info = self._repo.get_indexed_image_preview_info(image_id)
+        if info is None:
+            return None
+        path, mtime, size = info
+        try:
+            if self._preview_provider is not None:
+                cached = self._preview_provider._try_load_cached(
+                    path, (mtime, size)
+                )
+                if cached is not None:
+                    return cached
+            return render_preview(path, MAX_PREVIEW_PX)
+        except Exception:  # noqa: BLE001
+            _log.exception("Failed to load indexed image preview for MCP: %s", path)
+            return None
+
+    def _mcp_set_image_custom_tags(
+        self,
+        image_id: int,
+        image_path: str,
+        labels: Sequence[str],
+        mode: str,
+    ) -> tuple[str, ...]:
+        if not self._tagging.free_tagging_available:
+            raise RuntimeError(
+                "Custom tagging is disabled. Enable it in Settings before adding tags."
+            )
+        if self._repo is None or self._is_locked:
+            raise RuntimeError("The active database is not available.")
+        if self._repo.get_indexed_image_path(image_id) != image_path:
+            raise RuntimeError("The image ID and path do not identify the same indexed image.")
+        service = self._tagging.service
+        if service is None:
+            raise RuntimeError("Tagging service is not available.")
+        if mode == "append":
+            state = service.get_image_tagging_state(image_path).sidecar
+            existing = () if state is None else state.free_tags
+            labels = [*existing, *labels]
+        elif mode != "replace":
+            raise RuntimeError("mode must be 'append' or 'replace'.")
+        result = service.replace_free_tags(image_path, labels)
+        self._refresh_after_tag_mutation()
+        return result.sidecar.free_tags
 
     @Property(QObject, constant=True)
     def embeddedTagsModel(self) -> QObject:
@@ -762,6 +890,10 @@ class AppController(QObject):
     @Property(str, notify=folderFilterChanged)
     def folderFilter(self) -> str:
         return self._folder_filter
+
+    @Property(int, notify=searchImageSetFilterChanged)
+    def searchImageSetId(self) -> int:
+        return -2 if self._search_image_set_id is None else self._search_image_set_id
 
     @Property(str, notify=searchFolderFiltersChanged)
     def searchFolderFilters(self) -> str:
@@ -938,6 +1070,7 @@ class AppController(QObject):
             marked_only=True,
             date_from=self._date_from,
             date_to=self._date_to,
+            image_set_id=self._search_image_set_id,
         )
 
     def _load_marks(self) -> None:
@@ -971,6 +1104,59 @@ class AppController(QObject):
             return sorted(self._search_folder_filters)
         return None
 
+    @Property(str, notify=imageSetsChanged)
+    def imageSetsJson(self) -> str:
+        if self._repo is None:
+            return "[]"
+        return json.dumps(self._repo.list_image_sets(), ensure_ascii=False)
+
+    @Property(str, notify=imageSetStatusChanged)
+    def imageSetStatus(self) -> str:
+        return self._image_set_status
+
+    @Property(bool, notify=imageSetOperationChanged)
+    def imageSetOperationRunning(self) -> bool:
+        return self._image_set_worker is not None
+
+    @Property(int, notify=imageSetOperationProgressChanged)
+    def imageSetOperationProgress(self) -> int:
+        return self._image_set_progress
+
+    @Property(int, notify=imageSetOperationProgressChanged)
+    def imageSetOperationProgressTotal(self) -> int:
+        return self._image_set_progress_total
+
+    @Slot(int, int, int, result=str)
+    def imageSetMembersJson(self, set_id: int, limit: int, offset: int) -> str:
+        if self._repo is None:
+            return "[]"
+        try:
+            members = self._repo.get_image_set_members(
+                set_id, limit=limit, offset=offset
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._set_image_set_status(str(exc))
+            return "[]"
+        return json.dumps(members, ensure_ascii=False)
+
+    @Slot(int, result=str)
+    def imageSetMemberThumbnailSource(self, image_id: int) -> str:
+        if self._repo is None or self._search_model.cache_dir is None:
+            return ""
+        info = self._repo.get_indexed_image_preview_info(image_id)
+        if info is None:
+            return ""
+        path, mtime, size = info
+        cache_name = thumb_cache_name_from_stamp(path, mtime, size)
+        extension = ".enc" if self._key else ".png"
+        if not (self._search_model.cache_dir / (cache_name[:-4] + extension)).is_file():
+            return ""
+        return f"image://thumb/{cache_name[:-4]}"
+
+    def _set_image_set_status(self, message: str) -> None:
+        self._image_set_status = message
+        self.imageSetStatusChanged.emit()
+
     @Slot(int)
     def toggleChecked(self, proxy_row: int) -> None:
         row = self._filter_proxy.source_row_for(proxy_row) if self._filter_proxy else proxy_row
@@ -980,6 +1166,90 @@ class AppController(QObject):
             self._repo.mark_image(path, is_checked_now)
         self._recompute_checked_in_results()
         self.checkedCountChanged.emit()
+
+    @Slot(int)
+    def setActionImageSet(self, set_id: int) -> None:
+        action_set_id = None if set_id == 0 else max(0, set_id)
+        if self._action_image_set_id != action_set_id:
+            self._action_image_set_id = action_set_id
+            self._set_tagging_path = None
+            self._refresh_tagging_selection()
+            self.actionScopeChanged.emit()
+
+    def _tagging_selected_path(self) -> str | None:
+        if self._is_locked:
+            return None
+        if self._action_image_set_id is not None:
+            return self._set_tagging_path
+        return self._search_model.get_path(self._current_result_row)
+
+    def _validate_set_tagging_selection(self) -> None:
+        if (
+            self._set_tagging_path and self._repo is not None
+            and self._action_image_set_id is not None
+            and not self._repo.image_set_contains_path(
+                self._action_image_set_id, self._set_tagging_path
+            )
+        ):
+            self._set_tagging_path = None
+            self._refresh_tagging_selection()
+
+    @Property(bool, notify=taggingSelectionChanged)
+    def hasTaggingSelection(self) -> bool:
+        return self._tagging_selected_path() is not None
+
+    @Property(str, notify=taggingSelectionChanged)
+    def taggingFilename(self) -> str:
+        path = self._tagging_selected_path()
+        return Path(path).name if path else ""
+
+    @Property(str, notify=taggingSelectionChanged)
+    def selectedSetMemberPath(self) -> str:
+        return self._set_tagging_path or ""
+
+    @Slot(str)
+    def selectImageSetMember(self, path: str) -> None:
+        if self._repo is None or not self._action_image_set_id or self._is_locked:
+            return
+        if path and not self._repo.image_set_contains_path(self._action_image_set_id, path):
+            return
+        self._set_tagging_path = path or None
+        self._refresh_tagging_selection()
+
+    def _refresh_tagging_selection(self) -> None:
+        path = self._tagging_selected_path()
+        metadata_json = "{}"
+        if path and self._repo is not None:
+            rows = self._repo.get_images_by_paths([path])
+            if rows:
+                metadata_json = rows[0][3]
+        try:
+            metadata = json.loads(metadata_json)
+        except (TypeError, ValueError):
+            metadata = {}
+        self._tagging.set_embedded_tags(
+            extract_embedded_keyword_labels(metadata) if isinstance(metadata, dict) else ()
+        )
+        self._tagging.refresh_selected_state()
+        self.taggingSelectionChanged.emit()
+
+    @Property(int, notify=actionScopeChanged)
+    def actionImageCount(self) -> int:
+        if self._action_image_set_id is None:
+            return self._total_results
+        if self._repo is None or self._action_image_set_id == 0:
+            return 0
+        return self._repo.count_images("", image_set_id=self._action_image_set_id)
+
+    @Property(int, notify=actionScopeChanged)
+    def actionMarkedCount(self) -> int:
+        if self._action_image_set_id is None:
+            return self._checked_total_count
+        if self._repo is None or self._action_image_set_id == 0:
+            return 0
+        return self._repo.count_images(
+            "", marked_only=True, image_set_id=self._action_image_set_id
+        )
 
     @Slot()
     def selectAll(self) -> None:
@@ -991,7 +1261,7 @@ class AppController(QObject):
             mark_value=True,
             image_paths=(
                 [result.path for result in self._ai_result_cache]
-                if self._is_ai_search_mode
+                if self._is_ai_search_mode and self._action_image_set_id is None
                 else None
             ),
         )
@@ -1040,7 +1310,7 @@ class AppController(QObject):
         """
         if self._repo is None:
             return
-        if self._checked_total_count == 0:
+        if self.actionMarkedCount == 0:
             self._set_status(_("No marked images to delete."))
             return
         self._start_bulk_op(
@@ -1054,7 +1324,11 @@ class AppController(QObject):
         file_path = Path(QUrl(file_url).toLocalFile())
         if self._repo is None:
             return
-        if self._checked_total_count == 0:
+        export_count = (
+            self.actionImageCount if self._action_image_set_id is not None
+            else self._checked_total_count
+        )
+        if export_count == 0:
             self._set_status(_("No marked images to export."))
             return
         self._pending_export_path = file_path
@@ -1093,25 +1367,29 @@ class AppController(QObject):
         image_paths: List[str] | None = None,
     ) -> None:
         """Spawn a BulkOpWorker and show the busy overlay."""
-        if self._is_busy:
+        if self._is_busy or self._action_image_set_id == 0:
             return
+        set_scoped = self._action_image_set_id is not None
         self._bulk_worker = BulkOpWorker(
             self._db_path,
             self._key,
             operation,
-            query=self._query_text,
-            ext_filter=self._ext_filter,
-            path_filter=self._current_path_filter(),
-            restrict_to_enabled_folders=(self._folder_repo is not None),
-            marked_only=self._checked_only_filter_active,
+            query="" if set_scoped else self._query_text,
+            ext_filter="" if set_scoped else self._ext_filter,
+            path_filter=None if set_scoped else self._current_path_filter(),
+            restrict_to_enabled_folders=not set_scoped and self._folder_repo is not None,
+            marked_only=False if set_scoped else self._checked_only_filter_active,
             mark_value=mark_value,
             file_path=file_path,
             sort_by=sort_by,
             json_format=json_format,
             cache_dir=cache_dir,
             image_paths=image_paths,
-            date_from=self._date_from,
-            date_to=self._date_to,
+            date_from=None if set_scoped else self._date_from,
+            date_to=None if set_scoped else self._date_to,
+            image_set_id=self._action_image_set_id if set_scoped else self._search_image_set_id,
+            marked_set_id=self._action_image_set_id,
+            export_all_in_set=set_scoped and self.actionMarkedCount == 0,
         )
         self._bulk_worker.progress.connect(self._on_bulk_progress)
         self._bulk_worker.finished.connect(self._on_bulk_finished)
@@ -1168,6 +1446,8 @@ class AppController(QObject):
             self._invalidate_folder_tree()
             self._load_indexed_folders()
             self.search(self._query_text)
+            self.imageSetsChanged.emit()
+            self.imageSetMembersChanged.emit()
             parts = [
                 _("Deleted {n} image(s).").format(n=worker.result_deleted_count)
             ]
@@ -1474,6 +1754,7 @@ class AppController(QObject):
                 self._preview_provider.set_cache(cache_dir, password)
             self._search_model.set_encryption(bool(password))
             self.isLockedChanged.emit()
+            self.imageSetsChanged.emit()
             self.unlockErrorChanged.emit()
             self.statusTextChanged.emit()
             # Check exiftool availability once after unlock and warn if missing.
@@ -1755,6 +2036,25 @@ class AppController(QObject):
             return
         self._run_search()
 
+    @Slot(int)
+    def setSearchImageSetFilter(self, set_id: int) -> None:
+        if set_id < -2 or set_id == 0:
+            self._set_status(_("The selected image set filter is invalid."))
+            return
+        selected_id = None if set_id == -2 else set_id
+        if selected_id == self._search_image_set_id:
+            return
+        if selected_id is not None and selected_id > 0 and self._repo is not None:
+            if not any(item["id"] == selected_id for item in self._repo.list_image_sets()):
+                self._set_status(_("The selected image set no longer exists."))
+                return
+        self._search_image_set_id = selected_id
+        self._current_result_row = 0
+        self.searchImageSetFilterChanged.emit()
+        if self._rerun_ai_search_for_filter_change():
+            return
+        self._run_search()
+
     @Slot(str)
     def setFolderFilter(self, path: str) -> None:
         if self._folder_filter == path:
@@ -1815,6 +2115,7 @@ class AppController(QObject):
             and self._date_from is None
             and self._date_to is None
             and not self._ext_filter
+            and self._search_image_set_id is None
             and not self._checked_only_filter_active
             and self._current_path_filter() is None
         )
@@ -1885,6 +2186,7 @@ class AppController(QObject):
                     marked_only=self._checked_only_filter_active,
                     date_from=self._date_from,
                     date_to=self._date_to,
+                    image_set_id=self._search_image_set_id,
                 )
                 if target_offset is not None:
                     # Always load from the START of the folder through the target
@@ -1923,6 +2225,7 @@ class AppController(QObject):
             "query_text": query_text,
             "search_folder_filters": set(self._search_folder_filters),
             "ext_filter": self._ext_filter,
+            "search_image_set_id": self._search_image_set_id,
             "date_from": self._date_from,
             "date_to": self._date_to,
             "checked_only_filter": self._checked_only_filter_active,
@@ -1937,6 +2240,9 @@ class AppController(QObject):
             self._is_ai_search_mode = False
             self.isAiSearchModeChanged.emit()
         self._query_text = ""
+        if self._search_image_set_id is not None:
+            self._search_image_set_id = None
+            self.searchImageSetFilterChanged.emit()
         if self._search_folder_filters:
             self._search_folder_filters.clear()
             self.searchFolderFiltersChanged.emit()
@@ -1980,6 +2286,13 @@ class AppController(QObject):
             self._is_ai_search_mode = restore_ai_search_mode
             self.isAiSearchModeChanged.emit()
         self._query_text = snapshot["query_text"]
+        restored_set_id = snapshot.get("search_image_set_id")
+        if restored_set_id is not None and restored_set_id > 0 and self._repo is not None:
+            if not any(item["id"] == restored_set_id for item in self._repo.list_image_sets()):
+                restored_set_id = None
+        if restored_set_id != self._search_image_set_id:
+            self._search_image_set_id = restored_set_id
+            self.searchImageSetFilterChanged.emit()
         image_id = snapshot.get("current_image_id", 0)
         restored_search_folders = snapshot["search_folder_filters"]
         if restored_search_folders != self._search_folder_filters:
@@ -2106,6 +2419,7 @@ class AppController(QObject):
             marked_only=self._checked_only_filter_active,
             date_from=self._date_from,
             date_to=self._date_to,
+            image_set_id=self._search_image_set_id,
         )
         request = self._search_coordinator.request(
             params,
@@ -2456,6 +2770,7 @@ class AppController(QObject):
             self._repo.get_filtered_paths(
                 path_filter=self._current_path_filter(),
                 restrict_to_enabled_folders=(self._folder_repo is not None),
+                image_set_id=self._search_image_set_id,
             )
         )
 
@@ -2475,6 +2790,7 @@ class AppController(QObject):
                 restrict_to_enabled_folders=(self._folder_repo is not None),
                 date_from=self._date_from,
                 date_to=self._date_to,
+                image_set_id=self._search_image_set_id,
             )
         )
 
@@ -2490,6 +2806,7 @@ class AppController(QObject):
                 ext_filter=self._ext_filter,
                 path_filter=self._current_path_filter(),
                 restrict_to_enabled_folders=(self._folder_repo is not None),
+                image_set_id=self._search_image_set_id,
             )
         self._year_counts = json.dumps([{"year": y, "count": c} for y, c in counts])
         self.yearCountsChanged.emit()
@@ -2631,6 +2948,7 @@ class AppController(QObject):
             serial=self._search_coordinator.serial,
             date_from=self._date_from,
             date_to=self._date_to,
+            image_set_id=self._search_image_set_id,
         )
         worker.results_ready.connect(self._on_load_more_finished)
         worker.failed.connect(self._on_load_more_failed)
@@ -3616,6 +3934,7 @@ class AppController(QObject):
             ext_filter=self._ext_filter,
             date_from=self._date_from,
             date_to=self._date_to,
+            image_set_id=self._search_image_set_id,
         )
         worker.results_ready.connect(self._on_search_finished)
         worker.failed.connect(self._on_search_failed)
@@ -4147,10 +4466,13 @@ class AppController(QObject):
 
     @Slot()
     def refreshSelectedTaggingState(self) -> None:
-        self._tagging.refresh_selected_state()
+        if self._action_image_set_id is not None:
+            self._refresh_tagging_selection()
+        else:
+            self._tagging.refresh_selected_state()
 
     def _refresh_selected_tagging_state(self) -> None:
-        self._tagging.refresh_selected_state()
+        self.refreshSelectedTaggingState()
 
     @Slot(str)
     def addSelectedFreeTag(self, label: str) -> None:
@@ -4177,16 +4499,378 @@ class AppController(QObject):
             index = self._search_model.index(self._current_result_row)
             self._search_model.dataChanged.emit(index, index, [])
 
+    @Slot(str, result=int)
+    def createImageSet(self, name: str) -> int:
+        if self._repo is None or self._is_locked:
+            self._set_image_set_status(_("Unlock the database to manage sets."))
+            return 0
+        try:
+            set_id = self._repo.create_image_set(name)
+        except Exception as exc:  # noqa: BLE001
+            self._set_image_set_status(str(exc))
+            return 0
+        self._set_image_set_status(_("Set created."))
+        self.imageSetsChanged.emit()
+        self.imageSetMembersChanged.emit()
+        return set_id
+
+    @Slot(int, str, result=bool)
+    def renameImageSet(self, set_id: int, name: str) -> bool:
+        if self._repo is None or self._is_locked:
+            self._set_image_set_status(_("Unlock the database to manage sets."))
+            return False
+        try:
+            self._repo.rename_image_set(set_id, name)
+        except Exception as exc:  # noqa: BLE001
+            self._set_image_set_status(str(exc))
+            return False
+        self._set_image_set_status(_("Set renamed."))
+        self.imageSetsChanged.emit()
+        return True
+
+    @Slot(int, result=bool)
+    def deleteImageSet(self, set_id: int) -> bool:
+        if self._repo is None or self._is_locked:
+            self._set_image_set_status(_("Unlock the database to manage sets."))
+            return False
+        try:
+            deleted = self._repo.delete_image_set(set_id)
+        except Exception as exc:  # noqa: BLE001
+            self._set_image_set_status(str(exc))
+            return False
+        if deleted:
+            self._set_image_set_status(_("Set deleted."))
+            self.imageSetsChanged.emit()
+            self.imageSetMembersChanged.emit()
+            if self._search_image_set_id == set_id:
+                self._search_image_set_id = None
+                self.searchImageSetFilterChanged.emit()
+                if not self._rerun_ai_search_for_filter_change():
+                    self._run_search()
+        return deleted
+
+    @Slot(int, str, bool, result=bool)
+    def changeImageSetMembers(
+        self,
+        set_id: int,
+        target_scope: str,
+        add: bool,
+    ) -> bool:
+        if self._repo is None or self._is_locked:
+            self._set_image_set_status(_("Unlock the database to manage sets."))
+            return False
+        if self._image_set_worker is not None:
+            self._set_image_set_status(_("A set operation is already running."))
+            return False
+        image_paths = None
+        if target_scope == "results" and self._results_use_ai_pipeline():
+            image_paths = [result.path for result in self._ai_result_cache]
+        self._image_set_worker = ImageSetMembershipWorker(
+            self._db_path,
+            self._key,
+            set_id,
+            target_scope,
+            add,
+            selected_path=self._search_model.get_path(self._current_result_row),
+            image_paths=image_paths,
+            query=self._query_text,
+            ext_filter=self._ext_filter,
+            path_filter=self._current_path_filter(),
+            restrict_to_enabled_folders=self._folder_repo is not None,
+            marked_only=self._checked_only_filter_active,
+            date_from=self._date_from,
+            date_to=self._date_to,
+            browse_folder=self._folder_filter,
+            image_set_id=self._search_image_set_id,
+        )
+        self._image_set_worker.progress.connect(self._on_image_set_worker_progress)
+        self._image_set_worker.result_ready.connect(self._on_image_set_worker_result)
+        self._image_set_worker.failed.connect(self._on_image_set_worker_failed)
+        self._image_set_worker.canceled.connect(self._on_image_set_worker_canceled)
+        self._image_set_worker.empty_replace_confirmation_required.connect(
+            self._on_image_set_empty_replace_confirmation_required
+        )
+        self._image_set_worker.finished.connect(
+            self._on_image_set_worker_thread_finished
+        )
+        self._image_set_progress = 0
+        self._image_set_progress_total = 0
+        action = _("Adding") if add else _("Removing")
+        self._set_image_set_status(_("{} images from set…").format(action))
+        self.imageSetOperationChanged.emit()
+        self.imageSetOperationProgressChanged.emit()
+        self._image_set_worker.start()
+        return True
+
+    @Slot()
+    def cancelImageSetOperation(self) -> None:
+        if self._image_set_worker is not None:
+            self._image_set_worker.cancel()
+            self._set_image_set_status(_("Cancellation requested…"))
+
+    @Slot(int, int)
+    def _on_image_set_worker_progress(self, done: int, total: int) -> None:
+        self._image_set_progress = done
+        self._image_set_progress_total = total
+        self.imageSetOperationProgressChanged.emit()
+
+    @Slot(int, int, int)
+    def _on_image_set_worker_result(
+        self,
+        total: int,
+        added: int,
+        removed: int,
+    ) -> None:
+        worker = self._image_set_worker
+        if worker is not None and worker._target_scope == "filter":
+            self._set_image_set_status(
+                _("Filter matched {} images; {} added, {} removed.").format(
+                    total, added, removed
+                )
+            )
+        else:
+            self._set_image_set_status(
+                _("{} images processed; {} added, {} removed.").format(
+                    total, added, removed
+                )
+            )
+        self.imageSetsChanged.emit()
+        self.imageSetMembersChanged.emit()
+        if worker is not None:
+            self._refresh_search_for_image_set(worker._set_id)
+
+    @Slot(str)
+    def _on_image_set_worker_failed(self, message: str) -> None:
+        self._set_image_set_status(_("Set operation failed: {}").format(message))
+
+    @Slot(int, int, int)
+    def _on_image_set_worker_canceled(
+        self,
+        completed: int,
+        added: int,
+        removed: int,
+    ) -> None:
+        self._set_image_set_status(
+            _("Canceled after {} images; {} added, {} removed.").format(
+                completed, added, removed
+            )
+        )
+        self.imageSetsChanged.emit()
+        self.imageSetMembersChanged.emit()
+        worker = self._image_set_worker
+        if worker is not None:
+            self._refresh_search_for_image_set(worker._set_id)
+
+    def _refresh_search_for_image_set(self, set_id: int) -> None:
+        if self._search_image_set_id != set_id:
+            return
+        if not self._rerun_ai_search_for_filter_change():
+            self._run_search()
+
+    @Slot()
+    def _on_image_set_empty_replace_confirmation_required(self) -> None:
+        self._set_image_set_status(
+            _("This filter matches no images. Confirm to empty the set.")
+        )
+        self.imageSetEmptyReplaceConfirmationRequired.emit()
+
+    @Slot()
+    def _on_image_set_worker_thread_finished(self) -> None:
+        worker = self._image_set_worker
+        if worker is not None:
+            worker.wait()
+        self._image_set_worker = None
+        self.imageSetOperationChanged.emit()
+
+    @Slot(int, str, result=bool)
+    def removeImageSetMember(self, set_id: int, image_path: str) -> bool:
+        if self._repo is None or self._is_locked:
+            self._set_image_set_status(_("Unlock the database to manage sets."))
+            return False
+        try:
+            removed = self._repo.remove_images_from_set(set_id, [image_path])
+        except Exception as exc:  # noqa: BLE001
+            self._set_image_set_status(str(exc))
+            return False
+        self._set_image_set_status(_("Image removed from set.") if removed else "")
+        self.imageSetsChanged.emit()
+        self.imageSetMembersChanged.emit()
+        if removed:
+            self._refresh_search_for_image_set(set_id)
+        return bool(removed)
+
+    @Slot(int, result=int)
+    def countImageSetFilterMatches(self, set_id: int) -> int:
+        if self._repo is None or self._is_locked:
+            self._set_image_set_status(_("Unlock the database to manage sets."))
+            return -1
+        try:
+            return self._repo.count_image_set_filter_matches(set_id)
+        except Exception as exc:  # noqa: BLE001
+            self._set_image_set_status(str(exc))
+            return -1
+
+    @Slot(int, str, bool, result=bool)
+    def reapplyImageSetFilter(
+        self,
+        set_id: int,
+        mode: str,
+        confirm_empty_replace: bool,
+    ) -> bool:
+        if self._repo is None or self._is_locked:
+            self._set_image_set_status(_("Unlock the database to manage sets."))
+            return False
+        if mode not in {"add", "replace"}:
+            self._set_image_set_status(_("Choose Add or Replace for filter reapply."))
+            return False
+        if self._image_set_worker is not None:
+            self._set_image_set_status(_("A set operation is already running."))
+            return False
+        self._image_set_worker = ImageSetMembershipWorker(
+            self._db_path,
+            self._key,
+            set_id,
+            "filter",
+            mode == "add",
+            filter_mode=mode,
+            confirm_empty_replace=confirm_empty_replace,
+        )
+        self._image_set_worker.progress.connect(self._on_image_set_worker_progress)
+        self._image_set_worker.result_ready.connect(self._on_image_set_worker_result)
+        self._image_set_worker.failed.connect(self._on_image_set_worker_failed)
+        self._image_set_worker.canceled.connect(self._on_image_set_worker_canceled)
+        self._image_set_worker.empty_replace_confirmation_required.connect(
+            self._on_image_set_empty_replace_confirmation_required
+        )
+        self._image_set_worker.finished.connect(
+            self._on_image_set_worker_thread_finished
+        )
+        self._image_set_progress = 0
+        self._image_set_progress_total = 0
+        self._set_image_set_status(_("Applying saved filter…"))
+        self.imageSetOperationChanged.emit()
+        self.imageSetOperationProgressChanged.emit()
+        self._image_set_worker.start()
+        return True
+
+    @Slot(int, result=bool)
+    def saveCurrentSearchAsImageSetFilter(self, set_id: int) -> bool:
+        if self._repo is None or self._is_locked:
+            self._set_image_set_status(_("Unlock the database to manage sets."))
+            return False
+        if self._is_ai_search_mode and self._last_ai_query.strip():
+            self._set_image_set_status(
+                _("Semantic AI queries cannot be saved as text filters.")
+            )
+            return False
+        conditions: list[dict[str, object]] = []
+        if self._query_text.strip():
+            conditions.append(
+                {"field": "text", "operator": "matches", "value": self._query_text}
+            )
+        paths = self._current_path_filter()
+        if paths:
+            conditions.append(
+                {"field": "folder", "operator": "within_any", "value": paths}
+            )
+        if self._ext_filter:
+            conditions.append(
+                {
+                    "field": "file_type",
+                    "operator": "equals",
+                    "value": self._ext_filter,
+                }
+            )
+        if self._date_from is not None or self._date_to is not None:
+            conditions.append(
+                {
+                    "field": "capture_date",
+                    "operator": "between",
+                    "value": {"from": self._date_from, "to": self._date_to},
+                }
+            )
+        if self._checked_only_filter_active:
+            conditions.append(
+                {"field": "marked", "operator": "equals", "value": True}
+            )
+        if not conditions:
+            self._set_image_set_status(
+                _("Add a search condition before saving a filter.")
+            )
+            return False
+        try:
+            self._repo.set_image_set_filter(
+                set_id,
+                {"op": "and", "conditions": conditions},
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._set_image_set_status(str(exc))
+            return False
+        self._set_image_set_status(_("Current search saved as the set filter."))
+        self.imageSetsChanged.emit()
+        return True
+
+    @Slot(int, str, result=bool)
+    def setImageSetFilterJson(self, set_id: int, filter_json: str) -> bool:
+        if self._repo is None or self._is_locked:
+            self._set_image_set_status(_("Unlock the database to manage sets."))
+            return False
+        try:
+            parsed = json.loads(filter_json)
+            if not isinstance(parsed, dict):
+                raise ValueError("A saved filter must be a group object.")
+            self._repo.set_image_set_filter(set_id, parsed)
+        except Exception as exc:  # noqa: BLE001
+            self._set_image_set_status(str(exc))
+            return False
+        self._set_image_set_status(_("Set filter saved."))
+        self.imageSetsChanged.emit()
+        return True
+
+    @Slot(int, result=bool)
+    def clearImageSetFilter(self, set_id: int) -> bool:
+        if self._repo is None or self._is_locked:
+            self._set_image_set_status(_("Unlock the database to manage sets."))
+            return False
+        try:
+            self._repo.set_image_set_filter(set_id, None)
+        except Exception as exc:  # noqa: BLE001
+            self._set_image_set_status(str(exc))
+            return False
+        self._set_image_set_status(_("Set filter cleared."))
+        self.imageSetsChanged.emit()
+        return True
+
     @Slot(str, str)
     def copySelectedTags(self, target_scope: str, mode: str) -> None:
-        source_path = self._search_model.get_path(self._current_result_row)
+        source_path = self._tagging_selected_path()
         if not self._tagging.can_copy_tags(source_path):
             return
         if mode not in {"add", "replace"}:
             self._tagging.show_copy_error(_("Choose whether to add or replace tags."))
             return
         worker_kwargs: dict[str, object] = {}
-        if target_scope == "marked":
+        if target_scope.startswith("set:"):
+            try:
+                target_set_id = int(target_scope.removeprefix("set:"))
+            except ValueError:
+                target_set_id = 0
+            if self._repo is None or not any(
+                image_set["id"] == target_set_id
+                for image_set in self._repo.list_image_sets()
+            ):
+                self._tagging.show_copy_error(_("Choose a valid copy target."))
+                return
+            worker_kwargs = {"image_set_id": target_set_id}
+        elif self._action_image_set_id is not None:
+            if target_scope not in {"marked", "set"}:
+                self._tagging.show_copy_error(_("Choose a valid copy target."))
+                return
+            worker_kwargs = {
+                "image_set_id": self._action_image_set_id,
+                "marked_only": target_scope == "marked",
+            }
+        elif target_scope == "marked":
             worker_kwargs = {
                 "marked_only": True,
                 "restrict_to_enabled_folders": self._folder_repo is not None,
@@ -4207,6 +4891,7 @@ class AppController(QObject):
                     "restrict_to_enabled_folders": self._folder_repo is not None,
                     "date_from": self._date_from,
                     "date_to": self._date_to,
+                    "image_set_id": self._search_image_set_id,
                 }
         else:
             self._tagging.show_copy_error(_("Choose a valid copy target."))
@@ -4219,10 +4904,22 @@ class AppController(QObject):
 
     @Slot(str)
     def generateDerivativesForMarked(self, output_url: str) -> None:
+        if self._action_image_set_id is not None:
+            self._start_derivative_export(
+                output_url, matching_results=True, marked_only=True,
+                image_set_id=self._action_image_set_id,
+            )
+            return
         self._start_derivative_export(output_url)
 
     @Slot(str)
     def generateDerivativesForCurrentResults(self, output_url: str) -> None:
+        if self._action_image_set_id is not None:
+            self._start_derivative_export(
+                output_url, matching_results=True,
+                image_set_id=self._action_image_set_id,
+            )
+            return
         if self._results_use_ai_pipeline():
             self._start_derivative_export(
                 output_url,
@@ -4239,6 +4936,7 @@ class AppController(QObject):
             marked_only=self._checked_only_filter_active,
             date_from=self._date_from,
             date_to=self._date_to,
+            image_set_id=self._search_image_set_id,
         )
 
     def _start_derivative_export(
@@ -4246,6 +4944,8 @@ class AppController(QObject):
         output_url: str,
         **worker_options: object,
     ) -> None:
+        if self._action_image_set_id == 0:
+            return
         self._tagging.start_derivative_export(output_url, **worker_options)
 
     def _on_derivative_result(self, result: object) -> None:
@@ -4408,7 +5108,8 @@ class AppController(QObject):
             self._geo_wikipedia_url = ""
             self.geoWikipediaUrlChanged.emit()
         self._exif_model.set_rows([])
-        self._tagging.clear_embedded_tags()
+        if self._action_image_set_id is None or self._is_locked:
+            self._tagging.clear_embedded_tags()
         self._selected_image_source = ""
         self._selected_thumb_source = ""
         self._current_result_row = -1
@@ -4446,9 +5147,10 @@ class AppController(QObject):
         try:
             parsed = json.loads(meta_json)
             if isinstance(parsed, dict):
-                self._tagging.set_embedded_tags(
-                    extract_embedded_keyword_labels(parsed)
-                )
+                if self._action_image_set_id is None:
+                    self._tagging.set_embedded_tags(
+                        extract_embedded_keyword_labels(parsed)
+                    )
                 rows = sorted(
                     [(str(k), str(v)) for k, v in parsed.items()],
                     key=lambda r: r[0].lower(),
@@ -4468,7 +5170,8 @@ class AppController(QObject):
         except Exception:
             pass
         self._exif_model.set_rows([])
-        self._tagging.clear_embedded_tags()
+        if self._action_image_set_id is None or self._is_locked:
+            self._tagging.clear_embedded_tags()
         if self._geo_location_url:
             self._geo_location_url = ""
             self.geoLocationUrlChanged.emit()
@@ -4809,6 +5512,7 @@ class AppController(QObject):
             self._ai_scan_worker,
             self._ai_search_worker,
             self._bulk_worker,
+            self._image_set_worker,
             *self._finishing_search_workers,
         )
         running_workers: list[QThread] = []
@@ -4837,6 +5541,7 @@ class AppController(QObject):
         self._ai_scan_worker = None
         self._ai_search_worker = None
         self._bulk_worker = None
+        self._image_set_worker = None
         self._finishing_search_workers.clear()
         self._mcp.close()
         self._tagging.close()

@@ -174,6 +174,36 @@ class TaggingService:
         self._update_cache(image_path, updated, revision)
         return TagMutationResult(image_path, True, updated)
 
+    def replace_free_tags(
+        self,
+        image_path: str,
+        labels: Iterable[str],
+    ) -> TagMutationResult:
+        normalized_labels: list[str] = []
+        seen: set[str] = set()
+        for label in labels:
+            normalized = self._normalize_free_tag(label)
+            normalized = self._image_repository.resolve_free_tag(normalized) or normalized
+            key = normalized.casefold()
+            if key not in seen:
+                seen.add(key)
+                normalized_labels.append(normalized)
+
+        path = Path(image_path)
+        loaded = self._read_sidecar(path)
+        sidecar = self._load_or_create_sidecar(path, loaded)
+        replacement = tuple(normalized_labels)
+        if replacement == sidecar.free_tags:
+            return TagMutationResult(image_path, False, sidecar)
+        updated = replace(
+            sidecar,
+            updated_at=self._timestamp(),
+            free_tags=replacement,
+        )
+        revision = self._write_sidecar(path, updated, loaded)
+        self._update_cache(image_path, updated, revision)
+        return TagMutationResult(image_path, True, updated)
+
     def set_embedded_tag_excluded(
         self,
         image_path: str,

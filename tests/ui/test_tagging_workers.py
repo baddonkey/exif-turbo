@@ -117,8 +117,8 @@ def test_copy_tags_worker_results_scope_forwards_complete_filters(
                 "restrict_to_enabled_folders": True,
                 "date_from": 100,
                 "date_to": 200,
+                "image_set_id": None,
             },
         )
     ]
-
 

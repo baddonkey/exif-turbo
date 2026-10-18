@@ -18,11 +18,72 @@ Drawer {
     required property var appSettings
     property string selectedFilename: ""
     property bool browseMode: false
+    property bool setMode: false
+    property string setName: ""
+    property int currentSetId: -1
+    property string chosenCopyTarget: ""
+    property bool refreshingCopyTargets: false
     property bool showFreeTagSuggestions: false
-    readonly property bool hasSelection: appController && appController.currentResultRow >= 0
+    readonly property bool hasSelection: appController && appController.hasTaggingSelection
     readonly property bool locallyBusy: appController && appController.isTaggingBulk
 
-    onBrowseModeChanged: copyTarget.currentIndex = 0
+    onBrowseModeChanged: {
+        chosenCopyTarget = ""
+        copyTarget.currentIndex = 0
+        refreshCopyTargets()
+    }
+    onSetModeChanged: {
+        chosenCopyTarget = ""
+        copyTarget.currentIndex = -1
+        refreshCopyTargets()
+    }
+    onCurrentSetIdChanged: refreshCopyTargets()
+    onSetNameChanged: refreshCopyTargets()
+    Component.onCompleted: refreshCopyTargets()
+
+    function refreshCopyTargets() {
+        if (!appController)
+            return
+        var selectedValue = chosenCopyTarget || copyTarget.currentValue
+        var targets
+        if (setMode) {
+            targets = [
+                { text: qsTr("Marked images (%1)").arg(appController.actionMarkedCount), value: "marked" },
+                { text: setName + " (" + appController.actionImageCount + ")", value: "set" }
+            ]
+        } else {
+            targets = [
+                { text: qsTr("Marked images (%1)").arg(appController.checkedCount), value: "marked" },
+                browseMode
+                    ? { text: qsTr("Current folder (%1)").arg(appController.totalResults), value: "folder" }
+                    : { text: qsTr("Current search results (%1)").arg(appController.totalResults), value: "results" }
+            ]
+        }
+        try {
+            var imageSets = JSON.parse(appController.imageSetsJson)
+            for (var imageSet of imageSets) {
+                if (setMode && imageSet.id === currentSetId)
+                    continue
+                targets.push({
+                    text: imageSet.name + " (" + imageSet.member_count + ")",
+                    value: "set:" + imageSet.id
+                })
+            }
+        } catch (error) {
+        }
+        refreshingCopyTargets = true
+        copyTarget.model = targets
+        var selectedIndex = selectedValue ? -1 : (setMode ? 1 : 0)
+        for (var index = 0; index < targets.length; index++) {
+            if (targets[index].value === selectedValue) {
+                selectedIndex = index
+                break
+            }
+        }
+        copyTarget.currentIndex = selectedIndex
+        chosenCopyTarget = selectedIndex >= 0 ? targets[selectedIndex].value : selectedValue
+        refreshingCopyTargets = false
+    }
 
     Dialog {
         id: replaceTagsDialog
@@ -42,6 +103,7 @@ Drawer {
     }
 
     function openTaggingPanel() {
+        refreshCopyTargets()
         open()
         if (appController && appController.freeTaggingAvailable)
             appController.searchFreeTags("")
@@ -64,6 +126,11 @@ Drawer {
             if (drawer.opened && drawer.showFreeTagSuggestions)
                 appController.searchFreeTags(freeTagField.text)
         }
+        function onTaggingSelectionChanged() {
+            if (drawer.opened && drawer.showFreeTagSuggestions)
+                appController.searchFreeTags(freeTagField.text)
+        }
+            function onActionScopeChanged() { drawer.refreshCopyTargets() }
     }
 
     background: Rectangle {
@@ -383,15 +450,11 @@ Drawer {
                             currentIndex: 0
                             textRole: "text"
                             valueRole: "value"
-                            model: drawer.browseMode
-                                ? [
-                                    { text: qsTr("Marked images (%1)").arg(appController.checkedCount), value: "marked" },
-                                    { text: qsTr("Current folder (%1)").arg(appController.totalResults), value: "folder" }
-                                ]
-                                : [
-                                    { text: qsTr("Marked images (%1)").arg(appController.checkedCount), value: "marked" },
-                                    { text: qsTr("Current search results (%1)").arg(appController.totalResults), value: "results" }
-                                ]
+                            model: []
+                            onCurrentValueChanged: {
+                                if (!drawer.refreshingCopyTargets && currentIndex >= 0)
+                                    drawer.chosenCopyTarget = currentValue || ""
+                            }
                         }
                         RowLayout {
                             Layout.fillWidth: true
@@ -422,6 +485,7 @@ Drawer {
                             text: qsTr("Copy Tags")
                             highlighted: true
                             enabled: drawer.hasSelection && !drawer.locallyBusy
+                                     && copyTarget.currentIndex >= 0
                             onClicked: {
                                 if (copyReplaceMode.checked) {
                                     replaceTagsDialog.targetScope = copyTarget.currentValue

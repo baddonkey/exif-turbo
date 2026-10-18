@@ -274,7 +274,7 @@ def test_create_plan_sidecar_tags_differ_from_cache_uses_sidecar_tags(
     assert plan.items[0].labels == ("Authoritative sidecar tag",)
 
 
-def test_create_plan_cache_tags_without_sidecar_skips_source(
+def test_create_plan_cache_tags_without_sidecar_allows_untagged_copy(
     tmp_path: Path, repo: ImageIndexRepository
 ) -> None:
     # Arrange
@@ -292,7 +292,7 @@ def test_create_plan_cache_tags_without_sidecar_skips_source(
 
     # Assert
     assert plan.items[0].labels == ()
-    assert plan.items[0].planned_status is DerivativeExportStatus.SKIPPED_UNTAGGED
+    assert plan.items[0].planned_status is None
 
 
 def test_create_plan_preserves_embedded_keywords_with_custom_additions(
@@ -472,7 +472,7 @@ def test_export_existing_destination_skips_without_overwrite(
     assert writer.calls == []
 
 
-def test_export_untagged_source_skips_without_creating_output(
+def test_export_untagged_source_copies_without_modifying_metadata(
     tmp_path: Path, repo: ImageIndexRepository
 ) -> None:
     # Arrange
@@ -482,7 +482,8 @@ def test_export_untagged_source_skips_without_creating_output(
     image_path.write_bytes(b"original")
     _index_image(repo, image_path)
     output_root = tmp_path / "output"
-    service = DerivativeExportService(repo, FakeMetadataWriter())
+    writer = FakeMetadataWriter()
+    service = DerivativeExportService(repo, writer)
 
     # Act
     result = service.export(
@@ -492,8 +493,49 @@ def test_export_untagged_source_skips_without_creating_output(
     )
 
     # Assert
-    assert result.skipped_untagged_count == 1
-    assert not output_root.exists()
+    assert result.copied_count == 1
+    assert result.skipped_untagged_count == 0
+    assert (output_root / image_path.name).read_bytes() == b"original"
+    assert image_path.read_bytes() == b"original"
+    assert writer.calls == []
+
+
+@pytest.mark.parametrize("exclude_all", [False, True])
+def test_export_without_free_tags_still_applies_embedded_tag_exclusions(
+    tmp_path: Path, repo: ImageIndexRepository, exclude_all: bool
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    image_path = source_root / "photo.jpg"
+    image_path.write_bytes(b"original")
+    _index_image(repo, image_path)
+    excluded_labels = () if exclude_all else ("Private",)
+    FilesystemSidecarRepository().write(
+        image_path,
+        ImageSidecar(
+            source=SidecarSource(filename=image_path.name),
+            updated_at="2026-10-17T12:00:00Z",
+            excluded_embedded_tags=excluded_labels,
+            exclude_all_embedded_tags=exclude_all,
+        ),
+        expected_revision=None,
+    )
+    writer = FakeMetadataWriter()
+    service = DerivativeExportService(repo, writer)
+
+    # Act
+    result = service.export(service.create_plan(
+        {source_root: "source"}, tmp_path / "output", image_paths=[image_path]
+    ))
+
+    # Assert
+    assert result.copied_count == 1
+    assert len(writer.calls) == 1
+    assert writer.calls[0][1] == ()
+    assert writer.calls[0][3] == excluded_labels
+    assert writer.calls[0][4] is not exclude_all
+    assert image_path.read_bytes() == b"original"
 
 
 def test_export_metadata_failure_removes_temp_and_preserves_source(

@@ -35,6 +35,78 @@ def _run_export(db_path: Path, out: Path, fmt: JsonExportFormat) -> None:
     worker.run()
 
 
+def test_export_selected_set_excludes_other_marked_images(
+    qtbot: QtBot, marked_db: Path, tmp_path: Path
+) -> None:
+    # Arrange
+    repository = ImageIndexRepository(marked_db, key="")
+    set_id = repository.create_image_set("Export scope")
+    repository.add_images_to_set(set_id, ["/a.jpg"])
+    repository.close()
+    output_path = tmp_path / "set.json"
+    worker = BulkOpWorker(
+        marked_db, "", "export_json", file_path=output_path, marked_set_id=set_id
+    )
+
+    # Act
+    worker.run()
+
+    # Assert
+    assert [record["path"] for record in json.loads(output_path.read_text())] == ["/a.jpg"]
+
+
+def test_export_selected_set_without_marks_exports_all_members(
+    qtbot: QtBot, marked_db: Path, tmp_path: Path
+) -> None:
+    # Arrange
+    repository = ImageIndexRepository(marked_db, key="")
+    set_id = repository.create_image_set("Unmarked export")
+    repository.add_images_to_set(set_id, ["/a.jpg"])
+    repository.mark_image("/a.jpg", False)
+    repository.close()
+    output_path = tmp_path / "unmarked-set.json"
+    worker = BulkOpWorker(
+        marked_db, "", "export_json", file_path=output_path,
+        marked_set_id=set_id, export_all_in_set=True,
+    )
+
+    # Act
+    worker.run()
+
+    # Assert
+    assert [record["path"] for record in json.loads(output_path.read_text())] == ["/a.jpg"]
+
+
+def test_delete_selected_set_preserves_other_marked_files(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    # Arrange
+    db_path = tmp_path / "delete.db"
+    repository = ImageIndexRepository(db_path, key="")
+    inside_path = tmp_path / "inside.jpg"
+    outside_path = tmp_path / "outside.jpg"
+    for image_path in (inside_path, outside_path):
+        image_path.write_bytes(b"image")
+        repository.upsert_image(str(image_path), image_path.name, 1.0, 5, {}, "")
+        repository.mark_image(str(image_path), True)
+    set_id = repository.create_image_set("Delete scope")
+    repository.add_images_to_set(set_id, [str(inside_path)])
+    repository.close()
+    worker = BulkOpWorker(db_path, "", "delete_marked", marked_set_id=set_id)
+
+    # Act
+    worker.run()
+
+    # Assert
+    assert not inside_path.exists()
+    assert outside_path.exists()
+    repository = ImageIndexRepository(db_path, key="")
+    try:
+        assert repository.get_marked_paths() == [str(outside_path)]
+    finally:
+        repository.close()
+
+
 def test_export_compact_writes_one_record_per_line(
     qtbot: QtBot, marked_db: Path, tmp_path: Path
 ) -> None:

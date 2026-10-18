@@ -128,6 +128,45 @@ def test_write_keywords_excluded_existing_labels_are_not_merged_back(
     assert "-XMP-dc:Subject+=Private" not in written_arguments
 
 
+@pytest.mark.parametrize("preserve_existing", [False, True])
+def test_write_keywords_empty_labels_clears_and_verifies_without_empty_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, preserve_existing: bool
+) -> None:
+    # Arrange
+    target = tmp_path / "derivative.jpg"
+    target.write_bytes(b"image")
+    calls: list[list[str]] = []
+    read_count = 0
+
+    def fake_run(arguments: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal read_count
+        calls.append(arguments)
+        if "-json" in arguments:
+            read_count += 1
+            labels = ["Private"] if preserve_existing and read_count == 1 else []
+            stdout = json.dumps([{"XMP-dc:Subject": labels, "IPTC:Keywords": labels}])
+        else:
+            assert "-XMP-dc:Subject=" in arguments
+            assert "-IPTC:Keywords=" in arguments
+            stdout = "1 image files updated"
+        return subprocess.CompletedProcess(arguments, 0, stdout, "")
+
+    monkeypatch.setattr(
+        "exif_turbo.tagging.exif_metadata_writer.find_exiftool", lambda: "exiftool"
+    )
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    # Act
+    ExifMetadataWriter().write_keywords(
+        target, (), excluded_labels=("Private",),
+        preserve_existing_keywords=preserve_existing,
+    )
+
+    # Assert
+    assert len(calls) == (3 if preserve_existing else 2)
+    assert "-json" in calls[-1]
+
+
 def test_write_keywords_mp4_writes_and_verifies_xmp_and_windows_tags(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

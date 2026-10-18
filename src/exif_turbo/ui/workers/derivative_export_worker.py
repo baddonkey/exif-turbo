@@ -37,6 +37,7 @@ class DerivativeExportWorker(QThread):
         marked_only: bool = False,
         date_from: int | None = None,
         date_to: int | None = None,
+        image_set_id: int | None = None,
         metadata_writer: MetadataWriter | None = None,
     ) -> None:
         super().__init__()
@@ -53,6 +54,7 @@ class DerivativeExportWorker(QThread):
         self._marked_only = marked_only
         self._date_from = date_from
         self._date_to = date_to
+        self._image_set_id = image_set_id
         self._metadata_writer = metadata_writer
         self._cancel_event = threading.Event()
         self.result: DerivativeExportResult | None = None
@@ -75,6 +77,7 @@ class DerivativeExportWorker(QThread):
                     marked_only=self._marked_only,
                     date_from=self._date_from,
                     date_to=self._date_to,
+                    image_set_id=self._image_set_id,
                 )
             plan = service.create_plan(
                 self._indexed_roots,

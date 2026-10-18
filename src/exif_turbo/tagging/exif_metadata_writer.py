@@ -59,6 +59,10 @@ class ExifMetadataWriter:
             )
             raise ExifMetadataWriteError(f"ExifTool metadata clear failed: {detail}")
 
+        if not labels:
+            self._verify_keywords(target, labels, fields)
+            return
+
         arguments = [find_exiftool(), "-m", "-overwrite_original"]
         for label in labels:
             arguments.extend(f"-{field}+={label}" for field in fields)
