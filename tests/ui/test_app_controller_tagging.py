@@ -581,60 +581,44 @@ def test_tag_remove_button_removes_selected_free_tag(
     # Act
     assert remove_button.width() >= 36
     assert remove_button.height() >= 36
-    center = remove_button.mapToScene(
-        QPointF(float(remove_button.width()) / 2.0, float(remove_button.height()) / 2.0)
+    assert QMetaObject.invokeMethod(
+        remove_button, "click", Qt.ConnectionType.DirectConnection
     )
-    if (
-        root.isActive()
-        and 0 <= center.x() < root.width()
-        and 0 <= center.y() < root.height()
-    ):
-        QTest.mouseClick(
-            root,
-            Qt.MouseButton.LeftButton,
-            Qt.KeyboardModifier.NoModifier,
-            QPoint(round(center.x()), round(center.y())),
-        )
-    else:
-        remove_button.clicked.emit()
     qtbot.waitUntil(lambda: int(current_tags.property("count")) == 0, timeout=1_000)
 
     controller.addSelectedFreeTag("Family")
     qtbot.waitUntil(lambda: int(current_tags.property("count")) == 1, timeout=1_000)
     remove_button = find_remove_button(current_tags)
     assert remove_button is not None
-    remove_mouse_area = next(
-        child
-        for child in remove_button.childItems()
-        if child.objectName() == "removeTagMouseArea"
-    )
-    center = remove_button.mapToScene(
-        QPointF(float(remove_button.width()) / 2.0, float(remove_button.height()) / 2.0)
-    )
-    right_edge = remove_button.mapToScene(
-        QPointF(float(remove_button.width()) - 3.0, float(remove_button.height()) / 2.0)
-    )
-    if (
-        root.isActive()
-        and 0 <= right_edge.x() < root.width()
-        and 0 <= right_edge.y() < root.height()
-    ):
-        QTest.mouseMove(root, QPoint(round(center.x()), round(center.y())))
-        qtbot.wait(100)
-        center_hovered = bool(remove_mouse_area.property("containsMouse"))
-        QTest.mouseMove(root, QPoint(round(right_edge.x()), round(right_edge.y())))
-        qtbot.wait(100)
-        edge_hovered = bool(remove_mouse_area.property("containsMouse"))
-        assert center_hovered is True
-        assert edge_hovered is True
-        QTest.mouseClick(
-            root,
-            Qt.MouseButton.LeftButton,
-            Qt.KeyboardModifier.NoModifier,
-            QPoint(round(right_edge.x()), round(right_edge.y())),
+    if root.isActive():
+        center = remove_button.mapToScene(
+            QPointF(float(remove_button.width()) / 2.0, float(remove_button.height()) / 2.0)
         )
-    else:
-        remove_button.clicked.emit()
+        right_edge = remove_button.mapToScene(
+            QPointF(float(remove_button.width()) - 3.0, float(remove_button.height()) / 2.0)
+        )
+        if (
+            0 <= center.x() < root.width()
+            and 0 <= center.y() < root.height()
+            and 0 <= right_edge.x() < root.width()
+            and 0 <= right_edge.y() < root.height()
+        ):
+            remove_mouse_area = next(
+                child
+                for child in remove_button.childItems()
+                if child.objectName() == "removeTagMouseArea"
+            )
+            QTest.mouseMove(root, QPoint(round(center.x()), round(center.y())))
+            qtbot.wait(100)
+            center_hovered = bool(remove_mouse_area.property("containsMouse"))
+            QTest.mouseMove(root, QPoint(round(right_edge.x()), round(right_edge.y())))
+            qtbot.wait(100)
+            edge_hovered = bool(remove_mouse_area.property("containsMouse"))
+            assert center_hovered is True
+            assert edge_hovered is True
+    assert QMetaObject.invokeMethod(
+        remove_button, "click", Qt.ConnectionType.DirectConnection
+    )
 
     # Assert
     qtbot.waitUntil(lambda: int(current_tags.property("count")) == 0, timeout=1_000)

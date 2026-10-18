@@ -333,7 +333,7 @@ Item {
                         background: Item {
                             objectName: "filterActionSeparator"
                             visible: filterActionGroup.x > 0
-                                 && Math.abs(filterActionGroup.y - addActionGroup.y) < 1
+                                 && Math.abs(filterActionGroup.y - addActionGroup.y) < 2
                             Rectangle {
                                 x: -14.5
                                 y: filterActionButtons.y + editFilterButton.y
@@ -392,7 +392,7 @@ Item {
                         background: Item {
                             objectName: "reapplyActionSeparator"
                             visible: reapplyActionGroup.x > 0
-                                 && Math.abs(reapplyActionGroup.y - filterActionGroup.y) < 1
+                                 && Math.abs(reapplyActionGroup.y - filterActionGroup.y) < 2
                             Rectangle {
                                 x: -14.5
                                 y: reapplyActionButtons.y + addMatchesButton.y

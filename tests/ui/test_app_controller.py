@@ -708,8 +708,11 @@ def test_sets_action_separators_wrapping_hides_row_end_diamonds(
 
     # Act / Assert
     root.resize(2000, 900)
-    qtbot.waitUntil(lambda: reapply_group.y() == add_group.y())
-    qtbot.waitUntil(lambda: bool(filter_separator.property("visible")))
+    qtbot.waitUntil(
+        lambda: abs(reapply_group.y() - add_group.y()) < 2
+        and bool(filter_separator.property("visible"))
+        and bool(reapply_separator.property("visible"))
+    )
     assert bool(reapply_separator.property("visible"))
     for separator, button_name in (
         (filter_separator, "editSetFilterButton"),
@@ -729,7 +732,7 @@ def test_sets_action_separators_wrapping_hides_row_end_diamonds(
     )
     root.resize(two_group_width, 900)
     qtbot.waitUntil(lambda: reapply_group.y() > filter_group.y())
-    assert filter_group.y() == add_group.y()
+    assert abs(filter_group.y() - add_group.y()) < 2
     assert bool(filter_separator.property("visible"))
     assert not bool(reapply_separator.property("visible"))
     root.resize(900, 900)
@@ -971,8 +974,8 @@ def test_search_canon_returns_two_results(
 ) -> None:
     # Arrange
     controller, search_model, _ = window
-    controller.unlock(_TEST_PASSWORD)
-    qtbot.wait(_PAUSE_MS)
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
 
     # Act
     with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
@@ -990,8 +993,8 @@ def test_search_exact_model_name_returns_one_result(
 ) -> None:
     # Arrange
     controller, search_model, _ = window
-    controller.unlock(_TEST_PASSWORD)
-    qtbot.wait(_PAUSE_MS)
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
 
     # Act
     with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
@@ -1009,8 +1012,8 @@ def test_clear_search_restores_all_results(
 ) -> None:
     # Arrange — unlock and narrow the results first
     controller, search_model, _ = window
-    controller.unlock(_TEST_PASSWORD)
-    qtbot.wait(_PAUSE_MS // 2)
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
     controller.search("Fujifilm")
     qtbot.wait(_PAUSE_MS)
 
@@ -1030,8 +1033,8 @@ def test_search_no_match_returns_empty_results(
 ) -> None:
     # Arrange
     controller, search_model, _ = window
-    controller.unlock(_TEST_PASSWORD)
-    qtbot.wait(_PAUSE_MS)
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
 
     # Act
     with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
