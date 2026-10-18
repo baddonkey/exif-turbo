@@ -1145,6 +1145,8 @@ exporter:
   with ExifTool;
 - writes the final derivative description to **XMP Description** and, when the
   setting is enabled, **EXIF XPComment**, and also writes it to **IPTC Caption**;
+- preserves the full caption in IPTC even when it exceeds the 2,000-byte IPTC-IIM
+  limit; such over-limit IPTC values may not be supported by every metadata reader;
 - combines distinct embedded XMP descriptions and IPTC captions into one source
   description, avoids duplicating identical values, and honors the per-image
   embedded-description exclusion;

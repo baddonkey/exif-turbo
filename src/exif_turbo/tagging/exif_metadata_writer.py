@@ -11,6 +11,9 @@ from ..indexing.exif_metadata_extractor import find_exiftool
 from ..indexing.image_utils import VIDEO_EXTENSIONS
 
 
+_IPTC_CAPTION_MAX_BYTES = 2000
+
+
 class ExifMetadataWriteError(RuntimeError):
     """Raised when ExifTool cannot write or verify derivative keywords."""
 
@@ -47,7 +50,6 @@ class ExifMetadataWriter:
             write_arguments = [
                 find_exiftool(), "-overwrite_original",
                 f"-XMP-dc:Description<={text_path}",
-                f"-IPTC:Caption-Abstract<={text_path}",
             ]
             if self._write_description_to_xpcomment:
                 write_arguments.append(f"-IFD0:XPComment<={text_path}")
@@ -56,6 +58,18 @@ class ExifMetadataWriter:
             if result.returncode != 0:
                 raise ExifMetadataWriteError(
                     f"ExifTool description write failed: {result.stderr.strip() or result.stdout.strip()}"
+                )
+            iptc_arguments = [find_exiftool(), "-overwrite_original"]
+            if len(description.encode("utf-8")) > _IPTC_CAPTION_MAX_BYTES:
+                iptc_arguments.append("-m")
+            iptc_arguments.extend([
+                f"-IPTC:Caption-Abstract<={text_path}", str(target),
+            ])
+            iptc_result = self._run(iptc_arguments)
+            if iptc_result.returncode != 0:
+                raise ExifMetadataWriteError(
+                    "ExifTool IPTC caption write failed: "
+                    f"{iptc_result.stderr.strip() or iptc_result.stdout.strip()}"
                 )
         readback_arguments = [
             find_exiftool(), "-json", "-G1", "-XMP-dc:Description",

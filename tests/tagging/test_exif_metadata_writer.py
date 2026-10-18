@@ -579,7 +579,7 @@ def test_write_description_real_exiftool_preserves_unicode_in_iptc_caption(
         pytest.skip("ExifTool is required for the metadata integration test")
     target = tmp_path / "unicode-caption.jpg"
     Image.new("RGB", (8, 8)).save(target)
-    description = "Ōhi'a lehua; Halemaʻumaʻu"
+    description = "A" * 4502 + "ō"
 
     # Act
     ExifMetadataWriter().write_description(target, description)
