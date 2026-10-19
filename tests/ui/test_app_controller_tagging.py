@@ -1736,6 +1736,34 @@ def test_app_controller_derivative_slot_converts_url_and_all_indexed_roots(
     assert worker.started is True
 
 
+def test_app_controller_new_derivative_export_resets_initial_progress(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    controller, _, _, _ = tagging_controller
+    controller._tagging._derivative_progress = (7, 12)
+    progress_updates: list[tuple[int, int]] = []
+    controller.derivativeOperationChanged.connect(
+        lambda: progress_updates.append(
+            (controller.derivativeCurrent, controller.derivativeTotal)
+        )
+    )
+    FakeDerivativeWorker.instances.clear()
+    monkeypatch.setattr(
+        app_controller_module, "DerivativeExportWorker", FakeDerivativeWorker
+    )
+
+    # Act
+    controller.generateDerivativesForMarked(
+        QUrl.fromLocalFile(str(tmp_path / "output")).toString()
+    )
+
+    # Assert
+    assert progress_updates == [(0, 0)]
+
+
 @pytest.mark.parametrize("image_set_id", [None, 7])
 def test_app_controller_current_results_forwards_complete_search_scope(
     tagging_controller: tuple[AppController, SearchListModel, Path, Path],
@@ -1767,6 +1795,8 @@ def test_app_controller_current_results_forwards_complete_search_scope(
 
     # Assert
     assert FakeDerivativeWorker.instances[0].options == {
+        "auto_repair_tags": True,
+        "write_description_to_xpcomment": True,
         "matching_results": True,
         "query": "family",
         "ext_filter": ".jpg",
@@ -1802,10 +1832,40 @@ def test_app_controller_sets_derivatives_ignore_search_scope(
         controller.generateDerivativesForCurrentResults(output_url)
 
     # Assert
-    expected_options = {"matching_results": True, "image_set_id": 23}
+    expected_options = {
+        "auto_repair_tags": True,
+        "write_description_to_xpcomment": True,
+        "matching_results": True,
+        "image_set_id": 23,
+    }
     if marked_only:
         expected_options["marked_only"] = True
     assert FakeDerivativeWorker.instances[0].options == expected_options
+
+
+def test_app_controller_derivative_worker_receives_repair_setting(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    controller, _, _, _ = tagging_controller
+    assert controller._settings is not None
+    controller._settings.setAutoRepairDerivativeTags(False)
+    controller._settings.setWriteDescriptionToXpComment(False)
+    FakeDerivativeWorker.instances.clear()
+    monkeypatch.setattr(app_controller_module, "DerivativeExportWorker", FakeDerivativeWorker)
+
+    # Act
+    controller.generateDerivativesForMarked(
+        QUrl.fromLocalFile(str(tmp_path / "output")).toString()
+    )
+
+    # Assert
+    assert FakeDerivativeWorker.instances[0].options["auto_repair_tags"] is False
+    assert FakeDerivativeWorker.instances[0].options[
+        "write_description_to_xpcomment"
+    ] is False
 
 
 def test_app_controller_current_ai_results_passes_complete_cached_paths(
@@ -1846,6 +1906,8 @@ def test_app_controller_current_ai_results_passes_complete_cached_paths(
 
     # Assert
     assert FakeDerivativeWorker.instances[0].options == {
+        "auto_repair_tags": True,
+        "write_description_to_xpcomment": True,
         "image_paths": [str(image_path), str(second_path)],
     }
 
@@ -1968,5 +2030,37 @@ def test_app_controller_derivative_result_reports_first_failure_detail(
 
     # Assert
     assert "First failure (broken.png): ExifTool metadata write failed" in (
+        controller.derivativeResultSummary
+    )
+
+
+def test_app_controller_derivative_result_reports_metadata_warnings_and_report(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    controller, _model, _db_path, image_path = tagging_controller
+    report_path = tmp_path / "output" / "derivative-export-errors.json"
+    result = DerivativeExportResult(
+        (
+            DerivativeExportItemResult(
+                image_path,
+                tmp_path / "output" / image_path.name,
+                DerivativeExportStatus.COPIED,
+                "keyword metadata: XMP write failed",
+                ("keyword metadata: XMP write failed",),
+            ),
+        ),
+        error_report_path=report_path,
+    )
+
+    # Act
+    controller._on_derivative_result(result)
+
+    # Assert
+    assert "1 derivative(s) exported with metadata warnings." in (
+        controller.derivativeResultSummary
+    )
+    assert f"Derivative export error report: {report_path}" in (
         controller.derivativeResultSummary
     )

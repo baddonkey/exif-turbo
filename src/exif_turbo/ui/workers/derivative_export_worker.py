@@ -39,6 +39,8 @@ class DerivativeExportWorker(QThread):
         date_to: int | None = None,
         image_set_id: int | None = None,
         metadata_writer: MetadataWriter | None = None,
+        auto_repair_tags: bool = True,
+        write_description_to_xpcomment: bool = True,
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -56,6 +58,8 @@ class DerivativeExportWorker(QThread):
         self._date_to = date_to
         self._image_set_id = image_set_id
         self._metadata_writer = metadata_writer
+        self._auto_repair_tags = auto_repair_tags
+        self._write_description_to_xpcomment = write_description_to_xpcomment
         self._cancel_event = threading.Event()
         self.result: DerivativeExportResult | None = None
 
@@ -66,7 +70,12 @@ class DerivativeExportWorker(QThread):
         repository: ImageIndexRepository | None = None
         try:
             repository = ImageIndexRepository(self._db_path, key=self._key)
-            service = DerivativeExportService(repository, self._metadata_writer)
+            service = DerivativeExportService(
+                repository,
+                self._metadata_writer,
+                auto_repair_tags=self._auto_repair_tags,
+                write_description_to_xpcomment=self._write_description_to_xpcomment,
+            )
             image_paths = self._image_paths
             if image_paths is None and self._matching_results:
                 image_paths = repository.get_matching_paths(
@@ -84,6 +93,7 @@ class DerivativeExportWorker(QThread):
                 self._output_root,
                 image_paths=image_paths,
             )
+            self.progress.emit(0, len(plan.items), None)
             self.result = service.export(
                 plan,
                 on_progress=self._emit_progress,

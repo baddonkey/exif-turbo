@@ -11,46 +11,96 @@ from ..indexing.exif_metadata_extractor import find_exiftool
 from ..indexing.image_utils import VIDEO_EXTENSIONS
 
 
+_IPTC_CAPTION_MAX_BYTES = 2000
+
+
 class ExifMetadataWriteError(RuntimeError):
     """Raised when ExifTool cannot write or verify derivative keywords."""
 
 
 class ExifMetadataWriter:
+    _NONSTANDARD_XMP_APP1_HEADER = b"XMP\x00://ns.adobe.com/xap/1.0/\x00"
+    _STANDARD_XMP_APP1_HEADER = b"http://ns.adobe.com/xap/1.0/\x00"
     _DESCRIPTION_FIELDS = (
         "XMP-dc:Description", "IPTC:Caption-Abstract", "EXIF:ImageDescription",
-        "EXIF:UserComment", "XMP-exif:UserComment", "PNG:Description",
+        "EXIF:UserComment", "XMP-exif:UserComment", "IFD0:XPComment", "PNG:Description",
         "QuickTime:Description",
     )
 
-    def __init__(self, *, timeout_seconds: float = 30.0) -> None:
+    def __init__(
+        self,
+        *,
+        timeout_seconds: float = 30.0,
+        auto_repair_tags: bool = True,
+        write_description_to_xpcomment: bool = True,
+    ) -> None:
         self._timeout_seconds = timeout_seconds
+        self._auto_repair_tags = auto_repair_tags
+        self._write_description_to_xpcomment = write_description_to_xpcomment
 
     def write_description(
         self, target: Path, description: str, *, forbidden_sources: Iterable[Path] = ()
     ) -> None:
         self.discard_embedded_description(target, forbidden_sources=forbidden_sources)
+        if not description.isascii():
+            self._ensure_iptc_utf8(target)
         with tempfile.TemporaryDirectory(prefix="exif-turbo-description-") as directory:
             text_path = Path(directory) / "description.txt"
             text_path.write_text(description, encoding="utf-8", newline="")
-            result = self._run([
+            write_arguments = [
                 find_exiftool(), "-overwrite_original",
-                f"-XMP-dc:Description<={text_path}", str(target),
+                f"-XMP-dc:Description<={text_path}",
+            ]
+            if self._write_description_to_xpcomment:
+                write_arguments.append(f"-IFD0:XPComment<={text_path}")
+            write_arguments.append(str(target))
+            result = self._run(write_arguments)
+            if result.returncode != 0:
+                raise ExifMetadataWriteError(
+                    f"ExifTool description write failed: {result.stderr.strip() or result.stdout.strip()}"
+                )
+            iptc_arguments = [find_exiftool(), "-overwrite_original"]
+            if len(description.encode("utf-8")) > _IPTC_CAPTION_MAX_BYTES:
+                iptc_arguments.append("-m")
+            iptc_arguments.extend([
+                f"-IPTC:Caption-Abstract<={text_path}", str(target),
             ])
-        if result.returncode != 0:
-            raise ExifMetadataWriteError(
-                f"ExifTool description write failed: {result.stderr.strip() or result.stdout.strip()}"
-            )
-        readback = self._run([
-            find_exiftool(), "-json", "-G1", "-XMP-dc:Description", str(target),
-        ])
+            iptc_result = self._run(iptc_arguments)
+            if iptc_result.returncode != 0:
+                raise ExifMetadataWriteError(
+                    "ExifTool IPTC caption write failed: "
+                    f"{iptc_result.stderr.strip() or iptc_result.stdout.strip()}"
+                )
+        readback_arguments = [
+            find_exiftool(), "-json", "-G1", "-XMP-dc:Description",
+            "-IPTC:Caption-Abstract",
+        ]
+        if self._write_description_to_xpcomment:
+            readback_arguments.append("-IFD0:XPComment")
+        readback_arguments.append(str(target))
+        readback = self._run(readback_arguments)
         if readback.returncode != 0:
             raise ExifMetadataWriteError(
                 f"ExifTool description readback failed: {readback.stderr.strip() or readback.stdout.strip()}"
             )
         try:
             records = json.loads(readback.stdout)
-            if records[0].get("XMP-dc:Description") != description:
-                raise ExifMetadataWriteError("description readback did not match requested text")
+            record = records[0]
+            if record.get("XMP-dc:Description") != description:
+                raise ExifMetadataWriteError(
+                    "XMP description readback did not match requested text"
+                )
+            if record.get("IPTC:Caption-Abstract") != description:
+                raise ExifMetadataWriteError(
+                    "IPTC caption readback did not match requested text"
+                )
+            if (
+                self._write_description_to_xpcomment
+                and record.get("IFD0:XPComment") != description
+            ):
+                raise ExifMetadataWriteError(
+                    "XPComment readback did not match requested text"
+                )
         except (ValueError, TypeError, IndexError, AttributeError) as exc:
             raise ExifMetadataWriteError("ExifTool returned invalid description readback") from exc
 
@@ -59,6 +109,8 @@ class ExifMetadataWriter:
     ) -> None:
         if target.resolve() in {source.resolve() for source in forbidden_sources}:
             raise ExifMetadataWriteError(f"refusing to write metadata to source image: {target}")
+        if self._auto_repair_tags:
+            self._normalize_nonstandard_xmp_app1_header(target)
         result = self._run([
             find_exiftool(), "-overwrite_original",
             *(f"-{field}=" for field in self._DESCRIPTION_FIELDS), str(target),
@@ -107,6 +159,8 @@ class ExifMetadataWriter:
             raise ExifMetadataWriteError(
                 f"refusing to write metadata to source image: {target}"
             )
+        if self._auto_repair_tags:
+            self._normalize_nonstandard_xmp_app1_header(target)
 
         fields = self._keyword_fields(target)
         current_labels = (
@@ -117,6 +171,8 @@ class ExifMetadataWriter:
             label for label in current_labels if label.casefold() not in excluded_keys
         )
         labels = self._merge_labels(labels, current_labels)
+        if "IPTC:Keywords" in fields and any(not label.isascii() for label in labels):
+            self._ensure_iptc_utf8(target)
         clear_arguments = [
             find_exiftool(),
             "-m",
@@ -196,9 +252,16 @@ class ExifMetadataWriter:
                 "ExifTool returned invalid metadata readback"
             ) from exc
         expected = tuple(labels)
-        if any(values != expected for values in actual):
+        mismatches = [
+            f"{field}: expected {expected!r}, got {values!r}"
+            for field, values in zip(fields, actual)
+            if values != expected
+        ]
+        if mismatches:
             raise ExifMetadataWriteError(
-                "ExifTool metadata readback did not match requested labels"
+                "ExifTool metadata readback did not match requested labels ("
+                + "; ".join(mismatches)
+                + ")"
             )
 
     @staticmethod
@@ -207,6 +270,57 @@ class ExifMetadataWriter:
             return ("XMP-dc:Subject", "Microsoft:Category")
         return ("XMP-dc:Subject", "IPTC:Keywords")
 
+    @staticmethod
+    def _normalize_nonstandard_xmp_app1_header(target: Path) -> None:
+        if target.suffix.lower() not in {".jpg", ".jpeg"}:
+            return
+        try:
+            with target.open("r+b") as image:
+                if image.read(2) != b"\xff\xd8":
+                    return
+                while True:
+                    if image.read(1) != b"\xff":
+                        return
+                    marker_value = image.read(1)
+                    while marker_value == b"\xff":
+                        marker_value = image.read(1)
+                    if not marker_value:
+                        return
+                    marker = marker_value[0]
+                    if marker in {0xDA, 0xD9}:
+                        return
+                    if marker == 0x01 or 0xD0 <= marker <= 0xD7:
+                        continue
+                    length_bytes = image.read(2)
+                    if len(length_bytes) != 2:
+                        return
+                    segment_length = int.from_bytes(length_bytes, "big")
+                    if segment_length < 2:
+                        return
+                    payload_start = image.tell()
+                    if marker == 0xE1:
+                        header = image.read(
+                            len(ExifMetadataWriter._NONSTANDARD_XMP_APP1_HEADER)
+                        )
+                        if header == ExifMetadataWriter._NONSTANDARD_XMP_APP1_HEADER:
+                            image.seek(payload_start)
+                            image.write(ExifMetadataWriter._STANDARD_XMP_APP1_HEADER)
+                            return
+                    image.seek(payload_start + segment_length - 2)
+        except OSError as exc:
+            raise ExifMetadataWriteError(
+                f"unable to normalize JPEG XMP header: {exc}"
+            ) from exc
+
+    def _ensure_iptc_utf8(self, target: Path) -> None:
+        result = self._run([
+            find_exiftool(), "-overwrite_original", "-tagsFromFile", "@",
+            "-IPTC:All", "-IPTC:CodedCharacterSet=UTF8", str(target),
+        ])
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip() or "unknown error"
+            raise ExifMetadataWriteError(f"ExifTool IPTC UTF-8 conversion failed: {detail}")
+
     def _run(self, arguments: list[str]) -> subprocess.CompletedProcess[str]:
         platform_arguments: dict[str, Any] = (
             {"creationflags": 0x08000000}
@@ -214,6 +328,31 @@ class ExifMetadataWriter:
             else {"start_new_session": True}
         )
         try:
+            if os.name == "nt" and any(
+                not argument.isascii() for argument in arguments[1:]
+            ):
+                with tempfile.TemporaryDirectory(
+                    prefix="exif-turbo-exiftool-args-"
+                ) as directory:
+                    argument_file = Path(directory) / "args.txt"
+                    argument_file.write_text(
+                        "\n".join(arguments[1:]) + "\n",
+                        encoding="utf-8",
+                        newline="\n",
+                    )
+                    return subprocess.run(
+                        [
+                            arguments[0], "-charset", "filename=UTF8", "-@",
+                            str(argument_file),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        check=False,
+                        timeout=self._timeout_seconds,
+                        **platform_arguments,
+                    )
             return subprocess.run(
                 arguments,
                 capture_output=True,

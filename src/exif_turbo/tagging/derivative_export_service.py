@@ -124,11 +124,14 @@ class DerivativeExportItemResult:
     destination: Path
     status: DerivativeExportStatus
     message: str | None = None
+    metadata_errors: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class DerivativeExportResult:
     items: tuple[DerivativeExportItemResult, ...]
+    error_report_path: Path | None = None
+    error_report_error: str | None = None
 
     def count(self, status: DerivativeExportStatus) -> int:
         return sum(item.status is status for item in self.items)
@@ -156,6 +159,10 @@ class DerivativeExportResult:
     @property
     def canceled_count(self) -> int:
         return self.count(DerivativeExportStatus.CANCELED)
+
+    @property
+    def metadata_warning_count(self) -> int:
+        return sum(bool(item.metadata_errors) for item in self.items)
 
 
 DerivativeProgress = Callable[[int, int, DerivativeExportItemResult], None]
@@ -188,9 +195,15 @@ class DerivativeExportService:
         image_repository: ImageIndexRepository,
         metadata_writer: MetadataWriter | None = None,
         sidecar_repository: FilesystemSidecarRepository | None = None,
+        *,
+        auto_repair_tags: bool = True,
+        write_description_to_xpcomment: bool = True,
     ) -> None:
         self._image_repository = image_repository
-        self._metadata_writer = metadata_writer or ExifMetadataWriter()
+        self._metadata_writer = metadata_writer or ExifMetadataWriter(
+            auto_repair_tags=auto_repair_tags,
+            write_description_to_xpcomment=write_description_to_xpcomment,
+        )
         self._sidecar_repository = sidecar_repository or FilesystemSidecarRepository()
 
     def create_plan(
@@ -255,16 +268,17 @@ class DerivativeExportService:
             destination_keys.add(destination_key)
             loaded = self._sidecar_repository.read(source)
             labels, excluded_labels, exclude_all, exclude_description = self._derivative_labels(source, loaded)
-            description: str | None = None
-            if loaded is not None and loaded.sidecar.description:
-                rows = self._image_repository.get_images_by_paths([str(source)])
-                metadata = json.loads(rows[0][3]) if rows else {}
-                if not isinstance(metadata, dict):
-                    raise DerivativeExportError(f"invalid indexed metadata for {source}")
-                description = final_derivative_description(
-                    extract_embedded_description(metadata),
-                    loaded.sidecar.description, exclude_description,
-                )
+            rows = self._image_repository.get_images_by_paths([str(source)])
+            metadata = json.loads(rows[0][3]) if rows else {}
+            if not isinstance(metadata, dict):
+                raise DerivativeExportError(f"invalid indexed metadata for {source}")
+            embedded_description = extract_embedded_description(metadata)
+            custom_description = (
+                loaded.sidecar.description if loaded is not None else ""
+            )
+            description = final_derivative_description(
+                embedded_description, custom_description, exclude_description
+            ) or None
             status: DerivativeExportStatus | None = None
             message: str | None = None
             if destination.exists():
@@ -309,7 +323,18 @@ class DerivativeExportService:
             results.append(result)
             if on_progress is not None:
                 on_progress(index + 1, total, result)
-        return DerivativeExportResult(tuple(results))
+        report_items = [
+            item
+            for item in results
+            if item.status is DerivativeExportStatus.FAILED or item.metadata_errors
+        ]
+        report_path: Path | None = None
+        report_error: str | None = None
+        if report_items:
+            report_path = self._write_error_report(plan.output_root, report_items)
+            if report_path is None:
+                report_error = "unable to write derivative export error report"
+        return DerivativeExportResult(tuple(results), report_path, report_error)
 
     def _export_item(
         self,
@@ -320,6 +345,7 @@ class DerivativeExportService:
         temporary = item.destination.with_name(
             f".{item.destination.stem}.{uuid.uuid4().hex}.tmp{item.destination.suffix}"
         )
+        metadata_errors: list[str] = []
         try:
             if item.destination.exists():
                 return self._result(
@@ -334,35 +360,58 @@ class DerivativeExportService:
                     item, DerivativeExportStatus.CANCELED, "export canceled"
                 )
             if item.labels or item.excluded_embedded_tags or item.exclude_all_embedded_tags:
-                self._metadata_writer.write_keywords(
-                    temporary,
-                    item.labels,
-                    forbidden_sources=sources,
-                    excluded_labels=item.excluded_embedded_tags,
-                    preserve_existing_keywords=not item.exclude_all_embedded_tags,
-                )
+                try:
+                    self._metadata_writer.write_keywords(
+                        temporary,
+                        item.labels,
+                        forbidden_sources=sources,
+                        excluded_labels=item.excluded_embedded_tags,
+                        preserve_existing_keywords=not item.exclude_all_embedded_tags,
+                    )
+                except Exception as exc:  # noqa: BLE001 — preserve the derivative and report metadata trouble
+                    metadata_errors.append(f"keyword metadata: {exc}")
             if item.description is not None:
-                self._metadata_writer.write_description(
-                    temporary, item.description, forbidden_sources=sources
-                )
+                try:
+                    self._metadata_writer.write_description(
+                        temporary, item.description, forbidden_sources=sources
+                    )
+                except Exception as exc:  # noqa: BLE001 — preserve the derivative and report metadata trouble
+                    metadata_errors.append(f"description metadata: {exc}")
             elif item.exclude_embedded_description:
-                self._metadata_writer.discard_embedded_description(
-                    temporary, forbidden_sources=sources
-                )
+                try:
+                    self._metadata_writer.discard_embedded_description(
+                        temporary, forbidden_sources=sources
+                    )
+                except Exception as exc:  # noqa: BLE001 — preserve the derivative and report metadata trouble
+                    metadata_errors.append(f"description metadata: {exc}")
             if cancel_check is not None and cancel_check():
                 return self._result(
-                    item, DerivativeExportStatus.CANCELED, "export canceled"
+                    item,
+                    DerivativeExportStatus.CANCELED,
+                    "export canceled",
+                    metadata_errors=tuple(metadata_errors),
                 )
             if item.destination.exists():
                 return self._result(
                     item,
                     DerivativeExportStatus.SKIPPED_EXISTING,
                     "destination appeared during export",
+                    metadata_errors=tuple(metadata_errors),
                 )
             os.replace(temporary, item.destination)
-            return self._result(item, DerivativeExportStatus.COPIED)
+            return self._result(
+                item,
+                DerivativeExportStatus.COPIED,
+                "; ".join(metadata_errors) or None,
+                metadata_errors=tuple(metadata_errors),
+            )
         except Exception as exc:  # noqa: BLE001
-            return self._result(item, DerivativeExportStatus.FAILED, str(exc))
+            return self._result(
+                item,
+                DerivativeExportStatus.FAILED,
+                str(exc),
+                metadata_errors=tuple(metadata_errors),
+            )
         finally:
             try:
                 temporary.unlink(missing_ok=True)
@@ -492,10 +541,43 @@ class DerivativeExportService:
         item: DerivativeExportPlanItem,
         status: DerivativeExportStatus,
         message: str | None = None,
+        *,
+        metadata_errors: tuple[str, ...] = (),
     ) -> DerivativeExportItemResult:
         return DerivativeExportItemResult(
             source=item.source,
             destination=item.destination,
             status=status,
             message=message,
+            metadata_errors=metadata_errors,
         )
+
+    @staticmethod
+    def _write_error_report(
+        output_root: Path,
+        items: Sequence[DerivativeExportItemResult],
+    ) -> Path | None:
+        report_path = output_root / "derivative-export-errors.json"
+        suffix = 2
+        while report_path.exists():
+            report_path = output_root / f"derivative-export-errors-{suffix}.json"
+            suffix += 1
+        records = [
+            {
+                "source": str(item.source),
+                "destination": str(item.destination),
+                "status": item.status.value,
+                "error": item.message,
+                "metadataErrors": list(item.metadata_errors),
+            }
+            for item in items
+        ]
+        try:
+            output_root.mkdir(parents=True, exist_ok=True)
+            report_path.write_text(
+                json.dumps({"items": records}, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError:
+            return None
+        return report_path

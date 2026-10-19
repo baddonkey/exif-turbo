@@ -540,6 +540,16 @@ class TaggingController(QObject):
             self._get_key(),
             roots,
             output_root,
+            auto_repair_tags=(
+                self._settings.auto_repair_derivative_tags
+                if self._settings is not None
+                else True
+            ),
+            write_description_to_xpcomment=(
+                self._settings.write_description_to_xpcomment
+                if self._settings is not None
+                else True
+            ),
             **worker_options,
         )
         self._derivative_worker = worker
@@ -550,6 +560,7 @@ class TaggingController(QObject):
         worker.finished.connect(
             lambda: self._release_worker("_derivative_worker", worker)
         )
+        self._derivative_progress = (0, 0)
         self._derivative_operation = True
         self._derivative_summary = ""
         self.derivativeOperationChanged.emit()
@@ -565,7 +576,10 @@ class TaggingController(QObject):
         untagged_count = getattr(result, "skipped_untagged_count", 0)
         existing_count = getattr(result, "skipped_existing_count", 0)
         failed_count = getattr(result, "failed_count", 0)
+        metadata_warning_count = getattr(result, "metadata_warning_count", 0)
         canceled_count = getattr(result, "canceled_count", 0)
+        error_report_path = getattr(result, "error_report_path", None)
+        error_report_error = getattr(result, "error_report_error", None)
         items = getattr(result, "items", ())
         copied_destinations = [
             str(item.destination)
@@ -607,6 +621,20 @@ class TaggingController(QObject):
                 source_name = Path(str(getattr(failed_item, "source", ""))).name
                 detail = str(getattr(failed_item, "message", "") or "unknown error")
                 parts.append(_("First failure ({}): {}").format(source_name, detail))
+        if metadata_warning_count:
+            parts.append(
+                _("{} derivative(s) exported with metadata warnings.").format(
+                    metadata_warning_count
+                )
+            )
+        if error_report_path:
+            parts.append(_("Derivative export error report: {}").format(error_report_path))
+        elif error_report_error:
+            parts.append(
+                _("Unable to write derivative export error report: {}").format(
+                    error_report_error
+                )
+            )
         if canceled_count:
             parts.append(_("{} derivative(s) canceled.").format(canceled_count))
         self._derivative_summary = " ".join(parts)

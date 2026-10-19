@@ -12,6 +12,42 @@ def test_tagging_settings_default_custom_tags_disabled(tmp_path: Path) -> None:
 
     # Assert
     assert model.taggingEnabled is False
+    assert model.autoRepairDerivativeTags is True
+    assert model.writeDescriptionToXpComment is True
+
+
+def test_auto_repair_derivative_tags_persists_across_reload(tmp_path: Path) -> None:
+    # Arrange
+    settings_path = tmp_path / "settings.json"
+    model = SettingsModel(settings_path)
+
+    # Act
+    model.setAutoRepairDerivativeTags(False)
+    reloaded = SettingsModel(settings_path)
+
+    # Assert
+    assert reloaded.autoRepairDerivativeTags is False
+    assert json.loads(settings_path.read_text(encoding="utf-8"))[
+        "autoRepairDerivativeTags"
+    ] is False
+
+
+def test_write_description_to_xpcomment_setting_persists_across_reload(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    settings_path = tmp_path / "settings.json"
+    model = SettingsModel(settings_path)
+
+    # Act
+    model.setWriteDescriptionToXpComment(False)
+    reloaded = SettingsModel(settings_path)
+
+    # Assert
+    assert reloaded.writeDescriptionToXpComment is False
+    assert json.loads(settings_path.read_text(encoding="utf-8"))[
+        "writeDescriptionToXpComment"
+    ] is False
 
 
 def test_tagging_settings_persist_custom_tag_switch_and_ignore_legacy_preferences(

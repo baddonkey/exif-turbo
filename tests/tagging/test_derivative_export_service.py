@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import shutil
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -133,6 +134,20 @@ def test_extract_embedded_description_keeps_distinct_languages_and_deduplicates(
     assert extract_embedded_description(metadata) == "Caption\n\nBeschreibung\n\nDescription"
 
 
+def test_extract_embedded_description_deduplicates_matching_xmp_and_iptc() -> None:
+    # Arrange
+    metadata = {
+        "XMP-dc:Description": " Shared caption\r\nwith second line ",
+        "IPTC:Caption-Abstract": "Shared caption\nwith second line",
+    }
+
+    # Act
+    result = extract_embedded_description(metadata)
+
+    # Assert
+    assert result == "Shared caption\nwith second line"
+
+
 @pytest.mark.parametrize("excluded", [False, True])
 def test_export_custom_description_matches_final_preview(
     tmp_path: Path, repo: ImageIndexRepository, excluded: bool
@@ -142,7 +157,14 @@ def test_export_custom_description_matches_final_preview(
     source_root.mkdir()
     image_path = source_root / "photo.jpg"
     image_path.write_bytes(b"original")
-    repo.upsert_image(str(image_path), image_path.name, 1, 8, {"IFD0:ImageDescription": "Embedded"}, "")
+    repo.upsert_image(
+        str(image_path), image_path.name, 1, 8,
+        {
+            "XMP-dc:Description": "XMP caption",
+            "IPTC:Caption-Abstract": "IPTC caption",
+        },
+        "",
+    )
     FilesystemSidecarRepository().write(image_path, ImageSidecar(
         source=SidecarSource(filename=image_path.name), updated_at="2026-10-18T12:00:00Z",
         description="Custom", exclude_embedded_description=excluded,
@@ -154,11 +176,42 @@ def test_export_custom_description_matches_final_preview(
     result = service.export(plan)
 
     # Assert
-    expected = "Custom" if excluded else "Embedded\n\nCustom"
+    expected = (
+        "Custom"
+        if excluded
+        else "XMP caption\n\nIPTC caption\n\nCustom"
+    )
     assert plan.items[0].description == expected
     assert result.copied_count == 1
     assert plan.items[0].destination.read_text(encoding="utf-8") == expected
     assert image_path.read_bytes() == b"original"
+
+
+def test_create_plan_uses_embedded_description_without_custom_sidecar_text(
+    tmp_path: Path, repo: ImageIndexRepository
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    image_path = source_root / "photo.jpg"
+    image_path.write_bytes(b"original")
+    repo.upsert_image(
+        str(image_path), image_path.name, 1, 8,
+        {
+            "XMP-dc:Description": "XMP caption",
+            "IPTC:Caption-Abstract": "IPTC caption",
+        },
+        "",
+    )
+    service = DerivativeExportService(repo, FakeMetadataWriter())
+
+    # Act
+    plan = service.create_plan(
+        {source_root: "source"}, tmp_path / "output", image_paths=[image_path]
+    )
+
+    # Assert
+    assert plan.items[0].description == "XMP caption\n\nIPTC caption"
 
 
 @pytest.mark.parametrize("excluded", [False, True])
@@ -194,7 +247,7 @@ def test_export_description_exclusion_works_without_tags_or_replacement(
     assert plan.items[0].destination.read_bytes() == expected
 
 
-def test_export_description_removal_failure_does_not_finalize_copy(
+def test_export_description_removal_failure_keeps_copy_and_reports_issue(
     tmp_path: Path, repo: ImageIndexRepository
 ) -> None:
     # Arrange
@@ -214,10 +267,16 @@ def test_export_description_removal_failure_does_not_finalize_copy(
     result = service.export(plan)
 
     # Assert
-    assert result.failed_count == 1
+    assert result.copied_count == 1
+    assert result.failed_count == 0
+    assert result.metadata_warning_count == 1
     assert "description remains" in (result.items[0].message or "")
-    assert not plan.items[0].destination.exists()
-    assert list(plan.output_root.iterdir()) == []
+    assert plan.items[0].destination.exists()
+    assert result.error_report_path is not None
+    report = json.loads(result.error_report_path.read_text(encoding="utf-8"))
+    assert "description metadata: description remains" in report["items"][0][
+        "metadataErrors"
+    ]
     assert image_path.read_bytes() == b"original"
 
 
@@ -681,7 +740,7 @@ def test_export_without_free_tags_still_applies_embedded_tag_exclusions(
     assert image_path.read_bytes() == b"original"
 
 
-def test_export_metadata_failure_removes_temp_and_preserves_source(
+def test_export_metadata_failure_keeps_copy_and_reports_issue(
     tmp_path: Path, repo: ImageIndexRepository
 ) -> None:
     # Arrange
@@ -705,9 +764,17 @@ def test_export_metadata_failure_removes_temp_and_preserves_source(
     )
 
     # Assert
-    assert result.failed_count == 1
-    assert result.items[0].message == "metadata failed"
-    assert not (output_root / "photo.jpg").exists()
+    assert result.copied_count == 1
+    assert result.failed_count == 0
+    assert result.metadata_warning_count == 1
+    assert "metadata failed" in (result.items[0].message or "")
+    assert (output_root / "photo.jpg").exists()
+    assert (output_root / "photo.jpg").read_bytes() == b"original"
+    assert result.error_report_path is not None
+    report = json.loads(result.error_report_path.read_text(encoding="utf-8"))
+    assert "keyword metadata: metadata failed" in report["items"][0][
+        "metadataErrors"
+    ]
     assert list(output_root.glob(".*.tmp*")) == []
     assert hashlib.sha256(image_path.read_bytes()).hexdigest() == original_hash
     assert image_path.stat().st_mtime_ns == original_mtime
@@ -743,6 +810,9 @@ def test_export_copy_error_reports_failure_and_leaves_no_temp(
     assert result.failed_count == 1
     assert result.items[0].message == "copy failed"
     assert list(output_root.glob(".*.tmp*")) == []
+    assert result.error_report_path is not None
+    report = json.loads(result.error_report_path.read_text(encoding="utf-8"))
+    assert report["items"][0]["status"] == "failed"
 
 
 def test_export_cancellation_preserves_completed_final_and_cancels_remaining(

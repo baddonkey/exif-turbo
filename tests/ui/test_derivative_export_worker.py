@@ -102,7 +102,7 @@ def test_derivative_export_worker_emits_result_and_progress(tmp_path: Path) -> N
     worker.run()
 
     # Assert
-    assert progress == [(1, 1)]
+    assert progress == [(0, 1), (1, 1)]
     assert results == [worker.result]
     assert failures == []
     assert worker.result is not None
@@ -140,7 +140,7 @@ def test_derivative_export_worker_selected_set_exports_untagged_members(
     assert worker.result is not None
     assert worker.result.copied_count == 1
     assert worker.result.failed_count == 0
-    assert progress == [(1, 1)]
+    assert progress == [(0, 1), (1, 1)]
     assert (output_root / "member.jpg").read_bytes() == b"untagged image"
     assert not (output_root / "outside.jpg").exists()
 
