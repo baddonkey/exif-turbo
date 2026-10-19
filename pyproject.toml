@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "exif-turbo"
-version = "1.21.0"
+version = "1.21.1"
 description = "Local-first photo and video library indexing with EXIF metadata and AI image search"
 requires-python = ">=3.11"
 keywords = ["EXIF", "image search", "photo management", "metadata", "semantic search", "privacy", "video"]
