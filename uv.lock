@@ -305,7 +305,7 @@ requires-dist = [
     { name = "mcp", specifier = ">=2.3,<3" },
     { name = "open-clip-torch", specifier = ">=3.3" },
     { name = "packaging", marker = "extra == 'build'" },
-    { name = "pillow", specifier = ">=12.3" },
+    { name = "pillow", specifier = ">=13.0" },
     { name = "pyinstaller", marker = "extra == 'build'" },
     { name = "pyside6", specifier = ">=6.11" },
     { name = "pytest", marker = "extra == 'dev'" },
