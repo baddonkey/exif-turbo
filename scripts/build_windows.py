@@ -8,6 +8,7 @@ Requirements:
     pip install uv==0.13.0
     dotnet tool install --global wix          (WiX Toolset v6)
     wix extension add WixToolset.UI.wixext    (run once to install the UI ext)
+    7-Zip command-line tool (7z.exe), https://www.7-zip.org/
 
 The script automatically downloads the latest 64-bit ExifTool Windows binary
 from exiftool.org, stages it in build/exiftool-staged/, and bundles it into
@@ -22,6 +23,9 @@ Usage:
 from __future__ import annotations
 
 import io
+import hashlib
+import json
+import os
 import re
 import shutil
 import subprocess
@@ -29,7 +33,7 @@ import sys
 import tempfile
 import urllib.request
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 try:
     from audit_release_artifact import audit_release_payload
@@ -39,6 +43,43 @@ except ModuleNotFoundError:
     from scripts.release_environment import ensure_release_environment
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+_IMAGEMAGICK_VERSION = "7.1.2-34"
+_IMAGEMAGICK_ARCHIVE = f"ImageMagick-{_IMAGEMAGICK_VERSION}-portable-Q16-x64.7z"
+_IMAGEMAGICK_ARCHIVE_URL = (
+    "https://github.com/ImageMagick/ImageMagick/releases/download/"
+    f"{_IMAGEMAGICK_VERSION}/{_IMAGEMAGICK_ARCHIVE}"
+)
+_IMAGEMAGICK_ARCHIVE_SHA256 = (
+    "52cc6a441c7884f5ff4274b410c9b90c4b7d54245dcdf4d32988bb4e4df4e5d1"
+)
+_IMAGEMAGICK_SBOM_URL = (
+    "https://github.com/ImageMagick/ImageMagick/releases/download/"
+    f"{_IMAGEMAGICK_VERSION}/ImageMagick-{_IMAGEMAGICK_VERSION}-portable-Q16-x64.cdx.json"
+)
+_IMAGEMAGICK_SBOM_SHA256 = (
+    "fddfaa608e57215897e83d7e9933f5e692ce07883510a00310605a540382390f"
+)
+_FFMPEG_ARCHIVE = "ffmpeg-n9.0-latest-win64-lgpl-shared-9.0.zip"
+_FFMPEG_ARCHIVE_URL = (
+    "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/"
+    f"{_FFMPEG_ARCHIVE}"
+)
+_FFMPEG_ARCHIVE_SHA256 = (
+    "ce7c09bf3897333bff873edc5873f31425a429f9da99fba9add844da5fa0b64b"
+)
+_FFMPEG_CHECKSUMS_URL = (
+    "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/checksums.sha256"
+)
+_FFMPEG_CHECKSUMS_SHA256 = (
+    "48f9147a98a35319f265119cecce5f2221018df80b3be0448b7a0e952955a502"
+)
+_FFMPEG_BUILDS_COMMIT = "b4a2b1d7cc241786eb8e2b588a7ade40cad48bbd"
+_FFMPEG_BUILDS_SOURCE_URL = (
+    "https://github.com/BtbN/FFmpeg-Builds/archive/"
+    f"{_FFMPEG_BUILDS_COMMIT}.zip"
+)
+_MEDIA_TOOLS_LAYOUT_VERSION = 1
 
 
 def fail(msg: str) -> None:
@@ -195,6 +236,393 @@ def stage_exiftool() -> Path:
     return staged
 
 
+def _download_verified(url: str, destination: Path, expected_sha256: str) -> None:
+    digest = hashlib.sha256()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with urllib.request.urlopen(url, timeout=300) as response:  # noqa: S310
+        with destination.open("wb") as output:
+            while chunk := response.read(1024 * 1024):
+                digest.update(chunk)
+                output.write(chunk)
+    actual_sha256 = digest.hexdigest()
+    if actual_sha256 != expected_sha256:
+        raise ValueError(
+            f"SHA-256 mismatch for {url}: expected {expected_sha256}, "
+            f"received {actual_sha256}"
+        )
+
+
+def _download_to_path(url: str, destination: Path) -> str:
+    digest = hashlib.sha256()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with urllib.request.urlopen(url, timeout=300) as response:  # noqa: S310
+        with destination.open("wb") as output:
+            while chunk := response.read(1024 * 1024):
+                digest.update(chunk)
+                output.write(chunk)
+    return digest.hexdigest()
+
+
+def _safe_archive_path(name: str) -> PurePosixPath:
+    path = PurePosixPath(name.replace("\\", "/"))
+    if path.is_absolute() or ".." in path.parts or re.match(r"^[A-Za-z]:", name):
+        raise ValueError(f"unsafe archive member path: {name}")
+    return path
+
+
+def _find_7zip() -> str:
+    for name in ("7z.exe", "7za.exe", "7z"):
+        found = shutil.which(name)
+        if found:
+            return found
+    for environment_name in ("ProgramFiles", "ProgramFiles(x86)"):
+        program_files = os.environ.get(environment_name)
+        if program_files:
+            candidate = Path(program_files) / "7-Zip" / "7z.exe"
+            if candidate.is_file():
+                return str(candidate)
+    fail("7-Zip command-line tool not found; install 7-Zip to stage ImageMagick")
+    return ""
+
+
+def _extract_7z_archive(
+    archive_path: Path,
+    destination: Path,
+    *,
+    seven_zip: str | None = None,
+) -> None:
+    executable = seven_zip or _find_7zip()
+    listing = subprocess.run(
+        [executable, "l", "-slt", str(archive_path)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        check=False,
+    )
+    if listing.returncode != 0:
+        raise ValueError(f"7-Zip could not list {archive_path.name}: {listing.stderr}")
+
+    records: list[dict[str, str]] = []
+    current: dict[str, str] = {}
+    for line in listing.stdout.splitlines():
+        if line.strip() == "----------" or not line.strip():
+            if current:
+                records.append(current)
+            current = {}
+        elif " = " in line:
+            key, value = line.split(" = ", 1)
+            current[key] = value
+    if current:
+        records.append(current)
+
+    for record in records:
+        member = record.get("Path")
+        if not member or member in {str(archive_path), archive_path.name}:
+            continue
+        _safe_archive_path(member)
+        if record.get("Symbolic Link") or record.get("Hard Link"):
+            raise ValueError(f"7z archive contains a link: {member}")
+
+    destination.mkdir(parents=True, exist_ok=True)
+    extraction = subprocess.run(
+        [executable, "x", "-y", f"-o{destination}", str(archive_path)],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        check=False,
+    )
+    if extraction.returncode != 0:
+        raise ValueError(
+            f"7-Zip could not extract {archive_path.name}: {extraction.stderr}"
+        )
+
+
+def _extract_ffmpeg_archive(archive_path: Path, destination: Path) -> None:
+    destination.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(archive_path) as archive:
+        members = archive.infolist()
+        executable_members = [
+            info.filename
+            for info in members
+            if (
+                PurePosixPath(info.filename.replace("\\", "/")).as_posix().lower()
+                == "bin/ffmpeg.exe"
+                or PurePosixPath(info.filename.replace("\\", "/"))
+                .as_posix()
+                .lower()
+                .endswith("/bin/ffmpeg.exe")
+            )
+        ]
+        if len(executable_members) != 1:
+            raise ValueError("FFmpeg archive must contain exactly one bin/ffmpeg.exe")
+        executable_path = _safe_archive_path(executable_members[0])
+        archive_root = executable_path.parent.parent
+
+        for info in members:
+            member_path = _safe_archive_path(info.filename)
+            if info.is_dir() or not member_path.parts:
+                continue
+            mode = (info.external_attr >> 16) & 0o170000
+            if mode == 0o120000:
+                raise ValueError(f"FFmpeg archive contains a symbolic link: {info.filename}")
+            try:
+                relative_path = member_path.relative_to(archive_root)
+            except ValueError:
+                continue
+            target = destination.joinpath(*relative_path.parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(info) as source, target.open("wb") as output:
+                shutil.copyfileobj(source, output)
+
+
+def validate_media_tools(staged: Path) -> None:
+    required_files = (
+        staged / "imagemagick" / "magick.exe",
+        staged / "licenses" / "ImageMagick-LICENSE.txt",
+        staged / "licenses" / "ImageMagick-SBOM.cdx.json",
+        staged / "licenses" / "ImageMagick-VERSION.txt",
+        staged / "ffmpeg" / "bin" / "ffmpeg.exe",
+        staged / "ffmpeg" / "bin" / "ffprobe.exe",
+        staged / "licenses" / "FFmpeg-BUILD-CHECKSUMS.sha256",
+        staged / "licenses" / "FFmpeg-LGPL-2.1.txt",
+        staged / "licenses" / "FFmpeg-BUILDS-LICENSE.txt",
+        staged / "licenses" / "FFmpeg-BUILDS-README.md",
+        staged / "licenses" / "FFmpeg-BUILDS-SOURCE.zip",
+        staged / "licenses" / "FFmpeg-VERSION.txt",
+        staged / "licenses" / "FFmpeg-SOURCE.tar.gz",
+        staged / "licenses" / "FFmpeg-SOURCE-MANIFEST.txt",
+        staged / "MEDIA-TOOLS.json",
+    )
+    missing = [str(path.relative_to(staged)) for path in required_files if not path.is_file()]
+    if missing:
+        fail(f"Media tool payload is incomplete: {', '.join(missing)}")
+    for path in required_files:
+        if path.stat().st_size == 0:
+            fail(f"Media tool payload contains an empty file: {path.relative_to(staged)}")
+    imagemagick_license = (staged / "licenses" / "ImageMagick-LICENSE.txt").read_text(
+        encoding="utf-8"
+    )
+    if "IMAGEMAGICK LICENSE" not in imagemagick_license.upper():
+        fail("Staged ImageMagick license text is invalid")
+    ffmpeg_checksums = (staged / "licenses" / "FFmpeg-BUILD-CHECKSUMS.sha256").read_text(
+        encoding="ascii"
+    )
+    if _FFMPEG_ARCHIVE_SHA256 not in ffmpeg_checksums:
+        fail("FFmpeg checksum manifest does not contain the pinned Windows archive")
+    ffmpeg_bin = staged / "ffmpeg" / "bin"
+    if not any(ffmpeg_bin.glob("avcodec-*.dll")):
+        fail("FFmpeg shared build is missing its avcodec DLL")
+    imagemagick_version = (staged / "licenses" / "ImageMagick-VERSION.txt").read_text(
+        encoding="utf-8"
+    )
+    if f"ImageMagick { _IMAGEMAGICK_VERSION }" not in imagemagick_version:
+        fail("Staged ImageMagick version does not match the pinned release")
+    ffmpeg_version = (staged / "licenses" / "FFmpeg-VERSION.txt").read_text(
+        encoding="utf-8"
+    )
+    if "ffmpeg version n9.0" not in ffmpeg_version or "configuration:" not in ffmpeg_version:
+        fail("Staged FFmpeg version/configuration notice is incomplete")
+    ffmpeg_configuration = ffmpeg_version.split("configuration:", 1)[-1]
+    if "--enable-gpl" in ffmpeg_configuration or "--enable-nonfree" in ffmpeg_configuration:
+        fail("Staged FFmpeg build unexpectedly enables GPL or nonfree components")
+    if "GNU LESSER GENERAL PUBLIC LICENSE" not in (
+        staged / "licenses" / "FFmpeg-LGPL-2.1.txt"
+    ).read_text(encoding="utf-8").upper():
+        fail("Staged FFmpeg LGPL license text is invalid")
+    manifest = json.loads((staged / "MEDIA-TOOLS.json").read_text(encoding="utf-8"))
+    if (
+        manifest.get("layout_version") != _MEDIA_TOOLS_LAYOUT_VERSION
+        or manifest.get("imagemagick_version") != _IMAGEMAGICK_VERSION
+        or manifest.get("imagemagick_archive_sha256") != _IMAGEMAGICK_ARCHIVE_SHA256
+        or manifest.get("ffmpeg_archive_sha256") != _FFMPEG_ARCHIVE_SHA256
+    ):
+        fail("Staged media-tool manifest does not match pinned archive checksums")
+
+
+def stage_media_tools() -> Path:
+    """Download, verify, and stage the Windows media executables and notices."""
+    seven_zip = _find_7zip()
+    staged = REPO_ROOT / "build" / "media-tools-staged"
+    manifest_path = staged / "MEDIA-TOOLS.json"
+    if (
+        manifest_path.is_file()
+        and (staged / "imagemagick" / "magick.exe").is_file()
+        and (staged / "ffmpeg" / "bin" / "ffmpeg.exe").is_file()
+        and (staged / "ffmpeg" / "bin" / "ffprobe.exe").is_file()
+    ):
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if (
+                manifest.get("layout_version") == _MEDIA_TOOLS_LAYOUT_VERSION
+                and manifest.get("imagemagick_archive_sha256")
+                == _IMAGEMAGICK_ARCHIVE_SHA256
+                and manifest.get("ffmpeg_archive_sha256") == _FFMPEG_ARCHIVE_SHA256
+            ):
+                validate_media_tools(staged)
+                print(f"  Verified staged media tools: {staged}")
+                return staged
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    build_dir = REPO_ROOT / "build"
+    build_dir.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=build_dir) as temporary:
+        temporary_path = Path(temporary)
+        imagemagick_archive = temporary_path / _IMAGEMAGICK_ARCHIVE
+        ffmpeg_archive = temporary_path / _FFMPEG_ARCHIVE
+        _download_verified(
+            _IMAGEMAGICK_ARCHIVE_URL,
+            imagemagick_archive,
+            _IMAGEMAGICK_ARCHIVE_SHA256,
+        )
+        _download_verified(
+            _FFMPEG_ARCHIVE_URL,
+            ffmpeg_archive,
+            _FFMPEG_ARCHIVE_SHA256,
+        )
+
+        candidate = temporary_path / "staged"
+        candidate.mkdir()
+        image_extract = temporary_path / "imagemagick-extracted"
+        _extract_7z_archive(imagemagick_archive, image_extract, seven_zip=seven_zip)
+
+        magick_executables = tuple(image_extract.rglob("magick.exe"))
+        if len(magick_executables) != 1:
+            fail("ImageMagick archive must contain exactly one magick.exe")
+        shutil.copytree(magick_executables[0].parent, candidate / "imagemagick")
+        imagemagick_version_result = subprocess.run(
+            [str(candidate / "imagemagick" / "magick.exe"), "-version"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            check=False,
+        )
+        if (
+            imagemagick_version_result.returncode != 0
+            or f"ImageMagick {_IMAGEMAGICK_VERSION}"
+            not in imagemagick_version_result.stdout
+        ):
+            fail("Staged ImageMagick executable failed its pinned version check")
+
+        ffmpeg_root = candidate / "ffmpeg"
+        _extract_ffmpeg_archive(ffmpeg_archive, ffmpeg_root)
+        ffmpeg_executable = ffmpeg_root / "bin" / "ffmpeg.exe"
+        version_result = subprocess.run(
+            [str(ffmpeg_executable), "-version"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            check=False,
+        )
+        if version_result.returncode != 0:
+            fail("Staged FFmpeg executable failed its version check")
+        version_output = version_result.stdout
+        version_match = re.search(r"^ffmpeg version n9\.0[^\r\n]*-g([0-9a-f]{7,40})", version_output, re.MULTILINE)
+        if version_match is None:
+            fail("Staged FFmpeg does not identify an n9.0 source revision")
+        assert version_match is not None
+        ffmpeg_revision = version_match.group(1)
+        build_configuration = version_output.split("configuration:", 1)[-1]
+        if "--enable-gpl" in build_configuration or "--enable-nonfree" in build_configuration:
+            fail("Staged FFmpeg build unexpectedly enables GPL or nonfree components")
+
+        licenses = candidate / "licenses"
+        licenses.mkdir(parents=True)
+        (licenses / "ImageMagick-VERSION.txt").write_text(
+            imagemagick_version_result.stdout, encoding="utf-8"
+        )
+        (licenses / "FFmpeg-VERSION.txt").write_text(
+            version_output, encoding="utf-8"
+        )
+        (licenses / "FFmpeg-VERSION.txt").write_text(
+            version_output, encoding="utf-8"
+        )
+        image_license_url = (
+            "https://raw.githubusercontent.com/ImageMagick/ImageMagick/"
+            f"{_IMAGEMAGICK_VERSION}/LICENSE"
+        )
+        ffmpeg_license_url = (
+            f"https://raw.githubusercontent.com/FFmpeg/FFmpeg/{ffmpeg_revision}/"
+            "COPYING.LGPLv2.1"
+        )
+        btb_license_url = (
+            "https://raw.githubusercontent.com/BtbN/FFmpeg-Builds/"
+            f"{_FFMPEG_BUILDS_COMMIT}/LICENSE"
+        )
+        btb_readme_url = (
+            "https://raw.githubusercontent.com/BtbN/FFmpeg-Builds/"
+            f"{_FFMPEG_BUILDS_COMMIT}/README.md"
+        )
+        btb_source_url = _FFMPEG_BUILDS_SOURCE_URL
+        for url, target in (
+            (image_license_url, licenses / "ImageMagick-LICENSE.txt"),
+            (ffmpeg_license_url, licenses / "FFmpeg-LGPL-2.1.txt"),
+            (btb_license_url, licenses / "FFmpeg-BUILDS-LICENSE.txt"),
+            (btb_readme_url, licenses / "FFmpeg-BUILDS-README.md"),
+        ):
+            _download_to_path(url, target)
+        _download_verified(
+            _IMAGEMAGICK_SBOM_URL,
+            licenses / "ImageMagick-SBOM.cdx.json",
+            _IMAGEMAGICK_SBOM_SHA256,
+        )
+        _download_verified(
+            _FFMPEG_CHECKSUMS_URL,
+            licenses / "FFmpeg-BUILD-CHECKSUMS.sha256",
+            _FFMPEG_CHECKSUMS_SHA256,
+        )
+        build_source_sha256 = _download_to_path(
+            btb_source_url, licenses / "FFmpeg-BUILDS-SOURCE.zip"
+        )
+
+        ffmpeg_source_url = (
+            f"https://github.com/FFmpeg/FFmpeg/archive/{ffmpeg_revision}.tar.gz"
+        )
+        source_sha256 = _download_to_path(
+            ffmpeg_source_url, licenses / "FFmpeg-SOURCE.tar.gz"
+        )
+        (licenses / "FFmpeg-SOURCE-MANIFEST.txt").write_text(
+            "FFmpeg source matching the bundled LGPL shared binaries.\n"
+            f"FFmpeg revision: {ffmpeg_revision}\n"
+            f"Source URL: {ffmpeg_source_url}\n"
+            f"Source SHA-256: {source_sha256}\n"
+            f"FFmpeg binary SHA-256: {_FFMPEG_ARCHIVE_SHA256}\n"
+            f"BtbN build scripts revision: {_FFMPEG_BUILDS_COMMIT}\n"
+            f"BtbN build scripts source: {btb_source_url}\n"
+            f"BtbN build scripts SHA-256: {build_source_sha256}\n"
+            f"BtbN build asset: {_FFMPEG_ARCHIVE}\n",
+            encoding="utf-8",
+        )
+        (candidate / "MEDIA-TOOLS.json").write_text(
+            json.dumps(
+                {
+                    "layout_version": _MEDIA_TOOLS_LAYOUT_VERSION,
+                    "imagemagick_version": _IMAGEMAGICK_VERSION,
+                    "imagemagick_archive_sha256": _IMAGEMAGICK_ARCHIVE_SHA256,
+                    "ffmpeg_archive": _FFMPEG_ARCHIVE,
+                    "ffmpeg_archive_sha256": _FFMPEG_ARCHIVE_SHA256,
+                    "ffmpeg_revision": ffmpeg_revision,
+                    "ffmpeg_source_sha256": source_sha256,
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        validate_media_tools(candidate)
+
+        if staged.exists():
+            shutil.rmtree(staged)
+        shutil.move(str(candidate), staged)
+
+    print(f"  Media tools staged at: {staged}")
+    return staged
+
+
 def audit_msi(msi: Path) -> None:
     """Extract the completed MSI and audit the exact installed payload."""
     with tempfile.TemporaryDirectory() as temporary:
@@ -216,7 +644,11 @@ def audit_msi(msi: Path) -> None:
         executables = list(extracted.rglob("exif-turbo.exe"))
         if len(executables) != 1:
             fail("Extracted MSI does not contain exactly one exif-turbo.exe")
-        audit_release_payload(executables[0].parent, expect_exiftool=True)
+        audit_release_payload(
+            executables[0].parent,
+            expect_exiftool=True,
+            expect_media_tools=True,
+        )
 
 
 def generate_icon() -> Path:
@@ -259,6 +691,7 @@ def main() -> None:
     msi_out = REPO_ROOT / "dist" / f"exif-turbo-{version}-windows.msi"
     icon_file = generate_icon()
     exiftool_dir = stage_exiftool()
+    media_tools_dir = stage_media_tools()
     audit_release_payload(app_dir)
 
     run(
@@ -274,6 +707,8 @@ def main() -> None:
             f"IconFile={icon_file}",
             "-d",
             f"ExifToolDir={exiftool_dir.resolve()}",
+            "-d",
+            f"MediaToolsDir={media_tools_dir.resolve()}",
             "-arch",
             "x64",
             "-ext",

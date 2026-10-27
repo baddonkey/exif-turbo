@@ -46,6 +46,7 @@ def audit_release_payload(
     root: Path,
     *,
     expect_exiftool: bool = False,
+    expect_media_tools: bool = False,
     verify_native_hashes: bool = True,
 ) -> None:
     """Validate an extracted installer root or PyInstaller onedir payload."""
@@ -200,14 +201,51 @@ def audit_release_payload(
         except (OSError, KeyError, zipfile.BadZipFile) as exc:
             raise ArtifactAuditError("bundled ExifTool Perl terms are invalid") from exc
 
+    if expect_media_tools:
+        required_media_files = (
+            "media-tools/imagemagick/magick.exe",
+            "media-tools/ffmpeg/bin/ffmpeg.exe",
+            "media-tools/ffmpeg/bin/ffprobe.exe",
+            "media-tools/licenses/ImageMagick-LICENSE.txt",
+            "media-tools/licenses/ImageMagick-SBOM.cdx.json",
+            "media-tools/licenses/ImageMagick-VERSION.txt",
+            "media-tools/licenses/FFmpeg-BUILD-CHECKSUMS.sha256",
+            "media-tools/licenses/FFmpeg-LGPL-2.1.txt",
+            "media-tools/licenses/FFmpeg-BUILDS-LICENSE.txt",
+            "media-tools/licenses/FFmpeg-BUILDS-README.md",
+            "media-tools/licenses/FFmpeg-BUILDS-SOURCE.zip",
+            "media-tools/licenses/FFmpeg-VERSION.txt",
+            "media-tools/licenses/FFmpeg-SOURCE.tar.gz",
+            "media-tools/licenses/FFmpeg-SOURCE-MANIFEST.txt",
+            "media-tools/MEDIA-TOOLS.json",
+        )
+        for required in required_media_files:
+            _require_file(runtime_files, required)
+        ffmpeg_libraries = [
+            path
+            for path in runtime_files
+            if path.relative_to(root).as_posix().casefold().startswith(
+                "media-tools/ffmpeg/bin/"
+            )
+            and path.name.casefold().startswith("avcodec-")
+            and path.suffix.casefold() == ".dll"
+        ]
+        if not ffmpeg_libraries:
+            raise ArtifactAuditError("bundled FFmpeg shared avcodec DLL is missing")
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("payload", type=Path, help="Extracted installer or bundle root")
     parser.add_argument("--expect-exiftool", action="store_true")
+    parser.add_argument("--expect-media-tools", action="store_true")
     args = parser.parse_args()
     try:
-        audit_release_payload(args.payload, expect_exiftool=args.expect_exiftool)
+        audit_release_payload(
+            args.payload,
+            expect_exiftool=args.expect_exiftool,
+            expect_media_tools=args.expect_media_tools,
+        )
     except ArtifactAuditError as exc:
         parser.error(str(exc))
     print(f"Release compliance audit passed: {args.payload}")

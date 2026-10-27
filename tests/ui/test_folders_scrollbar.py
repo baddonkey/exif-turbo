@@ -104,10 +104,10 @@ def scrollbar_window(
 
 
 def _switch_to_folders_tab(root: QObject, qtbot: QtBot) -> None:
-    """Set mainTabBar.currentIndex to 2 (Indexed Folders tab)."""
+    """Set mainTabBar.currentIndex to 3 (Indexed Folders tab)."""
     tab_bar = root.findChild(QObject, "mainTabBar")
     assert tab_bar is not None, "mainTabBar QML item not found"
-    tab_bar.setProperty("currentIndex", 2)
+    tab_bar.setProperty("currentIndex", 3)
     qtbot.wait(200)
 
 

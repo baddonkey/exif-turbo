@@ -27,9 +27,9 @@ def _qml_messages(filename: str) -> set[str]:
 _TAGGING_MESSAGES = (
     _qml_messages("TaggingDrawer.qml")
     | _qml_messages("CustomTaggingSettings.qml")
+    | _qml_messages("DerivativeExportPage.qml")
+    | _qml_messages("DerivativeExportDialog.qml")
     | {
-        "%1 / %2 images",
-        "Choose Derivative Target Folder",
         "Derivative Generation Complete",
         "Generate Tagged Derivatives for &Marked Images (%1 selected)",
         "Generate Tagged Derivatives for Current &Results...",
@@ -94,8 +94,11 @@ def test_tagging_population_source_supported_locale_has_all_qml_messages(
 ) -> None:
     # Arrange
     translations = TRANSLATIONS[language]
-    qml_messages = _qml_messages("TaggingDrawer.qml") | _qml_messages(
-        "CustomTaggingSettings.qml"
+    qml_messages = (
+        _qml_messages("TaggingDrawer.qml")
+        | _qml_messages("CustomTaggingSettings.qml")
+        | _qml_messages("DerivativeExportPage.qml")
+        | _qml_messages("DerivativeExportDialog.qml")
     )
 
     # Act

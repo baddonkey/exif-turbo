@@ -18,7 +18,7 @@ from typing import Generator
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import QObject, QPointF, QThread, QUrl
+from PySide6.QtCore import Q_ARG, QMetaObject, QObject, QPointF, QThread, QUrl
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtQml import QQmlApplicationEngine
 from pytestqt.qtbot import QtBot
@@ -335,7 +335,7 @@ def test_sets_actions_follow_selected_set_and_preserve_search_scope(
     assert delete_action is not None
 
     # Act / Assert
-    tab_bar.setProperty("currentIndex", 3)
+    tab_bar.setProperty("currentIndex", 2)
     sets_page.setProperty("selectedSetId", first_id)
     qtbot.waitUntil(lambda: controller.actionMarkedCount == 1)
     assert controller.actionImageCount == 1
@@ -380,7 +380,7 @@ def test_sets_tab_displays_and_manages_database_sets(
     assert sets_page is not None
 
     # Act
-    tab_bar.setProperty("currentIndex", 3)
+    tab_bar.setProperty("currentIndex", 2)
     qtbot.waitUntil(lambda: bool(sets_page.property("visible")))
     edit_filter_button = root.findChild(QObject, "editSetFilterButton")
     filter_dialog = root.findChild(QObject, "imageSetFilterDialog")
@@ -511,7 +511,7 @@ def test_sets_plus_button_creates_set_through_name_dialog(
     assert confirm_button is not None
 
     # Act
-    tab_bar.setProperty("currentIndex", 3)
+    tab_bar.setProperty("currentIndex", 2)
     create_button.clicked.emit()
     qtbot.waitUntil(lambda: bool(create_dialog.property("visible")))
     name_field.setProperty("text", "Created from dialog")
@@ -550,7 +550,7 @@ def test_sets_member_selection_opens_shared_tagging_drawer(
     assert copy_target is not None
 
     # Act / Assert
-    tab_bar.setProperty("currentIndex", 3)
+    tab_bar.setProperty("currentIndex", 2)
     sets_page.setProperty("selectedSetId", set_id)
     content = member_list.property("contentItem")
     qtbot.waitUntil(lambda: any(
@@ -616,7 +616,7 @@ def test_sets_operation_running_shows_progress_and_cancel_controls(
     assert progress_row is not None
     assert progress_bar is not None
     assert cancel_button is not None
-    tab_bar.setProperty("currentIndex", 3)
+    tab_bar.setProperty("currentIndex", 2)
     worker = ImageSetMembershipWorker(
         controller._db_path, _TEST_PASSWORD, 1, "marked", True
     )
@@ -703,7 +703,7 @@ def test_sets_action_separators_wrapping_hides_row_end_diamonds(
     assert reapply_group is not None
     assert filter_separator is not None
     assert reapply_separator is not None
-    tab_bar.setProperty("currentIndex", 3)
+    tab_bar.setProperty("currentIndex", 2)
     root.showNormal()
     sets_page = root.findChild(QObject, "setsPage")
     assert sets_page is not None
@@ -760,7 +760,7 @@ def test_sets_splitter_width_stays_when_selection_changes(
     assert tab_bar is not None
     assert sets_page is not None
     assert set_list_pane is not None
-    tab_bar.setProperty("currentIndex", 3)
+    tab_bar.setProperty("currentIndex", 2)
     qtbot.waitUntil(lambda: bool(sets_page.property("visible")))
     qtbot.waitUntil(lambda: float(sets_page.property("width")) > 500)
 
@@ -777,6 +777,145 @@ def test_sets_splitter_width_stays_when_selection_changes(
 
     # Assert
     assert abs(width_after_selection_change - width_before_selection_change) < 1
+
+
+def test_derivative_export_tab_shows_seeded_flavours(
+    qtbot: QtBot,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    export_page = root.findChild(QObject, "derivativeExportPage")
+    flavour_list = root.findChild(QObject, "derivativeFlavourList")
+    assert tab_bar is not None
+    assert export_page is not None
+    assert flavour_list is not None
+
+    # Act
+    tab_bar.setProperty("currentIndex", 4)
+
+    # Assert
+    qtbot.waitUntil(lambda: bool(export_page.property("visible")))
+    assert flavour_list.property("count") == 6
+
+
+def test_derivative_export_duplicate_uses_unique_name_suffix_and_id(
+    qtbot: QtBot,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    page = root.findChild(QObject, "derivativeExportPage")
+    duplicate_button = root.findChild(QObject, "duplicateDerivativeFlavourButton")
+    assert page is not None
+    assert duplicate_button is not None
+    settings = page.property("appSettings")
+    original = settings.derivative_export_flavours[1]
+    page.setProperty("selectedFlavourId", original.flavour_id)
+
+    # Act
+    duplicate_button.setProperty("enabled", True)
+    duplicate_button.clicked.emit()
+
+    # Assert
+    duplicated = settings.derivative_export_flavours
+    assert len(duplicated) == 7
+    assert duplicated[1].flavour_id != original.flavour_id
+    assert duplicated[1].name != original.name
+    assert duplicated[1].filename_suffix != original.filename_suffix
+    assert len(duplicated[1].filename_suffix) <= 40
+
+
+def test_derivative_export_dialog_metadata_overrides_reset_on_reopen(
+    qtbot: QtBot,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    dialog = root.findChild(QObject, "derivativeExportDialog")
+    assert dialog is not None
+    dialog.setProperty("sampleSourcePath", "D:/Pictures/DSC_1234.MOV")
+    settings = dialog.property("appSettings")
+    assert settings is not None
+    saved_mode = settings.derivative_export_flavours[1].metadata_mode
+
+    # Act
+    assert QMetaObject.invokeMethod(dialog, "openForScope", Q_ARG("QVariant", "results"))
+    rows = list(dialog.property("rows").toVariant())
+    preview = root.findChild(QObject, "derivativeExportPreview")
+    assert preview is not None
+    assert "DSC_1234_original.MOV" in str(preview.property("text"))
+    changed_rows = [dict(row) for row in rows]
+    changed_rows[1]["effective_metadata_mode"] = "custom"
+    dialog.setProperty("rows", changed_rows)
+    dialog.reject()
+    assert QMetaObject.invokeMethod(dialog, "openForScope", Q_ARG("QVariant", "results"))
+    reopened_rows = list(dialog.property("rows").toVariant())
+
+    # Assert
+    assert reopened_rows[1]["effective_metadata_mode"] == saved_mode.value
+    assert settings.derivative_export_flavours[1].metadata_mode is saved_mode
+    dialog.reject()
+
+
+def test_derivative_export_folder_picker_converts_windows_file_url(
+    qtbot: QtBot,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    dialog = root.findChild(QObject, "derivativeExportDialog")
+    assert dialog is not None
+
+    # Act
+    assert QMetaObject.invokeMethod(
+        dialog,
+        "setOutputFolderUrl",
+        Q_ARG("QVariant", "file:///C:/Photos/Derivative%20Output"),
+    )
+
+    # Assert
+    assert dialog.property("outputDirectoryText") == (
+        "C:\\Photos\\Derivative Output"
+    )
+
+
+def test_derivative_export_disables_export_for_duplicate_preview_names(
+    qtbot: QtBot,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    dialog = root.findChild(QObject, "derivativeExportDialog")
+    assert dialog is not None
+    settings = dialog.property("appSettings")
+    flavours = [flavour.to_dict() for flavour in settings.derivative_export_flavours]
+    duplicate = dict(flavours[1])
+    duplicate["id"] = "duplicate-web-jpeg"
+    duplicate["name"] = "Second Web JPEG"
+    flavours.append(duplicate)
+    rows = [dict(flavour, selected=index == 1 or index == len(flavours) - 1)
+            for index, flavour in enumerate(flavours)]
+    dialog.setProperty("rows", rows)
+    dialog.setProperty("outputDirectoryText", "C:\\Output")
+    export_button = root.findChild(QObject, "derivativeExportStartButton")
+    assert export_button is not None
+
+    # Act
+    # Assert
+    assert dialog.property("canExport") is False
+    assert export_button.property("enabled") is False
 
 
 def test_search_image_set_filter_limits_results_and_can_be_cleared(
