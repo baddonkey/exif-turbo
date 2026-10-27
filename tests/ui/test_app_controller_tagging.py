@@ -304,6 +304,10 @@ def tagging_controller(
     monkeypatch.setattr(controller, "search", lambda _query: None)
     monkeypatch.setattr(controller, "_start_auto_thumbs", lambda: None)
     controller._do_unlock("")
+    qtbot.waitUntil(
+        lambda: controller._maint_worker is None and not controller.isBusy,
+        timeout=5_000,
+    )
     search_model.set_rows(
         [
             SearchResult(

@@ -36,7 +36,7 @@ class GermanTranslator(QTranslator):
         return self.catalog.gettext(sourceText)
 
 
-@pytest.mark.parametrize("width,height", [(1200, 900), (800, 700), (1200, 1100)])
+@pytest.mark.parametrize("width,height", [(1200, 900), (800, 700), (1200, 1100), (1028, 749)])
 def test_derivative_layout_german_resize_uses_space_and_scrolls(
     qtbot: QtBot, qapp: object, qml_engine: QQmlApplicationEngine,
     tmp_path: Path, width: int, height: int,
@@ -79,8 +79,10 @@ ApplicationWindow {
 
         # Act / Assert
         qtbot.waitUntil(lambda: panel.property("height") >= 360)
-        if width >= 1100:
-            qtbot.waitUntil(lambda: panel.property("height") > height - 150)
+        if page.property("width") >= 1100:
+            qtbot.waitUntil(
+                lambda: panel.property("height") > page.property("height") - 150
+            )
         qtbot.waitUntil(lambda: scroll.property("contentHeight") > 0)
         name_field = window.findChild(QObject, "derivativeFlavourNameField")
         assert name_field is not None
