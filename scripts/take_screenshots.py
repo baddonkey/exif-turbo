@@ -752,7 +752,7 @@ def _run_gui(
         page = root.findChild(QObject, "derivativeExportPage")
         if page is None:
             raise RuntimeError("Derivative Export page not found")
-        flavours = json.loads(settings.derivativeExportFlavoursJson)
+        flavours = json.loads(str(settings.property("derivativeExportFlavoursJson")))
         web_jpeg = next(
             (flavour for flavour in flavours if flavour.get("name") == "Web JPEG"),
             None,
@@ -764,7 +764,7 @@ def _run_gui(
 
     def step_9_settings_grab() -> None:
         _grab(root, "15_derivative_export_settings")
-        flavours = json.loads(settings.derivativeExportFlavoursJson)
+        flavours = json.loads(str(settings.property("derivativeExportFlavoursJson")))
         for flavour in flavours:
             if flavour.get("name") == "Web PNG":
                 flavour["selected_by_default"] = False

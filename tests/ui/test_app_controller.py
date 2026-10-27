@@ -865,9 +865,10 @@ def test_derivative_export_dialog_metadata_overrides_reset_on_reopen(
     dialog.reject()
 
 
-def test_derivative_export_folder_picker_converts_windows_file_url(
+def test_derivative_export_folder_picker_converts_local_file_url(
     qtbot: QtBot,
     window: tuple[AppController, SearchListModel, QQuickWindow],
+    tmp_path: Path,
 ) -> None:
     # Arrange
     controller, _, root = window
@@ -875,18 +876,17 @@ def test_derivative_export_folder_picker_converts_windows_file_url(
         controller.unlock(_TEST_PASSWORD)
     dialog = root.findChild(QObject, "derivativeExportDialog")
     assert dialog is not None
+    output_directory = tmp_path / "Derivative Output"
 
     # Act
     assert QMetaObject.invokeMethod(
         dialog,
         "setOutputFolderUrl",
-        Q_ARG("QVariant", "file:///C:/Photos/Derivative%20Output"),
+        Q_ARG("QVariant", QUrl.fromLocalFile(str(output_directory)).toString()),
     )
 
     # Assert
-    assert dialog.property("outputDirectoryText") == (
-        "C:\\Photos\\Derivative Output"
-    )
+    assert dialog.property("outputDirectoryText") == str(output_directory)
 
 
 def test_derivative_export_disables_export_for_duplicate_preview_names(

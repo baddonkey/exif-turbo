@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import gettext
 import json
+from io import BytesIO
 from pathlib import Path
 
 import pytest
+from babel.messages.mofile import write_mo
+from babel.messages.pofile import read_po
 from PySide6.QtCore import QObject, QPointF, QUrl, QTranslator, QMetaObject, Qt
 from PySide6.QtQml import QQmlApplicationEngine
 from pytestqt.qtbot import QtBot
@@ -15,11 +18,16 @@ from exif_turbo.ui.models.settings_model import SettingsModel
 class GermanTranslator(QTranslator):
     def __init__(self) -> None:
         super().__init__()
-        self.catalog = gettext.translation(
-            "exif_turbo",
-            localedir=Path(__file__).resolve().parents[2] / "src/exif_turbo/i18n/locales",
-            languages=["de"],
+        source = (
+            Path(__file__).resolve().parents[2]
+            / "src/exif_turbo/i18n/locales/de/LC_MESSAGES/exif_turbo.po"
         )
+        with source.open("rb") as catalog_file:
+            catalog = read_po(catalog_file, locale="de")
+        compiled = BytesIO()
+        write_mo(compiled, catalog)
+        compiled.seek(0)
+        self.catalog = gettext.GNUTranslations(compiled)
 
     def translate(
         self, context: str, sourceText: str, disambiguation: str | None = None,
