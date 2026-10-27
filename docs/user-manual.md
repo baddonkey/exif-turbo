@@ -53,6 +53,30 @@ The installer adds an entry to **Start Menu** and puts `exif-turbo` on your `PAT
 ExifTool is **included in the MSI** — you do not need to download it separately.
 If you already have ExifTool installed system-wide, that version takes priority.
 
+The feature-selection screen lists these components individually. FFmpeg and
+ImageMagick are separate entries, not grouped under derivative tooling:
+
+| Component | Purpose | Default |
+|-----------|---------|---------|
+| **exif-turbo** | The application | Selected |
+| **ExifTool (bundled, recommended)** | Reading and writing image metadata | Selected |
+| **FFmpeg** | Extracting video frames for derivative export; includes FFprobe and shared libraries | Selected |
+| **ImageMagick** | Converting and encoding derivative images | Selected |
+
+You can deselect FFmpeg and ImageMagick independently. Converted image exports
+need ImageMagick; video-frame exports also need FFmpeg. Original, byte-for-byte
+copies do not use either converter. Installed system tools on `PATH` take
+priority over bundled copies. The bundled tools are not added to the system
+`PATH`.
+
+Each selected tool includes its license and third-party notices. ImageMagick
+also includes its upstream software bill of materials; FFmpeg includes matching
+source, build scripts, configuration details, and checksums. These materials
+are installed in `media-tools\licenses\` under the application directory, with
+additional upstream notices alongside each tool. The application's `licenses`
+folder includes the complete
+[third-party package and license inventory](../THIRD-PARTY-LICENSES.md).
+
 ### macOS installer
 
 Download `exif-turbo-<version>-macos-arm64.dmg` for Apple silicon from the
