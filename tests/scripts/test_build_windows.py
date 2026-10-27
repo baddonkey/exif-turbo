@@ -4,11 +4,49 @@ import json
 import zipfile
 import hashlib
 import subprocess
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
 
 from scripts import build_windows
+
+
+def test_windows_installer_media_features_separate_tools_and_licenses() -> None:
+    # Arrange
+    source = Path(__file__).resolve().parents[2] / "installer/exif-turbo.wxs"
+    namespace = {"wix": "http://wixtoolset.org/schemas/v4/wxs"}
+    package = ET.parse(source).getroot().find("wix:Package", namespace)
+    assert package is not None
+
+    # Act
+    features = {
+        feature.attrib["Id"]: feature
+        for feature in package.findall("wix:Feature", namespace)
+    }
+
+    # Assert
+    assert "MediaToolsFeature" not in features
+    for feature_id, title, folder in (
+        ("FFmpegFeature", "FFmpeg", "ffmpeg"),
+        ("ImageMagickFeature", "ImageMagick", "imagemagick"),
+    ):
+        feature = features[feature_id]
+        assert feature.attrib["Title"] == title
+        assert feature.attrib["Level"] == "1"
+        assert feature.attrib["InstallDefault"] == "local"
+        assert feature.attrib["AllowAdvertise"] == "no"
+        assert {
+            harvest.attrib["Include"]
+            for harvest in feature.findall("wix:Files", namespace)
+        } == {
+            f"$(var.MediaToolsDir)\\{folder}\\**",
+            f"$(var.MediaToolsDir)\\licenses\\{title}-*",
+        }
+    assert any(
+        harvest.attrib["Include"] == "$(var.MediaToolsDir)\\MEDIA-TOOLS.json"
+        for harvest in features["MainFeature"].findall("wix:Files", namespace)
+    )
 
 
 def _write_exiftool_payload(staged: Path, *, include_artistic: bool = True) -> None:

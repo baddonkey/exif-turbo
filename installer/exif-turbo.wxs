@@ -59,7 +59,11 @@
              pollute the app root and can be skipped when a system-wide
              ExifTool is already present on PATH. -->
         <Directory Id="EXIFTOOLSUBDIR" Name="exiftool" />
-        <Directory Id="MEDIATOOLSDIR" Name="media-tools" />
+        <Directory Id="MEDIATOOLSDIR" Name="media-tools">
+          <Directory Id="FFMPEGDIR" Name="ffmpeg" />
+          <Directory Id="IMAGEMAGICKDIR" Name="imagemagick" />
+          <Directory Id="MEDIATOOLSLICENSESDIR" Name="licenses" />
+        </Directory>
       </Directory>
     </StandardDirectory>
 
@@ -109,22 +113,35 @@
              Level="1">
       <!-- Unified onedir bundle into INSTALLFOLDER -->
       <Files Directory="INSTALLFOLDER" Include="$(var.AppDir)\**" />
+      <Files Directory="MEDIATOOLSDIR" Include="$(var.MediaToolsDir)\MEDIA-TOOLS.json" />
       <ComponentRef Id="AppShortcut" />
     </Feature>
 
     <!--
       Media tools are staged with pinned versions and checksums by
-      scripts/build_windows.py. FFmpeg uses the LGPL shared build. The feature
-      remains optional but is selected by default for derivative conversion.
+      scripts/build_windows.py. Each optional feature includes its own legal
+      materials and is selected by default. FFmpeg uses the LGPL shared build.
     -->
-    <Feature Id="MediaToolsFeature"
-             Title="Derivative media tools (bundled, recommended)"
-             Description="Install ImageMagick and the FFmpeg LGPL shared binaries used to create derivative images. License texts and corresponding FFmpeg source are included."
+    <Feature Id="FFmpegFeature"
+         Title="FFmpeg"
+         Description="Install FFmpeg and FFprobe for video-frame extraction. Includes the LGPL shared binaries, license texts, and corresponding source and build materials."
              Level="1"
              AllowAdvertise="no"
              InstallDefault="local"
              TypicalDefault="install">
-      <Files Directory="MEDIATOOLSDIR" Include="$(var.MediaToolsDir)\**" />
+      <Files Directory="FFMPEGDIR" Include="$(var.MediaToolsDir)\ffmpeg\**" />
+      <Files Directory="MEDIATOOLSLICENSESDIR" Include="$(var.MediaToolsDir)\licenses\FFmpeg-*" />
+    </Feature>
+
+    <Feature Id="ImageMagickFeature"
+             Title="ImageMagick"
+             Description="Install ImageMagick for still-image conversion and encoding. Includes the ImageMagick license, version notice, and upstream software bill of materials."
+             Level="1"
+             AllowAdvertise="no"
+             InstallDefault="local"
+             TypicalDefault="install">
+      <Files Directory="IMAGEMAGICKDIR" Include="$(var.MediaToolsDir)\imagemagick\**" />
+      <Files Directory="MEDIATOOLSLICENSESDIR" Include="$(var.MediaToolsDir)\licenses\ImageMagick-*" />
     </Feature>
 
     <!--

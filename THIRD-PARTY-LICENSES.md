@@ -117,8 +117,10 @@ These packages are used during development and CI, not shipped in releases.
 ## System / External Tools
 
 These tools are executables, not Python packages. ImageMagick and FFmpeg may be
-resolved from `PATH` for development; the Windows MSI also carries an optional,
-pre-selected media-tools feature.
+resolved from `PATH` for development. The Windows MSI lists **FFmpeg** and
+**ImageMagick** as separate, independently selectable, pre-selected entries,
+alongside ExifTool. Each tool's binaries and legal materials are installed only
+when its entry is selected; there is no combined derivative-tooling entry.
 
 | Tool | Used for | License | URL |
 |------|----------|---------|-----|
@@ -156,6 +158,7 @@ Perl Artistic and GPL license texts in `Licenses_Strawberry_Perl.zip`.
 
 ### ImageMagick (Windows x64)
 
+- **Installer entry:** ImageMagick (optional, selected by default)
 - **Version bundled:** 7.1.2-34, Q16 portable x64 archive
 - **Source:** https://github.com/ImageMagick/ImageMagick/releases/tag/7.1.2-34
 - **SHA-256:** `52cc6a441c7884f5ff4274b410c9b90c4b7d54245dcdf4d32988bb4e4df4e5d1`
@@ -165,6 +168,7 @@ Perl Artistic and GPL license texts in `Licenses_Strawberry_Perl.zip`.
 
 ### FFmpeg (Windows x64)
 
+- **Installer entry:** FFmpeg (optional, selected by default, independent of ImageMagick)
 - **Version branch:** FFmpeg 9.0 LGPL shared build from BtbN FFmpeg-Builds
 - **Archive:** `ffmpeg-n9.0-latest-win64-lgpl-shared-9.0.zip`
 - **SHA-256:** `ce7c09bf3897333bff873edc5873f31425a429f9da99fba9add844da5fa0b64b`
