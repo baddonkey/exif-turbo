@@ -30,6 +30,7 @@ def test_tagging_qml_contract_keeps_custom_tagging_and_removes_vocabulary_sugges
             _QML_DIR / "Main.qml",
             _QML_DIR / "TaggingDrawer.qml",
             _QML_DIR / "CustomTaggingSettings.qml",
+            _QML_DIR / "DerivativeExportDialog.qml",
         )
     )
     required_bindings = {

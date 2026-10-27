@@ -4,6 +4,7 @@
 Usage (from the project root, with the venv active):
     python scripts/take_screenshots.py
     python scripts/take_screenshots.py --demo-only
+     python scripts/take_screenshots.py --derivative-only
 
 Requirements:
     - ExifTool must be on PATH (used by IndexerService)
@@ -35,6 +36,8 @@ Output files:
     12_tagging_drawer.png    -- Custom tagging drawer on a set member
     13_copy_tags_and_descriptions.png -- Bulk tag/description copy panel
     14_set_action_menu.png   -- Action menu scoped to a selected set
+    15_derivative_export_settings.png -- Derivative export flavour settings
+    16_derivative_export_dialog.png -- Export dialog with flavour previews
     demo_indexed_folders.png -- indexed folders in a taller demo window
     demo_exif_results.png    -- broad EXIF search with bottom metadata visible
     demo_ai_mode.png         -- AI search with bottom metadata visible
@@ -47,6 +50,7 @@ import ctypes
 import shutil
 import os
 import sys
+import json
 import logging
 import tempfile
 from pathlib import Path
@@ -113,6 +117,8 @@ _STEPS = [
     "12_tagging_drawer",
     "13_copy_tags_and_descriptions",
     "14_set_action_menu",
+    "15_derivative_export_settings",
+    "16_derivative_export_dialog",
 ]
 
 
@@ -364,7 +370,11 @@ def _wait_for_preview(
 
 # -- GUI runner ----------------------------------------------------------------
 
-def _run_gui(demo_only: bool = False, tagged_sample: Path | None = None) -> None:
+def _run_gui(
+    demo_only: bool = False,
+    tagged_sample: Path | None = None,
+    derivative_only: bool = False,
+) -> None:
     app = QGuiApplication(sys.argv)
     app.setApplicationName("Exif-Turbo")
 
@@ -449,7 +459,7 @@ def _run_gui(demo_only: bool = False, tagged_sample: Path | None = None) -> None
     # -- Step 0: lock screen ---------------------------------------------------
     def step_0_lock() -> None:
         switch_tab(0)
-        if not demo_only:
+        if not demo_only and not derivative_only:
             _grab(root, "01_lock_screen")
         ctrl.unlock("")
         ctrl._start_auto_thumbs()  # not triggered automatically on a pre-built DB
@@ -461,6 +471,9 @@ def _run_gui(demo_only: bool = False, tagged_sample: Path | None = None) -> None
             QTimer.singleShot(100, step_0_wait_thumbs)
             return
         print(f"  Thumbnails done ({ctrl._thumb_total}) -- waiting for preview to decode ...")
+        if derivative_only:
+            QTimer.singleShot(400, step_9_derivative_settings)
+            return
         if demo_only:
             QTimer.singleShot(400, step_demo_folders)
             return
@@ -726,6 +739,62 @@ def _run_gui(demo_only: bool = False, tagged_sample: Path | None = None) -> None
 
     def step_8_action_grab() -> None:
         _grab(root, "14_set_action_menu")
+        QTimer.singleShot(300, step_9_derivative_settings)
+
+    def step_9_derivative_settings() -> None:
+        root.setProperty("height", 1000)
+        switch_tab(4)
+        QTimer.singleShot(500, step_9_select_web_jpeg)
+
+    def step_9_select_web_jpeg() -> None:
+        from PySide6.QtCore import QObject
+
+        page = root.findChild(QObject, "derivativeExportPage")
+        if page is None:
+            raise RuntimeError("Derivative Export page not found")
+        flavours = json.loads(str(settings.property("derivativeExportFlavoursJson")))
+        web_jpeg = next(
+            (flavour for flavour in flavours if flavour.get("name") == "Web JPEG"),
+            None,
+        )
+        if web_jpeg is None:
+            raise RuntimeError("Web JPEG flavour not found")
+        page.setProperty("selectedFlavourId", web_jpeg["id"])
+        QTimer.singleShot(350, step_9_settings_grab)
+
+    def step_9_settings_grab() -> None:
+        _grab(root, "15_derivative_export_settings")
+        flavours = json.loads(str(settings.property("derivativeExportFlavoursJson")))
+        for flavour in flavours:
+            if flavour.get("name") == "Web PNG":
+                flavour["selected_by_default"] = False
+        settings.setDerivativeExportFlavours(json.dumps(flavours))
+        switch_tab(2)
+        QTimer.singleShot(500, step_9_open_dialog)
+
+    def step_9_open_dialog() -> None:
+        from PySide6.QtCore import QObject, Q_ARG, QMetaObject, Qt
+
+        dialog = root.findChild(QObject, "derivativeExportDialog")
+        if dialog is None:
+            raise RuntimeError("Derivative export dialog not found")
+        root.setProperty("height", 1000)
+        opened = QMetaObject.invokeMethod(
+            dialog,
+            "openForScope",
+            Qt.ConnectionType.DirectConnection,
+            Q_ARG("QVariant", "results"),
+        )
+        if not opened:
+            raise RuntimeError("Unable to open the derivative export dialog")
+        dialog.setProperty("sampleSourcePath", r"C:\Photos\DSC_1234.jpg")
+        dialog.setProperty(
+            "outputDirectoryText", r"C:\Users\Public\Pictures\Derivatives"
+        )
+        QTimer.singleShot(500, step_9_dialog_grab)
+
+    def step_9_dialog_grab() -> None:
+        _grab(root, "16_derivative_export_dialog")
         print(f"  Done -- screenshots in {SCREENSHOTS_DIR.relative_to(_REPO_ROOT)}/")
         QTimer.singleShot(300, app.quit)
 
@@ -739,6 +808,9 @@ def main() -> None:
     demo_only = "--demo-only" in sys.argv
     if demo_only:
         sys.argv.remove("--demo-only")
+    derivative_only = "--derivative-only" in sys.argv
+    if derivative_only:
+        sys.argv.remove("--derivative-only")
     logging.basicConfig(level=logging.WARNING)
     with tempfile.TemporaryDirectory(prefix="exif-turbo-docs-") as temp_dir:
         tagged_folder = Path(temp_dir) / "Wildlife"
@@ -748,7 +820,11 @@ def main() -> None:
         build_demo_db([tagged_folder])
         build_thumbs_and_previews()
         print("\nLaunching UI for screenshot capture ...")
-        _run_gui(demo_only=demo_only, tagged_sample=tagged_sample)
+        _run_gui(
+            demo_only=demo_only,
+            tagged_sample=tagged_sample,
+            derivative_only=derivative_only,
+        )
 
 
 if __name__ == "__main__":

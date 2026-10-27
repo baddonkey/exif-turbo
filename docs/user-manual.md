@@ -916,8 +916,8 @@ actions use all set members.
 | Action | What it does |
 |--------|--------------|
 | **Export Metadata as JSON…** | Writes the EXIF metadata of every marked image to a JSON file you choose via a Save dialog. The export honours the current **Sort** order (date taken, filename, path, or size). When nothing is marked, it exports all current results. On Sets, it exports marked members when present, otherwise all members of the selected set. The on-disk layout is controlled by **Settings → JSON Export Formatting** (see *Settings*). |
-| **Generate Tagged Derivatives for Current Results…** | Asks for a target folder, then generates derivatives for every image matching the current Search filters, including unloaded pages. On Sets, it processes every member of the selected set. |
-| **Generate Tagged Derivatives for Marked Images…** | Asks for a target folder, then generates derivatives for marked images. On Sets, only marked members of the selected set are used. Disabled when the current scope has no marked images. |
+| **Generate Tagged Derivatives for Current Results…** | Opens the derivative export dialog for every image matching the current Search filters, including unloaded pages. On Sets, it processes every member of the selected set. |
+| **Generate Tagged Derivatives for Marked Images…** | Opens the derivative export dialog for marked images. On Sets, only marked members of the selected set are used. Disabled when the current scope has no marked images. |
 | **Delete Marked Images…** | Permanently deletes marked images **from disk** and removes their rows from the index. On Sets, only marked members of the selected set are targeted. Cached thumbnails (`.png` / `.enc`), `.skip` sentinels, and rendered previews (`.jpg` / `.jpg.enc`) are also cleaned up. Disabled when the current scope has nothing marked. |
 
 Long-running actions show progress and support cancellation. Any completed
@@ -1125,21 +1125,61 @@ also remain available as a derivative scope. Press
 **Space** to toggle the focused image's mark, then choose **Marked images** in
 Copy Tags or use **Action → Generate Tagged Derivatives for Marked Images…**.
 
-### Tagged derivatives
+### Derivative export flavours
 
 Use **Action → Generate Tagged Derivatives for Current Results…** to process
 the complete current result set, including pages not yet loaded into the view,
 or **Action → Generate Tagged Derivatives for Marked Images…** to process the
-marked set. Images without tags are exported too, as unchanged copies unless
-embedded-tag exclusions need to be applied. The chosen output root must be outside every indexed source root. The
-exporter:
+marked set. The dialog lets you choose an output directory, preserve source
+subfolders, and select one or more configured flavours. Its default selections
+come from the **Derivative Export** tab. **Select Default**, **Select All**, and
+**Select None** affect only the current dialog. Per-flavour metadata overrides
+are also temporary and reset to the saved flavour value when the dialog is
+opened again. The chosen output root must be outside every indexed source root.
 
-- preserves each source format and relative source folder tree;
+![Derivative export dialog showing the output directory, selected flavours, metadata modes, and filename preview](screenshots/16_derivative_export_dialog.png)
+
+The preview shows the names and settings that will be used before export begins.
+
+Flavour presets are stored with the active database settings. Each preset has
+its own format, filename suffix, resize limit, encoder options, metadata mode,
+and default-selection flag. The initial suggestions are Original (as is), Web
+JPEG, Web PNG, Full Resolution PNG, Thumbnail PNG, and Archive TIFF. Multiple
+flavours may use the same output format.
+
+![Derivative Export settings with Web JPEG selected and its suffix, format, and resize options visible](screenshots/15_derivative_export_settings.png)
+
+The selected Web JPEG preset uses the `_web-jpeg` suffix, JPEG format, a 2,048-pixel longest-edge limit, and no upscaling.
+
+**Original (as is)** copies the source bytes without re-encoding or metadata
+writes, keeps the original extension, and may add a destination filename
+suffix. Converted flavours support JPEG quality, PNG compression, TIFF None,
+LZW or ZIP compression, and aspect-preserving size limits without upscaling by
+default. A video converted to an image produces one representative frame; the
+Original flavour copies the complete video unchanged.
+
+Each converted flavour uses one of three metadata modes:
+
+- **None** strips removable metadata, including embedded profiles and DPI.
+  Required format/container fields remain.
+- **Original** preserves compatible source metadata and does not add exif-turbo
+  tags or descriptions.
+- **Custom** applies the existing embedded keyword and description merge,
+  custom tags, and per-image exclusions.
+
+The exporter:
+
+- preserves relative source folders when that option is selected;
 - adds collision-safe top-level labels when marks span multiple indexed roots;
-- skips existing destination files without overwriting;
+- skips existing destination files without overwriting and reports failures per
+  source and flavour;
+- stages outputs before finalization and leaves source files unchanged;
+- uses ImageMagick for converted images and FFmpeg for video-frame extraction;
+- uses the Original flavour for byte-for-byte copies, bypassing the metadata
+  writer;
 - merges existing embedded keywords with custom tags,
   removes case-insensitive duplicates, and writes the result to **XMP Subject**
-  and **IPTC Keywords** on a temporary copy;
+  and **IPTC Keywords** for Custom metadata outputs;
 - reads the copied file immediately before writing so non-excluded keywords
   changed since the last index scan are preserved, then verifies both fields
   with ExifTool;
@@ -1150,20 +1190,18 @@ exporter:
 - combines distinct embedded XMP descriptions and IPTC captions into one source
   description, avoids duplicating identical values, and honors the per-image
   embedded-description exclusion;
-- keeps the derivative copy if keyword or description metadata cannot be
+- keeps the converted output if keyword or description metadata cannot be
   written or verified; those derivatives may have incomplete metadata, and
-  details are saved in a `derivative-export-errors*.json` report in the output
-  root;
-- still reports file-copy and finalization failures, and removes their
+  details, including the source, flavour, and destination, are saved in a
+  `derivative-export-errors*.json` report in the output root;
+- reports file-copy, conversion, and finalization failures, and removes their
   incomplete temporary copies;
 - never copies sidecars into the derivative tree.
 
-Originals are explicitly forbidden as metadata-write targets. Other copied
-metadata is preserved, but version 1 does not convert formats, provide custom
-metadata mappings, or overwrite existing derivatives. Some source formats may
-not support the requested writable metadata; the derivative is still copied
-and the metadata issue is recorded in the error report. The source remains
-unchanged.
+Originals are explicitly forbidden as metadata-write targets. Some metadata
+fields cannot be preserved across formats, and not every source can be decoded
+by every installed encoder. Such limitations are reported per output. The
+source remains unchanged.
 
 ### Lifecycle and reset
 

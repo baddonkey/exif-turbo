@@ -175,9 +175,12 @@ def _render_pdf_weasyprint(html: str, output: Path) -> None:
 
 def _render_pdf_xhtml2pdf(html: str, output: Path) -> None:
     from xhtml2pdf import pisa
+
     print("Rendering PDF with xhtml2pdf …")
     with output.open("wb") as fh:
         result = pisa.CreatePDF(html, dest=fh)
+    if isinstance(result, bytes):
+        raise TypeError("xhtml2pdf did not return a pisaContext")
     if result.err:
         print(f"ERROR: xhtml2pdf reported {result.err} error(s)")
         sys.exit(1)

@@ -17,6 +17,7 @@ from shiboken6 import isValid
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.mcp.mcp_session_service import McpSessionService
+from exif_turbo.models.derivative_export_flavour import default_derivative_export_flavours
 from exif_turbo.models.search_result import SearchResult
 from exif_turbo.tagging.derivative_export_service import (
     DerivativeExportItemResult,
@@ -303,6 +304,10 @@ def tagging_controller(
     monkeypatch.setattr(controller, "search", lambda _query: None)
     monkeypatch.setattr(controller, "_start_auto_thumbs", lambda: None)
     controller._do_unlock("")
+    qtbot.waitUntil(
+        lambda: controller._maint_worker is None and not controller.isBusy,
+        timeout=5_000,
+    )
     search_model.set_rows(
         [
             SearchResult(
@@ -1807,6 +1812,65 @@ def test_app_controller_current_results_forwards_complete_search_scope(
         "date_to": 200,
         "image_set_id": image_set_id,
     }
+
+
+def test_app_controller_forwards_selected_flavours_and_folder_option(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    controller, _, _, _ = tagging_controller
+    flavour = default_derivative_export_flavours()[1]
+    FakeDerivativeWorker.instances.clear()
+    monkeypatch.setattr(
+        app_controller_module, "DerivativeExportWorker", FakeDerivativeWorker
+    )
+
+    # Act
+    controller.generateDerivativesForCurrentResults(
+        QUrl.fromLocalFile(str(tmp_path / "output")).toString(),
+        json.dumps([flavour.to_dict()]),
+        False,
+    )
+
+    # Assert
+    worker_options = FakeDerivativeWorker.instances[0].options
+    assert worker_options["flavours"] == [flavour]
+    assert worker_options["preserve_folder_structure"] is False
+
+
+def test_app_controller_media_tool_check_exposes_status(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    controller, _, _, _ = tagging_controller
+    statuses = [
+        {
+            "id": "imagemagick",
+            "name": "ImageMagick",
+            "available": True,
+            "version": "ImageMagick 7",
+            "path": "magick",
+            "detail": "",
+        },
+        {
+            "id": "ffmpeg",
+            "name": "FFmpeg",
+            "available": False,
+            "version": "",
+            "path": "",
+            "detail": "ffmpeg and ffprobe executables are both required",
+        },
+    ]
+    monkeypatch.setattr(app_controller_module, "check_media_tools", lambda: statuses)
+
+    # Act
+    controller.checkMediaTools()
+
+    # Assert
+    assert json.loads(controller.mediaToolsJson) == statuses
 
 
 @pytest.mark.parametrize("marked_only", [False, True])

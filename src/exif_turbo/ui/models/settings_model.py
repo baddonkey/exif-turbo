@@ -4,12 +4,17 @@ import json
 import os
 import platform
 import sys
+import uuid
 from pathlib import Path
 from typing import List
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from exif_turbo.i18n import _, apply_language, available_languages, current_theme, set_theme
+from exif_turbo.models.derivative_export_flavour import (
+    DerivativeExportFlavour,
+    default_derivative_export_flavours,
+)
 from exif_turbo.utils import ai_device
 from exif_turbo.utils.json_export import JsonExportFormat
 from exif_turbo.utils.preview_render import (
@@ -94,6 +99,8 @@ class SettingsModel(QObject):
     gpuInstallProgressChanged = Signal()
     gpuInstallFinished = Signal(bool, str)
     taggingSettingsChanged = Signal()
+    derivativeExportSettingsChanged = Signal()
+    derivativeExportSaveErrorChanged = Signal()
     jsonExportFormatChanged = Signal()
     mcpSettingsChanged = Signal()
 
@@ -117,6 +124,9 @@ class SettingsModel(QObject):
         self._tagging_enabled: bool = False
         self._auto_repair_derivative_tags = _DEFAULT_AUTO_REPAIR_DERIVATIVE_TAGS
         self._write_description_to_xpcomment = _DEFAULT_WRITE_DESCRIPTION_TO_XPCOMMENT
+        self._derivative_export_flavours = list(default_derivative_export_flavours())
+        self._derivative_export_save_error = ""
+        self._last_save_error = ""
         self._json_pretty: bool = _DEFAULT_JSON_PRETTY
         self._json_indent_style: str = _DEFAULT_JSON_INDENT_STYLE
         self._json_indent_size: int = _DEFAULT_JSON_INDENT_SIZE
@@ -370,6 +380,67 @@ class SettingsModel(QObject):
         self._write_description_to_xpcomment = value
         self.taggingSettingsChanged.emit()
         self._save()
+
+    @Property(str, notify=derivativeExportSettingsChanged)
+    def derivativeExportFlavoursJson(self) -> str:
+        return json.dumps(
+            [flavour.to_dict() for flavour in self._derivative_export_flavours],
+            ensure_ascii=False,
+        )
+
+    @Property(str, constant=True)
+    def defaultDerivativeExportFlavoursJson(self) -> str:
+        return json.dumps(
+            [flavour.to_dict() for flavour in default_derivative_export_flavours()],
+            ensure_ascii=False,
+        )
+
+    @property
+    def derivative_export_flavours(self) -> tuple[DerivativeExportFlavour, ...]:
+        return tuple(self._derivative_export_flavours)
+
+    @Property(str, notify=derivativeExportSaveErrorChanged)
+    def derivativeExportSaveError(self) -> str:
+        return self._derivative_export_save_error
+
+    @Slot(str)
+    def setDerivativeExportFlavours(self, serialized_flavours: str) -> None:
+        try:
+            raw_flavours = json.loads(serialized_flavours)
+            if not isinstance(raw_flavours, list):
+                raise ValueError("flavours must be a list")
+            flavours = [
+                DerivativeExportFlavour.from_dict(value) for value in raw_flavours
+            ]
+            flavour_ids = [flavour.flavour_id for flavour in flavours]
+            if len(flavour_ids) != len(set(flavour_ids)):
+                raise ValueError("flavour IDs must be unique")
+        except (json.JSONDecodeError, ValueError) as exc:
+            self._set_derivative_export_save_error(str(exc))
+            return
+
+        if (
+            flavours == self._derivative_export_flavours
+            and not self._derivative_export_save_error
+        ):
+            self._set_derivative_export_save_error("")
+            return
+        self._derivative_export_flavours = flavours
+        self.derivativeExportSettingsChanged.emit()
+        if self._save():
+            self._set_derivative_export_save_error("")
+        else:
+            self._set_derivative_export_save_error(
+                _("Could not save derivative export settings: {error}").format(
+                    error=self._last_save_error
+                )
+            )
+
+    def _set_derivative_export_save_error(self, error: str) -> None:
+        if self._derivative_export_save_error == error:
+            return
+        self._derivative_export_save_error = error
+        self.derivativeExportSaveErrorChanged.emit()
 
     # ── MCP interface ─────────────────────────────────────────────────────────
 
@@ -665,6 +736,19 @@ class SettingsModel(QObject):
                 self._auto_repair_derivative_tags = data["autoRepairDerivativeTags"]
             if isinstance(data.get("writeDescriptionToXpComment"), bool):
                 self._write_description_to_xpcomment = data["writeDescriptionToXpComment"]
+            raw_flavours = data.get("derivativeExportFlavours")
+            if isinstance(raw_flavours, list):
+                try:
+                    flavours = [
+                        DerivativeExportFlavour.from_dict(value)
+                        for value in raw_flavours
+                    ]
+                    flavour_ids = [flavour.flavour_id for flavour in flavours]
+                    if len(flavour_ids) != len(set(flavour_ids)):
+                        raise ValueError("flavour IDs must be unique")
+                    self._derivative_export_flavours = flavours
+                except ValueError:
+                    pass
             if isinstance(data.get("jsonExportPretty"), bool):
                 self._json_pretty = data["jsonExportPretty"]
             if data.get("jsonExportIndentStyle") in _VALID_INDENT_STYLES:
@@ -686,34 +770,47 @@ class SettingsModel(QObject):
         except Exception:
             pass  # corrupt/missing file — use defaults
 
-    def _save(self) -> None:
+    def _save(self) -> bool:
+        temporary_path: Path | None = None
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            self._path.write_text(
-                json.dumps(
-                    {
-                        "workerCount": self._worker_count,
-                        "blacklist": self._blacklist,
-                        "previewMaxSize": self._preview_max_size,
-                        "libvipsExtensions": self._libvips_extensions,
-                        "sortBy": self._sort_by,
-                        "language": self._language,
-                        "aiEnabled": self._ai_enabled,
-                        "gpuAccelerationEnabled": self._gpu_acceleration_enabled,
-                        "gpuConsentBackends": sorted(self._gpu_consent_backends),
-                        "taggingEnabled": self._tagging_enabled,
-                        "autoRepairDerivativeTags": self._auto_repair_derivative_tags,
-                        "writeDescriptionToXpComment": self._write_description_to_xpcomment,
-                        "jsonExportPretty": self._json_pretty,
-                        "jsonExportIndentStyle": self._json_indent_style,
-                        "jsonExportIndentSize": self._json_indent_size,
-                        "mcpEnabled": self._mcp_enabled,
-                        "mcpHost": self._mcp_host,
-                        "mcpPort": self._mcp_port,
-                    },
-                    indent=2,
-                ),
-                encoding="utf-8",
+            serialized = json.dumps(
+                {
+                    "workerCount": self._worker_count,
+                    "blacklist": self._blacklist,
+                    "previewMaxSize": self._preview_max_size,
+                    "libvipsExtensions": self._libvips_extensions,
+                    "sortBy": self._sort_by,
+                    "language": self._language,
+                    "aiEnabled": self._ai_enabled,
+                    "gpuAccelerationEnabled": self._gpu_acceleration_enabled,
+                    "gpuConsentBackends": sorted(self._gpu_consent_backends),
+                    "taggingEnabled": self._tagging_enabled,
+                    "autoRepairDerivativeTags": self._auto_repair_derivative_tags,
+                    "writeDescriptionToXpComment": self._write_description_to_xpcomment,
+                    "derivativeExportFlavours": [
+                        flavour.to_dict()
+                        for flavour in self._derivative_export_flavours
+                    ],
+                    "jsonExportPretty": self._json_pretty,
+                    "jsonExportIndentStyle": self._json_indent_style,
+                    "jsonExportIndentSize": self._json_indent_size,
+                    "mcpEnabled": self._mcp_enabled,
+                    "mcpHost": self._mcp_host,
+                    "mcpPort": self._mcp_port,
+                },
+                indent=2,
             )
-        except Exception:
-            pass  # read-only filesystem — silently ignore
+            temporary_path = self._path.with_name(
+                f".{self._path.name}.{uuid.uuid4().hex}.tmp"
+            )
+            temporary_path.write_text(serialized, encoding="utf-8")
+            os.replace(temporary_path, self._path)
+            self._last_save_error = ""
+            return True
+        except Exception as exc:  # noqa: BLE001 — settings writes are best-effort
+            self._last_save_error = str(exc)
+            return False
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
