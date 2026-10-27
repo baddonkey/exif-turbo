@@ -9,6 +9,12 @@ from typing import Iterable, Sequence
 import pytest
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
+from exif_turbo.models.derivative_export_flavour import (
+    DerivativeExportFlavour,
+    DerivativeFormat,
+    MetadataMode,
+    default_derivative_export_flavours,
+)
 from exif_turbo.models.image_sidecar import ImageSidecar, SidecarSource
 from exif_turbo.tagging.derivative_export_service import (
     DerivativeExportError,
@@ -65,6 +71,32 @@ class FakeMetadataWriter:
         if self.error is not None:
             raise self.error
         target.write_text(description, encoding="utf-8")
+
+
+class FakeMediaConverter:
+    def convert(
+        self,
+        _source: Path,
+        destination: Path,
+        _flavour: DerivativeExportFlavour,
+        _metadata_mode: MetadataMode,
+        *,
+        cancel_check: object = None,
+    ) -> None:
+        destination.write_bytes(b"converted")
+
+
+class FailingMediaConverter:
+    def convert(
+        self,
+        _source: Path,
+        _destination: Path,
+        _flavour: DerivativeExportFlavour,
+        _metadata_mode: MetadataMode,
+        *,
+        cancel_check: object = None,
+    ) -> None:
+        raise RuntimeError("conversion failed")
 
 
 def _index_image(
@@ -146,6 +178,195 @@ def test_extract_embedded_description_deduplicates_matching_xmp_and_iptc() -> No
 
     # Assert
     assert result == "Shared caption\nwith second line"
+
+
+def test_create_plan_expands_sources_by_flavour_and_applies_metadata_overrides(
+    tmp_path: Path,
+    repo: ImageIndexRepository,
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    image_path = source_root / "photo.jpg"
+    image_path.write_bytes(b"source")
+    repo.upsert_image(str(image_path), image_path.name, 1, 6, {}, "")
+    jpeg, png = default_derivative_export_flavours()[1:3]
+    service = DerivativeExportService(repo, FakeMetadataWriter())
+
+    # Act
+    plan = service.create_plan(
+        {source_root: "source"},
+        tmp_path / "output",
+        image_paths=[image_path],
+        flavours=[jpeg, png],
+        metadata_modes={jpeg.flavour_id: MetadataMode.CUSTOM},
+    )
+
+    # Assert
+    assert [item.destination.name for item in plan.items] == [
+        "photo_web-jpeg.jpg",
+        "photo_web-png.png",
+    ]
+    assert [item.metadata_mode for item in plan.items] == [
+        MetadataMode.CUSTOM,
+        MetadataMode.NONE,
+    ]
+
+
+def test_create_plan_original_flavour_preserves_source_extension(
+    tmp_path: Path,
+    repo: ImageIndexRepository,
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    image_path = source_root / "clip.MOV"
+    image_path.write_bytes(b"video bytes")
+    repo.upsert_image(str(image_path), image_path.name, 1, 11, {}, "")
+    original = default_derivative_export_flavours()[0]
+    service = DerivativeExportService(repo, FakeMetadataWriter())
+
+    # Act
+    plan = service.create_plan(
+        {source_root: "source"},
+        tmp_path / "output",
+        image_paths=[image_path],
+        flavours=[original],
+    )
+
+    # Assert
+    assert plan.items[0].destination.name == "clip_original.MOV"
+    assert plan.items[0].metadata_mode is MetadataMode.ORIGINAL
+
+
+def test_create_plan_duplicate_flavour_destinations_are_rejected(
+    tmp_path: Path,
+    repo: ImageIndexRepository,
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    image_path = source_root / "photo.jpg"
+    image_path.write_bytes(b"source")
+    repo.upsert_image(str(image_path), image_path.name, 1, 6, {}, "")
+    first = default_derivative_export_flavours()[1]
+    second = DerivativeExportFlavour(
+        "duplicate-output",
+        "Second JPEG",
+        DerivativeFormat.JPEG,
+        filename_suffix=first.filename_suffix,
+    )
+    service = DerivativeExportService(repo, FakeMetadataWriter())
+
+    # Act / Assert
+    with pytest.raises(DerivativeExportError, match="multiple sources resolve"):
+        service.create_plan(
+            {source_root: "source"},
+            tmp_path / "output",
+            image_paths=[image_path],
+            flavours=[first, second],
+        )
+
+
+def test_export_original_flavour_copies_exact_bytes_without_metadata_writes(
+    tmp_path: Path,
+    repo: ImageIndexRepository,
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    image_path = source_root / "photo.jpg"
+    image_path.write_bytes(b"byte-exact-original")
+    _index_image(repo, image_path, "Family")
+    metadata_writer = FakeMetadataWriter()
+    original = default_derivative_export_flavours()[0]
+    service = DerivativeExportService(repo, metadata_writer)
+    plan = service.create_plan(
+        {source_root: "source"},
+        tmp_path / "output",
+        image_paths=[image_path],
+        flavours=[original],
+    )
+
+    # Act
+    result = service.export(plan)
+
+    # Assert
+    output = plan.items[0].destination
+    assert result.copied_count == 1
+    assert output.read_bytes() == image_path.read_bytes()
+    assert hashlib.sha256(output.read_bytes()).digest() == hashlib.sha256(
+        image_path.read_bytes()
+    ).digest()
+    assert metadata_writer.calls == []
+
+
+def test_export_none_metadata_mode_skips_custom_tag_writer(
+    tmp_path: Path,
+    repo: ImageIndexRepository,
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    image_path = source_root / "photo.jpg"
+    image_path.write_bytes(b"source")
+    _index_image(repo, image_path, "Family")
+    metadata_writer = FakeMetadataWriter()
+    flavour = default_derivative_export_flavours()[2]
+    service = DerivativeExportService(
+        repo,
+        metadata_writer,
+        media_converter=FakeMediaConverter(),  # type: ignore[arg-type]
+    )
+    plan = service.create_plan(
+        {source_root: "source"},
+        tmp_path / "output",
+        image_paths=[image_path],
+        flavours=[flavour],
+    )
+
+    # Act
+    result = service.export(plan)
+
+    # Assert
+    assert result.copied_count == 1
+    assert plan.items[0].destination.read_bytes() == b"converted"
+    assert metadata_writer.calls == []
+
+
+def test_export_error_report_identifies_flavour_and_destination(
+    tmp_path: Path,
+    repo: ImageIndexRepository,
+) -> None:
+    # Arrange
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    image_path = source_root / "photo.jpg"
+    image_path.write_bytes(b"source")
+    _index_image(repo, image_path)
+    flavour = default_derivative_export_flavours()[1]
+    service = DerivativeExportService(
+        repo,
+        media_converter=FailingMediaConverter(),  # type: ignore[arg-type]
+    )
+    plan = service.create_plan(
+        {source_root: "source"},
+        tmp_path / "output",
+        image_paths=[image_path],
+        flavours=[flavour],
+    )
+
+    # Act
+    result = service.export(plan)
+
+    # Assert
+    assert result.failed_count == 1
+    assert result.error_report_path is not None
+    report = json.loads(result.error_report_path.read_text(encoding="utf-8"))
+    record = report["items"][0]
+    assert record["source"] == str(image_path.resolve())
+    assert record["destination"] == str(plan.items[0].destination)
+    assert record["flavour"] == flavour.name
 
 
 @pytest.mark.parametrize("excluded", [False, True])

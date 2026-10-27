@@ -116,12 +116,16 @@ These packages are used during development and CI, not shipped in releases.
 
 ## System / External Tools
 
-These tools must be available on `PATH` at runtime or build time.
-They are **not** Python packages.
+These tools are executables, not Python packages. ImageMagick and FFmpeg may be
+resolved from `PATH` for development; the Windows MSI also carries an optional,
+pre-selected media-tools feature.
 
 | Tool | Used for | License | URL |
 |------|----------|---------|-----|
 | [ExifTool](https://exiftool.org/) | Metadata extraction and derivative writes — reads EXIF, IPTC, and XMP metadata, then writes and verifies XMP Subject and IPTC Keywords on temporary derivative copies only | Artistic License / GPL (same terms as Perl) | https://exiftool.org |
+| [ImageMagick](https://imagemagick.org/) | Still-image derivative conversion and encoding in the Windows MSI | ImageMagick License | https://github.com/ImageMagick/ImageMagick |
+| [FFmpeg](https://ffmpeg.org/) | Video-frame extraction for derivative export in the Windows MSI | LGPL 2.1 or later build; codec configuration must be reviewed | https://github.com/FFmpeg/FFmpeg |
+| [FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds) | Windows LGPL shared FFmpeg build scripts and binaries | MIT for build scripts; FFmpeg and linked dependencies retain their own licenses | https://github.com/BtbN/FFmpeg-Builds |
 | `iconutil` *(macOS)* | `build_macos.py` — converts PNG icon assets into an `.icns` file embedded in the `.app` bundle | Proprietary (Xcode Command Line Tools) | https://developer.apple.com/xcode |
 | `hdiutil` *(macOS)* | `build_macos.py` — packages the built `.app` bundle into a distributable `.dmg` disk image | Proprietary (macOS built-in) | https://developer.apple.com/macos |
 
@@ -129,11 +133,10 @@ They are **not** Python packages.
 
 ## Bundled Third-Party Binaries (Windows MSI)
 
-The Windows MSI installer includes the following third-party binary as an
-optional, pre-selected feature.  It is installed into a dedicated
-`exiftool\` subfolder inside the application directory and is **not** added
-to the system PATH.  exif-turbo uses this bundled copy only when no
-system-wide ExifTool is found on PATH.
+The Windows MSI installer includes third-party binaries as optional,
+pre-selected features. They are installed in subfolders inside the application
+directory and are **not** added to the system PATH. exif-turbo prefers tools on
+`PATH` and falls back to these bundled copies.
 
 ### ExifTool (Windows 64-bit executable)
 
@@ -150,6 +153,33 @@ launcher.  See https://oliverbetz.de/pages/Artikel/ExifTool-for-Windows.
 Redistribution of the ExifTool Windows executable in this installer is
 permitted by its license.  The unmodified Windows package includes the full
 Perl Artistic and GPL license texts in `Licenses_Strawberry_Perl.zip`.
+
+### ImageMagick (Windows x64)
+
+- **Version bundled:** 7.1.2-34, Q16 portable x64 archive
+- **Source:** https://github.com/ImageMagick/ImageMagick/releases/tag/7.1.2-34
+- **SHA-256:** `52cc6a441c7884f5ff4274b410c9b90c4b7d54245dcdf4d32988bb4e4df4e5d1`
+- **License:** ImageMagick License; the license, upstream SBOM, and attribution
+  are included under `media-tools\licenses\`.
+- **Install path:** `media-tools\imagemagick\`
+
+### FFmpeg (Windows x64)
+
+- **Version branch:** FFmpeg 9.0 LGPL shared build from BtbN FFmpeg-Builds
+- **Archive:** `ffmpeg-n9.0-latest-win64-lgpl-shared-9.0.zip`
+- **SHA-256:** `ce7c09bf3897333bff873edc5873f31425a429f9da99fba9add844da5fa0b64b`
+- **License:** LGPL 2.1 or later for the selected FFmpeg build, plus the
+  individual licenses of its linked components. The staged build is rejected if
+  its configuration enables GPL or nonfree components.
+- **Source and build materials:** Matching FFmpeg source, the pinned BtbN build
+  scripts source, source hashes, the upstream checksum file, version/configure
+  output, and license notices are included under `media-tools\licenses\`.
+- **Install path:** `media-tools\ffmpeg\bin\`
+
+The Windows packaging script verifies pinned archive SHA-256 values, checks the
+staged executables, and audits the extracted MSI for the binaries and legal
+materials. These third-party tools are distributed under their own licenses;
+their inclusion does not imply endorsement by their authors.
 
 ---
 

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 from exif_turbo.data.image_index_repository import ImageIndexRepository
+from exif_turbo.models.derivative_export_flavour import default_derivative_export_flavours
 from exif_turbo.models.image_sidecar import ImageSidecar, SidecarSource
 from exif_turbo.tagging.sidecar_repository import FilesystemSidecarRepository
 from exif_turbo.ui.workers.derivative_export_worker import DerivativeExportWorker
@@ -20,6 +21,19 @@ class FakeMetadataWriter:
         preserve_existing_keywords: bool = True,
     ) -> None:
         target.write_bytes(target.read_bytes() + b"-tagged")
+
+
+class FakeMediaConverter:
+    def convert(
+        self,
+        _source: Path,
+        destination: Path,
+        _flavour: object,
+        _metadata_mode: object,
+        *,
+        cancel_check: object = None,
+    ) -> None:
+        destination.write_bytes(b"converted")
 
 
 def _index_tagged_image(
@@ -176,3 +190,39 @@ def test_derivative_export_worker_matching_results_exports_all_database_rows(
     assert worker.result.copied_count == 2
     assert (tmp_path / "output" / "first.jpg").exists()
     assert (tmp_path / "output" / "second.jpg").exists()
+
+
+def test_derivative_export_worker_exports_each_selected_flavour(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    db_path = tmp_path / "images.db"
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    image_path = source_root / "photo.jpg"
+    image_path.write_bytes(b"source")
+    repository = ImageIndexRepository(db_path, key="")
+    repository.upsert_image(str(image_path), image_path.name, 1, 6, {}, "")
+    repository.close()
+    jpeg, png = default_derivative_export_flavours()[1:3]
+    worker = DerivativeExportWorker(
+        db_path,
+        "",
+        {source_root: "source"},
+        tmp_path / "output",
+        image_paths=[image_path],
+        flavours=[jpeg, png],
+        media_converter=FakeMediaConverter(),  # type: ignore[arg-type]
+    )
+    progress: list[tuple[int, int]] = []
+    worker.progress.connect(lambda done, total, _item: progress.append((done, total)))
+
+    # Act
+    worker.run()
+
+    # Assert
+    assert worker.result is not None
+    assert worker.result.copied_count == 2
+    assert progress == [(0, 2), (1, 2), (2, 2)]
+    assert (tmp_path / "output" / "photo_web-jpeg.jpg").read_bytes() == b"converted"
+    assert (tmp_path / "output" / "photo_web-png.png").read_bytes() == b"converted"

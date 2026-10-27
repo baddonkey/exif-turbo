@@ -619,6 +619,9 @@ class TaggingController(QObject):
             )
             if failed_item is not None:
                 source_name = Path(str(getattr(failed_item, "source", ""))).name
+                flavour_name = getattr(failed_item, "flavour_name", None)
+                if flavour_name:
+                    source_name = f"{source_name} / {flavour_name}"
                 detail = str(getattr(failed_item, "message", "") or "unknown error")
                 parts.append(_("First failure ({}): {}").format(source_name, detail))
         if metadata_warning_count:

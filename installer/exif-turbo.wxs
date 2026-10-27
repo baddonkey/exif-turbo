@@ -8,6 +8,7 @@
          -d AppDir=<abs-path-to-dist\exif-turbo>
          -d IconFile=<abs-path-to-assets\icon.ico>
          -d ExifToolDir=<abs-path-to-build\exiftool-staged>
+         -d MediaToolsDir=<abs-path-to-build\media-tools-staged>
          -ext WixToolset.UI.wixext
          -out dist\exif-turbo-<version>-windows.msi
 
@@ -58,6 +59,7 @@
              pollute the app root and can be skipped when a system-wide
              ExifTool is already present on PATH. -->
         <Directory Id="EXIFTOOLSUBDIR" Name="exiftool" />
+        <Directory Id="MEDIATOOLSDIR" Name="media-tools" />
       </Directory>
     </StandardDirectory>
 
@@ -108,6 +110,21 @@
       <!-- Unified onedir bundle into INSTALLFOLDER -->
       <Files Directory="INSTALLFOLDER" Include="$(var.AppDir)\**" />
       <ComponentRef Id="AppShortcut" />
+    </Feature>
+
+    <!--
+      Media tools are staged with pinned versions and checksums by
+      scripts/build_windows.py. FFmpeg uses the LGPL shared build. The feature
+      remains optional but is selected by default for derivative conversion.
+    -->
+    <Feature Id="MediaToolsFeature"
+             Title="Derivative media tools (bundled, recommended)"
+             Description="Install ImageMagick and the FFmpeg LGPL shared binaries used to create derivative images. License texts and corresponding FFmpeg source are included."
+             Level="1"
+             AllowAdvertise="no"
+             InstallDefault="local"
+             TypicalDefault="install">
+      <Files Directory="MEDIATOOLSDIR" Include="$(var.MediaToolsDir)\**" />
     </Feature>
 
     <!--

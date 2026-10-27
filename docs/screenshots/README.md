@@ -20,6 +20,7 @@ license](https://creativecommons.org/licenses/by-sa/4.0/):
 - `12_tagging_drawer.png`
 - `13_copy_tags_and_descriptions.png`
 - `14_set_action_menu.png`
+- `16_derivative_export_dialog.png`
 - `exif-turbo-demo-poster.png`
 - `exif-turbo-demo.mp4`
 

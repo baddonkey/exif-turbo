@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, Sequence
 
 from PySide6.QtCore import QThread, Signal
 
 from ...data.image_index_repository import ImageIndexRepository
+from ...models.derivative_export_flavour import DerivativeExportFlavour
 from ...tagging.derivative_export_service import (
     DerivativeExportItemResult,
     DerivativeExportResult,
     DerivativeExportService,
     MetadataWriter,
 )
+from ...tagging.media_conversion import DerivativeMediaConverter
 
 
 class DerivativeExportWorker(QThread):
@@ -39,8 +41,11 @@ class DerivativeExportWorker(QThread):
         date_to: int | None = None,
         image_set_id: int | None = None,
         metadata_writer: MetadataWriter | None = None,
+        media_converter: DerivativeMediaConverter | None = None,
         auto_repair_tags: bool = True,
         write_description_to_xpcomment: bool = True,
+        flavours: Sequence[DerivativeExportFlavour] | None = None,
+        preserve_folder_structure: bool = True,
     ) -> None:
         super().__init__()
         self._db_path = db_path
@@ -58,8 +63,11 @@ class DerivativeExportWorker(QThread):
         self._date_to = date_to
         self._image_set_id = image_set_id
         self._metadata_writer = metadata_writer
+        self._media_converter = media_converter
         self._auto_repair_tags = auto_repair_tags
         self._write_description_to_xpcomment = write_description_to_xpcomment
+        self._flavours = None if flavours is None else tuple(flavours)
+        self._preserve_folder_structure = preserve_folder_structure
         self._cancel_event = threading.Event()
         self.result: DerivativeExportResult | None = None
 
@@ -75,6 +83,7 @@ class DerivativeExportWorker(QThread):
                 self._metadata_writer,
                 auto_repair_tags=self._auto_repair_tags,
                 write_description_to_xpcomment=self._write_description_to_xpcomment,
+                media_converter=self._media_converter,
             )
             image_paths = self._image_paths
             if image_paths is None and self._matching_results:
@@ -92,6 +101,8 @@ class DerivativeExportWorker(QThread):
                 self._indexed_roots,
                 self._output_root,
                 image_paths=image_paths,
+                flavours=self._flavours,
+                preserve_folder_structure=self._preserve_folder_structure,
             )
             self.progress.emit(0, len(plan.items), None)
             self.result = service.export(

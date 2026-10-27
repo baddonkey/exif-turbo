@@ -106,7 +106,7 @@ def wheel_window(
     # Switch to the Indexed Folders tab
     tab_bar = root.findChild(QObject, "mainTabBar")
     assert tab_bar is not None
-    tab_bar.setProperty("currentIndex", 2)
+    tab_bar.setProperty("currentIndex", 3)
     qtbot.wait(_PAUSE_MS)
 
     # Populate enough folders to overflow

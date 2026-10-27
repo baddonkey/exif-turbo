@@ -53,11 +53,13 @@ from ...indexing.ai_indexer_service import (
 )
 from ...indexing.image_utils import RAW_EXTENSIONS
 from ...models.indexed_folder import IndexedFolder
+from ...models.derivative_export_flavour import DerivativeExportFlavour
 from ...models.search_result import SearchResult
 from ...tagging.derivative_export_service import (
     extract_embedded_keyword_labels,
     extract_embedded_description,
 )
+from ...tagging.media_tool_discovery import check_media_tools
 from ...tagging.custom_tag_migration import CustomTagMigrationService
 from ...utils.preview_cache import (
     clear_cached_previews_for,
@@ -177,6 +179,7 @@ class AppController(QObject):
     busyCancelableChanged = Signal()
     exiftoolMissingChanged = Signal()
     exiftoolVersionChanged = Signal()
+    mediaToolsChanged = Signal()
     clipboardCopyDone = Signal(str)  # message to show in toast
     dateFilterChanged = Signal()
     yearCountsChanged = Signal()
@@ -389,6 +392,7 @@ class AppController(QObject):
         self._is_unlocking: bool = False
         self._exiftool_missing: bool = False
         self._exiftool_version: str = ""  # populated lazily by checkExiftool slot
+        self._media_tools_json = "[]"
         self._password_change_worker: PasswordChangeWorker | None = None
         self._password_change_old: str = ""
         self._password_change_new: str = ""
@@ -1168,6 +1172,10 @@ class AppController(QObject):
     def exiftoolVersion(self) -> str:
         return self._exiftool_version
 
+    @Property(str, notify=mediaToolsChanged)
+    def mediaToolsJson(self) -> str:
+        return self._media_tools_json
+
     @Property(float, notify=dateFilterChanged)
     def dateFrom(self) -> float:
         return float(self._date_from) if self._date_from is not None else -1.0
@@ -1197,6 +1205,11 @@ class AppController(QObject):
             self.exiftoolVersionChanged.emit()
         if missing_changed:
             self.exiftoolMissingChanged.emit()
+
+    @Slot()
+    def checkMediaTools(self) -> None:
+        self._media_tools_json = json.dumps(check_media_tools())
+        self.mediaToolsChanged.emit()
 
     def set_filter_proxy(self, proxy: CheckedFilterProxyModel) -> None:
         self._filter_proxy = proxy
@@ -5092,27 +5105,50 @@ class AppController(QObject):
         self._tagging.cancel_bulk_tagging()
 
     @Slot(str)
-    def generateDerivativesForMarked(self, output_url: str) -> None:
+    @Slot(str, str, bool)
+    def generateDerivativesForMarked(
+        self,
+        output_url: str,
+        flavours_json: str = "",
+        preserve_folder_structure: bool = True,
+    ) -> None:
+        flavour_options = self._derivative_flavour_options(
+            flavours_json, preserve_folder_structure
+        )
+        if flavour_options is None:
+            return
         if self._action_image_set_id is not None:
             self._start_derivative_export(
                 output_url, matching_results=True, marked_only=True,
-                image_set_id=self._action_image_set_id,
+                image_set_id=self._action_image_set_id, **flavour_options,
             )
             return
-        self._start_derivative_export(output_url)
+        self._start_derivative_export(output_url, **flavour_options)
 
     @Slot(str)
-    def generateDerivativesForCurrentResults(self, output_url: str) -> None:
+    @Slot(str, str, bool)
+    def generateDerivativesForCurrentResults(
+        self,
+        output_url: str,
+        flavours_json: str = "",
+        preserve_folder_structure: bool = True,
+    ) -> None:
+        flavour_options = self._derivative_flavour_options(
+            flavours_json, preserve_folder_structure
+        )
+        if flavour_options is None:
+            return
         if self._action_image_set_id is not None:
             self._start_derivative_export(
                 output_url, matching_results=True,
-                image_set_id=self._action_image_set_id,
+                image_set_id=self._action_image_set_id, **flavour_options,
             )
             return
         if self._results_use_ai_pipeline():
             self._start_derivative_export(
                 output_url,
                 image_paths=[result.path for result in self._ai_result_cache],
+                **flavour_options,
             )
             return
         self._start_derivative_export(
@@ -5126,7 +5162,30 @@ class AppController(QObject):
             date_from=self._date_from,
             date_to=self._date_to,
             image_set_id=self._search_image_set_id,
+            **flavour_options,
         )
+
+    def _derivative_flavour_options(
+        self, flavours_json: str, preserve_folder_structure: bool
+    ) -> dict[str, object] | None:
+        if not flavours_json:
+            return {}
+        try:
+            raw_flavours = json.loads(flavours_json)
+            if not isinstance(raw_flavours, list) or not raw_flavours:
+                raise ValueError("select at least one export flavour")
+            flavours = [
+                DerivativeExportFlavour.from_dict(value) for value in raw_flavours
+            ]
+            return {
+                "flavours": flavours,
+                "preserve_folder_structure": preserve_folder_structure,
+            }
+        except (json.JSONDecodeError, ValueError) as exc:
+            self._set_status(
+                _("Cannot start derivative export: {error}").format(error=exc)
+            )
+            return None
 
     def _start_derivative_export(
         self,

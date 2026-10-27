@@ -47,12 +47,59 @@ def _write_compliant_payload(root: Path) -> None:
     bpe_vocab.write_bytes(b"vocabulary")
 
 
+def _write_media_tool_payload(root: Path) -> None:
+    files = {
+        "media-tools/imagemagick/magick.exe": b"magick",
+        "media-tools/ffmpeg/bin/ffmpeg.exe": b"ffmpeg",
+        "media-tools/ffmpeg/bin/ffprobe.exe": b"ffprobe",
+        "media-tools/ffmpeg/bin/avcodec-63.dll": b"avcodec",
+        "media-tools/licenses/ImageMagick-LICENSE.txt": b"ImageMagick terms",
+        "media-tools/licenses/ImageMagick-SBOM.cdx.json": b"ImageMagick SBOM",
+        "media-tools/licenses/ImageMagick-VERSION.txt": b"ImageMagick version",
+        "media-tools/licenses/FFmpeg-BUILD-CHECKSUMS.sha256": b"archive checksums",
+        "media-tools/licenses/FFmpeg-LGPL-2.1.txt": b"FFmpeg LGPL terms",
+        "media-tools/licenses/FFmpeg-BUILDS-LICENSE.txt": b"BtbN MIT terms",
+        "media-tools/licenses/FFmpeg-BUILDS-README.md": b"Build notes",
+        "media-tools/licenses/FFmpeg-BUILDS-SOURCE.zip": b"BtbN build source",
+        "media-tools/licenses/FFmpeg-VERSION.txt": b"FFmpeg version/build config",
+        "media-tools/licenses/FFmpeg-SOURCE.tar.gz": b"source archive",
+        "media-tools/licenses/FFmpeg-SOURCE-MANIFEST.txt": b"source manifest",
+        "media-tools/MEDIA-TOOLS.json": b"manifest",
+    }
+    for relative, contents in files.items():
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(contents)
+
+
 def test_audit_release_payload_complete_payload_succeeds(tmp_path: Path) -> None:
     # Arrange
     _write_compliant_payload(tmp_path)
 
     # Act / Assert
     audit_release_payload(tmp_path)
+
+
+def test_audit_release_payload_bundled_media_tools_succeed(tmp_path: Path) -> None:
+    # Arrange
+    _write_compliant_payload(tmp_path)
+    _write_media_tool_payload(tmp_path)
+
+    # Act / Assert
+    audit_release_payload(tmp_path, expect_media_tools=True)
+
+
+def test_audit_release_payload_missing_bundled_ffprobe_raises_error(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    _write_compliant_payload(tmp_path)
+    _write_media_tool_payload(tmp_path)
+    (tmp_path / "media-tools" / "ffmpeg" / "bin" / "ffprobe.exe").unlink()
+
+    # Act / Assert
+    with pytest.raises(ArtifactAuditError, match="ffprobe.exe"):
+        audit_release_payload(tmp_path, expect_media_tools=True)
 
 
 def test_audit_release_payload_missing_open_clip_bpe_vocab_raises_error(

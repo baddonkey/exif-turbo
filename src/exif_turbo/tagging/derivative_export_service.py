@@ -13,7 +13,13 @@ from pathlib import Path
 from typing import Callable, Iterable, Mapping, Protocol, Sequence
 
 from ..data.image_index_repository import ImageIndexRepository
+from ..models.derivative_export_flavour import (
+    DerivativeExportFlavour,
+    DerivativeFormat,
+    MetadataMode,
+)
 from .exif_metadata_writer import ExifMetadataWriter
+from .media_conversion import DerivativeMediaConverter, MediaConversionCanceled
 from .sidecar_repository import FilesystemSidecarRepository, LoadedSidecar
 
 
@@ -109,6 +115,8 @@ class DerivativeExportPlanItem:
     message: str | None = None
     exclude_embedded_description: bool = False
     description: str | None = None
+    flavour: DerivativeExportFlavour | None = None
+    metadata_mode: MetadataMode | None = None
 
 
 @dataclass(frozen=True)
@@ -125,6 +133,7 @@ class DerivativeExportItemResult:
     status: DerivativeExportStatus
     message: str | None = None
     metadata_errors: tuple[str, ...] = ()
+    flavour_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -198,6 +207,7 @@ class DerivativeExportService:
         *,
         auto_repair_tags: bool = True,
         write_description_to_xpcomment: bool = True,
+        media_converter: DerivativeMediaConverter | None = None,
     ) -> None:
         self._image_repository = image_repository
         self._metadata_writer = metadata_writer or ExifMetadataWriter(
@@ -205,6 +215,7 @@ class DerivativeExportService:
             write_description_to_xpcomment=write_description_to_xpcomment,
         )
         self._sidecar_repository = sidecar_repository or FilesystemSidecarRepository()
+        self._media_converter = media_converter or DerivativeMediaConverter()
 
     def create_plan(
         self,
@@ -212,7 +223,15 @@ class DerivativeExportService:
         output_root: Path,
         *,
         image_paths: Iterable[Path | str] | None = None,
+        flavours: Sequence[DerivativeExportFlavour] | None = None,
+        metadata_modes: Mapping[str, MetadataMode | str] | None = None,
+        preserve_folder_structure: bool = True,
     ) -> DerivativeExportPlan:
+        if flavours is not None and not flavours:
+            raise DerivativeExportError("at least one export flavour must be selected")
+        flavour_ids = [flavour.flavour_id for flavour in flavours or ()]
+        if len(flavour_ids) != len(set(flavour_ids)):
+            raise DerivativeExportError("selected export flavour IDs must be unique")
         roots = self._normalize_roots(indexed_roots)
         resolved_output = output_root.resolve()
         for root, _ in roots:
@@ -248,24 +267,6 @@ class DerivativeExportService:
         for source in sources:
             root = assigned_roots[source]
             relative = source.relative_to(root)
-            destination = resolved_output
-            if len(used_roots) > 1:
-                destination /= labels_by_root[root]
-            destination = (destination / relative).resolve()
-            if not self._is_within(destination, resolved_output):
-                raise DerivativeExportError(
-                    f"planned destination escapes output root: {destination}"
-                )
-            if destination in source_set:
-                raise DerivativeExportError(
-                    f"planned destination resolves to a source image: {destination}"
-                )
-            destination_key = os.path.normcase(str(destination))
-            if destination_key in destination_keys:
-                raise DerivativeExportError(
-                    f"multiple sources resolve to destination: {destination}"
-                )
-            destination_keys.add(destination_key)
             loaded = self._sidecar_repository.read(source)
             labels, excluded_labels, exclude_all, exclude_description = self._derivative_labels(source, loaded)
             rows = self._image_repository.get_images_by_paths([str(source)])
@@ -279,25 +280,95 @@ class DerivativeExportService:
             description = final_derivative_description(
                 embedded_description, custom_description, exclude_description
             ) or None
-            status: DerivativeExportStatus | None = None
-            message: str | None = None
-            if destination.exists():
-                status = DerivativeExportStatus.SKIPPED_EXISTING
-                message = "destination already exists"
-            items.append(
-                DerivativeExportPlanItem(
-                    source=source,
-                    destination=destination,
-                    labels=labels,
-                    excluded_embedded_tags=excluded_labels,
-                    exclude_all_embedded_tags=exclude_all,
-                    planned_status=status,
-                    message=message,
-                    exclude_embedded_description=exclude_description,
-                    description=description,
-                )
+            selected_flavours: Sequence[DerivativeExportFlavour | None] = (
+                flavours if flavours is not None else (None,)
             )
+            for flavour in selected_flavours:
+                destination_root = resolved_output
+                if len(used_roots) > 1:
+                    destination_root /= labels_by_root[root]
+                if preserve_folder_structure:
+                    destination_root /= relative.parent
+                if flavour is None:
+                    destination_name = source.name
+                    metadata_mode = None
+                else:
+                    metadata_mode = self._effective_metadata_mode(
+                        flavour, metadata_modes
+                    )
+                    extension = self._extension_for_flavour(flavour, source)
+                    destination_name = f"{source.stem}{flavour.filename_suffix}{extension}"
+                destination = (destination_root / destination_name).resolve()
+                if not self._is_within(destination, resolved_output):
+                    raise DerivativeExportError(
+                        f"planned destination escapes output root: {destination}"
+                    )
+                if destination in source_set:
+                    raise DerivativeExportError(
+                        f"planned destination resolves to a source image: {destination}"
+                    )
+                destination_key = os.path.normcase(str(destination))
+                if destination_key in destination_keys:
+                    raise DerivativeExportError(
+                        f"multiple sources resolve to destination: {destination}"
+                    )
+                destination_keys.add(destination_key)
+                status: DerivativeExportStatus | None = None
+                message: str | None = None
+                if destination.exists():
+                    status = DerivativeExportStatus.SKIPPED_EXISTING
+                    message = "destination already exists"
+                items.append(
+                    DerivativeExportPlanItem(
+                        source=source,
+                        destination=destination,
+                        labels=labels,
+                        excluded_embedded_tags=excluded_labels,
+                        exclude_all_embedded_tags=exclude_all,
+                        planned_status=status,
+                        message=message,
+                        exclude_embedded_description=exclude_description,
+                        description=description,
+                        flavour=flavour,
+                        metadata_mode=metadata_mode,
+                    )
+                )
         return DerivativeExportPlan(resolved_output, sources, tuple(items))
+
+    @staticmethod
+    def _effective_metadata_mode(
+        flavour: DerivativeExportFlavour,
+        metadata_modes: Mapping[str, MetadataMode | str] | None,
+    ) -> MetadataMode:
+        mode: MetadataMode | str = flavour.metadata_mode
+        if metadata_modes is not None and flavour.flavour_id in metadata_modes:
+            mode = metadata_modes[flavour.flavour_id]
+        try:
+            effective_mode = mode if isinstance(mode, MetadataMode) else MetadataMode(mode)
+        except ValueError as exc:
+            raise DerivativeExportError(
+                f"invalid metadata mode for flavour {flavour.name}: {mode}"
+            ) from exc
+        if (
+            flavour.output_format is DerivativeFormat.ORIGINAL
+            and effective_mode is not MetadataMode.ORIGINAL
+        ):
+            raise DerivativeExportError(
+                "Original (as is) requires Original metadata mode"
+            )
+        return effective_mode
+
+    @staticmethod
+    def _extension_for_flavour(
+        flavour: DerivativeExportFlavour, source: Path
+    ) -> str:
+        if flavour.output_format is DerivativeFormat.ORIGINAL:
+            return source.suffix
+        return {
+            DerivativeFormat.JPEG: ".jpg",
+            DerivativeFormat.PNG: ".png",
+            DerivativeFormat.TIFF: ".tif",
+        }[flavour.output_format]
 
     def export(
         self,
@@ -354,12 +425,27 @@ class DerivativeExportService:
                     "destination already exists",
                 )
             item.destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(item.source, temporary)
+            if item.flavour is None or item.flavour.output_format is DerivativeFormat.ORIGINAL:
+                shutil.copy2(item.source, temporary)
+            else:
+                self._media_converter.convert(
+                    item.source,
+                    temporary,
+                    item.flavour,
+                    item.metadata_mode or item.flavour.metadata_mode,
+                    cancel_check=cancel_check,
+                )
             if cancel_check is not None and cancel_check():
                 return self._result(
                     item, DerivativeExportStatus.CANCELED, "export canceled"
                 )
-            if item.labels or item.excluded_embedded_tags or item.exclude_all_embedded_tags:
+            should_write_custom_metadata = (
+                item.flavour is None
+                or item.metadata_mode is MetadataMode.CUSTOM
+            )
+            if should_write_custom_metadata and (
+                item.labels or item.excluded_embedded_tags or item.exclude_all_embedded_tags
+            ):
                 try:
                     self._metadata_writer.write_keywords(
                         temporary,
@@ -370,14 +456,14 @@ class DerivativeExportService:
                     )
                 except Exception as exc:  # noqa: BLE001 — preserve the derivative and report metadata trouble
                     metadata_errors.append(f"keyword metadata: {exc}")
-            if item.description is not None:
+            if should_write_custom_metadata and item.description is not None:
                 try:
                     self._metadata_writer.write_description(
                         temporary, item.description, forbidden_sources=sources
                     )
                 except Exception as exc:  # noqa: BLE001 — preserve the derivative and report metadata trouble
                     metadata_errors.append(f"description metadata: {exc}")
-            elif item.exclude_embedded_description:
+            elif should_write_custom_metadata and item.exclude_embedded_description:
                 try:
                     self._metadata_writer.discard_embedded_description(
                         temporary, forbidden_sources=sources
@@ -405,6 +491,8 @@ class DerivativeExportService:
                 "; ".join(metadata_errors) or None,
                 metadata_errors=tuple(metadata_errors),
             )
+        except MediaConversionCanceled:
+            return self._result(item, DerivativeExportStatus.CANCELED, "export canceled")
         except Exception as exc:  # noqa: BLE001
             return self._result(
                 item,
@@ -550,6 +638,7 @@ class DerivativeExportService:
             status=status,
             message=message,
             metadata_errors=metadata_errors,
+            flavour_name=item.flavour.name if item.flavour is not None else None,
         )
 
     @staticmethod
@@ -562,16 +651,18 @@ class DerivativeExportService:
         while report_path.exists():
             report_path = output_root / f"derivative-export-errors-{suffix}.json"
             suffix += 1
-        records = [
-            {
+        records = []
+        for item in items:
+            record: dict[str, object] = {
                 "source": str(item.source),
                 "destination": str(item.destination),
                 "status": item.status.value,
                 "error": item.message,
                 "metadataErrors": list(item.metadata_errors),
             }
-            for item in items
-        ]
+            if item.flavour_name is not None:
+                record["flavour"] = item.flavour_name
+            records.append(record)
         try:
             output_root.mkdir(parents=True, exist_ok=True)
             report_path.write_text(

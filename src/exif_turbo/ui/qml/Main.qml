@@ -70,7 +70,7 @@ ApplicationWindow {
     function openTaggingSettingsForAutomation() {
         taggingDrawer.close()
         copyTaggingDrawer.close()
-        mainTabBar.currentIndex = 3
+        mainTabBar.currentIndex = 5
         Qt.callLater(function() {
             settingsScroll.contentItem.contentY = Math.max(0, taggingSettingsSection.y - 120)
         })
@@ -221,7 +221,7 @@ ApplicationWindow {
     }
     Shortcut {
         sequence: "Ctrl+T"
-        enabled: !_isLocked && (root._searchOrBrowseActive || mainTabBar.currentIndex === 3)
+        enabled: !_isLocked && (root._searchOrBrowseActive || mainTabBar.currentIndex === 2)
         onActivated: taggingDrawer.opened ? taggingDrawer.close() : taggingDrawer.openTaggingPanel()
     }
 
@@ -234,7 +234,7 @@ ApplicationWindow {
     readonly property bool _searchOrBrowseActive:
         mainTabBar.currentIndex === 0 || mainTabBar.currentIndex === 1
     readonly property bool _actionsActive: _searchOrBrowseActive
-        || (mainTabBar.currentIndex === 3 && setsPage.selectedSet !== null
+        || (mainTabBar.currentIndex === 2 && setsPage.selectedSet !== null
             && !controller.imageSetOperationRunning)
 
 
@@ -831,12 +831,12 @@ ApplicationWindow {
                 readonly property int _cnt: controller ? controller.actionMarkedCount : 0
                 text: _cnt > 0
                       ? qsTr("Export Metadata as &JSON (%1 selected)").arg(_cnt)
-                                            : mainTabBar.currentIndex === 3 && setsPage.selectedSet
+                                            : mainTabBar.currentIndex === 2 && setsPage.selectedSet
                                                 ? qsTr("Export Metadata as &JSON (%1)").arg(
                                                         setsPage.selectedSet.name.replace(/&/g, "&&"))
                       : qsTr("Export Metadata as &JSON (all results)")
                 enabled: !_isLocked && root._actionsActive
-                         && (mainTabBar.currentIndex !== 3 || controller.actionImageCount > 0)
+                         && (mainTabBar.currentIndex !== 2 || controller.actionImageCount > 0)
                 onTriggered: if (!_isLocked) exportJsonDialog.open()
             }
             MenuSeparator {}
@@ -848,8 +848,7 @@ ApplicationWindow {
                          && _derivativeAvailable && controller.actionImageCount > 0
                          && !_isExportingDerivatives
                 onTriggered: {
-                    derivativeTargetDialog.scope = "results"
-                    derivativeTargetDialog.open()
+                    derivativeExportDialog.openForScope("results")
                 }
             }
             Action {
@@ -861,8 +860,7 @@ ApplicationWindow {
                          && _derivativeAvailable && _cnt > 0
                          && !_isExportingDerivatives
                 onTriggered: {
-                    derivativeTargetDialog.scope = "marked"
-                    derivativeTargetDialog.open()
+                    derivativeExportDialog.openForScope("marked")
                 }
             }
             MenuSeparator {}
@@ -903,16 +901,20 @@ ApplicationWindow {
         onAccepted: controller.exportMarkedMetadataJson(selectedFile)
     }
 
-    FolderDialog {
-        id: derivativeTargetDialog
-        property string scope: "results"
-        title: qsTr("Choose Derivative Target Folder")
-        onAccepted: {
+    DerivativeExportDialog {
+        id: derivativeExportDialog
+        appSettings: settingsModel
+        sampleSourcePath: controller ? controller.pendingPreviewPath : ""
+        onExportRequested: (scope, outputUrl, flavoursJson, preserveFolderStructure) => {
             derivativeProgressDialog.open()
             if (scope === "marked")
-                controller.generateDerivativesForMarked(selectedFolder.toString())
+                controller.generateDerivativesForMarked(
+                    outputUrl, flavoursJson, preserveFolderStructure
+                )
             else
-                controller.generateDerivativesForCurrentResults(selectedFolder.toString())
+                controller.generateDerivativesForCurrentResults(
+                    outputUrl, flavoursJson, preserveFolderStructure
+                )
         }
     }
 
@@ -941,7 +943,7 @@ ApplicationWindow {
             Label {
                 Layout.fillWidth: true
                 visible: _isExportingDerivatives && _derivativeTotal > 0
-                text: qsTr("%1 / %2 images").arg(_derivativeCurrent).arg(_derivativeTotal)
+                text: qsTr("%1 / %2 outputs").arg(_derivativeCurrent).arg(_derivativeTotal)
                 horizontalAlignment: Text.AlignHCenter
             }
             Label {
@@ -1317,17 +1319,17 @@ ApplicationWindow {
         id: mainTabBar
         objectName: "mainTabBar"
         anchors { top: parent.top; left: parent.left }
-        width: Math.min(700, parent.width - (taggingWorkbenchButton.visible ? 100 : 0))
+        width: Math.min(840, parent.width - (taggingWorkbenchButton.visible ? 100 : 0))
         implicitHeight: 40
         visible: !_isLocked
         z: 10
         background: Item {}  // transparent; background rect above covers the row
 
         Repeater {
-            model: [ qsTr("Search"), qsTr("Browse"), qsTr("Indexed Folders"), qsTr("Sets"), qsTr("Settings") ]
+            model: [ qsTr("Search"), qsTr("Browse"), qsTr("Sets"), qsTr("Indexed Folders"), qsTr("Derivative Export"), qsTr("Settings") ]
             TabButton {
                 text: modelData
-                implicitWidth: 140
+                implicitWidth: mainTabBar.width / 6
                 implicitHeight: 40
                 enabled: true
 
@@ -1353,7 +1355,7 @@ ApplicationWindow {
         }
 
         onCurrentIndexChanged: {
-            controller.setActionImageSet(currentIndex === 3 ? setsPage.selectedSetId : 0)
+            controller.setActionImageSet(currentIndex === 2 ? setsPage.selectedSetId : 0)
             if (taggingDrawer.visible)
                 taggingDrawer.close()
             if (copyTaggingDrawer.visible)
@@ -1407,7 +1409,7 @@ ApplicationWindow {
         anchors { top: parent.top; right: copyTaggingWorkbenchButton.left; rightMargin: 4 }
         width: 40; height: 40
         z: 11
-        visible: !_isLocked && (root._searchOrBrowseActive || mainTabBar.currentIndex === 3)
+        visible: !_isLocked && (root._searchOrBrowseActive || mainTabBar.currentIndex === 2)
         enabled: !_isLocked
         icon.source: "../../assets/tag_icon.svg"
         icon.width: 20
@@ -1424,7 +1426,7 @@ ApplicationWindow {
         appSettings: settingsModel
         selectedFilename: controller ? controller.taggingFilename : ""
         browseMode: mainTabBar.currentIndex === 1
-        setMode: mainTabBar.currentIndex === 3
+        setMode: mainTabBar.currentIndex === 2
         setName: setsPage.selectedSet ? setsPage.selectedSet.name : ""
         currentSetId: setsPage.selectedSetId
         onAboutToShow: copyTaggingDrawer.close()
@@ -1438,7 +1440,7 @@ ApplicationWindow {
         appSettings: settingsModel
         selectedFilename: controller ? controller.taggingFilename : ""
         browseMode: mainTabBar.currentIndex === 1
-        setMode: mainTabBar.currentIndex === 3
+        setMode: mainTabBar.currentIndex === 2
         setName: setsPage.selectedSet ? setsPage.selectedSet.name : ""
         currentSetId: setsPage.selectedSetId
         onAboutToShow: taggingDrawer.close()
@@ -3907,7 +3909,7 @@ ApplicationWindow {
     // ── Folders tab ──────────────────────────────────────────────────────
     FoldersPanel {
         anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; bottom: parent.bottom }
-        visible: !_isLocked && mainTabBar.currentIndex === 2
+        visible: !_isLocked && mainTabBar.currentIndex === 3
         demoMode: root._demoMode
     }
 
@@ -3915,16 +3917,22 @@ ApplicationWindow {
     SetsPage {
         id: setsPage
         anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; rightMargin: root.taggingPanelInset; bottom: parent.bottom }
-        visible: !_isLocked && mainTabBar.currentIndex === 3
+        visible: !_isLocked && mainTabBar.currentIndex === 2
         appController: controller
         accentColor: root._accentColor
         onTaggingRequested: taggingDrawer.openTaggingPanel()
     }
 
+    DerivativeExportPage {
+        anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; bottom: parent.bottom }
+        visible: !_isLocked && mainTabBar.currentIndex === 4
+        appSettings: settingsModel
+    }
+
     // ── Settings tab ─────────────────────────────────────────────────────
     Item {
         anchors { top: mainTabBar.bottom; left: parent.left; right: parent.right; bottom: parent.bottom }
-        visible: !_isLocked && mainTabBar.currentIndex === 4
+        visible: !_isLocked && mainTabBar.currentIndex === 5
 
         ScrollView {
             id: settingsScroll
@@ -4510,6 +4518,55 @@ ApplicationWindow {
                         font.pixelSize: 11
                         opacity: 0.55
                         Layout.bottomMargin: 0
+                    }
+
+                    Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Material.dividerColor; Layout.topMargin: 28; Layout.bottomMargin: 28 }
+
+                    Label {
+                        text: qsTr("Media Tools")
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                        Layout.bottomMargin: 6
+                    }
+                    Label {
+                        text: qsTr("ImageMagick and FFmpeg are used to convert derivative images and video frames.")
+                        font.pixelSize: 12
+                        opacity: 0.6
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 12
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Button {
+                            objectName: "checkMediaToolsButton"
+                            text: qsTr("Check")
+                            onClicked: controller.checkMediaTools()
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Repeater {
+                                model: controller ? JSON.parse(controller.mediaToolsJson) : []
+                                delegate: RowLayout {
+                                    required property var modelData
+                                    spacing: 8
+                                    Rectangle {
+                                        width: 10; height: 10; radius: 5
+                                        color: modelData.available ? "#66bb6a" : "#ef5350"
+                                    }
+                                    Label {
+                                        text: modelData.available
+                                              ? qsTr("%1 — %2").arg(modelData.name).arg(modelData.version)
+                                              : qsTr("%1 — Not found").arg(modelData.name)
+                                        font.pixelSize: 13
+                                        color: modelData.available
+                                               ? (Material.theme === Material.Dark ? "#a5d6a7" : "#2e7d32")
+                                               : (Material.theme === Material.Dark ? "#ef9a9a" : "#c62828")
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     // spacer below the section
