@@ -1137,11 +1137,19 @@ come from the **Derivative Export** tab. **Select Default**, **Select All**, and
 are also temporary and reset to the saved flavour value when the dialog is
 opened again. The chosen output root must be outside every indexed source root.
 
+![Derivative export dialog showing the output directory, selected flavours, metadata modes, and filename preview](screenshots/16_derivative_export_dialog.png)
+
+The preview shows the names and settings that will be used before export begins.
+
 Flavour presets are stored with the active database settings. Each preset has
 its own format, filename suffix, resize limit, encoder options, metadata mode,
 and default-selection flag. The initial suggestions are Original (as is), Web
 JPEG, Web PNG, Full Resolution PNG, Thumbnail PNG, and Archive TIFF. Multiple
 flavours may use the same output format.
+
+![Derivative Export settings with Web JPEG selected and its suffix, format, and resize options visible](screenshots/15_derivative_export_settings.png)
+
+The selected Web JPEG preset uses the `_web-jpeg` suffix, JPEG format, a 2,048-pixel longest-edge limit, and no upscaling.
 
 **Original (as is)** copies the source bytes without re-encoding or metadata
 writes, keeps the original extension, and may add a destination filename
