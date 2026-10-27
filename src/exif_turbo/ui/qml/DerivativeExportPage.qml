@@ -182,12 +182,18 @@ Item {
     }
 
     ScrollView {
+        id: pageScroll
         anchors.fill: parent
         contentWidth: availableWidth
         clip: true
+        ScrollBar.vertical.policy: ScrollBar.AsNeeded
+        ScrollBar.vertical.visible: pageScroll.ScrollBar.vertical.size < 1
+        ScrollBar.vertical.active: true
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
         ColumnLayout {
-            width: parent.width
+            width: pageScroll.availableWidth
+            height: Math.max(implicitHeight, pageScroll.availableHeight)
             spacing: 12
 
             ColumnLayout {
@@ -223,7 +229,9 @@ Item {
 
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 560
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 360
+                    Layout.preferredHeight: editorGrid.columns === 2 ? 360 : 460
                     color: "transparent"
                     border.color: Material.dividerColor
                     radius: 4
@@ -235,6 +243,7 @@ Item {
 
                         Flow {
                             Layout.fillWidth: true
+                            Layout.preferredHeight: implicitHeight
                             spacing: 4
                             Button { text: qsTr("Add"); onClicked: root.addFlavour() }
                             Button {
@@ -274,8 +283,7 @@ Item {
                             Layout.fillWidth: true
                             spacing: 8
                             Label { text: qsTr("Name"); Layout.fillWidth: true }
-                            Label { text: qsTr("Format"); Layout.preferredWidth: 85 }
-                            Label { text: qsTr("Default"); Layout.preferredWidth: 70 }
+                            Label { text: qsTr("Format"); Layout.preferredWidth: 78 }
                         }
 
                         ListView {
@@ -286,13 +294,14 @@ Item {
                             clip: true
                             model: root.flavours
                             spacing: 1
+                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; active: true; visible: size < 1 }
 
                             delegate: Rectangle {
                                 id: flavourDelegate
                                 required property var modelData
                                 required property int index
                                 width: flavourList.width
-                                height: 58
+                                height: Math.max(58, presetRow.implicitHeight + 16)
                                 color: flavourDelegate.modelData.id === root.selectedFlavourId
                                        ? Qt.rgba(root.Material.accentColor.r,
                                                  root.Material.accentColor.g,
@@ -305,9 +314,10 @@ Item {
                                     onClicked: root.selectedFlavourId = flavourDelegate.modelData.id
                                 }
                                 RowLayout {
+                                    id: presetRow
                                     anchors.fill: parent
                                     anchors.leftMargin: 8
-                                    anchors.rightMargin: 8
+                                    anchors.rightMargin: 20
                                     spacing: 8
                                     z: 1
                                     CheckBox {
@@ -320,7 +330,7 @@ Item {
                                         spacing: 2
                                         Label {
                                             text: flavourDelegate.modelData.name
-                                            elide: Text.ElideRight
+                                            wrapMode: Text.Wrap
                                             Layout.fillWidth: true
                                         }
                                         Label {
@@ -329,7 +339,7 @@ Item {
                                                   : qsTr("%1 px · Metadata: %2").arg(flavourDelegate.modelData.pixel_limit).arg(flavourDelegate.modelData.metadata_mode)
                                             font.pixelSize: 11
                                             opacity: 0.65
-                                            elide: Text.ElideRight
+                                            wrapMode: Text.Wrap
                                             Layout.fillWidth: true
                                         }
                                     }
@@ -345,20 +355,33 @@ Item {
                 }
 
                 Rectangle {
+                    objectName: "derivativeSettingsPanel"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 560
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 360
+                    Layout.preferredHeight: editorGrid.columns === 2 ? 360 : 640
                     color: "transparent"
                     border.color: Material.dividerColor
                     radius: 4
 
                     ScrollView {
+                        id: settingsScroll
+                        objectName: "derivativeSettingsScroll"
                         anchors.fill: parent
                         anchors.margins: 14
                         clip: true
+                        rightPadding: effectiveScrollBarWidth + 8
                         contentWidth: availableWidth
+                        contentHeight: settingsColumn.implicitHeight
+                        ScrollBar.vertical.policy: ScrollBar.AsNeeded
+                        ScrollBar.vertical.visible: settingsScroll.ScrollBar.vertical.size < 1
+                        ScrollBar.vertical.active: true
+                        ScrollBar.vertical.objectName: "derivativeSettingsScrollbar"
+                        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
                         ColumnLayout {
-                            width: parent.width
+                            id: settingsColumn
+                            width: settingsScroll.availableWidth
                             spacing: 12
 
                             Label {
@@ -368,12 +391,12 @@ Item {
                             }
 
                             GridLayout {
-                                columns: 2
+                                columns: settingsScroll.availableWidth >= 460 ? 2 : 1
                                 columnSpacing: 12
                                 rowSpacing: 10
                                 Layout.fillWidth: true
 
-                                Label { text: qsTr("Name:") }
+                                Label { text: qsTr("Name:"); Layout.fillWidth: true; wrapMode: Text.Wrap }
                                 TextField {
                                     objectName: "derivativeFlavourNameField"
                                     Layout.fillWidth: true
@@ -382,7 +405,7 @@ Item {
                                     onEditingFinished: root.updateSelected({ name: text.trim() })
                                 }
 
-                                Label { text: qsTr("Output filename suffix:") }
+                                Label { text: qsTr("Output filename suffix:"); Layout.fillWidth: true; Layout.maximumWidth: 200; wrapMode: Text.Wrap }
                                 TextField {
                                     objectName: "derivativeFlavourSuffixField"
                                     Layout.fillWidth: true
@@ -409,7 +432,7 @@ Item {
                                     })
                                 }
 
-                                Label { text: qsTr("Selected by default in export dialog") }
+                                Label { text: qsTr("Selected by default in export dialog"); Layout.fillWidth: true; Layout.maximumWidth: 200; wrapMode: Text.Wrap }
                                 CheckBox {
                                     objectName: "derivativeFlavourDefaultCheck"
                                     enabled: root.selectedFlavour !== null
@@ -437,7 +460,7 @@ Item {
 
                             GridLayout {
                                 visible: root.selectedFlavour && root.selectedFlavour.format !== "original"
-                                columns: 2
+                                columns: settingsScroll.availableWidth >= 460 ? 2 : 1
                                 columnSpacing: 12
                                 rowSpacing: 10
                                 Layout.fillWidth: true
@@ -530,7 +553,7 @@ Item {
                             }
 
                             GridLayout {
-                                columns: 2
+                                columns: settingsScroll.availableWidth >= 460 ? 2 : 1
                                 columnSpacing: 12
                                 Layout.fillWidth: true
                                 Label {

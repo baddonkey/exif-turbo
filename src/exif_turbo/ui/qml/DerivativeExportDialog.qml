@@ -12,8 +12,8 @@ Dialog {
     title: qsTr("Export Derivatives")
     modal: true
     anchors.centerIn: Overlay.overlay
-    width: Math.min(760, parent ? parent.width - 32 : 720)
-    height: Math.min(720, parent ? parent.height - 32 : 680)
+    width: Math.min(960, parent ? parent.width - 32 : 920)
+    height: Math.min(880, parent ? parent.height - 32 : 840)
     padding: 18
 
     property var appSettings
@@ -179,8 +179,7 @@ Dialog {
         }
     }
 
-    ColumnLayout {
-        anchors.fill: parent
+    contentItem: ColumnLayout {
         spacing: 12
 
         ColumnLayout {
@@ -199,9 +198,11 @@ Dialog {
             }
         }
 
-        RowLayout {
+        ColumnLayout {
             Layout.fillWidth: true
-            Label { text: qsTr("Output directory"); Layout.preferredWidth: 128 }
+            Label { text: qsTr("Output directory"); Layout.fillWidth: true; wrapMode: Text.Wrap }
+            RowLayout {
+                Layout.fillWidth: true
             TextField {
                 objectName: "derivativeOutputDirectoryField"
                 Layout.fillWidth: true
@@ -216,16 +217,25 @@ Dialog {
                 text: qsTr("Browse…")
                 onClicked: outputFolderDialog.open()
             }
+            }
         }
 
         CheckBox {
+            id: preserveFoldersCheck
             objectName: "preserveDerivativeFolderStructureCheck"
+            Layout.fillWidth: true
             text: qsTr("Create subdirectories (preserve folder structure)")
+            contentItem: Label {
+                text: preserveFoldersCheck.text
+                leftPadding: preserveFoldersCheck.indicator.width + preserveFoldersCheck.spacing
+                verticalAlignment: Text.AlignVCenter
+                wrapMode: Text.Wrap
+            }
             checked: root.preserveFolderStructure
             onClicked: root.preserveFolderStructure = checked
         }
 
-        RowLayout {
+        ColumnLayout {
             Layout.fillWidth: true
             Label {
                 text: qsTr("Export flavours")
@@ -233,9 +243,14 @@ Dialog {
                 font.weight: Font.DemiBold
                 Layout.fillWidth: true
             }
-            Button { text: qsTr("Select Default"); onClicked: root.selectRows("default") }
-            Button { text: qsTr("Select All"); onClicked: root.selectRows("all") }
-            Button { text: qsTr("Select None"); onClicked: root.selectRows("none") }
+            Flow {
+                Layout.fillWidth: true
+                Layout.preferredHeight: implicitHeight
+                spacing: 4
+                Button { text: qsTr("Select Default"); onClicked: root.selectRows("default") }
+                Button { text: qsTr("Select All"); onClicked: root.selectRows("all") }
+                Button { text: qsTr("Select None"); onClicked: root.selectRows("none") }
+            }
         }
 
         RowLayout {
@@ -243,9 +258,7 @@ Dialog {
             spacing: 8
             Label { text: ""; Layout.preferredWidth: 36 }
             Label { text: qsTr("Name"); Layout.fillWidth: true }
-            Label { text: qsTr("Format"); Layout.preferredWidth: 62 }
-            Label { text: qsTr("Size / Quality"); Layout.preferredWidth: 150 }
-            Label { text: qsTr("Metadata"); Layout.preferredWidth: 125 }
+            Label { text: qsTr("Metadata"); Layout.preferredWidth: 180; wrapMode: Text.Wrap }
         }
 
         ListView {
@@ -253,23 +266,26 @@ Dialog {
             objectName: "derivativeExportFlavourRows"
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.minimumHeight: 100
             clip: true
             model: root.rows
             spacing: 1
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; active: true; visible: size < 1 }
             delegate: Rectangle {
                 id: exportFlavourRow
                 required property var modelData
                 width: flavourRows.width
-                height: 58
+                height: Math.max(74, exportRow.implicitHeight + 20)
                 color: modelData.selected
                        ? Qt.rgba(Material.accentColor.r, Material.accentColor.g,
                                  Material.accentColor.b, 0.12)
                        : "transparent"
 
                 RowLayout {
+                    id: exportRow
                     anchors.fill: parent
                     anchors.leftMargin: 6
-                    anchors.rightMargin: 6
+                    anchors.rightMargin: 20
                     spacing: 8
                     CheckBox {
                         checked: exportFlavourRow.modelData.selected
@@ -278,24 +294,22 @@ Dialog {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 2
-                        Label { text: exportFlavourRow.modelData.name; elide: Text.ElideRight; Layout.fillWidth: true }
+                        Label {
+                            text: exportFlavourRow.modelData.name + " (" + exportFlavourRow.modelData.format.toUpperCase() + ")"
+                            wrapMode: Text.Wrap
+                            Layout.fillWidth: true
+                        }
                         Label {
                             text: root.rowSummary(exportFlavourRow.modelData)
                             font.pixelSize: 11
                             opacity: 0.7
-                            elide: Text.ElideRight
+                            wrapMode: Text.Wrap
                             Layout.fillWidth: true
                         }
                     }
-                    Label { text: exportFlavourRow.modelData.format.toUpperCase(); Layout.preferredWidth: 62 }
-                    Label {
-                        text: exportFlavourRow.modelData.format === "original" ? "—" : root.rowSummary(exportFlavourRow.modelData).split(", metadata:")[0]
-                        Layout.preferredWidth: 150
-                        elide: Text.ElideRight
-                    }
                     ComboBox {
                         objectName: "derivativeExportMetadataOverride"
-                        Layout.preferredWidth: 125
+                        Layout.preferredWidth: 180
                         model: [qsTr("None"), qsTr("Original"), qsTr("Custom")]
                         currentIndex: ["none", "original", "custom"].indexOf(exportFlavourRow.modelData.effective_metadata_mode)
                         enabled: exportFlavourRow.modelData.format !== "original"
@@ -318,13 +332,23 @@ Dialog {
             font.pixelSize: 16
             font.weight: Font.DemiBold
         }
-        TextArea {
-            objectName: "derivativeExportPreview"
+        ScrollView {
+            id: previewScroll
             Layout.fillWidth: true
-            Layout.preferredHeight: 78
-            readOnly: true
-            wrapMode: TextEdit.NoWrap
-            text: root.previewText()
+            Layout.preferredHeight: 110
+            clip: true
+            ScrollBar.vertical.policy: ScrollBar.AsNeeded
+            ScrollBar.vertical.visible: previewScroll.ScrollBar.vertical.size < 1
+            ScrollBar.vertical.active: true
+            ScrollBar.horizontal.policy: ScrollBar.AsNeeded
+            ScrollBar.horizontal.visible: previewScroll.ScrollBar.horizontal.size < 1
+            ScrollBar.horizontal.active: true
+            TextArea {
+                objectName: "derivativeExportPreview"
+                readOnly: true
+                wrapMode: TextEdit.NoWrap
+                text: root.previewText()
+            }
         }
         Label {
             visible: root.hasSelectedNameConflicts()
