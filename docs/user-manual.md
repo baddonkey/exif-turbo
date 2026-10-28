@@ -685,7 +685,11 @@ are not changed.
 Use the **Add** scope to add the selected image, marked images, all current
 Search results, or every image in the current Browse folder. Search-result and
 folder operations include the complete scope, not only rows currently loaded or
-visible. Click **Remove** on a member row to remove that image from the set;
+visible. After an AI search, **Current results** uses the exact AI result list,
+not a metadata search for the same words. Visiting Browse before opening Sets
+preserves that Search scope; use **Browse folder** to add the browsed folder
+instead. An empty AI result list adds no images.
+Click **Remove** on a member row to remove that image from the set;
 removing it does not delete the image from the database or disk. Repeating an
 add or remove is safe. Removing an image from the index also removes its set
 memberships.
@@ -700,6 +704,8 @@ The **Set** filter in the Search toolbar controls which set members appear:
 
 Changing the Search filter never changes set membership. Returning to Search
 from Browse restores the previous set filter with the rest of the Search state.
+If that set was deleted in the meantime, the filter returns to **Ignore**, and
+**Current results** on the Sets tab also ignores the deleted set.
 
 ### Saved filters
 

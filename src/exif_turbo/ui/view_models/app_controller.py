@@ -143,6 +143,7 @@ class AppController(QObject):
     totalResultsChanged = Signal()
     loadedResultsChanged = Signal()
     searchRestoreReady = Signal()
+    searchStateSnapshotChanged = Signal()
     searchErrorChanged = Signal()
     isLockedChanged = Signal()
     isNewDatabaseChanged = Signal()
@@ -1053,6 +1054,10 @@ class AppController(QObject):
     @Property(str, notify=folderFilterChanged)
     def folderFilter(self) -> str:
         return self._folder_filter
+
+    @Property(bool, notify=searchStateSnapshotChanged)
+    def hasSearchStateSnapshot(self) -> bool:
+        return self._search_state_snapshot is not None
 
     @Property(int, notify=searchImageSetFilterChanged)
     def searchImageSetId(self) -> int:
@@ -2406,11 +2411,12 @@ class AppController(QObject):
             "checked_only_filter": self._checked_only_filter_active,
             "was_ai_search_mode": self._is_ai_search_mode,
             "current_image_id": self._search_model.get_image_id(self._current_result_row) or 0,
-            "ai_rows": list(self._ai_result_cache) if self._is_ai_search_mode else None,
+            "ai_rows": list(self._ai_result_cache) if self._results_use_ai_pipeline() else None,
             "ai_facet_paths": list(self._ai_facet_paths) if self._is_ai_search_mode else None,
             "ai_total_results": self._total_results if self._is_ai_search_mode else 0,
             "ai_loaded_results": self._loaded_results if self._is_ai_search_mode else 0,
         }
+        self.searchStateSnapshotChanged.emit()
         if self._is_ai_search_mode:
             self._is_ai_search_mode = False
             self.isAiSearchModeChanged.emit()
@@ -2440,11 +2446,15 @@ class AppController(QObject):
 
         Clears the Browse-side folder filter, restores the saved search
         state and re-runs the search. Returns the previously-saved query
-        text so the QML searchField can be repopulated. Returns an empty
-        string if no snapshot was held.
+        text so the QML searchField can be repopulated. Without a held
+        snapshot this is a no-op that returns an empty string, leaving the
+        current Search state and results untouched.
         """
         snapshot = self._search_state_snapshot
+        if snapshot is None:
+            return ""
         self._search_state_snapshot = None
+        self.searchStateSnapshotChanged.emit()
         # Discard any in-flight forward Browse-jump target — it belongs to
         # the Browse session we are now leaving.
         self._pending_browse_jump_id = 0
@@ -2452,10 +2462,6 @@ class AppController(QObject):
         if self._folder_filter:
             self._folder_filter = ""
             self.folderFilterChanged.emit()
-        if snapshot is None:
-            self._query_text = ""
-            self._run_search()
-            return ""
         restore_ai_search_mode = bool(snapshot.get("was_ai_search_mode", False))
         if self._is_ai_search_mode != restore_ai_search_mode:
             self._is_ai_search_mode = restore_ai_search_mode
@@ -4730,6 +4736,9 @@ class AppController(QObject):
             self._set_image_set_status(_("Set deleted."))
             self.imageSetsChanged.emit()
             self.imageSetMembersChanged.emit()
+            snapshot = self._search_state_snapshot
+            if snapshot is not None and snapshot["search_image_set_id"] == set_id:
+                snapshot["search_image_set_id"] = None
             if self._search_image_set_id == set_id:
                 self._search_image_set_id = None
                 self.searchImageSetFilterChanged.emit()
@@ -4750,9 +4759,14 @@ class AppController(QObject):
         if self._image_set_worker is not None:
             self._set_image_set_status(_("A set operation is already running."))
             return False
+        snapshot = self._search_state_snapshot if target_scope == "results" else None
         image_paths = None
-        if target_scope == "results" and self._results_use_ai_pipeline():
-            image_paths = [result.path for result in self._ai_result_cache]
+        if target_scope == "results":
+            if snapshot is not None:
+                if snapshot["ai_rows"] is not None:
+                    image_paths = [result.path for result in snapshot["ai_rows"]]
+            elif self._results_use_ai_pipeline():
+                image_paths = [result.path for result in self._ai_result_cache]
         self._image_set_worker = ImageSetMembershipWorker(
             self._db_path,
             self._key,
@@ -4761,15 +4775,27 @@ class AppController(QObject):
             add,
             selected_path=self._search_model.get_path(self._current_result_row),
             image_paths=image_paths,
-            query=self._query_text,
-            ext_filter=self._ext_filter,
-            path_filter=self._current_path_filter(),
+            query=snapshot["query_text"] if snapshot is not None else self._query_text,
+            ext_filter=snapshot["ext_filter"] if snapshot is not None else self._ext_filter,
+            path_filter=(
+                sorted(snapshot["search_folder_filters"]) or None
+                if snapshot is not None
+                else self._current_path_filter()
+            ),
             restrict_to_enabled_folders=self._folder_repo is not None,
-            marked_only=self._checked_only_filter_active,
-            date_from=self._date_from,
-            date_to=self._date_to,
+            marked_only=(
+                snapshot["checked_only_filter"]
+                if snapshot is not None
+                else self._checked_only_filter_active
+            ),
+            date_from=snapshot["date_from"] if snapshot is not None else self._date_from,
+            date_to=snapshot["date_to"] if snapshot is not None else self._date_to,
             browse_folder=self._folder_filter,
-            image_set_id=self._search_image_set_id,
+            image_set_id=(
+                snapshot["search_image_set_id"]
+                if snapshot is not None
+                else self._search_image_set_id
+            ),
         )
         self._image_set_worker.progress.connect(self._on_image_set_worker_progress)
         self._image_set_worker.result_ready.connect(self._on_image_set_worker_result)

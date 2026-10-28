@@ -294,6 +294,7 @@ Item {
                         spacing: 8
                         ComboBox {
                             id: targetScope
+                            objectName: "imageSetTargetScope"
                             width: Math.min(300, parent.width)
                             enabled: root.selectedSet !== null
                                      && root.canEditSets
@@ -308,6 +309,7 @@ Item {
                         }
                         Button {
                             id: addMembersButton
+                            objectName: "addImageSetMembersButton"
                             text: qsTr("Add")
                             enabled: root.selectedSet !== null
                                      && root.canEditSets

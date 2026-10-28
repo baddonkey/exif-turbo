@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -323,6 +324,192 @@ def tagging_controller(
     controller._current_result_row = 0
     yield controller, search_model, db_path, image_path
     controller.close()
+
+
+@pytest.fixture
+def load_ai_results(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    tmp_path: Path,
+) -> Callable[[int], list[str]]:
+    """Index *count* images and deliver them as the completed AI search."""
+    controller, _, _, _ = tagging_controller
+
+    def load(count: int) -> list[str]:
+        assert controller._repo is not None
+        paths = [str(tmp_path / f"semantic-{index}.jpg") for index in range(count)]
+        controller._repo.upsert_images_batch([
+            (path, Path(path).name, 1.0, 5, {}, "", None, None) for path in paths
+        ])
+        controller.setAiSearchMode(True)
+        controller._last_ai_query = "forest"
+        serial = controller._search_coordinator.begin_secondary_search()
+        controller._on_search_finished(
+            controller._repo.get_images_by_paths(paths), count, [], serial
+        )
+        return paths
+
+    return load
+
+
+def _visit_browse_folder(controller: AppController, qtbot: QtBot, folder: Path) -> None:
+    controller.enterBrowseTab(controller._last_ai_query or controller._query_text)
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
+        controller.browseFolder(str(folder))
+
+
+@pytest.mark.parametrize("visit_browse", [False, True])
+@pytest.mark.parametrize("result_count", [0, 51])
+def test_app_controller_add_current_ai_results_to_set_adds_exact_members(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    load_ai_results: Callable[[int], list[str]],
+    qtbot: QtBot,
+    tmp_path: Path,
+    visit_browse: bool,
+    result_count: int,
+) -> None:
+    # Arrange
+    controller, _, _, _ = tagging_controller
+    assert controller._repo is not None
+    ai_paths = load_ai_results(result_count)
+    if visit_browse:
+        _visit_browse_folder(controller, qtbot, tmp_path)
+    set_id = controller.createImageSet("Semantic results")
+
+    # Act
+    assert controller.changeImageSetMembers(set_id, "results", True)
+    qtbot.waitUntil(lambda: not controller.imageSetOperationRunning, timeout=5000)
+
+    # Assert
+    members = controller._repo.get_image_set_members(set_id, limit=100)
+    assert {member["path"] for member in members} == set(ai_paths)
+
+
+@pytest.mark.parametrize("visit_browse", [False, True])
+def test_app_controller_remove_current_ai_results_from_set_keeps_other_members(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    load_ai_results: Callable[[int], list[str]],
+    qtbot: QtBot,
+    tmp_path: Path,
+    visit_browse: bool,
+) -> None:
+    # Arrange
+    controller, _, _, unrelated_path = tagging_controller
+    assert controller._repo is not None
+    ai_paths = load_ai_results(51)
+    if visit_browse:
+        _visit_browse_folder(controller, qtbot, tmp_path)
+    set_id = controller.createImageSet("Semantic results")
+    controller._repo.add_images_to_set(set_id, [*ai_paths, str(unrelated_path)])
+
+    # Act
+    assert controller.changeImageSetMembers(set_id, "results", False)
+    qtbot.waitUntil(lambda: not controller.imageSetOperationRunning, timeout=5000)
+
+    # Assert
+    members = controller._repo.get_image_set_members(set_id, limit=100)
+    assert {member["path"] for member in members} == {str(unrelated_path)}
+
+
+@pytest.mark.parametrize("ai_fallback", [False, True])
+def test_app_controller_add_current_results_after_browse_uses_saved_search_scope(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    qtbot: QtBot,
+    tmp_path: Path,
+    ai_fallback: bool,
+) -> None:
+    # Arrange
+    controller, _, _, unrelated_path = tagging_controller
+    assert controller._repo is not None
+    matching_path = str(tmp_path / "forest.jpg")
+    controller._repo.upsert_image(matching_path, "forest.jpg", 1.0, 5, {}, "forest")
+    controller.setAiSearchMode(ai_fallback)
+    controller._query_text = "" if ai_fallback else "forest"
+    _visit_browse_folder(controller, qtbot, tmp_path)
+    set_id = controller.createImageSet("Saved search")
+
+    # Act
+    assert controller.changeImageSetMembers(set_id, "results", True)
+    qtbot.waitUntil(lambda: not controller.imageSetOperationRunning, timeout=5000)
+
+    # Assert
+    expected_paths = {matching_path, str(unrelated_path)} if ai_fallback else {matching_path}
+    members = controller._repo.get_image_set_members(set_id, limit=100)
+    assert {member["path"] for member in members} == expected_paths
+
+
+@pytest.fixture
+def browse_with_deleted_search_set(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> tuple[AppController, set[str]]:
+    """Search filtered by a set, then Browse, then that set is deleted."""
+    controller, _, _, image_path = tagging_controller
+    assert controller._repo is not None
+    other_path = str(tmp_path / "other.jpg")
+    controller._repo.upsert_image(other_path, "other.jpg", 1.0, 5, {}, "")
+    filter_set_id = controller.createImageSet("Search filter")
+    controller._repo.add_images_to_set(filter_set_id, [str(image_path)])
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
+        controller.setSearchImageSetFilter(filter_set_id)
+    _visit_browse_folder(controller, qtbot, tmp_path)
+    assert controller.deleteImageSet(filter_set_id)
+    return controller, {str(image_path), other_path}
+
+
+def test_app_controller_add_current_results_after_deleting_saved_search_set_ignores_filter(
+    browse_with_deleted_search_set: tuple[AppController, set[str]],
+    qtbot: QtBot,
+) -> None:
+    # Arrange
+    controller, all_paths = browse_with_deleted_search_set
+    assert controller._repo is not None
+    target_set_id = controller.createImageSet("Target")
+
+    # Act
+    assert controller.changeImageSetMembers(target_set_id, "results", True)
+    qtbot.waitUntil(lambda: not controller.imageSetOperationRunning, timeout=5000)
+
+    # Assert
+    members = controller._repo.get_image_set_members(target_set_id, limit=100)
+    assert {member["path"] for member in members} == all_paths
+
+
+def test_app_controller_leave_browse_after_deleting_saved_search_set_restores_ignore(
+    browse_with_deleted_search_set: tuple[AppController, set[str]],
+    qtbot: QtBot,
+) -> None:
+    # Arrange
+    controller, all_paths = browse_with_deleted_search_set
+
+    # Act
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
+        controller.leaveBrowseTab()
+
+    # Assert
+    assert controller.searchImageSetId == -2
+    assert controller.totalResults == len(all_paths)
+
+
+def test_app_controller_leave_browse_without_snapshot_keeps_ai_results(
+    tagging_controller: tuple[AppController, SearchListModel, Path, Path],
+    load_ai_results: Callable[[int], list[str]],
+    qtbot: QtBot,
+) -> None:
+    # Arrange
+    controller, model, _, _ = tagging_controller
+    ai_paths = load_ai_results(2)
+    cached_results = list(controller._ai_result_cache)
+
+    # Act
+    with qtbot.assertNotEmitted(controller.totalResultsChanged, wait=300):
+        restored_query = controller.leaveBrowseTab()
+
+    # Assert
+    assert restored_query == ""
+    assert controller.hasSearchStateSnapshot is False
+    assert controller._ai_result_cache == cached_results
+    assert [model.get_path(row) for row in range(model.rowCount())] == ai_paths
 
 
 def test_app_controller_set_member_tagging_keeps_search_selection(
