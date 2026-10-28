@@ -8,6 +8,37 @@ import pytest
 from exif_turbo.tagging import media_tool_discovery
 
 
+@pytest.mark.parametrize("tool", ["imagemagick", "ffmpeg", "ffprobe"])
+@pytest.mark.parametrize("platform", ["darwin", "linux"])
+def test_find_media_tool_missing_from_path_uses_homebrew_only_on_macos(
+    tool: str,
+    platform: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    tool_name = "magick" if tool == "imagemagick" else tool
+    executable = tmp_path / tool_name
+    executable.write_bytes(b"tool")
+    executable.chmod(0o755)
+    monkeypatch.setattr(media_tool_discovery.sys, "platform", platform)
+    monkeypatch.setattr(media_tool_discovery.sys, "executable", str(tmp_path / "app"))
+    monkeypatch.delattr(media_tool_discovery.sys, "_MEIPASS", raising=False)
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    monkeypatch.setattr(
+        media_tool_discovery,
+        "_MACOS_MEDIA_TOOL_DIRECTORIES",
+        (str(tmp_path),),
+        raising=False,
+    )
+
+    # Act
+    result = media_tool_discovery.find_media_tool(tool)
+
+    # Assert
+    assert result == (str(executable) if platform == "darwin" else None)
+
+
 def test_find_media_tool_prefers_path_then_checks_bundle_directory(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

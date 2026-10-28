@@ -13,6 +13,7 @@ _TOOL_NAMES = {
     "ffmpeg": ("ffmpeg", "ffmpeg.exe"),
     "ffprobe": ("ffprobe", "ffprobe.exe"),
 }
+_MACOS_MEDIA_TOOL_DIRECTORIES = ("/opt/homebrew/bin", "/usr/local/bin")
 
 
 def find_media_tool(tool: str) -> str | None:
@@ -28,6 +29,12 @@ def find_media_tool(tool: str) -> str | None:
             candidate = directory / name
             if candidate.is_file():
                 return str(candidate)
+    if sys.platform == "darwin":
+        search_path = os.pathsep.join(_MACOS_MEDIA_TOOL_DIRECTORIES)
+        for name in names:
+            found = shutil.which(name, path=search_path)
+            if found:
+                return found
     return None
 
 
