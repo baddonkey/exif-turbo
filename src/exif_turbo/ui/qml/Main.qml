@@ -1367,9 +1367,11 @@ ApplicationWindow {
                 root._savedSearchScrollY = resultsList.contentY
                 controller.enterBrowseTab(searchToolbar.queryText)
                 searchToolbar.queryText = ""
-            } else if (currentIndex === 0) {
-                // Returning to Search: restore the snapshot, repopulate searchField,
-                // and request a one-shot scroll restore once results have loaded.
+            } else if (currentIndex === 0 && controller.hasSearchStateSnapshot) {
+                // Returning to Search from Browse (directly or via another
+                // tab): restore the snapshot, repopulate searchField, and
+                // request a one-shot scroll restore once results have loaded.
+                // Other tabs leave Search untouched, so nothing is armed.
                 root._pendingBrowseTargetId = -1
                 root._pendingBrowseScrollRow = -1
                 root._restoreSearchPosition = true

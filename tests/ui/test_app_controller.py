@@ -36,6 +36,7 @@ from exif_turbo.ui.models.settings_model import SettingsModel
 from exif_turbo.ui.providers.preview_image_provider import PreviewImageProvider
 from exif_turbo.ui.providers.raw_image_provider import RawImageProvider
 from exif_turbo.ui.view_models.app_controller import AppController
+from exif_turbo.ui.workers.ai_search_worker import AiSearchWorker
 from exif_turbo.ui.workers.image_set_membership_worker import ImageSetMembershipWorker
 
 # How long to leave the window visible between steps (ms).
@@ -361,6 +362,107 @@ def test_sets_actions_follow_selected_set_and_preserve_search_scope(
     qtbot.waitUntil(lambda: controller._action_image_set_id is None)
     assert controller._search_image_set_id == first_id
     assert "Renamed action scope" not in str(export_action.property("text"))
+
+
+@pytest.fixture
+def ai_search_window(
+    qtbot: QtBot,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[AppController, SearchListModel, QQuickWindow, list[str]]:
+    """Main window showing a completed AI search for "forest"."""
+    controller, model, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    assert controller._repo is not None
+    rows = list(reversed(controller._repo.search_images("", 2, 0)))
+
+    def emit_ai_results(worker: AiSearchWorker) -> None:
+        worker.results_ready.emit(rows, len(rows), [], worker._serial)
+
+    monkeypatch.setattr(AiSearchWorker, "run", emit_ai_results)
+    toolbar = root.findChild(QObject, "searchToolbar")
+    assert toolbar is not None
+    toolbar.aiSearchModeRequested.emit(True)
+    toolbar.setProperty("queryText", "forest")
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=5000):
+        toolbar.searchRequested.emit("forest")
+    return controller, model, root, [row[1] for row in rows]
+
+
+def test_sets_current_results_round_trip_keeps_ai_search_without_restore(
+    qtbot: QtBot,
+    ai_search_window: tuple[AppController, SearchListModel, QQuickWindow, list[str]],
+) -> None:
+    # Arrange
+    controller, model, root, ai_paths = ai_search_window
+    toolbar = root.findChild(QObject, "searchToolbar")
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    create_button = root.findChild(QObject, "createImageSetButton")
+    create_dialog = root.findChild(QObject, "createSetDialog")
+    name_field = root.findChild(QObject, "createSetNameField")
+    confirm_button = root.findChild(QObject, "confirmCreateSetButton")
+    target_scope = root.findChild(QObject, "imageSetTargetScope")
+    add_button = root.findChild(QObject, "addImageSetMembersButton")
+    sets_page = root.findChild(QObject, "setsPage")
+    assert toolbar is not None
+    assert tab_bar is not None
+    assert create_button is not None
+    assert create_dialog is not None
+    assert name_field is not None
+    assert confirm_button is not None
+    assert target_scope is not None
+    assert add_button is not None
+    assert sets_page is not None
+    assert controller._repo is not None
+    set_ids: list[int] = []
+
+    # Act
+    for name in ("First AI set", "Second AI set"):
+        tab_bar.setProperty("currentIndex", 2)
+        create_button.clicked.emit()
+        qtbot.waitUntil(lambda: bool(create_dialog.property("visible")))
+        name_field.setProperty("text", name)
+        confirm_button.clicked.emit()
+        set_ids.append(int(sets_page.property("selectedSetId")))
+        target_scope.setProperty("currentIndex", 2)
+        with qtbot.waitSignal(controller.imageSetOperationChanged, timeout=5000):
+            add_button.clicked.emit()
+        qtbot.waitUntil(lambda: not controller.imageSetOperationRunning, timeout=5000)
+        with qtbot.assertNotEmitted(controller.totalResultsChanged, wait=300):
+            tab_bar.setProperty("currentIndex", 0)
+
+    # Assert
+    for set_id in set_ids:
+        members = controller._repo.get_image_set_members(set_id, limit=100)
+        assert {member["path"] for member in members} == set(ai_paths)
+    assert root.property("_restoreSearchPosition") is False
+    assert toolbar.property("queryText") == "forest"
+    assert controller.isAiSearchMode
+    assert [model.get_path(row) for row in range(model.rowCount())] == ai_paths
+
+
+def test_browse_then_sets_then_search_restores_saved_ai_search(
+    qtbot: QtBot,
+    ai_search_window: tuple[AppController, SearchListModel, QQuickWindow, list[str]],
+) -> None:
+    # Arrange
+    controller, model, root, ai_paths = ai_search_window
+    toolbar = root.findChild(QObject, "searchToolbar")
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    assert toolbar is not None
+    assert tab_bar is not None
+    tab_bar.setProperty("currentIndex", 1)
+    tab_bar.setProperty("currentIndex", 2)
+
+    # Act
+    tab_bar.setProperty("currentIndex", 0)
+
+    # Assert
+    assert controller.hasSearchStateSnapshot is False
+    assert toolbar.property("queryText") == "forest"
+    assert controller.isAiSearchMode
+    assert [model.get_path(row) for row in range(model.rowCount())] == ai_paths
 
 
 def test_sets_tab_displays_and_manages_database_sets(
