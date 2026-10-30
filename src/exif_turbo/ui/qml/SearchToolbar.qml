@@ -255,6 +255,18 @@ Rectangle {
 
                             Label { text: "summer*"; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
                             Label { text: qsTr("prefix wildcard"); font.pixelSize: 12 }
+
+                            Label { text: "tags:=\"forest, wildlife\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: qsTr("all exact tag values; exclusions apply"); font.pixelSize: 12 }
+
+                            Label { text: "description:=\"sun\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: qsTr("substring in embedded or custom description"); font.pixelSize: 12 }
+
+                            Label { text: "embedded-tags:=\"forest\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: qsTr("non-excluded embedded keywords"); font.pixelSize: 12 }
+
+                            Label { text: "custom-tags:=\"deer\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: qsTr("custom sidecar tags only"); font.pixelSize: 12 }
                         }
 
                         Rectangle {

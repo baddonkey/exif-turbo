@@ -69,6 +69,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "exclude token": "Begriff ausschliessen",
         "exact phrase": "exakte Wortfolge",
         "prefix wildcard": "Pr\u00e4fix-Platzhalter",
+        "all exact tag values; exclusions apply": "Alle exakten Tag-Werte; Ausschl\u00fcsse gelten",
+        "substring in embedded or custom description": "Teilzeichenfolge in eingebetteter oder benutzerdefinierter Beschreibung",
+        "non-excluded embedded keywords": "Nicht ausgeschlossene eingebettete Schl\u00fcsselw\u00f6rter",
+        "custom sidecar tags only": "Nur benutzerdefinierte Sidecar-Tags",
         "Tips": "Tipps",
         "\u2022 Operators AND, OR, NOT must be UPPERCASE\n\u2022 Quote multi-word phrases\n\u2022 In ExifTool keys (e.g. GPS:GPSLatitude) the colon acts as a separator":
             "\u2022 Operatoren AND, OR, NOT m\u00fcssen GROSSGESCHRIEBEN sein\n\u2022 Mehrwortausdr\u00fccke in Anf\u00fchrungszeichen setzen\n\u2022 In ExifTool-Schl\u00fcsseln (z.B. GPS:GPSLatitude) wirkt der Doppelpunkt als Trennzeichen",
@@ -406,6 +410,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "exclude token": "exclure le terme",
         "exact phrase": "expression exacte",
         "prefix wildcard": "joker de pr\u00e9fixe",
+            "all exact tag values; exclusions apply": "toutes les valeurs exactes ; exclusions appliqu\u00e9es",
+            "substring in embedded or custom description": "sous-cha\u00eene dans la description int\u00e9gr\u00e9e ou personnalis\u00e9e",
+            "non-excluded embedded keywords": "mots-cl\u00e9s int\u00e9gr\u00e9s non exclus",
+            "custom sidecar tags only": "tags personnalis\u00e9s du sidecar uniquement",
         "Tips": "Astuces",
         "\u2022 Operators AND, OR, NOT must be UPPERCASE\n\u2022 Quote multi-word phrases\n\u2022 In ExifTool keys (e.g. GPS:GPSLatitude) the colon acts as a separator":
             "\u2022 Les op\u00e9rateurs AND, OR, NOT doivent \u00eatre en MAJUSCULES\n\u2022 Mettre les expressions de plusieurs mots entre guillemets\n\u2022 Dans les cl\u00e9s ExifTool (p.\u00a0ex. GPS:GPSLatitude), le deux-points sert de s\u00e9parateur",
@@ -747,6 +755,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "exclude token": "escludi termine",
         "exact phrase": "frase esatta",
         "prefix wildcard": "carattere jolly di prefisso",
+            "all exact tag values; exclusions apply": "tutti i valori esatti dei tag; le esclusioni vengono applicate",
+            "substring in embedded or custom description": "sottostringa nella descrizione incorporata o personalizzata",
+            "non-excluded embedded keywords": "parole chiave incorporate non escluse",
+            "custom sidecar tags only": "solo tag personalizzati del sidecar",
         "Tips": "Suggerimenti",
         "• Operators AND, OR, NOT must be UPPERCASE\n• Quote multi-word phrases\n• In ExifTool keys (e.g. GPS:GPSLatitude) the colon acts as a separator":
             "• Gli operatori AND, OR, NOT devono essere in MAIUSCOLO\n• Racchiudere le frasi di più parole tra virgolette\n• Nelle chiavi ExifTool (es. GPS:GPSLatitude) i due punti fungono da separatore",
@@ -1093,6 +1105,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "exclude token": "excluder term",
         "exact phrase": "frasa exacta",
         "prefix wildcard": "joker da prefix",
+            "all exact tag values; exclusions apply": "tut las valurs exactas dals tags; las exclusiuns valan",
+            "substring in embedded or custom description": "part da la descripziun integrada u persunalisada",
+            "non-excluded embedded keywords": "pleds-clav integrads betg exclus",
+            "custom sidecar tags only": "mo tags persunalisads dal sidecar",
         "Tips": "Cussegls",
         "• Operators AND, OR, NOT must be UPPERCASE\n• Quote multi-word phrases\n• In ExifTool keys (e.g. GPS:GPSLatitude) the colon acts as a separator":
             "• Ils operaturs AND, OR, NOT ston esser scrits en MAJUSCULAS\n• Metter frasas da pliras pleds tranter virgulettas\n• En las clavs ExifTool (p.ex. GPS:GPSLatitude) ils dus puncts gioghan il rolla d'in separatur",

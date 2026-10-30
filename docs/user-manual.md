@@ -369,9 +369,8 @@ keywords, copyright, and more.
 Press **Enter** with an empty search bar to show all indexed images.
 
 A **`?`** button at the right edge of the search field shows a syntax
-cheat-sheet when hovered. It lists six examples (single token, implicit AND,
-OR, NOT, exact phrase, prefix wildcard) and a short tips section. You do not
-need to click it — the tooltip appears automatically on hover.
+cheat-sheet when hovered. It includes full-text and structured search examples.
+You do not need to click it — the tooltip appears automatically on hover.
 
 When the search field contains text a **`×`** button appears to its left.
 Clicking it clears the field and immediately shows all images (equivalent to
@@ -576,6 +575,29 @@ ExifTool stores metadata with group-prefixed keys such as `GPS:GPSLatitude` or
 `ExifIFD:FocalLength`. You can type these directly in the search box — the colon
 is treated as a word separator, so `GPS:GPSLatitude` becomes an implicit AND
 of `GPS` and `GPSLatitude`.
+
+### Exact tag and description filters
+
+Structured filters can be combined with each other and with ordinary full-text
+terms. Every structured filter is combined with AND semantics:
+
+| Syntax | Example | What it finds |
+|--------|---------|---------------|
+| `tags:=` | `tags:="forest, wildlife"` | Images with every listed effective tag |
+| `description:=` | `description:="sun"` | Descriptions containing `sun` anywhere |
+| `embedded-tags:=` | `embedded-tags:="forest"` | Non-excluded embedded IPTC/XMP keywords |
+| `custom-tags:=` | `custom-tags:="deer"` | Custom sidecar tags only |
+
+Tag values are matched case-insensitively as complete values, not as words or
+substrings. Multiple values are comma-separated and all must be present. The
+default `tags:=` filter searches the effective collection: embedded keywords
+not excluded for that image, plus custom sidecar tags. Excluding all embedded
+keywords does not exclude custom tags.
+
+Description filters are case-insensitive substring searches across both
+embedded and custom descriptions. Unlike exact tag filters, `description:=` can
+match in the middle of a word. Structured filters combine with remaining FTS
+text, for example `mountains tags:="forest, deer" description:="sun"`.
 
 ---
 
