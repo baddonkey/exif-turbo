@@ -238,23 +238,50 @@ Rectangle {
                             Label { text: qsTr("Example"); font.pixelSize: 11; font.bold: true; opacity: 0.65 }
                             Label { text: qsTr("Meaning"); font.pixelSize: 11; font.bold: true; opacity: 0.65 }
 
-                            Label { text: "canon"; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
-                            Label { text: qsTr("single token"); font.pixelSize: 12 }
+                            Label { text: "Canon EOS R5"; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: qsTr("all terms in indexed text"); font.pixelSize: 12 }
 
-                            Label { text: "canon r5"; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: "Switzerland 2024"; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
                             Label { text: qsTr("both tokens (implicit AND)"); font.pixelSize: 12 }
 
                             Label { text: "canon OR nikon"; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
                             Label { text: qsTr("either token"); font.pixelSize: 12 }
 
-                            Label { text: "canon NOT raw"; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
-                            Label { text: qsTr("exclude token"); font.pixelSize: 12 }
+                            Label { text: "\"red deer\" NOT captive"; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: qsTr("phrase, excluding the second term"); font.pixelSize: 12 }
 
-                            Label { text: "\"Z 9\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: "\"golden eagle\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
                             Label { text: qsTr("exact phrase"); font.pixelSize: 12 }
 
-                            Label { text: "summer*"; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: "Fuji*"; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
                             Label { text: qsTr("prefix wildcard"); font.pixelSize: 12 }
+
+                            Label { text: "tags:=\"red deer, landscape\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: qsTr("all exact tag values; exclusions apply"); font.pixelSize: 12 }
+
+                            Label { text: "description:=\"sunset\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: qsTr("substring in embedded or custom description"); font.pixelSize: 12 }
+
+                            Label { text: "embedded-tags:=\"landscape\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: qsTr("non-excluded embedded keywords"); font.pixelSize: 12 }
+
+                            Label { text: "custom-tags:=\"summer holiday\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: qsTr("custom sidecar tags only"); font.pixelSize: 12 }
+
+                            Label { text: "text:=\"golden eagle\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: qsTr("phrase in non-tag text"); font.pixelSize: 12 }
+
+                            Label { text: "text-not:=\"captive\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: qsTr("exclude phrase from non-tag text"); font.pixelSize: 12 }
+
+                            Label { text: "(Canon OR Nikon) tags:=\"wildlife\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: qsTr("FTS OR plus an exact tag"); font.pixelSize: 12 }
+
+                            Label { text: "tags:=\"red deer\" AND description:=\"golden\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: qsTr("exact tag AND description"); font.pixelSize: 12 }
+
+                            Label { text: "tags:=\"cat, playing\" OR text:=\"green\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: qsTr("exact tags OR non-tag text"); font.pixelSize: 12 }
                         }
 
                         Rectangle {

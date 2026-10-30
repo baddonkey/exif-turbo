@@ -3923,6 +3923,14 @@ ApplicationWindow {
         appController: controller
         accentColor: root._accentColor
         onTaggingRequested: taggingDrawer.openTaggingPanel()
+        onOpenImageInSearch: (setId, imageId) => {
+            mainTabBar.currentIndex = 0
+            Qt.callLater(function() {
+                searchToolbar.queryText = ""
+                root._aiSearchMode = false
+                controller.openImageSetMemberInSearch(setId, imageId)
+            })
+        }
     }
 
     DerivativeExportPage {

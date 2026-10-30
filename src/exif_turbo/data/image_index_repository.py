@@ -4,13 +4,20 @@ import json
 import math
 import os
 import re
+import unicodedata
 from os.path import commonpath
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Tuple
 
 import sqlcipher3
 
+from ..metadata_values import (
+    extract_embedded_description,
+    extract_embedded_keyword_labels,
+    metadata_text_without_embedded_keywords,
+)
 from ..models.image_sidecar import ImageSidecar
+from ..search_query import ParsedSearchQuery, StructuredSearchFilter, parse_search_query
 from ._connection import open_encrypted_connection, rekey_connection
 from .password_policy import validate_new_database_password
 from .sidecar_sync_state import SidecarSyncState
@@ -22,6 +29,8 @@ _DIM_KEY_PAIRS: tuple[tuple[str, str], ...] = (
     ("IFD0:ImageWidth", "IFD0:ImageHeight"),
     ("PNG:ImageWidth", "PNG:ImageHeight"),
 )
+_STRUCTURED_SEARCH_MIGRATION = "structured-search-index-v1"
+_TEXT_NOT_FTS_MIGRATION = "text-not-fts-v1"
 
 
 class EmptyImageSetReplaceError(ValueError):
@@ -61,6 +70,10 @@ def _pixel_count_from_meta(meta_json: str) -> int:
     except Exception:  # noqa: BLE001
         pass
     return 0
+
+
+def _normalize_search_value(value: str) -> str:
+    return unicodedata.normalize("NFC", value.strip()).casefold()
 
 
 class ImageIndexRepository:
@@ -137,6 +150,14 @@ class ImageIndexRepository:
             CREATE VIRTUAL TABLE IF NOT EXISTS images_fts
             USING fts5(path, filename, metadata_text, tags_text);
 
+            CREATE VIRTUAL TABLE IF NOT EXISTS images_non_tag_fts
+            USING fts5(path, filename, metadata_text, custom_description);
+
+            CREATE TRIGGER IF NOT EXISTS images_non_tag_fts_image_delete
+            AFTER DELETE ON images BEGIN
+                DELETE FROM images_non_tag_fts WHERE rowid = old.id;
+            END;
+
             CREATE TABLE IF NOT EXISTS image_sidecar_state (
                 image_id INTEGER PRIMARY KEY REFERENCES images(id) ON DELETE CASCADE,
                 sidecar_path TEXT NOT NULL,
@@ -145,6 +166,7 @@ class ImageIndexRepository:
                 checksum TEXT NOT NULL,
                 schema_version INTEGER NOT NULL,
                 sync_status TEXT NOT NULL,
+                exclude_all_embedded_tags INTEGER NOT NULL DEFAULT 0,
                 error TEXT
             );
 
@@ -156,9 +178,30 @@ class ImageIndexRepository:
                 PRIMARY KEY (image_id, normalized_label)
             );
 
+            CREATE TABLE IF NOT EXISTS image_embedded_tags (
+                image_id INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE,
+                normalized_label TEXT NOT NULL,
+                display_label TEXT NOT NULL,
+                PRIMARY KEY (image_id, normalized_label)
+            );
+
+            CREATE TABLE IF NOT EXISTS image_tag_exclusions (
+                image_id INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE,
+                normalized_label TEXT NOT NULL,
+                PRIMARY KEY (image_id, normalized_label)
+            );
+
             CREATE TABLE IF NOT EXISTS image_descriptions (
                 image_id INTEGER PRIMARY KEY REFERENCES images(id) ON DELETE CASCADE,
                 description TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS image_description_texts (
+                id INTEGER PRIMARY KEY,
+                image_id INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE,
+                source TEXT NOT NULL CHECK (source IN ('embedded', 'custom')),
+                normalized_description TEXT NOT NULL,
+                UNIQUE (image_id, source)
             );
 
             CREATE TABLE IF NOT EXISTS free_tag_catalog (
@@ -176,6 +219,12 @@ class ImageIndexRepository:
             CREATE INDEX IF NOT EXISTS idx_images_path_nocase ON images(path COLLATE NOCASE);
             CREATE INDEX IF NOT EXISTS idx_images_mtime      ON images(mtime DESC);
             CREATE INDEX IF NOT EXISTS idx_images_size       ON images(size DESC);
+            CREATE INDEX IF NOT EXISTS idx_image_free_tags_label
+                ON image_free_tags(normalized_label, image_id);
+            CREATE INDEX IF NOT EXISTS idx_image_embedded_tags_label
+                ON image_embedded_tags(normalized_label, image_id);
+            CREATE INDEX IF NOT EXISTS idx_image_tag_exclusions_label
+                ON image_tag_exclusions(normalized_label, image_id);
 
             CREATE TABLE IF NOT EXISTS image_folders (
                 image_id  INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE,
@@ -186,6 +235,19 @@ class ImageIndexRepository:
             CREATE INDEX IF NOT EXISTS idx_image_folders_folder ON image_folders(folder_id);
             """
         )
+        self._init_description_search_index()
+        sidecar_state_columns = {
+            row[1]
+            for row in self.conn.execute(
+                "PRAGMA table_info(image_sidecar_state)"
+            ).fetchall()
+        }
+        if "exclude_all_embedded_tags" not in sidecar_state_columns:
+            self.conn.execute(
+                "ALTER TABLE image_sidecar_state ADD COLUMN "
+                "exclude_all_embedded_tags INTEGER NOT NULL DEFAULT 0"
+            )
+            self.conn.commit()
         if not had_description_cache:
             # Older readers preserved descriptions as unknown fields but did not cache them.
             self.conn.execute("UPDATE image_sidecar_state SET mtime_ns = -1")
@@ -239,6 +301,8 @@ class ImageIndexRepository:
                     (os.sep,),
                 )
                 self.conn.commit()
+        self._migrate_structured_search_indexes()
+        self._migrate_non_tag_text_fts()
 
     def upsert_image(
         self,
@@ -279,6 +343,15 @@ class ImageIndexRepository:
                     """,
                     (path, filename, ext, mtime, size, metadata_json, captured_at),
                 )
+                image_id_row = self.conn.execute(
+                    "SELECT id FROM images WHERE path = ?", (path,)
+                ).fetchone()
+                if image_id_row is not None:
+                    self._replace_embedded_search_data(int(image_id_row[0]), metadata)
+                    self._refresh_non_tag_fts_row(
+                        path,
+                        metadata_text=metadata_text_without_embedded_keywords(metadata),
+                    )
                 self._refresh_fts_row(path, metadata_text=metadata_text)
                 if folder_id is not None:
                     self.conn.execute(
@@ -313,11 +386,14 @@ class ImageIndexRepository:
                 "ON CONFLICT(image_id) DO UPDATE SET description=excluded.description",
                 (image_id, sidecar.description),
             )
+            self._replace_description_search_text(
+                image_id, "custom", sidecar.description
+            )
             self.conn.execute(
                 "DELETE FROM image_free_tags WHERE image_id = ?", (image_id,)
             )
             for position, label in enumerate(sidecar.free_tags):
-                normalized_label = label.casefold()
+                normalized_label = _normalize_search_value(label)
                 self.conn.execute(
                     "INSERT INTO image_free_tags "
                     "(image_id, normalized_label, position, display_label) "
@@ -335,11 +411,20 @@ class ImageIndexRepository:
                     (normalized_label, label),
                 )
             self.conn.execute(
+                "DELETE FROM image_tag_exclusions WHERE image_id = ?", (image_id,)
+            )
+            for label in sidecar.excluded_embedded_tags:
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO image_tag_exclusions "
+                    "(image_id, normalized_label) VALUES (?, ?)",
+                    (image_id, _normalize_search_value(label)),
+                )
+            self.conn.execute(
                 """
                 INSERT INTO image_sidecar_state (
                     image_id, sidecar_path, mtime_ns, size, checksum,
-                    schema_version, sync_status, error
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    schema_version, sync_status, exclude_all_embedded_tags, error
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(image_id) DO UPDATE SET
                     sidecar_path=excluded.sidecar_path,
                     mtime_ns=excluded.mtime_ns,
@@ -347,6 +432,7 @@ class ImageIndexRepository:
                     checksum=excluded.checksum,
                     schema_version=excluded.schema_version,
                     sync_status=excluded.sync_status,
+                    exclude_all_embedded_tags=excluded.exclude_all_embedded_tags,
                     error=excluded.error
                 """,
                 (
@@ -357,6 +443,7 @@ class ImageIndexRepository:
                     sidecar_checksum,
                     sidecar.schema_version,
                     sync_status,
+                    int(sidecar.exclude_all_embedded_tags),
                     sync_error,
                 ),
             )
@@ -364,6 +451,7 @@ class ImageIndexRepository:
                 image_path,
                 tags_text=self._build_tags_text(image_id),
             )
+            self._refresh_non_tag_fts_row(image_path)
 
     def get_description(self, image_path: str) -> str:
         row = self.conn.execute(
@@ -403,7 +491,7 @@ class ImageIndexRepository:
         return str(row[0]), float(row[1]), int(row[2])
 
     def search_free_tags(self, query: str, *, limit: int = 20) -> tuple[str, ...]:
-        normalized_query = query.strip().casefold()
+        normalized_query = _normalize_search_value(query)
         rows = self.conn.execute(
             """
             SELECT display_label
@@ -432,7 +520,7 @@ class ImageIndexRepository:
     def resolve_free_tag(self, label: str) -> str | None:
         row = self.conn.execute(
             "SELECT display_label FROM free_tag_catalog WHERE normalized_label = ?",
-            (label.strip().casefold(),),
+            (_normalize_search_value(label),),
         ).fetchone()
         return None if row is None else str(row[0])
 
@@ -521,9 +609,17 @@ class ImageIndexRepository:
                 "DELETE FROM image_descriptions WHERE image_id = ?", (image_id,)
             )
             self.conn.execute(
+                "DELETE FROM image_description_texts "
+                "WHERE image_id = ? AND source = 'custom'",
+                (image_id,),
+            )
+            self.conn.execute(
                 "DELETE FROM image_free_tags "
                 "WHERE image_id = ?",
                 (image_id,),
+            )
+            self.conn.execute(
+                "DELETE FROM image_tag_exclusions WHERE image_id = ?", (image_id,)
             )
             self.conn.execute(
                 "DELETE FROM image_sidecar_state "
@@ -534,6 +630,7 @@ class ImageIndexRepository:
                 image_path,
                 tags_text=self._build_tags_text(image_id),
             )
+            self._refresh_non_tag_fts_row(image_path)
 
     def migration_completed(self, name: str) -> bool:
         return self.conn.execute(
@@ -1178,28 +1275,35 @@ class ImageIndexRepository:
         marks_clause = "AND images.marked = 1" if marked_only else ""
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
         set_clause, set_args = self._build_image_set_clause(image_set_id)
+        fts_query, structured_clause, structured_args = self._compile_search_query(query)
 
-        if query.strip():
-            fts_query = self._sanitize_fts_query(query)
+        if fts_query:
             sql = (
                 f"UPDATE images SET marked = {val} "
                 "WHERE id IN ("
                 "  SELECT images.id FROM images_fts "
                 "  JOIN images ON images_fts.rowid = images.id "
-                f" WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
+                f" WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause} {structured_clause}"
                 ")"
             )
-            args: tuple = (fts_query,) + ext_args + path_args + date_args + set_args
+            args: tuple = (
+                (fts_query,)
+                + ext_args
+                + path_args
+                + date_args
+                + set_args
+                + structured_args
+            )
         else:
             sql = (
                 f"UPDATE images SET marked = {val} "
-                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
+                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause} {structured_clause}"
             )
-            args = ext_args + path_args + date_args + set_args
+            args = ext_args + path_args + date_args + set_args + structured_args
 
         sql_returning = sql + " RETURNING path"
         with self.conn:
-            if query.strip():
+            if fts_query:
                 cursor = self._execute_fts_query(sql_returning, args, fts_query)
             else:
                 cursor = self.conn.execute(sql_returning, args)
@@ -1229,28 +1333,35 @@ class ImageIndexRepository:
         marks_clause = "AND images.marked = 1" if marked_only else ""
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
         set_clause, set_args = self._build_image_set_clause(image_set_id)
+        fts_query, structured_clause, structured_args = self._compile_search_query(query)
 
-        if query.strip():
-            fts_query = self._sanitize_fts_query(query)
+        if fts_query:
             sql = (
                 "UPDATE images SET marked = 1 - marked "
                 "WHERE id IN ("
                 "  SELECT images.id FROM images_fts "
                 "  JOIN images ON images_fts.rowid = images.id "
-                f" WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
+                f" WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause} {structured_clause}"
                 ")"
             )
-            args: tuple = (fts_query,) + ext_args + path_args + date_args + set_args
+            args: tuple = (
+                (fts_query,)
+                + ext_args
+                + path_args
+                + date_args
+                + set_args
+                + structured_args
+            )
         else:
             sql = (
                 "UPDATE images SET marked = 1 - marked "
-                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
+                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause} {structured_clause}"
             )
-            args = ext_args + path_args + date_args + set_args
+            args = ext_args + path_args + date_args + set_args + structured_args
 
         sql_returning = sql + " RETURNING path, marked"
         with self.conn:
-            if query.strip():
+            if fts_query:
                 cursor = self._execute_fts_query(sql_returning, args, fts_query)
             else:
                 cursor = self.conn.execute(sql_returning, args)
@@ -1466,6 +1577,111 @@ class ImageIndexRepository:
         sanitized = re.sub(r'[^\w\s"*^()]', ' ', query)
         return ' '.join(sanitized.split())
 
+    def _build_structured_search_clause(
+        self,
+        filters: tuple[StructuredSearchFilter, ...],
+        operators: tuple[str, ...] = (),
+    ) -> tuple[str, tuple[object, ...]]:
+        predicates: list[str] = []
+        args: list[object] = []
+        for search_filter in filters:
+            if search_filter.kind == "description":
+                normalized = _normalize_search_value(search_filter.values[0])
+                if len(normalized) >= 3 and self._description_trigram_available:
+                    phrase = '"' + normalized.replace('"', '""') + '"'
+                    predicates.append(
+                        "images.id IN ("
+                        "SELECT d.image_id FROM image_description_fts "
+                        "JOIN image_description_texts d "
+                        "ON d.id = image_description_fts.rowid "
+                        "WHERE image_description_fts MATCH ? "
+                        "AND instr(d.normalized_description, ?) > 0)"
+                    )
+                    args.extend((phrase, normalized))
+                else:
+                    predicates.append(
+                        "EXISTS (SELECT 1 FROM image_description_texts d "
+                        "WHERE d.image_id = images.id "
+                        "AND instr(d.normalized_description, ?) > 0)"
+                    )
+                    args.append(normalized)
+                continue
+
+            if search_filter.kind in {"text", "text-not"}:
+                phrase = '"' + search_filter.values[0].replace('"', '""') + '"'
+                membership = "IN" if search_filter.kind == "text" else "NOT IN"
+                predicates.append(
+                    f"images.id {membership} ("
+                    "SELECT rowid FROM images_non_tag_fts "
+                    "WHERE images_non_tag_fts MATCH ?)"
+                )
+                args.append(phrase)
+                continue
+
+            normalized_values = tuple(
+                _normalize_search_value(value) for value in search_filter.values
+            )
+            placeholders = ", ".join("?" for _ in normalized_values)
+            tag_sources: list[str] = []
+            if search_filter.kind in {"tags", "custom-tags"}:
+                tag_sources.append(
+                    "SELECT image_id, normalized_label FROM image_free_tags "
+                    f"WHERE normalized_label IN ({placeholders})"
+                )
+                args.extend(normalized_values)
+            if search_filter.kind in {"tags", "embedded-tags"}:
+                tag_sources.append(
+                    "SELECT embedded.image_id, embedded.normalized_label "
+                    "FROM image_embedded_tags embedded "
+                    f"WHERE embedded.normalized_label IN ({placeholders}) "
+                    "AND NOT EXISTS (SELECT 1 FROM image_tag_exclusions excluded "
+                    "WHERE excluded.image_id = embedded.image_id "
+                    "AND excluded.normalized_label = embedded.normalized_label) "
+                    "AND NOT EXISTS (SELECT 1 FROM image_sidecar_state sidecar "
+                    "WHERE sidecar.image_id = embedded.image_id "
+                    "AND sidecar.exclude_all_embedded_tags = 1)"
+                )
+                args.extend(normalized_values)
+            predicates.append(
+                "images.id IN (SELECT matched.image_id FROM ("
+                + " UNION ALL ".join(tag_sources)
+                + ") matched GROUP BY matched.image_id "
+                "HAVING COUNT(DISTINCT matched.normalized_label) = ?)"
+            )
+            args.append(len(normalized_values))
+
+        if not predicates:
+            return "", tuple(args)
+
+        filter_operators = tuple(
+            operator if operator in {"AND", "OR"} else "AND"
+            for operator in operators
+        )
+        if len(filter_operators) < len(predicates) - 1:
+            filter_operators += ("AND",) * (len(predicates) - 1 - len(filter_operators))
+
+        groups: list[str] = []
+        current_group: list[str] = []
+        for index, predicate in enumerate(predicates):
+            current_group.append(predicate)
+            if index == len(predicates) - 1 or filter_operators[index] == "OR":
+                groups.append(" AND ".join(current_group))
+                current_group = []
+        return "AND (" + " OR ".join(f"({group})" for group in groups) + ")", tuple(args)
+
+    def _compile_search_query(
+        self, query: str
+    ) -> tuple[str, str, tuple[object, ...]]:
+        parsed_query: ParsedSearchQuery = parse_search_query(query)
+        structured_clause, structured_args = self._build_structured_search_clause(
+            parsed_query.filters, parsed_query.filter_operators
+        )
+        return (
+            self._sanitize_fts_query(parsed_query.text),
+            structured_clause,
+            structured_args,
+        )
+
     @staticmethod
     def _drop_prefix_wildcards(fts_query: str) -> str:
         """Return a wildcard-free fallback query for strict SQLCipher builds."""
@@ -1514,30 +1730,49 @@ class ImageIndexRepository:
         marks_clause = "AND images.marked = 1" if marked_only else ""
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
         set_clause, set_args = self._build_image_set_clause(image_set_id)
+        parsed_query = parse_search_query(query)
+        fts_query = self._sanitize_fts_query(parsed_query.text)
+        structured_clause, structured_args = self._build_structured_search_clause(
+            parsed_query.filters, parsed_query.filter_operators
+        )
 
-        if query.strip():
-            fts_query = self._sanitize_fts_query(query)
+        if fts_query:
             # When user picks an explicit sort keep it; otherwise use relevance.
             order_expr = f"ORDER BY {order}" if sort_by else "ORDER BY bm25(images_fts)"
             sql = (
                 "SELECT images.id, images.path, images.filename, images.metadata_json, images.size, images.mtime "
                 "FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause} "
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause} {structured_clause} "
                 f"{order_expr} "
                 "LIMIT ? OFFSET ?"
             )
-            args = (fts_query,) + ext_args + path_args + date_args + set_args + (limit, offset)
+            args = (
+                (fts_query,)
+                + ext_args
+                + path_args
+                + date_args
+                + set_args
+                + structured_args
+                + (limit, offset)
+            )
             cur = self._execute_fts_query(sql, args, fts_query)
         else:
             sql = (
                 "SELECT id, path, filename, metadata_json, size, mtime "
                 "FROM images "
-                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause} "
+                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause} {structured_clause} "
                 f"ORDER BY {order} "
                 "LIMIT ? OFFSET ?"
             )
-            args = ext_args + path_args + date_args + set_args + (limit, offset)
+            args = (
+                ext_args
+                + path_args
+                + date_args
+                + set_args
+                + structured_args
+                + (limit, offset)
+            )
             cur = self.conn.execute(sql, args)
         return cur.fetchall()
 
@@ -1560,22 +1795,33 @@ class ImageIndexRepository:
         marks_clause = "AND images.marked = 1" if marked_only else ""
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
         set_clause, set_args = self._build_image_set_clause(image_set_id)
+        parsed_query = parse_search_query(query)
+        fts_query = self._sanitize_fts_query(parsed_query.text)
+        structured_clause, structured_args = self._build_structured_search_clause(
+            parsed_query.filters, parsed_query.filter_operators
+        )
 
-        if query.strip():
-            fts_query = self._sanitize_fts_query(query)
+        if fts_query:
             sql = (
                 "SELECT COUNT(*) FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause} {structured_clause}"
             )
-            args = (fts_query,) + ext_args + path_args + date_args + set_args
+            args = (
+                (fts_query,)
+                + ext_args
+                + path_args
+                + date_args
+                + set_args
+                + structured_args
+            )
             cur = self._execute_fts_query(sql, args, fts_query)
         else:
             sql = (
                 f"SELECT COUNT(*) FROM images "
-                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
+                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause} {structured_clause}"
             )
-            args = ext_args + path_args + date_args + set_args
+            args = ext_args + path_args + date_args + set_args + structured_args
             cur = self.conn.execute(sql, args)
         return int(cur.fetchone()[0])
 
@@ -1603,9 +1849,9 @@ class ImageIndexRepository:
         marks_clause = "AND images.marked = 1" if marked_only else ""
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
         set_clause, set_args = self._build_image_set_clause(image_set_id)
+        fts_query, structured_clause, structured_args = self._compile_search_query(query)
 
-        if query.strip():
-            fts_query = self._sanitize_fts_query(query)
+        if fts_query:
             order_expr = (
                 f"{order}, images.id ASC"
                 if sort_by
@@ -1617,11 +1863,19 @@ class ImageIndexRepository:
                 f"         ROW_NUMBER() OVER (ORDER BY {order_expr}) - 1 AS row_offset "
                 "  FROM images_fts "
                 "  JOIN images ON images_fts.rowid = images.id "
-                f"  WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
+                f"  WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause} {structured_clause}"
                 ") ranked "
                 "WHERE image_id = ?"
             )
-            args = (fts_query,) + ext_args + path_args + date_args + set_args + (image_id,)
+            args = (
+                (fts_query,)
+                + ext_args
+                + path_args
+                + date_args
+                + set_args
+                + structured_args
+                + (image_id,)
+            )
             row = self._execute_fts_query(sql, args, fts_query).fetchone()
         else:
             sql = (
@@ -1629,11 +1883,11 @@ class ImageIndexRepository:
                 "  SELECT images.id AS image_id, "
                 f"         ROW_NUMBER() OVER (ORDER BY {order}, images.id ASC) - 1 AS row_offset "
                 "  FROM images "
-                f"  WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
+                f"  WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause} {structured_clause}"
                 ") ranked "
                 "WHERE image_id = ?"
             )
-            args = ext_args + path_args + date_args + set_args + (image_id,)
+            args = ext_args + path_args + date_args + set_args + structured_args + (image_id,)
             row = self.conn.execute(sql, args).fetchone()
         if row is None:
             return None
@@ -1659,22 +1913,22 @@ class ImageIndexRepository:
         marks_clause = "AND images.marked = 1" if marked_only else ""
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
         set_clause, set_args = self._build_image_set_clause(image_set_id)
+        fts_query, structured_clause, structured_args = self._compile_search_query(query)
 
-        if query.strip():
-            fts_query = self._sanitize_fts_query(query)
+        if fts_query:
             sql = (
                 "SELECT images.path FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
+                f"WHERE images_fts MATCH ? {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause} {structured_clause}"
             )
-            args = (fts_query,) + ext_args + path_args + date_args + set_args
+            args = (fts_query,) + ext_args + path_args + date_args + set_args + structured_args
             cur = self._execute_fts_query(sql, args, fts_query)
         else:
             sql = (
                 "SELECT path FROM images "
-                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause}"
+                f"WHERE 1=1 {ext_clause} {path_clause} {date_clause} {marks_clause} {enabled_clause} {set_clause} {structured_clause}"
             )
-            args = ext_args + path_args + date_args + set_args
+            args = ext_args + path_args + date_args + set_args + structured_args
             cur = self.conn.execute(sql, args)
         return [row[0] for row in cur.fetchall()]
 
@@ -1762,28 +2016,28 @@ class ImageIndexRepository:
 
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
         set_clause, set_args = self._build_image_set_clause(image_set_id)
+        fts_query, structured_clause, structured_args = self._compile_search_query(query)
 
-        if query.strip():
-            fts_query = self._sanitize_fts_query(query)
+        if fts_query:
             sql = (
                 "SELECT CAST(strftime('%Y', datetime(images.captured_at, 'unixepoch')) AS INTEGER) AS yr, "
                 "COUNT(*) AS cnt "
                 "FROM images_fts "
                 "JOIN images ON images_fts.rowid = images.id "
-                f"WHERE images_fts MATCH ? AND images.captured_at IS NOT NULL {ext_clause} {path_clause} {enabled_clause} {set_clause} "
+                f"WHERE images_fts MATCH ? AND images.captured_at IS NOT NULL {ext_clause} {path_clause} {enabled_clause} {set_clause} {structured_clause} "
                 "GROUP BY yr ORDER BY yr"
             )
-            args = (fts_query,) + ext_args + path_args + set_args
+            args = (fts_query,) + ext_args + path_args + set_args + structured_args
             cur = self._execute_fts_query(sql, args, fts_query)
         else:
             sql = (
                 "SELECT CAST(strftime('%Y', datetime(captured_at, 'unixepoch')) AS INTEGER) AS yr, "
                 "COUNT(*) AS cnt "
                 "FROM images "
-                f"WHERE captured_at IS NOT NULL {ext_clause} {path_clause} {enabled_clause} {set_clause} "
+                f"WHERE captured_at IS NOT NULL {ext_clause} {path_clause} {enabled_clause} {set_clause} {structured_clause} "
                 "GROUP BY yr ORDER BY yr"
             )
-            args = ext_args + path_args + set_args
+            args = ext_args + path_args + set_args + structured_args
             cur = self.conn.execute(sql, args)
         return [(int(row[0]), int(row[1])) for row in cur.fetchall()]
 
@@ -1811,27 +2065,27 @@ class ImageIndexRepository:
         enabled_clause = self._ENABLED_CLAUSE if restrict_to_enabled_folders else ""
         date_clause, date_args = self._build_date_clause(date_from, date_to)
         set_clause, set_args = self._build_image_set_clause(image_set_id)
+        fts_query, structured_clause, structured_args = self._compile_search_query(query)
 
-        if query.strip():
-            fts_query = self._sanitize_fts_query(query)
+        if fts_query:
             sql = (
                 "SELECT images.ext, COUNT(*) AS cnt FROM images_fts"
                 " JOIN images ON images_fts.rowid = images.id"
                 f" WHERE images_fts MATCH ? AND images.ext <> ''"
-                f" {path_clause} {enabled_clause} {date_clause} {set_clause}"
+                f" {path_clause} {enabled_clause} {date_clause} {set_clause} {structured_clause}"
                 " GROUP BY images.ext"
                 " ORDER BY cnt DESC, images.ext ASC"
             )
-            args = (fts_query,) + path_args + date_args + set_args
+            args = (fts_query,) + path_args + date_args + set_args + structured_args
             cur = self._execute_fts_query(sql, args, fts_query)
         else:
             sql = (
                 "SELECT ext, COUNT(*) AS cnt FROM images"
-                f" WHERE ext <> '' {path_clause} {enabled_clause} {date_clause} {set_clause}"
+                f" WHERE ext <> '' {path_clause} {enabled_clause} {date_clause} {set_clause} {structured_clause}"
                 " GROUP BY ext"
                 " ORDER BY cnt DESC, ext ASC"
             )
-            args = path_args + date_args + set_args
+            args = path_args + date_args + set_args + structured_args
             cur = self.conn.execute(sql, args)
         return [(str(row[0]), int(row[1])) for row in cur.fetchall()]
 
@@ -2164,6 +2418,256 @@ class ImageIndexRepository:
 
     def close(self) -> None:
         self.conn.close()
+
+    def _init_description_search_index(self) -> None:
+        try:
+            self.conn.execute(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS image_description_fts "
+                "USING fts5(normalized_description, "
+                "content='image_description_texts', content_rowid='id', "
+                "tokenize='trigram')"
+            )
+        except Exception as exc:
+            message = str(exc).lower()
+            if (
+                type(exc).__name__ != "OperationalError"
+                or ("tokenizer" not in message and "fts5" not in message)
+            ):
+                raise
+            self._description_trigram_available = False
+            return
+
+        self.conn.executescript(
+            """
+            CREATE TRIGGER IF NOT EXISTS image_description_texts_ai
+            AFTER INSERT ON image_description_texts BEGIN
+                INSERT INTO image_description_fts (rowid, normalized_description)
+                VALUES (new.id, new.normalized_description);
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS image_description_texts_ad
+            AFTER DELETE ON image_description_texts BEGIN
+                INSERT INTO image_description_fts (
+                    image_description_fts, rowid, normalized_description
+                ) VALUES ('delete', old.id, old.normalized_description);
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS image_description_texts_au
+            AFTER UPDATE ON image_description_texts BEGIN
+                INSERT INTO image_description_fts (
+                    image_description_fts, rowid, normalized_description
+                ) VALUES ('delete', old.id, old.normalized_description);
+                INSERT INTO image_description_fts (rowid, normalized_description)
+                VALUES (new.id, new.normalized_description);
+            END;
+            """
+        )
+        self._description_trigram_available = True
+
+    def _replace_embedded_search_data(
+        self, image_id: int, metadata: Mapping[str, object]
+    ) -> None:
+        self.conn.execute(
+            "DELETE FROM image_embedded_tags WHERE image_id = ?", (image_id,)
+        )
+        for label in extract_embedded_keyword_labels(metadata):
+            normalized_label = _normalize_search_value(label)
+            if normalized_label:
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO image_embedded_tags "
+                    "(image_id, normalized_label, display_label) VALUES (?, ?, ?)",
+                    (image_id, normalized_label, label.strip()),
+                )
+        self._replace_description_search_text(
+            image_id, "embedded", extract_embedded_description(metadata)
+        )
+
+    def _replace_description_search_text(
+        self, image_id: int, source: str, description: str
+    ) -> None:
+        self.conn.execute(
+            "DELETE FROM image_description_texts WHERE image_id = ? AND source = ?",
+            (image_id, source),
+        )
+        normalized_description = _normalize_search_value(description)
+        if normalized_description:
+            self.conn.execute(
+                "INSERT INTO image_description_texts "
+                "(image_id, source, normalized_description) VALUES (?, ?, ?)",
+                (image_id, source, normalized_description),
+            )
+
+    def _migrate_structured_search_indexes(self) -> None:
+        if self.migration_completed(_STRUCTURED_SEARCH_MIGRATION):
+            return
+
+        from ..tagging.sidecar_repository import FilesystemSidecarRepository
+
+        sidecar_repository = FilesystemSidecarRepository()
+        cursor = self.conn.execute(
+            "SELECT i.id, i.path, i.metadata_json, d.description, s.image_id "
+            "FROM images i "
+            "LEFT JOIN image_descriptions d ON d.image_id = i.id "
+            "LEFT JOIN image_sidecar_state s ON s.image_id = i.id "
+            "ORDER BY i.id"
+        )
+        while True:
+            rows = cursor.fetchmany(250)
+            if not rows:
+                break
+
+            backfill_rows: list[
+                tuple[int, dict[str, object], str, ImageSidecar | None, bool]
+            ] = []
+            for image_id_value, path, metadata_json, custom_description, has_sidecar in rows:
+                try:
+                    metadata_value = json.loads(metadata_json or "{}")
+                    metadata = metadata_value if isinstance(metadata_value, dict) else {}
+                except (TypeError, ValueError):
+                    metadata = {}
+                sidecar: ImageSidecar | None = None
+                sidecar_read = False
+                if has_sidecar is not None:
+                    sidecar_read = True
+                    try:
+                        loaded_sidecar = sidecar_repository.read(Path(path))
+                        sidecar = (
+                            loaded_sidecar.sidecar
+                            if loaded_sidecar is not None
+                            else None
+                        )
+                    except (OSError, RuntimeError, ValueError):
+                        sidecar = None
+                        sidecar_read = False
+                backfill_rows.append(
+                    (
+                        int(image_id_value),
+                        metadata,
+                        str(custom_description or ""),
+                        sidecar,
+                        sidecar_read,
+                    )
+                )
+
+            with self.conn:
+                for image_id, metadata, custom_description, sidecar, sidecar_read in backfill_rows:
+                    self._replace_embedded_search_data(image_id, metadata)
+                    self._replace_description_search_text(
+                        image_id, "custom", custom_description
+                    )
+                    if sidecar_read:
+                        self.conn.execute(
+                            "DELETE FROM image_tag_exclusions WHERE image_id = ?",
+                            (image_id,),
+                        )
+                        if sidecar is not None:
+                            for label in sidecar.excluded_embedded_tags:
+                                self.conn.execute(
+                                    "INSERT OR IGNORE INTO image_tag_exclusions "
+                                    "(image_id, normalized_label) VALUES (?, ?)",
+                                    (image_id, _normalize_search_value(label)),
+                                )
+                            exclude_all = int(sidecar.exclude_all_embedded_tags)
+                        else:
+                            exclude_all = 0
+                        self.conn.execute(
+                            "UPDATE image_sidecar_state "
+                            "SET exclude_all_embedded_tags = ? WHERE image_id = ?",
+                            (exclude_all, image_id),
+                        )
+
+        self.mark_migration_completed(_STRUCTURED_SEARCH_MIGRATION)
+
+    def _migrate_non_tag_text_fts(self) -> None:
+        if self.migration_completed(_TEXT_NOT_FTS_MIGRATION):
+            return
+
+        cursor = self.conn.execute(
+            "SELECT i.id, i.path, i.filename, i.metadata_json, "
+            "COALESCE(d.description, '') "
+            "FROM images i LEFT JOIN image_descriptions d ON d.image_id = i.id "
+            "ORDER BY i.id"
+        )
+        while True:
+            rows = cursor.fetchmany(500)
+            if not rows:
+                break
+
+            with self.conn:
+                for image_id, path, filename, metadata_json, custom_description in rows:
+                    try:
+                        metadata_value = json.loads(metadata_json or "{}")
+                        metadata = (
+                            metadata_value if isinstance(metadata_value, dict) else {}
+                        )
+                    except (TypeError, ValueError):
+                        metadata = {}
+                    self._write_non_tag_fts_row(
+                        int(image_id),
+                        str(path),
+                        str(filename),
+                        metadata_text_without_embedded_keywords(metadata),
+                        str(custom_description or ""),
+                    )
+
+        self.mark_migration_completed(_TEXT_NOT_FTS_MIGRATION)
+
+    def _refresh_non_tag_fts_row(
+        self, image_path: str, *, metadata_text: str | None = None
+    ) -> None:
+        image_row = self.conn.execute(
+            "SELECT i.id, i.path, i.filename, i.metadata_json, "
+            "COALESCE(d.description, '') "
+            "FROM images i LEFT JOIN image_descriptions d ON d.image_id = i.id "
+            "WHERE i.path = ?",
+            (image_path,),
+        ).fetchone()
+        if image_row is None:
+            return
+
+        image_id, path, filename, metadata_json, custom_description = image_row
+        if metadata_text is None:
+            current = self.conn.execute(
+                "SELECT metadata_text FROM images_non_tag_fts WHERE rowid = ?",
+                (image_id,),
+            ).fetchone()
+            if current is None:
+                try:
+                    metadata_value = json.loads(metadata_json or "{}")
+                    metadata = (
+                        metadata_value if isinstance(metadata_value, dict) else {}
+                    )
+                except (TypeError, ValueError):
+                    metadata = {}
+                metadata_text = metadata_text_without_embedded_keywords(metadata)
+            else:
+                metadata_text = str(current[0])
+
+        self._write_non_tag_fts_row(
+            int(image_id),
+            str(path),
+            str(filename),
+            metadata_text,
+            str(custom_description or ""),
+        )
+
+    def _write_non_tag_fts_row(
+        self,
+        image_id: int,
+        path: str,
+        filename: str,
+        metadata_text: str,
+        custom_description: str,
+    ) -> None:
+        self.conn.execute(
+            "DELETE FROM images_non_tag_fts WHERE rowid = ?", (image_id,)
+        )
+        self.conn.execute(
+            "INSERT INTO images_non_tag_fts "
+            "(rowid, path, filename, metadata_text, custom_description) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (image_id, path, filename, metadata_text, custom_description),
+        )
 
     def _migrate_fts_tags_text(self) -> None:
         # FTS5 exposes internal hidden columns via table_xinfo, so table_info is

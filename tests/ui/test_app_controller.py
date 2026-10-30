@@ -744,6 +744,59 @@ def test_sets_operation_running_shows_progress_and_cancel_controls(
     qtbot.waitUntil(lambda: not bool(progress_row.property("visible")))
 
 
+def test_set_member_search_button_opens_filtered_search_and_selects_image(
+    qtbot: QtBot,
+    demo_db: tuple[Path, Path],
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    image_path = str(demo_db[1] / "images" / _CAMERAS[0][0])
+    set_id = controller.createImageSet("Search member set")
+    assert controller._repo is not None
+    controller._repo.add_images_to_set(set_id, [image_path])
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.search("no-image-can-match-this-query")
+
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    sets_page = root.findChild(QQuickItem, "setsPage")
+    member_list = root.findChild(QQuickItem, "imageSetMemberList")
+    assert tab_bar is not None
+    assert sets_page is not None
+    assert member_list is not None
+
+    tab_bar.setProperty("currentIndex", 2)
+    sets_page.setProperty("selectedSetId", set_id)
+    content = member_list.property("contentItem")
+    qtbot.waitUntil(lambda: any(
+        item.objectName() == "imageSetMemberDelegate" for item in content.childItems()
+    ))
+    delegate = next(
+        item for item in content.childItems()
+        if item.objectName() == "imageSetMemberDelegate"
+    )
+    search_button = delegate.findChild(QObject, "openImageSetMemberInSearchButton")
+    assert search_button is not None
+
+    # Act
+    search_button.clicked.emit()
+
+    # Assert
+    qtbot.waitUntil(
+        lambda: tab_bar.property("currentIndex") == 0
+        and controller.searchImageSetId == set_id
+        and controller._search_model.get_path(controller.currentResultRow) == image_path
+    )
+    assert controller._query_text == ""
+    assert "EOS R5" in controller._details_plain_text
+
+    tab_bar.setProperty("currentIndex", 2)
+    qtbot.waitUntil(lambda: bool(delegate.property("highlighted")))
+    assert int(member_list.property("currentIndex")) == 0
+
+
 def test_sets_reapply_group_filter_changes_update_enabled_state(
     qtbot: QtBot,
     window: tuple[AppController, SearchListModel, QQuickWindow],

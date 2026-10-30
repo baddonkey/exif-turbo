@@ -117,12 +117,14 @@ crashes/hangs above. If tests start hanging, **check free disk space first**.
 |-------|---------|
 | [senior-python-engineer](.github/agents/senior-python-engineer.md) | Default coding agent — senior IC style, opinionated on design, testing, and Python standards |
 | [code-reviewer](.github/agents/code-reviewer.agent.md) | Read-only code review — SOLID, tests, types, coupling |
+| [documentation](.github/agents/documentation.agent.md) | User manual, README, release notes, and documentation artifacts including the PDF |
 
 ## Customizations
 
 | Type | Name | Purpose |
 |------|------|---------|
 | Instruction | `testing-conventions` | Auto-applied to `tests/**` — naming, AAA structure, fixture patterns |
+| Instruction | `documentation-workflow` | Auto-applied to `docs/user-manual.*` — consult the documentation agent and regenerate the PDF |
 
 ## Agent Behaviour Rules
 

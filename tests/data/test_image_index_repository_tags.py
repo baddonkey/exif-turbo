@@ -108,6 +108,104 @@ def test_init_db_legacy_fts_migration_preserves_metadata_search_and_is_idempoten
     assert [row[2] for row in second_results] == ["photo.jpg"]
 
 
+def test_init_db_backfills_structured_search_indexes_from_cached_data(
+    tmp_path: Path,
+) -> None:
+    image_path = tmp_path / "photo.jpg"
+    image_path.write_bytes(b"not read by migration")
+    sidecar_path = Path(f"{image_path}.sidecar.json")
+    sidecar = replace(
+        _sidecar(free_tags=("deer",)),
+        description="autumn custom notes",
+        excluded_embedded_tags=("Landscape",),
+        exclude_all_embedded_tags=True,
+    )
+    FilesystemSidecarRepository().write(image_path, sidecar, None)
+    original_sidecar = sidecar_path.read_bytes()
+    db_path = tmp_path / "legacy-search.db"
+    connection = sqlcipher3.connect(str(db_path))
+    connection.executescript(
+        """
+        CREATE TABLE images (
+            id INTEGER PRIMARY KEY,
+            path TEXT UNIQUE NOT NULL,
+            filename TEXT NOT NULL,
+            mtime REAL NOT NULL,
+            size INTEGER NOT NULL,
+            metadata_json TEXT NOT NULL
+        );
+        CREATE TABLE image_sidecar_state (
+            image_id INTEGER PRIMARY KEY,
+            sidecar_path TEXT NOT NULL,
+            mtime_ns INTEGER NOT NULL,
+            size INTEGER NOT NULL,
+            checksum TEXT NOT NULL,
+            schema_version INTEGER NOT NULL,
+            sync_status TEXT NOT NULL,
+            error TEXT
+        );
+        CREATE TABLE image_free_tags (
+            image_id INTEGER NOT NULL,
+            normalized_label TEXT NOT NULL,
+            position INTEGER NOT NULL,
+            display_label TEXT NOT NULL,
+            PRIMARY KEY (image_id, normalized_label)
+        );
+        CREATE TABLE image_descriptions (
+            image_id INTEGER PRIMARY KEY,
+            description TEXT NOT NULL
+        );
+        """,
+    )
+    connection.execute(
+        "INSERT INTO images (id, path, filename, mtime, size, metadata_json) "
+        "VALUES (1, ?, 'photo.jpg', 1.0, 100, ?)",
+        (
+            str(image_path),
+            '{"IPTC:Keywords": ["forest", "Landscape"], '
+            '"XMP-dc:Description": "Schurzwald dusk"}',
+        ),
+    )
+    connection.execute(
+        "INSERT INTO image_sidecar_state ("
+        "image_id, sidecar_path, mtime_ns, size, checksum, schema_version, "
+        "sync_status, error) VALUES (1, ?, 1, 1, 'cached', 1, 'synced', NULL)",
+        (str(sidecar_path),),
+    )
+    connection.execute(
+        "INSERT INTO image_free_tags "
+        "(image_id, normalized_label, position, display_label) "
+        "VALUES (1, 'deer', 0, 'deer')"
+    )
+    connection.execute(
+        "INSERT INTO image_descriptions (image_id, description) "
+        "VALUES (1, 'autumn custom notes')"
+    )
+    connection.commit()
+    connection.close()
+
+    repo = ImageIndexRepository(db_path, key="")
+
+    embedded = repo.conn.execute(
+        "SELECT normalized_label FROM image_embedded_tags "
+        "WHERE image_id = 1 ORDER BY normalized_label"
+    ).fetchall()
+    exclusions = repo.conn.execute(
+        "SELECT normalized_label FROM image_tag_exclusions WHERE image_id = 1"
+    ).fetchall()
+    assert embedded == [("forest",), ("landscape",)]
+    assert exclusions == [("landscape",)]
+    assert repo.conn.execute(
+        "SELECT exclude_all_embedded_tags FROM image_sidecar_state WHERE image_id = 1"
+    ).fetchone()[0] == 1
+    assert repo.migration_completed("structured-search-index-v1")
+    assert repo.migration_completed("text-not-fts-v1")
+    assert repo.count_images('text-not:="forest"') == 1
+    assert repo.count_images('text-not:="autumn"') == 0
+    assert sidecar_path.read_bytes() == original_sidecar
+    repo.close()
+
+
 def test_replace_tags_free_tags_are_searchable_and_remembered(
     repo: ImageIndexRepository,
 ) -> None:
@@ -127,6 +225,499 @@ def test_replace_tags_free_tags_are_searchable_and_remembered(
     assert repo.count_images('"Summer 2026"') == 1
     assert repo.search_free_tags("fam") == ("Family",)
     assert repo.count_images("Hasselblad") == 1
+
+
+def test_upsert_embedded_metadata_updates_normalized_search_indexes(
+    repo: ImageIndexRepository,
+) -> None:
+    image_path = "/photos/metadata.jpg"
+
+    repo.upsert_image(
+        image_path,
+        "metadata.jpg",
+        1.0,
+        100,
+        {
+            "IPTC:Keywords": ["Forest", "Birdhouse"],
+            "XMP-dc:Description": "Schurzwald at dusk; Straße",
+        },
+        "",
+    )
+
+    rows = repo.conn.execute(
+        "SELECT normalized_label, display_label FROM image_embedded_tags "
+        "WHERE image_id = (SELECT id FROM images WHERE path = ?) "
+        "ORDER BY normalized_label",
+        (image_path,),
+    ).fetchall()
+    description_match = repo.conn.execute(
+        "SELECT d.image_id FROM image_description_fts f "
+        "JOIN image_description_texts d ON d.id = f.rowid "
+        "WHERE image_description_fts MATCH ?",
+        ('"hurz"',),
+    ).fetchone()
+
+    assert rows == [("birdhouse", "Birdhouse"), ("forest", "Forest")]
+    assert description_match is not None
+    assert int(description_match[0]) == repo.conn.execute(
+        "SELECT id FROM images WHERE path = ?", (image_path,)
+    ).fetchone()[0]
+    assert repo.count_images('embedded-tags:="forest"') == 1
+    assert repo.count_images('description:="hurz"') == 1
+    assert repo.count_images('description:="STRASSE"') == 1
+
+
+def test_sidecar_cache_updates_exclusions_custom_description_and_cleanup(
+    repo: ImageIndexRepository,
+) -> None:
+    image_path = "/photos/sidecar.jpg"
+    repo.upsert_image(
+        image_path,
+        "photo.jpg",
+        1.0,
+        100,
+        {"IPTC:Keywords": ["Landscape"]},
+        "",
+    )
+    sidecar = replace(
+        _sidecar(free_tags=("Autumn",)),
+        description="Schurzwald notes",
+        excluded_embedded_tags=("Landscape",),
+        exclude_all_embedded_tags=True,
+    )
+
+    _replace_tags(repo, image_path, sidecar)
+
+    image_id = int(
+        repo.conn.execute(
+            "SELECT id FROM images WHERE path = ?", (image_path,)
+        ).fetchone()[0]
+    )
+    assert repo.conn.execute(
+        "SELECT normalized_label FROM image_tag_exclusions WHERE image_id = ?",
+        (image_id,),
+    ).fetchall() == [("landscape",)]
+    assert repo.conn.execute(
+        "SELECT exclude_all_embedded_tags FROM image_sidecar_state "
+        "WHERE image_id = ?",
+        (image_id,),
+    ).fetchone()[0] == 1
+    assert repo.conn.execute(
+        "SELECT image_id FROM image_description_fts f "
+        "JOIN image_description_texts d ON d.id = f.rowid "
+        "WHERE image_description_fts MATCH ?",
+        ('"notes"',),
+    ).fetchone()[0] == image_id
+    assert repo.count_images('text-not:="notes"') == 0
+
+    repo.clear_custom_tags_and_sidecar_state(image_path)
+
+    assert repo.conn.execute(
+        "SELECT COUNT(*) FROM image_tag_exclusions WHERE image_id = ?", (image_id,)
+    ).fetchone()[0] == 0
+    assert repo.conn.execute(
+        "SELECT COUNT(*) FROM image_description_texts "
+        "WHERE image_id = ? AND source = 'custom'",
+        (image_id,),
+    ).fetchone()[0] == 0
+    assert repo.count_images('text-not:="notes"') == 1
+
+
+def test_search_effective_tags_matches_all_exact_values_across_sources(
+    repo: ImageIndexRepository,
+) -> None:
+    first_path = "/photos/first.jpg"
+    second_path = "/photos/second.jpg"
+    repo.upsert_image(
+        first_path,
+        "first.jpg",
+        1.0,
+        100,
+        {"IPTC:Keywords": ["Forest", "wildlife", "landscape"]},
+        "",
+        captured_at=1_735_689_600,
+    )
+    repo.upsert_image(
+        second_path,
+        "second.jpg",
+        1.0,
+        100,
+        {"IPTC:Keywords": ["birdhouse"]},
+        "",
+    )
+    repo.upsert_image(
+        "/photos/empty.jpg",
+        "empty.jpg",
+        1.0,
+        100,
+        {"IPTC:Keywords": []},
+        "",
+    )
+    all_excluded_path = "/photos/all-excluded.jpg"
+    repo.upsert_image(
+        all_excluded_path,
+        "all-excluded.jpg",
+        1.0,
+        100,
+        {"IPTC:Keywords": ["mountain"]},
+        "",
+    )
+    first_sidecar = replace(
+        _sidecar(free_tags=("forest", "deer", "autumn", "Café au lait")),
+        excluded_embedded_tags=("Landscape",),
+    )
+    _replace_tags(repo, first_path, first_sidecar)
+    _replace_tags(repo, second_path, _sidecar(free_tags=("birdhouse",)))
+    _replace_tags(
+        repo,
+        all_excluded_path,
+        replace(
+            _sidecar(free_tags=("compass",)),
+            exclude_all_embedded_tags=True,
+        ),
+    )
+
+    matching_paths = lambda query: [
+        row[1] for row in repo.search_images(query, limit=20, offset=0)
+    ]
+
+    assert matching_paths('tags:="forest, deer"') == [first_path]
+    assert matching_paths('tags:="forest" AND tags:="deer"') == [first_path]
+    assert matching_paths('tags:="deer, autumn"') == [first_path]
+    assert matching_paths('tags:="forest, landscape"') == []
+    assert matching_paths('tags:="bird"') == []
+    assert matching_paths('tags:="birdhouse"') == [second_path]
+    assert matching_paths('custom-tags:="bird"') == []
+    assert matching_paths('tags:="empty"') == []
+    assert matching_paths('tags:="Café au lait, café au lait"') == [first_path]
+    assert matching_paths('embedded-tags:="forest"') == [first_path]
+    assert matching_paths('custom-tags:="deer, autumn"') == [first_path]
+    assert matching_paths('tags:="mountain"') == []
+    assert matching_paths('embedded-tags:="mountain"') == []
+    assert matching_paths('tags:="compass"') == [all_excluded_path]
+    query = 'tags:="forest, deer"'
+    image_id = int(
+        repo.conn.execute(
+            "SELECT id FROM images WHERE path = ?", (first_path,)
+        ).fetchone()[0]
+    )
+    assert repo.count_images(query) == 1
+    assert repo.get_matching_paths(query) == [first_path]
+    assert repo.find_image_offset(image_id, query) == 0
+    assert repo.get_year_counts(query) == [(2025, 1)]
+    assert repo.get_format_counts(query) == [("jpg", 1)]
+    assert repo.bulk_mark_images(True, query=query) == [first_path]
+    assert repo.bulk_invert_images(query=query) == ([], [first_path])
+
+
+def test_search_description_substrings_combine_with_fts_and_tag_filters(
+    repo: ImageIndexRepository,
+) -> None:
+    image_path = "/photos/description.jpg"
+    repo.upsert_image(
+        image_path,
+        "description.jpg",
+        1.0,
+        100,
+        {
+            "IPTC:Keywords": ["Forest"],
+            "XMP-dc:Description": "Schurzwald at dusk",
+        },
+        "Mountains",
+    )
+    _replace_tags(
+        repo,
+        image_path,
+        replace(
+            _sidecar(free_tags=("deer",)),
+            description="Abhurzung in the field notes",
+        ),
+    )
+
+    assert repo.count_images('description:="HURZ"') == 1
+    assert repo.count_images('description:="field"') == 1
+    assert repo.count_images(
+        'Mountains tags:="forest, deer" description:="hurz"'
+    ) == 1
+    assert repo.count_images('Mountains description:="missing"') == 0
+
+
+def test_search_text_not_excludes_non_tag_text_but_not_tag_values(
+    repo: ImageIndexRepository,
+) -> None:
+    tag_only_path = "/photos/tag-only.jpg"
+    embedded_text_path = "/photos/embedded-text.jpg"
+    custom_text_path = "/photos/custom-text.jpg"
+    green_text_path = "/photos/green-text.jpg"
+    repo.upsert_image(
+        tag_only_path,
+        "tag-only.jpg",
+        1.0,
+        100,
+        {"IPTC:Keywords": ["Huba"]},
+        "",
+    )
+    repo.upsert_image(
+        embedded_text_path,
+        "embedded-text.jpg",
+        1.0,
+        100,
+        {
+            "IPTC:Keywords": ["Huba"],
+            "XMP-dc:Description": "A Huba sculpture",
+        },
+        "",
+    )
+    repo.upsert_image(
+        custom_text_path,
+        "custom-text.jpg",
+        1.0,
+        100,
+        {"IPTC:Keywords": ["Huba"]},
+        "",
+    )
+    repo.upsert_image(
+        green_text_path,
+        "green-text.jpg",
+        1.0,
+        100,
+        {"XMP-dc:Description": "A green meadow"},
+        "",
+    )
+    _replace_tags(repo, tag_only_path, _sidecar(free_tags=("Huba",)))
+    _replace_tags(repo, custom_text_path, replace(
+        _sidecar(free_tags=("Huba",)),
+        description="A Huba field note",
+    ))
+
+    rows = repo.search_images(
+        'tags:="Huba" text-not:="huba"', limit=10, offset=0
+    )
+
+    assert [row[1] for row in rows] == [tag_only_path]
+    assert repo.count_images('text:="huba"') == 2
+    assert repo.count_images('text:="sculpture"') == 1
+    assert repo.count_images('tags:="Huba" text:="field note"') == 1
+    assert repo.count_images('tags:="Huba"') == 3
+    assert repo.count_images('text:="green"') == 1
+    assert repo.count_images(
+        'tags:="Huba" OR text:="green"'
+    ) == 4
+    or_rows = repo.search_images(
+        'tags:="Huba" OR text:="green"', limit=10, offset=0
+    )
+    assert {row[1] for row in or_rows} == {
+        tag_only_path,
+        embedded_text_path,
+        custom_text_path,
+        green_text_path,
+    }
+    assert repo.count_images(
+        'tags:="Huba" OR text:="green" AND description:="sculpture"'
+    ) == 3
+
+
+def test_documented_search_examples_match_expected_images(
+    repo: ImageIndexRepository,
+) -> None:
+    canon_path = "/photos/canon-r5.jpg"
+    nikon_path = "/photos/nikon-z9.jpg"
+    fuji_path = "/photos/fuji-x100.jpg"
+    repo.upsert_image(
+        canon_path,
+        "canon-r5.jpg",
+        1.0,
+        100,
+        {
+            "Make": "Canon",
+            "Model": "EOS R5",
+            "FocalLength": "50mm",
+            "Country": "Switzerland",
+            "Year": "2024",
+            "IPTC:Keywords": ["wildlife", "landscape"],
+            "XMP-dc:Description": "Golden eagle over alpine lake at sunset",
+        },
+        "Make Canon Model EOS R5 FocalLength 50mm Country Switzerland Year 2024 "
+        "IPTC:Keywords wildlife landscape XMP-dc:Description Golden eagle over "
+        "alpine lake at sunset",
+    )
+    repo.upsert_image(
+        nikon_path,
+        "nikon-z9.jpg",
+        1.0,
+        100,
+        {
+            "Make": "Nikon",
+            "Model": "Z 9",
+            "FocalLength": "85mm",
+            "IPTC:Keywords": ["wildlife", "landscape", "golden eagle"],
+            "XMP-dc:Description": "Red deer in the reserve",
+        },
+        "Make Nikon Model Z 9 FocalLength 85mm IPTC:Keywords wildlife landscape "
+        "golden eagle XMP-dc:Description Red deer in the reserve",
+    )
+    repo.upsert_image(
+        fuji_path,
+        "fuji-x100.jpg",
+        1.0,
+        100,
+        {"Make": "Fujifilm", "Model": "X100V"},
+        "Make Fujifilm Model X100V",
+    )
+    _replace_tags(
+        repo,
+        canon_path,
+        replace(
+            _sidecar(free_tags=("red deer", "summer holiday")),
+            description="Alpine family trip",
+        ),
+    )
+    _replace_tags(
+        repo,
+        nikon_path,
+        replace(
+            _sidecar(free_tags=("red deer",)),
+            description="A red deer in a captive reserve",
+        ),
+    )
+
+    def matching_paths(query: str) -> set[str]:
+        return {
+            row[1] for row in repo.search_images(query, limit=20, offset=0)
+        }
+
+    assert matching_paths("Canon EOS R5") == {canon_path}
+    assert matching_paths('"golden eagle"') == {canon_path, nikon_path}
+    assert matching_paths("Switzerland 2024") == {canon_path}
+    assert matching_paths("Canon OR Nikon") == {canon_path, nikon_path}
+    assert matching_paths("Fuji*") == {fuji_path}
+    assert matching_paths("Canon AND 50mm") == {canon_path}
+    assert matching_paths('"red deer" NOT captive') == {canon_path}
+    assert matching_paths('tags:="red deer, landscape"') == {
+        canon_path,
+        nikon_path,
+    }
+    assert matching_paths('embedded-tags:="landscape"') == {
+        canon_path,
+        nikon_path,
+    }
+    assert matching_paths('custom-tags:="summer holiday"') == {canon_path}
+    assert matching_paths('description:="sunset"') == {canon_path}
+    assert matching_paths('text:="golden eagle"') == {canon_path}
+    assert matching_paths('text-not:="captive"') == {canon_path, fuji_path}
+    assert matching_paths('(Canon OR Nikon) tags:="wildlife"') == {
+        canon_path,
+        nikon_path,
+    }
+    assert matching_paths(
+        '"red deer" NOT captive tags:="wildlife, landscape"'
+    ) == {canon_path}
+    assert matching_paths(
+        'tags:="red deer" AND description:="golden"'
+    ) == {canon_path}
+    assert matching_paths(
+        'tags:="red deer" text:="alpine lake" text-not:="zoo"'
+    ) == {canon_path}
+
+
+def test_upsert_and_delete_refresh_structured_search_indexes(
+    repo: ImageIndexRepository,
+) -> None:
+    image_path = "/photos/updated.jpg"
+    repo.upsert_image(
+        image_path,
+        "updated.jpg",
+        1.0,
+        100,
+        {"IPTC:Keywords": ["forest"], "XMP-dc:Description": "old caption"},
+        "",
+    )
+    repo.upsert_image(
+        image_path,
+        "updated.jpg",
+        2.0,
+        100,
+        {"IPTC:Keywords": ["bird"], "XMP-dc:Description": "new caption"},
+        "",
+    )
+
+    assert repo.count_images('embedded-tags:="forest"') == 0
+    assert repo.count_images('embedded-tags:="bird"') == 1
+    assert repo.count_images('description:="old"') == 0
+    assert repo.count_images('description:="new"') == 1
+    assert repo.count_images('text-not:="new"') == 0
+    assert repo.count_images('text-not:="old"') == 1
+
+    repo.delete_missing([])
+
+    assert repo.count_images('embedded-tags:="bird"') == 0
+    assert repo.conn.execute(
+        "SELECT COUNT(*) FROM image_description_texts"
+    ).fetchone()[0] == 0
+    assert repo.conn.execute(
+        "SELECT COUNT(*) FROM images_non_tag_fts"
+    ).fetchone()[0] == 0
+
+
+def test_structured_search_malformed_expression_raises_controlled_error(
+    repo: ImageIndexRepository,
+) -> None:
+    with pytest.raises(ValueError, match="requires a quoted value"):
+        repo.search_images("tags:=forest", limit=10, offset=0)
+
+
+def test_description_search_falls_back_to_cached_text_without_trigram(
+    repo: ImageIndexRepository,
+) -> None:
+    repo.upsert_image(
+        "/photos/fallback.jpg",
+        "fallback.jpg",
+        1.0,
+        100,
+        {"XMP-dc:Description": "The Schurzwald at dusk"},
+        "",
+    )
+    repo._description_trigram_available = False
+
+    assert repo.count_images('description:="hurz"') == 1
+    assert repo.count_images('description:="ss"') == 0
+
+
+def test_large_synthetic_tag_collection_uses_label_lookup_index(
+    repo: ImageIndexRepository,
+) -> None:
+    image_count = 2_500
+    repo.upsert_images_batch(
+        [
+            (
+                f"/photos/synthetic-{index:05}.jpg",
+                f"synthetic-{index:05}.jpg",
+                float(index),
+                100,
+                {"IPTC:Keywords": ["shared", f"subject-{index}"]},
+                "",
+                None,
+                None,
+            )
+            for index in range(image_count)
+        ]
+    )
+
+    count = repo.count_images('embedded-tags:="shared"')
+    query_plan = repo.conn.execute(
+        "EXPLAIN QUERY PLAN SELECT image_id FROM image_embedded_tags "
+        "WHERE normalized_label IN (?)",
+        ("shared",),
+    ).fetchall()
+    assert count == image_count
+    assert any("idx_image_embedded_tags_label" in str(row[3]) for row in query_plan)
+    if repo._description_trigram_available:
+        description_plan = repo.conn.execute(
+            "EXPLAIN QUERY PLAN SELECT rowid FROM image_description_fts "
+            "WHERE image_description_fts MATCH ?",
+            ('"caption"',),
+        ).fetchall()
+        assert any("VIRTUAL TABLE INDEX" in str(row[3]) for row in description_plan)
 
 
 def test_remove_free_tag_from_image_keeps_catalog_suggestion(
