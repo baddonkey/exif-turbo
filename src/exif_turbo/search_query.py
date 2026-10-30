@@ -32,6 +32,14 @@ class SearchQueryParseError(ValueError):
 _OPERATOR_PATTERN = re.compile(
     r"(?:embedded-tags|custom-tags|description|text-not|text|tags):=", re.IGNORECASE
 )
+_OPERATOR_KINDS: dict[str, SearchFilterKind] = {
+    "embedded-tags": "embedded-tags",
+    "custom-tags": "custom-tags",
+    "description": "description",
+    "text-not": "text-not",
+    "text": "text",
+    "tags": "tags",
+}
 
 
 def parse_search_query(query: str) -> ParsedSearchQuery:
@@ -69,11 +77,14 @@ def parse_search_query(query: str) -> ParsedSearchQuery:
                 text_parts.append(text_segment)
                 filter_operators.append("AND")
             else:
-                filter_operators.append(connector.group(1) or "AND")
+                if connector.group(1) == "OR":
+                    filter_operators.append("OR")
+                else:
+                    filter_operators.append("AND")
         else:
             text_parts.append(text_segment)
 
-        kind = match.group(0)[:-2].lower()
+        kind = _OPERATOR_KINDS[match.group(0)[:-2].lower()]
         value_start = match.end()
         while value_start < len(query) and query[value_start].isspace():
             value_start += 1

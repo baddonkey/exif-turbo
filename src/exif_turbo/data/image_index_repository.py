@@ -2427,9 +2427,12 @@ class ImageIndexRepository:
                 "content='image_description_texts', content_rowid='id', "
                 "tokenize='trigram')"
             )
-        except sqlcipher3.OperationalError as exc:
+        except Exception as exc:
             message = str(exc).lower()
-            if "tokenizer" not in message and "fts5" not in message:
+            if (
+                type(exc).__name__ != "OperationalError"
+                or ("tokenizer" not in message and "fts5" not in message)
+            ):
                 raise
             self._description_trigram_available = False
             return
@@ -2513,19 +2516,26 @@ class ImageIndexRepository:
             if not rows:
                 break
 
-            backfill_rows: list[tuple[int, dict[str, object], str, object, bool]] = []
+            backfill_rows: list[
+                tuple[int, dict[str, object], str, ImageSidecar | None, bool]
+            ] = []
             for image_id_value, path, metadata_json, custom_description, has_sidecar in rows:
                 try:
                     metadata_value = json.loads(metadata_json or "{}")
                     metadata = metadata_value if isinstance(metadata_value, dict) else {}
                 except (TypeError, ValueError):
                     metadata = {}
-                sidecar = None
+                sidecar: ImageSidecar | None = None
                 sidecar_read = False
                 if has_sidecar is not None:
                     sidecar_read = True
                     try:
-                        sidecar = sidecar_repository.read(Path(path))
+                        loaded_sidecar = sidecar_repository.read(Path(path))
+                        sidecar = (
+                            loaded_sidecar.sidecar
+                            if loaded_sidecar is not None
+                            else None
+                        )
                     except (OSError, RuntimeError, ValueError):
                         sidecar = None
                         sidecar_read = False
@@ -2551,15 +2561,13 @@ class ImageIndexRepository:
                             (image_id,),
                         )
                         if sidecar is not None:
-                            for label in sidecar.sidecar.excluded_embedded_tags:
+                            for label in sidecar.excluded_embedded_tags:
                                 self.conn.execute(
                                     "INSERT OR IGNORE INTO image_tag_exclusions "
                                     "(image_id, normalized_label) VALUES (?, ?)",
                                     (image_id, _normalize_search_value(label)),
                                 )
-                            exclude_all = int(
-                                sidecar.sidecar.exclude_all_embedded_tags
-                            )
+                            exclude_all = int(sidecar.exclude_all_embedded_tags)
                         else:
                             exclude_all = 0
                         self.conn.execute(
