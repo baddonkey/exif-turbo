@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import json
 from typing import Iterable, Mapping
 
 
@@ -11,6 +12,22 @@ _EMBEDDED_KEYWORD_KEYS = (
     "XMP-lr:HierarchicalSubject",
     "XMP:HierarchicalSubject",
 )
+_EMBEDDED_KEYWORD_KEY_SET = frozenset(_EMBEDDED_KEYWORD_KEYS)
+
+
+def metadata_text_without_embedded_keywords(
+    metadata: Mapping[str, object],
+) -> str:
+    searchable_metadata = {
+        key: value
+        for key, value in metadata.items()
+        if key not in _EMBEDDED_KEYWORD_KEY_SET
+    }
+    parts: list[str] = []
+    for key, value in searchable_metadata.items():
+        parts.extend((key, str(value)))
+    parts.append(json.dumps(searchable_metadata, ensure_ascii=False))
+    return " ".join(parts)
 
 
 def merge_keyword_labels(*groups: Iterable[str]) -> tuple[str, ...]:

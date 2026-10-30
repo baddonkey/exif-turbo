@@ -15,6 +15,51 @@ def test_parse_search_query_mixed_filter_preserves_ordinary_fts_text() -> None:
     ]
 
 
+def test_parse_search_query_explicit_and_between_filters_is_consumed() -> None:
+    parsed = parse_search_query('tags:="Huba" AND tags:="Bronko"')
+
+    assert parsed.text == ""
+    assert [(item.kind, item.values) for item in parsed.filters] == [
+        ("tags", ("Huba",)),
+        ("tags", ("Bronko",)),
+    ]
+
+
+def test_parse_search_query_text_not_filter_is_structured() -> None:
+    parsed = parse_search_query('tags:="Huba" text-not:="huba"')
+
+    assert parsed.text == ""
+    assert [(item.kind, item.values) for item in parsed.filters] == [
+        ("tags", ("Huba",)),
+        ("text-not", ("huba",)),
+    ]
+
+
+def test_parse_search_query_text_filter_is_structured() -> None:
+    parsed = parse_search_query('text:="wildlife"')
+
+    assert parsed.text == ""
+    assert [(item.kind, item.values) for item in parsed.filters] == [
+        ("text", ("wildlife",)),
+    ]
+
+
+def test_parse_search_query_plain_fts_and_remains_unchanged() -> None:
+    query = "forest AND camera"
+
+    parsed = parse_search_query(query)
+
+    assert parsed.text == query
+    assert parsed.filters == ()
+
+
+def test_parse_search_query_and_inside_quoted_phrase_is_preserved_with_filter() -> None:
+    parsed = parse_search_query('description:="sun" AND "rock AND roll"')
+
+    assert parsed.text == '"rock AND roll"'
+    assert len(parsed.filters) == 1
+
+
 def test_parse_search_query_operator_inside_quoted_phrase_remains_fts_text() -> None:
     query = '"look for tags:=\"birds\"" forest'
 
@@ -53,7 +98,7 @@ def test_parse_search_query_doubled_quote_is_unescaped() -> None:
 
 @pytest.mark.parametrize(
     "query",
-    ['tags:=forest', 'tags:="forest, "', 'description:="'],
+    ['tags:=forest', 'tags:="forest, "', 'description:="', 'text-not:=" "'],
 )
 def test_parse_search_query_malformed_structured_expression_raises(query: str) -> None:
     with pytest.raises(SearchQueryParseError):

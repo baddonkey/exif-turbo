@@ -267,6 +267,12 @@ Rectangle {
 
                             Label { text: "custom-tags:=\"deer\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
                             Label { text: qsTr("custom sidecar tags only"); font.pixelSize: 12 }
+
+                            Label { text: "text:=\"wildlife\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: qsTr("phrase in non-tag text"); font.pixelSize: 12 }
+
+                            Label { text: "text-not:=\"huba\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { text: qsTr("exclude phrase from non-tag text"); font.pixelSize: 12 }
                         }
 
                         Rectangle {

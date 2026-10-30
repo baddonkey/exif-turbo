@@ -587,6 +587,8 @@ terms. Every structured filter is combined with AND semantics:
 | `description:=` | `description:="sun"` | Descriptions containing `sun` anywhere |
 | `embedded-tags:=` | `embedded-tags:="forest"` | Non-excluded embedded IPTC/XMP keywords |
 | `custom-tags:=` | `custom-tags:="deer"` | Custom sidecar tags only |
+| `text:=` | `text:="wildlife"` | Requires a phrase in non-tag text |
+| `text-not:=` | `text-not:="huba"` | Excludes images containing the phrase in non-tag text |
 
 Tag values are matched case-insensitively as complete values, not as words or
 substrings. Multiple values are comma-separated and all must be present. The
@@ -598,6 +600,14 @@ Description filters are case-insensitive substring searches across both
 embedded and custom descriptions. Unlike exact tag filters, `description:=` can
 match in the middle of a word. Structured filters combine with remaining FTS
 text, for example `mountains tags:="forest, deer" description:="sun"`.
+
+`text:=` requires a quoted FTS phrase in filenames, non-keyword embedded
+metadata, or custom descriptions. Its counterpart, `text-not:=`, excludes
+images with that phrase in those same fields. Embedded IPTC/XMP keyword values
+and custom sidecar tag values do not count as text matches. For example,
+`tags:="Huba" text-not:="huba"` finds images with the exact effective tag
+`Huba` only when the phrase does not also appear in non-tag text. This is an
+FTS phrase match, not an arbitrary substring search.
 
 ---
 

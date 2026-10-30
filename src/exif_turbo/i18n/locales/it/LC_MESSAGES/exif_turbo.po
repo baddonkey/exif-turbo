@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-30 17:17+0100\n"
+"POT-Creation-Date: 2026-10-30 18:21+0100\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: it\n"
@@ -2627,6 +2627,10 @@ msgid "exact phrase"
 msgstr "frase esatta"
 
 #: QML
+msgid "exclude phrase from non-tag text"
+msgstr "escludi la frase dai campi di testo non tag"
+
+#: QML
 msgid "exclude token"
 msgstr "escludi termine"
 
@@ -2677,6 +2681,10 @@ msgstr "file originale, invariato"
 #: QML
 msgid "original size"
 msgstr "dimensione originale"
+
+#: QML
+msgid "phrase in non-tag text"
+msgstr "frase nei campi di testo non tag"
 
 #: QML
 msgid "pixels (long edge)"

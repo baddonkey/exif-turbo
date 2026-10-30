@@ -11,7 +11,11 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Tuple
 
 import sqlcipher3
 
-from ..metadata_values import extract_embedded_description, extract_embedded_keyword_labels
+from ..metadata_values import (
+    extract_embedded_description,
+    extract_embedded_keyword_labels,
+    metadata_text_without_embedded_keywords,
+)
 from ..models.image_sidecar import ImageSidecar
 from ..search_query import ParsedSearchQuery, StructuredSearchFilter, parse_search_query
 from ._connection import open_encrypted_connection, rekey_connection
@@ -26,6 +30,7 @@ _DIM_KEY_PAIRS: tuple[tuple[str, str], ...] = (
     ("PNG:ImageWidth", "PNG:ImageHeight"),
 )
 _STRUCTURED_SEARCH_MIGRATION = "structured-search-index-v1"
+_TEXT_NOT_FTS_MIGRATION = "text-not-fts-v1"
 
 
 class EmptyImageSetReplaceError(ValueError):
@@ -144,6 +149,14 @@ class ImageIndexRepository:
 
             CREATE VIRTUAL TABLE IF NOT EXISTS images_fts
             USING fts5(path, filename, metadata_text, tags_text);
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS images_non_tag_fts
+            USING fts5(path, filename, metadata_text, custom_description);
+
+            CREATE TRIGGER IF NOT EXISTS images_non_tag_fts_image_delete
+            AFTER DELETE ON images BEGIN
+                DELETE FROM images_non_tag_fts WHERE rowid = old.id;
+            END;
 
             CREATE TABLE IF NOT EXISTS image_sidecar_state (
                 image_id INTEGER PRIMARY KEY REFERENCES images(id) ON DELETE CASCADE,
@@ -289,6 +302,7 @@ class ImageIndexRepository:
                 )
                 self.conn.commit()
         self._migrate_structured_search_indexes()
+        self._migrate_non_tag_text_fts()
 
     def upsert_image(
         self,
@@ -334,6 +348,10 @@ class ImageIndexRepository:
                 ).fetchone()
                 if image_id_row is not None:
                     self._replace_embedded_search_data(int(image_id_row[0]), metadata)
+                    self._refresh_non_tag_fts_row(
+                        path,
+                        metadata_text=metadata_text_without_embedded_keywords(metadata),
+                    )
                 self._refresh_fts_row(path, metadata_text=metadata_text)
                 if folder_id is not None:
                     self.conn.execute(
@@ -433,6 +451,7 @@ class ImageIndexRepository:
                 image_path,
                 tags_text=self._build_tags_text(image_id),
             )
+            self._refresh_non_tag_fts_row(image_path)
 
     def get_description(self, image_path: str) -> str:
         row = self.conn.execute(
@@ -611,6 +630,7 @@ class ImageIndexRepository:
                 image_path,
                 tags_text=self._build_tags_text(image_id),
             )
+            self._refresh_non_tag_fts_row(image_path)
 
     def migration_completed(self, name: str) -> bool:
         return self.conn.execute(
@@ -1585,6 +1605,17 @@ class ImageIndexRepository:
                     args.append(normalized)
                 continue
 
+            if search_filter.kind in {"text", "text-not"}:
+                phrase = '"' + search_filter.values[0].replace('"', '""') + '"'
+                membership = "IN" if search_filter.kind == "text" else "NOT IN"
+                clauses.append(
+                    f"AND images.id {membership} ("
+                    "SELECT rowid FROM images_non_tag_fts "
+                    "WHERE images_non_tag_fts MATCH ?)"
+                )
+                args.append(phrase)
+                continue
+
             normalized_values = tuple(
                 _normalize_search_value(value) for value in search_filter.values
             )
@@ -2518,6 +2549,97 @@ class ImageIndexRepository:
                         )
 
         self.mark_migration_completed(_STRUCTURED_SEARCH_MIGRATION)
+
+    def _migrate_non_tag_text_fts(self) -> None:
+        if self.migration_completed(_TEXT_NOT_FTS_MIGRATION):
+            return
+
+        cursor = self.conn.execute(
+            "SELECT i.id, i.path, i.filename, i.metadata_json, "
+            "COALESCE(d.description, '') "
+            "FROM images i LEFT JOIN image_descriptions d ON d.image_id = i.id "
+            "ORDER BY i.id"
+        )
+        while True:
+            rows = cursor.fetchmany(500)
+            if not rows:
+                break
+
+            with self.conn:
+                for image_id, path, filename, metadata_json, custom_description in rows:
+                    try:
+                        metadata_value = json.loads(metadata_json or "{}")
+                        metadata = (
+                            metadata_value if isinstance(metadata_value, dict) else {}
+                        )
+                    except (TypeError, ValueError):
+                        metadata = {}
+                    self._write_non_tag_fts_row(
+                        int(image_id),
+                        str(path),
+                        str(filename),
+                        metadata_text_without_embedded_keywords(metadata),
+                        str(custom_description or ""),
+                    )
+
+        self.mark_migration_completed(_TEXT_NOT_FTS_MIGRATION)
+
+    def _refresh_non_tag_fts_row(
+        self, image_path: str, *, metadata_text: str | None = None
+    ) -> None:
+        image_row = self.conn.execute(
+            "SELECT i.id, i.path, i.filename, i.metadata_json, "
+            "COALESCE(d.description, '') "
+            "FROM images i LEFT JOIN image_descriptions d ON d.image_id = i.id "
+            "WHERE i.path = ?",
+            (image_path,),
+        ).fetchone()
+        if image_row is None:
+            return
+
+        image_id, path, filename, metadata_json, custom_description = image_row
+        if metadata_text is None:
+            current = self.conn.execute(
+                "SELECT metadata_text FROM images_non_tag_fts WHERE rowid = ?",
+                (image_id,),
+            ).fetchone()
+            if current is None:
+                try:
+                    metadata_value = json.loads(metadata_json or "{}")
+                    metadata = (
+                        metadata_value if isinstance(metadata_value, dict) else {}
+                    )
+                except (TypeError, ValueError):
+                    metadata = {}
+                metadata_text = metadata_text_without_embedded_keywords(metadata)
+            else:
+                metadata_text = str(current[0])
+
+        self._write_non_tag_fts_row(
+            int(image_id),
+            str(path),
+            str(filename),
+            metadata_text,
+            str(custom_description or ""),
+        )
+
+    def _write_non_tag_fts_row(
+        self,
+        image_id: int,
+        path: str,
+        filename: str,
+        metadata_text: str,
+        custom_description: str,
+    ) -> None:
+        self.conn.execute(
+            "DELETE FROM images_non_tag_fts WHERE rowid = ?", (image_id,)
+        )
+        self.conn.execute(
+            "INSERT INTO images_non_tag_fts "
+            "(rowid, path, filename, metadata_text, custom_description) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (image_id, path, filename, metadata_text, custom_description),
+        )
 
     def _migrate_fts_tags_text(self) -> None:
         # FTS5 exposes internal hidden columns via table_xinfo, so table_info is
