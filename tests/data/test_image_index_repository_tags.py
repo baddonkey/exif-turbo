@@ -448,6 +448,7 @@ def test_search_text_not_excludes_non_tag_text_but_not_tag_values(
     tag_only_path = "/photos/tag-only.jpg"
     embedded_text_path = "/photos/embedded-text.jpg"
     custom_text_path = "/photos/custom-text.jpg"
+    green_text_path = "/photos/green-text.jpg"
     repo.upsert_image(
         tag_only_path,
         "tag-only.jpg",
@@ -475,6 +476,14 @@ def test_search_text_not_excludes_non_tag_text_but_not_tag_values(
         {"IPTC:Keywords": ["Huba"]},
         "",
     )
+    repo.upsert_image(
+        green_text_path,
+        "green-text.jpg",
+        1.0,
+        100,
+        {"XMP-dc:Description": "A green meadow"},
+        "",
+    )
     _replace_tags(repo, tag_only_path, _sidecar(free_tags=("Huba",)))
     _replace_tags(repo, custom_text_path, replace(
         _sidecar(free_tags=("Huba",)),
@@ -489,6 +498,23 @@ def test_search_text_not_excludes_non_tag_text_but_not_tag_values(
     assert repo.count_images('text:="huba"') == 2
     assert repo.count_images('text:="sculpture"') == 1
     assert repo.count_images('tags:="Huba" text:="field note"') == 1
+    assert repo.count_images('tags:="Huba"') == 3
+    assert repo.count_images('text:="green"') == 1
+    assert repo.count_images(
+        'tags:="Huba" OR text:="green"'
+    ) == 4
+    or_rows = repo.search_images(
+        'tags:="Huba" OR text:="green"', limit=10, offset=0
+    )
+    assert {row[1] for row in or_rows} == {
+        tag_only_path,
+        embedded_text_path,
+        custom_text_path,
+        green_text_path,
+    }
+    assert repo.count_images(
+        'tags:="Huba" OR text:="green" AND description:="sculpture"'
+    ) == 3
 
 
 def test_documented_search_examples_match_expected_images(

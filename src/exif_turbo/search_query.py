@@ -9,6 +9,7 @@ from typing import Literal
 SearchFilterKind = Literal[
     "tags", "embedded-tags", "custom-tags", "description", "text", "text-not"
 ]
+StructuredFilterOperator = Literal["AND", "OR"]
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,7 @@ class StructuredSearchFilter:
 class ParsedSearchQuery:
     text: str
     filters: tuple[StructuredSearchFilter, ...]
+    filter_operators: tuple[StructuredFilterOperator, ...] = ()
 
 
 class SearchQueryParseError(ValueError):
@@ -35,14 +37,16 @@ _OPERATOR_PATTERN = re.compile(
 def parse_search_query(query: str) -> ParsedSearchQuery:
     """Separate structured operators from ordinary FTS query text."""
     filters: list[StructuredSearchFilter] = []
+    filter_operators: list[StructuredFilterOperator] = []
     text_parts: list[str] = []
+    pending_text: list[str] = []
     position = 0
 
     while position < len(query):
         character = query[position]
         if character == '"':
             end = _quoted_end(query, position)
-            text_parts.append(query[position:end])
+            pending_text.append(query[position:end])
             position = end
             continue
 
@@ -53,9 +57,21 @@ def parse_search_query(query: str) -> ParsedSearchQuery:
             or query[position - 1] == "("
         )
         if match is None or not at_token_boundary:
-            text_parts.append(character)
+            pending_text.append(character)
             position += 1
             continue
+
+        text_segment = "".join(pending_text)
+        pending_text.clear()
+        if filters:
+            connector = re.fullmatch(r"\s*(AND|OR)?\s*", text_segment)
+            if connector is None:
+                text_parts.append(text_segment)
+                filter_operators.append("AND")
+            else:
+                filter_operators.append(connector.group(1) or "AND")
+        else:
+            text_parts.append(text_segment)
 
         kind = match.group(0)[:-2].lower()
         value_start = match.end()
@@ -69,12 +85,16 @@ def parse_search_query(query: str) -> ParsedSearchQuery:
         raw_value, position = _read_quoted_value(query, value_start)
         values = _normalize_values(kind, raw_value)
         filters.append(StructuredSearchFilter(kind=kind, values=values))
-        text_parts.append(" ")
 
+    text_parts.extend(pending_text)
     text = "".join(text_parts).strip()
     if filters:
         text = _remove_explicit_and(text)
-    return ParsedSearchQuery(text=text, filters=tuple(filters))
+    return ParsedSearchQuery(
+        text=text,
+        filters=tuple(filters),
+        filter_operators=tuple(filter_operators),
+    )
 
 
 def _remove_explicit_and(text: str) -> str:

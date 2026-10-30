@@ -44,6 +44,17 @@ def test_parse_search_query_text_filter_is_structured() -> None:
     ]
 
 
+def test_parse_search_query_or_between_structured_filters_is_consumed() -> None:
+    parsed = parse_search_query('tags:="cat, playing" OR text:="green"')
+
+    assert parsed.text == ""
+    assert [(item.kind, item.values) for item in parsed.filters] == [
+        ("tags", ("cat", "playing")),
+        ("text", ("green",)),
+    ]
+    assert parsed.filter_operators == ("OR",)
+
+
 def test_parse_search_query_plain_fts_and_remains_unchanged() -> None:
     query = "forest AND camera"
 

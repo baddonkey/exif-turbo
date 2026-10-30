@@ -1578,17 +1578,19 @@ class ImageIndexRepository:
         return ' '.join(sanitized.split())
 
     def _build_structured_search_clause(
-        self, filters: tuple[StructuredSearchFilter, ...]
+        self,
+        filters: tuple[StructuredSearchFilter, ...],
+        operators: tuple[str, ...] = (),
     ) -> tuple[str, tuple[object, ...]]:
-        clauses: list[str] = []
+        predicates: list[str] = []
         args: list[object] = []
         for search_filter in filters:
             if search_filter.kind == "description":
                 normalized = _normalize_search_value(search_filter.values[0])
                 if len(normalized) >= 3 and self._description_trigram_available:
                     phrase = '"' + normalized.replace('"', '""') + '"'
-                    clauses.append(
-                        "AND images.id IN ("
+                    predicates.append(
+                        "images.id IN ("
                         "SELECT d.image_id FROM image_description_fts "
                         "JOIN image_description_texts d "
                         "ON d.id = image_description_fts.rowid "
@@ -1597,8 +1599,8 @@ class ImageIndexRepository:
                     )
                     args.extend((phrase, normalized))
                 else:
-                    clauses.append(
-                        "AND EXISTS (SELECT 1 FROM image_description_texts d "
+                    predicates.append(
+                        "EXISTS (SELECT 1 FROM image_description_texts d "
                         "WHERE d.image_id = images.id "
                         "AND instr(d.normalized_description, ?) > 0)"
                     )
@@ -1608,8 +1610,8 @@ class ImageIndexRepository:
             if search_filter.kind in {"text", "text-not"}:
                 phrase = '"' + search_filter.values[0].replace('"', '""') + '"'
                 membership = "IN" if search_filter.kind == "text" else "NOT IN"
-                clauses.append(
-                    f"AND images.id {membership} ("
+                predicates.append(
+                    f"images.id {membership} ("
                     "SELECT rowid FROM images_non_tag_fts "
                     "WHERE images_non_tag_fts MATCH ?)"
                 )
@@ -1640,21 +1642,39 @@ class ImageIndexRepository:
                     "AND sidecar.exclude_all_embedded_tags = 1)"
                 )
                 args.extend(normalized_values)
-            clauses.append(
-                "AND images.id IN (SELECT matched.image_id FROM ("
+            predicates.append(
+                "images.id IN (SELECT matched.image_id FROM ("
                 + " UNION ALL ".join(tag_sources)
                 + ") matched GROUP BY matched.image_id "
                 "HAVING COUNT(DISTINCT matched.normalized_label) = ?)"
             )
             args.append(len(normalized_values))
-        return " ".join(clauses), tuple(args)
+
+        if not predicates:
+            return "", tuple(args)
+
+        filter_operators = tuple(
+            operator if operator in {"AND", "OR"} else "AND"
+            for operator in operators
+        )
+        if len(filter_operators) < len(predicates) - 1:
+            filter_operators += ("AND",) * (len(predicates) - 1 - len(filter_operators))
+
+        groups: list[str] = []
+        current_group: list[str] = []
+        for index, predicate in enumerate(predicates):
+            current_group.append(predicate)
+            if index == len(predicates) - 1 or filter_operators[index] == "OR":
+                groups.append(" AND ".join(current_group))
+                current_group = []
+        return "AND (" + " OR ".join(f"({group})" for group in groups) + ")", tuple(args)
 
     def _compile_search_query(
         self, query: str
     ) -> tuple[str, str, tuple[object, ...]]:
         parsed_query: ParsedSearchQuery = parse_search_query(query)
         structured_clause, structured_args = self._build_structured_search_clause(
-            parsed_query.filters
+            parsed_query.filters, parsed_query.filter_operators
         )
         return (
             self._sanitize_fts_query(parsed_query.text),
@@ -1713,7 +1733,7 @@ class ImageIndexRepository:
         parsed_query = parse_search_query(query)
         fts_query = self._sanitize_fts_query(parsed_query.text)
         structured_clause, structured_args = self._build_structured_search_clause(
-            parsed_query.filters
+            parsed_query.filters, parsed_query.filter_operators
         )
 
         if fts_query:
@@ -1778,7 +1798,7 @@ class ImageIndexRepository:
         parsed_query = parse_search_query(query)
         fts_query = self._sanitize_fts_query(parsed_query.text)
         structured_clause, structured_args = self._build_structured_search_clause(
-            parsed_query.filters
+            parsed_query.filters, parsed_query.filter_operators
         )
 
         if fts_query:

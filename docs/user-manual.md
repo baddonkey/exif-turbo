@@ -613,22 +613,25 @@ match phrases, not arbitrary substrings.
 
 ### Combining expressions and filters
 
-The ordinary full-text part can use the FTS operators above, and can be
-combined with structured filters. Each structured filter is ANDed with the
-ordinary full-text result and with every other structured filter. For example:
+The ordinary full-text expression can use the FTS operators above. Structured
+filters can also be joined with uppercase `AND` or `OR`; adjacent structured
+filters without an operator default to AND. AND has precedence over OR. The
+ordinary full-text expression, when present, is ANDed with the complete
+structured-filter expression. For example:
 
 | Query | Meaning |
 |-------|---------|
 | `(Canon OR Nikon) tags:="wildlife"` | Canon or Nikon images that have the exact effective tag `wildlife` |
 | `"red deer" NOT captive tags:="wildlife, landscape"` | The phrase without `captive`, plus both exact effective tags |
 | `tags:="red deer" AND description:="golden"` | The exact tag and a description containing `golden` |
+| `tags:="cat, playing" OR text:="green"` | Both exact tags, or the phrase `green` in non-tag text |
 | `tags:="red deer" text:="alpine lake" text-not:="zoo"` | The exact tag, the phrase in non-tag text, and no `zoo` phrase in non-tag text |
 
 When filters are separated by spaces, they already mean AND; writing `AND`
-between structured filters is optional. `OR` applies only inside the ordinary
-FTS expression. OR between structured filters (for example, either of two
-different `tags:=` filters) is not supported; a comma-separated tag list
-always requires every listed tag.
+between structured filters is optional. OR can join different structured
+filters, but commas inside a tag filter always require every listed tag. For
+example, `tags:="cat" OR tags:="playing"` matches either exact tag, while
+`tags:="cat, playing"` requires both.
 
 ---
 
