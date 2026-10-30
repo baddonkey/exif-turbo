@@ -491,6 +491,109 @@ def test_search_text_not_excludes_non_tag_text_but_not_tag_values(
     assert repo.count_images('tags:="Huba" text:="field note"') == 1
 
 
+def test_documented_search_examples_match_expected_images(
+    repo: ImageIndexRepository,
+) -> None:
+    canon_path = "/photos/canon-r5.jpg"
+    nikon_path = "/photos/nikon-z9.jpg"
+    fuji_path = "/photos/fuji-x100.jpg"
+    repo.upsert_image(
+        canon_path,
+        "canon-r5.jpg",
+        1.0,
+        100,
+        {
+            "Make": "Canon",
+            "Model": "EOS R5",
+            "FocalLength": "50mm",
+            "Country": "Switzerland",
+            "Year": "2024",
+            "IPTC:Keywords": ["wildlife", "landscape"],
+            "XMP-dc:Description": "Golden eagle over alpine lake at sunset",
+        },
+        "Make Canon Model EOS R5 FocalLength 50mm Country Switzerland Year 2024 "
+        "IPTC:Keywords wildlife landscape XMP-dc:Description Golden eagle over "
+        "alpine lake at sunset",
+    )
+    repo.upsert_image(
+        nikon_path,
+        "nikon-z9.jpg",
+        1.0,
+        100,
+        {
+            "Make": "Nikon",
+            "Model": "Z 9",
+            "FocalLength": "85mm",
+            "IPTC:Keywords": ["wildlife", "landscape", "golden eagle"],
+            "XMP-dc:Description": "Red deer in the reserve",
+        },
+        "Make Nikon Model Z 9 FocalLength 85mm IPTC:Keywords wildlife landscape "
+        "golden eagle XMP-dc:Description Red deer in the reserve",
+    )
+    repo.upsert_image(
+        fuji_path,
+        "fuji-x100.jpg",
+        1.0,
+        100,
+        {"Make": "Fujifilm", "Model": "X100V"},
+        "Make Fujifilm Model X100V",
+    )
+    _replace_tags(
+        repo,
+        canon_path,
+        replace(
+            _sidecar(free_tags=("red deer", "summer holiday")),
+            description="Alpine family trip",
+        ),
+    )
+    _replace_tags(
+        repo,
+        nikon_path,
+        replace(
+            _sidecar(free_tags=("red deer",)),
+            description="A red deer in a captive reserve",
+        ),
+    )
+
+    def matching_paths(query: str) -> set[str]:
+        return {
+            row[1] for row in repo.search_images(query, limit=20, offset=0)
+        }
+
+    assert matching_paths("Canon EOS R5") == {canon_path}
+    assert matching_paths('"golden eagle"') == {canon_path, nikon_path}
+    assert matching_paths("Switzerland 2024") == {canon_path}
+    assert matching_paths("Canon OR Nikon") == {canon_path, nikon_path}
+    assert matching_paths("Fuji*") == {fuji_path}
+    assert matching_paths("Canon AND 50mm") == {canon_path}
+    assert matching_paths('"red deer" NOT captive') == {canon_path}
+    assert matching_paths('tags:="red deer, landscape"') == {
+        canon_path,
+        nikon_path,
+    }
+    assert matching_paths('embedded-tags:="landscape"') == {
+        canon_path,
+        nikon_path,
+    }
+    assert matching_paths('custom-tags:="summer holiday"') == {canon_path}
+    assert matching_paths('description:="sunset"') == {canon_path}
+    assert matching_paths('text:="golden eagle"') == {canon_path}
+    assert matching_paths('text-not:="captive"') == {canon_path, fuji_path}
+    assert matching_paths('(Canon OR Nikon) tags:="wildlife"') == {
+        canon_path,
+        nikon_path,
+    }
+    assert matching_paths(
+        '"red deer" NOT captive tags:="wildlife, landscape"'
+    ) == {canon_path}
+    assert matching_paths(
+        'tags:="red deer" AND description:="golden"'
+    ) == {canon_path}
+    assert matching_paths(
+        'tags:="red deer" text:="alpine lake" text-not:="zoo"'
+    ) == {canon_path}
+
+
 def test_upsert_and_delete_refresh_structured_search_indexes(
     repo: ImageIndexRepository,
 ) -> None:

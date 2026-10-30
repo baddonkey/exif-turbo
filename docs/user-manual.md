@@ -1,4 +1,4 @@
-# exif-turbo User Manual
+<<<<<<<<<<<<# exif-turbo User Manual
 
 **exif-turbo** lets you scan image folders, build a searchable index of all EXIF
 metadata, and instantly find any photo by camera model, lens, date, location, or any
@@ -551,10 +551,10 @@ source not attached: D:\Photos — attach or mount this folder to open files."*
 | Query | What it finds |
 |-------|---------------|
 | `Canon EOS R5` | All images shot with a Canon EOS R5 |
-| `f/1.4` | All images taken at f/1.4 aperture |
-| `Switzerland 2024` | Images with Switzerland and 2024 in any metadata field |
-| `eagle` | Images whose filename, title, or keywords mention eagle |
-| `Nikon Z 9 ISO 6400` | Nikon Z 9 shots at ISO 6400 |
+| `"golden eagle"` | Images with that exact phrase in indexed text |
+| `Switzerland 2024` | Images containing both terms in indexed text |
+| `Canon OR Nikon` | Images containing either camera make |
+| `Fuji*` | Images with a token beginning with `Fuji` |
 
 ### Advanced query syntax
 
@@ -566,7 +566,7 @@ The search box accepts the full **SQLite FTS5** query language:
 | `"exact phrase"` | `"red deer"` | Terms must appear adjacent and in order |
 | `term1 AND term2` | `Canon AND 50mm` | Both terms must be present |
 | `term1 OR term2` | `Canon OR Nikon` | Either term must be present |
-| `term1 NOT term2` | `50mm NOT Nikon` | First term present, second term absent |
+| `term1 NOT term2` | `"red deer" NOT captive` | Phrase present, excluded term absent |
 | `prefix*` | `Fuji*` | Matches any token starting with the prefix |
 
 Multiple terms without an operator (`Canon 50mm`) are treated as an implicit AND.
@@ -576,19 +576,19 @@ ExifTool stores metadata with group-prefixed keys such as `GPS:GPSLatitude` or
 is treated as a word separator, so `GPS:GPSLatitude` becomes an implicit AND
 of `GPS` and `GPSLatitude`.
 
-### Exact tag and description filters
+### Exact tag, description, and text filters
 
-Structured filters can be combined with each other and with ordinary full-text
-terms. Every structured filter is combined with AND semantics:
+Use structured filters when you need exact tag membership or want to search
+non-tag text separately from tags:
 
 | Syntax | Example | What it finds |
 |--------|---------|---------------|
-| `tags:=` | `tags:="forest, wildlife"` | Images with every listed effective tag |
-| `description:=` | `description:="sun"` | Descriptions containing `sun` anywhere |
-| `embedded-tags:=` | `embedded-tags:="forest"` | Non-excluded embedded IPTC/XMP keywords |
-| `custom-tags:=` | `custom-tags:="deer"` | Custom sidecar tags only |
-| `text:=` | `text:="wildlife"` | Requires a phrase in non-tag text |
-| `text-not:=` | `text-not:="huba"` | Excludes images containing the phrase in non-tag text |
+| `tags:=` | `tags:="red deer, landscape"` | Images with both exact effective tags |
+| `embedded-tags:=` | `embedded-tags:="landscape"` | Images with that non-excluded embedded keyword |
+| `custom-tags:=` | `custom-tags:="summer holiday"` | Images with that custom sidecar tag |
+| `description:=` | `description:="sunset"` | Descriptions containing `sunset` anywhere |
+| `text:=` | `text:="golden eagle"` | Images with that phrase in non-tag text |
+| `text-not:=` | `text-not:="captive"` | Excludes the phrase from non-tag text |
 
 Tag values are matched case-insensitively as complete values, not as words or
 substrings. Multiple values are comma-separated and all must be present. The
@@ -596,18 +596,39 @@ default `tags:=` filter searches the effective collection: embedded keywords
 not excluded for that image, plus custom sidecar tags. Excluding all embedded
 keywords does not exclude custom tags.
 
-Description filters are case-insensitive substring searches across both
-embedded and custom descriptions. Unlike exact tag filters, `description:=` can
-match in the middle of a word. Structured filters combine with remaining FTS
-text, for example `mountains tags:="forest, deer" description:="sun"`.
+Tag values are matched case-insensitively as complete values, not as words or
+substrings. Commas separate multiple tags, and every listed value must be
+present. The default `tags:=` filter searches the effective collection:
+embedded keywords not excluded for that image, plus custom sidecar tags.
+Excluding all embedded keywords does not exclude custom tags.
 
-`text:=` requires a quoted FTS phrase in filenames, non-keyword embedded
-metadata, or custom descriptions. Its counterpart, `text-not:=`, excludes
-images with that phrase in those same fields. Embedded IPTC/XMP keyword values
-and custom sidecar tag values do not count as text matches. For example,
-`tags:="Huba" text-not:="huba"` finds images with the exact effective tag
-`Huba` only when the phrase does not also appear in non-tag text. This is an
-FTS phrase match, not an arbitrary substring search.
+Description filters perform case-insensitive substring matching across both
+embedded and custom descriptions. Unlike exact tags, they can match inside a
+word; for example, `description:="sun"` can match *sunset*.
+
+`text:=` and `text-not:=` use FTS phrase matching on filenames, non-keyword
+embedded metadata, and custom descriptions. Embedded IPTC/XMP keyword values
+and custom sidecar tags are excluded from this text collection. These operators
+match phrases, not arbitrary substrings.
+
+### Combining expressions and filters
+
+The ordinary full-text part can use the FTS operators above, and can be
+combined with structured filters. Each structured filter is ANDed with the
+ordinary full-text result and with every other structured filter. For example:
+
+| Query | Meaning |
+|-------|---------|
+| `(Canon OR Nikon) tags:="wildlife"` | Canon or Nikon images that have the exact effective tag `wildlife` |
+| `"red deer" NOT captive tags:="wildlife, landscape"` | The phrase without `captive`, plus both exact effective tags |
+| `tags:="red deer" AND description:="golden"` | The exact tag and a description containing `golden` |
+| `tags:="red deer" text:="alpine lake" text-not:="zoo"` | The exact tag, the phrase in non-tag text, and no `zoo` phrase in non-tag text |
+
+When filters are separated by spaces, they already mean AND; writing `AND`
+between structured filters is optional. `OR` applies only inside the ordinary
+FTS expression. OR between structured filters (for example, either of two
+different `tags:=` filters) is not supported; a comma-separated tag list
+always requires every listed tag.
 
 ---
 
@@ -1307,9 +1328,96 @@ MCP clients can inspect the selected image, list sets, read paginated set
 members, and apply custom tags or descriptions to indexed images. They can also
 set embedded-keyword and description exclusions for derivative exports. MCP
 does not create, rename, delete, or change set membership. Batch updates use
-image IDs and paths from the active database and report per-image outcomes. See
-the [README MCP guide](../README.md#mcp-batch-selection) for tool examples and
-pagination details.
+image IDs and paths from the active database and report per-image outcomes.
+
+#### Read the current selection or a set
+
+`get_selected_image` returns the image selected in the tagging drawer, including
+its image ID, path, custom tags, custom description, metadata, and an available
+JPEG preview. In Search or Browse it follows that tab's selection. In Sets, a
+set member must be selected; it does not fall back to an unrelated Search or
+Browse selection. Set `include_preview=False` to omit the inline preview.
+
+Use `list_image_sets` to get set IDs, names, member counts, and saved-filter
+availability. Then read a set in pages:
+
+```python
+list_image_sets()
+get_image_set_images(set_id=1, include_previews=True)
+```
+
+Each page includes image IDs and paths, metadata, custom tags, descriptions,
+and preview resource URIs. Inline previews default to 5 images and are limited
+to 5. Without inline previews, pages default to 25 and can contain up to 50
+images. Pass `next_offset` as `offset` to fetch the next page; stop when it is
+`null`.
+
+#### Update tags and descriptions
+
+`add_custom_tags` adds tags to the image selected in the tagging drawer. It
+does not update every member of an active set. For explicit targets, use
+`set_custom_tags_batch` with `image_id`, `path`, `tags`, and optional `mode`
+(`append` by default, or `replace`):
+
+```python
+set_custom_tags_batch(updates=[
+  {"image_id": 42, "path": "/photos/alpine-lake.jpg",
+   "tags": ["alpine lake", "summer"], "mode": "append"},
+])
+```
+
+Tag batches accept up to 100 images. Each result reports success or error and,
+on success, the resulting custom tags. Use matching image IDs and paths from
+`get_selected_image` or `get_image_set_images`; both must identify the same
+image in the active, unlocked database. Successful tag updates are recorded at
+INFO level with the image ID, path, mode, and requested and resulting tags.
+
+Use `set_image_description` to append or replace one image's custom description.
+The mode is required; append adds a paragraph separated by a blank line, while
+replace substitutes the full description. An empty append is rejected and an
+empty replacement clears the custom description. For example:
+
+```python
+set_image_description(
+  image_id=42,
+  path="/photos/alpine-lake.jpg",
+  description="Photographed shortly before sunset.",
+  mode="append",
+)
+```
+
+`set_image_descriptions_batch` applies the same operations to up to 100 images.
+Each update must include `image_id`, `path`, `description`, and explicit `mode`;
+results report per-image success or error, the resulting description, and a
+`changed` flag. Custom descriptions are stored in adjacent sidecars and the
+search index. MCP writes never modify original image bytes or embedded metadata.
+
+#### Control derivative exclusions
+
+These tools change sidecar settings for exported copies only; source image
+metadata and ordinary metadata search remain unchanged. Tag-exclusion tools
+require a matching indexed image ID/path, an unlocked database, and **Custom
+Tags** enabled. Individual embedded-keyword exclusions are case-insensitive
+and remain saved when ignore-all is toggled. Restoring one keyword does not
+override ignore-all; clear the all-keywords flag separately.
+
+```python
+set_image_embedded_tag_excluded(
+  image_id=42, path="/photos/alpine-lake.jpg", tag="Family", excluded=True
+)
+set_image_all_embedded_tags_excluded(
+  image_id=42, path="/photos/alpine-lake.jpg", excluded=True
+)
+set_image_description_excluded(
+  image_id=42, path="/photos/alpine-lake.jpg", excluded=True
+)
+```
+
+Set `excluded=False` to restore inclusion. Tag-exclusion results include
+`excluded_embedded_tags`, `exclude_all_embedded_tags`, and `changed`; description
+exclusion results include `exclude_embedded_description` and `changed`. These
+settings are also returned by selected-image reads and set-image listings.
+Ignoring an embedded description does not clear custom description text.
 
 ### Worker Threads
 

@@ -15,10 +15,11 @@ For AI assisted tagging, watch out the companion project [Exif Turbo AI Tagger](
 
 ## What it does
 
-- **Search metadata:** Find images and videos by EXIF, IPTC, XMP, and other embedded metadata, with text, date, and folder filters.
-- **Search by image meaning:** Use natural-language AI search to find photos by their visual content, not just their filenames or tags. AI search runs locally after its model is available.
-- **Browse and inspect:** Browse indexed folders, preview media, and inspect metadata and EXIF tags.
-- **Organize without changing originals:** Add searchable custom tags and descriptions in sidecars, and export tagged copies while leaving source files untouched.
+- **Search metadata:** Search EXIF, IPTC, XMP, and other embedded metadata with full-text and [structured tag, description, date, format, and folder filters](docs/user-manual.md#6-searching).
+- **Search by image meaning:** Find photos by visual content with local AI search after its model is available. See [AI search](docs/user-manual.md#6-searching).
+- **Browse and inspect:** Browse [indexed folders](docs/user-manual.md#7-browsing-by-folder), preview media, and inspect [metadata and EXIF tags](docs/user-manual.md#9-viewing-metadata-and-exif-tags).
+- **Group with Image Sets:** Collect image references, filter Search by set, and optionally reapply saved filters. See [Image Sets](docs/user-manual.md#8-image-sets).
+- **Tag and export derivatives:** Add searchable custom tags and descriptions in sidecars, then create configurable derivative copies with format, resize, metadata, and embedded-tag/description controls. See [Custom Tags and Derivatives](docs/user-manual.md#11-custom-tags-and-derivatives).
 - **Keep the index local:** Password-protected databases encrypt the index and supported thumbnail, preview, and AI caches at rest.
 - **Handle varied libraries:** Index common photo, RAW, and video formats; the interface is available in five languages.
 
@@ -32,107 +33,12 @@ Download the installer for your platform from [GitHub Releases](https://github.c
 
 See the [User Manual](docs/user-manual.md#2-installation) for setup and first-run instructions.
 
-## MCP batch selection
+## MCP interface
 
-The running desktop app's MCP interface lets an assistant choose an image set
-before applying custom tags to a batch:
-
-```python
-list_image_sets()
-get_image_set_images(set_id=1, include_previews=True)
-```
-
-The first call lists sets with their IDs, names, and member counts. The second
-returns a page of images with existing custom tags, descriptions, metadata, and available JPEG
-previews. With previews enabled, the default and maximum page size is 5 images;
-without previews, the default is 25 and the maximum is 50. Pass the returned
-`next_offset` as `offset` to fetch another page until `next_offset` is `null`.
-Use the chosen image IDs and paths with `set_custom_tags_batch` to append or
-replace custom tags.
-
-The single-image tools `get_selected_image` and `add_custom_tags` follow the
-tagging drawer's selection. In Sets, select a member first; they never fall back
-to an unrelated Search selection while a set is active. `add_custom_tags` updates
-only that selected image, not the entire set. Check the path returned by
-`get_selected_image` before tagging, and use `set_custom_tags_batch` with explicit
-image IDs and paths for batch updates.
-
-Successful MCP tag updates write an INFO log entry per image with the tool name,
-image ID, target path, append/replace mode, requested tags, and resulting custom
-tags. Failed updates are not logged as successes.
-
-### Embedded tag exclusions through MCP
-
-To ignore or restore one embedded keyword on derivative exports:
-
-```python
-set_image_embedded_tag_excluded(
-    image_id=42, path=r"C:\photos\image.jpg", tag="Family", excluded=True
-)
-```
-
-To ignore all embedded keywords independently:
-
-```python
-set_image_all_embedded_tags_excluded(
-    image_id=42, path=r"C:\photos\image.jpg", excluded=True
-)
-```
-
-Use `excluded=False` to restore inclusion. Individual exclusions are
-case-insensitive and remain saved when ignore-all is toggled; restoring one
-keyword does not override ignore-all. Both tools require a matching indexed
-image ID/path, an unlocked database, and enabled tagging. They return
-`excluded_embedded_tags`, `exclude_all_embedded_tags`, and `changed`.
-Selected-image reads/resources and set-image listings also expose both settings.
-Only sidecars and derived cache state change; originals, source metadata/search,
-custom tags, descriptions, and description drafts are preserved.
-
-### Custom descriptions through MCP
-
-Use `set_image_description` to append or replace the custom description for an
-explicit indexed image. Obtain its `image_id` and `path` from
-`get_selected_image` or `get_image_set_images`; both must match the active
-database. The mode is required:
-
-```python
-set_image_description(
-    image_id=42,
-    path=r"C:\Photos\fox.jpg",
-    description="Photographed shortly before sunset.",
-    mode="append",
-)
-```
-
-Append adds a new paragraph with one blank line between the existing text and
-the new text. Replace substitutes the entire custom description; an empty string
-clears it. Empty appends are rejected. Original images and embedded descriptions
-are never modified: the custom description lives in the adjacent JSON sidecar
-and is searchable in the database.
-
-For batches, call `set_image_descriptions_batch(updates=[...])` with at most 100
-objects containing `image_id`, `path`, `description`, and explicit `mode`.
-Results are reported per image, including the resulting description and a
-`changed` flag. Existing descriptions are included in selected-image metadata
-and set-image listings. Description editing in the tagging drawer uses the same
-sidecar operations. A separate **Copy tags and descriptions** panel, opened
-with the multiple-tags toolbar icon, provides read-only custom and derivative
-metadata previews alongside the bulk copy controls. The normal tagging panel
-remains editable. **Copy Description** can append or replace saved custom
-descriptions on the same targets as Copy Tags. Replace requires confirmation
-and can clear target descriptions when the source is empty; drafts and embedded
-metadata are not copied. Copy Tags remains unchanged. Derivative exports include the
-embedded description (unless ignored), then the saved custom description as a
-new paragraph in XMP-dc Description. The drawer's **Final derivative description**
-preview shows this combined text; unsaved drafts are not included.
-
-To discard embedded descriptions from exported copies without supplying any
-replacement text, use
-`set_image_description_excluded(image_id=42, path=..., excluded=True)`.
-The independent `exclude_embedded_description` sidecar flag is also available as
-**Ignore embedded description** in the drawer and is returned by MCP image reads.
-Set it to `False` to retain embedded descriptions again. It does not clear custom
-description text, remove source metadata from search, or change original files.
+The optional MCP server runs inside the desktop app. The User Manual's
+[MCP Interface guide](docs/user-manual.md#mcp-interface) covers setup, selected
+images, set pagination, batch tag and description updates, and derivative
+exclusions.
 
 ## Privacy
 
