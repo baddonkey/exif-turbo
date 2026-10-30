@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-30 19:17+0100\n"
+"POT-Creation-Date: 2026-10-30 20:41+0100\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: rm\n"
@@ -1425,6 +1425,10 @@ msgid "FOLDERS"
 msgstr "CARTELLAS"
 
 #: QML
+msgid "FTS OR plus an exact tag"
+msgstr "OR FTS cun in tag exact"
+
+#: QML
 msgid "Factory default: %1 (%2 CPU threads detected)"
 msgstr "Predefinì: %1 (%2 threads CPU detectads)"
 
@@ -2588,6 +2592,10 @@ msgid "all exact tag values; exclusions apply"
 msgstr "tut las valurs exactas dals tags; las exclusiuns valan"
 
 #: QML
+msgid "all terms in indexed text"
+msgstr "tut ils terms en il text indexà"
+
+#: QML
 msgid "at least"
 msgstr "almain"
 
@@ -2636,12 +2644,16 @@ msgid "exact phrase"
 msgstr "frasa exacta"
 
 #: QML
-msgid "exclude phrase from non-tag text"
-msgstr "excluder la frasa dal text senza tags"
+msgid "exact tag AND description"
+msgstr "tag exact E descripziun"
 
 #: QML
-msgid "exclude token"
-msgstr "excluder term"
+msgid "exact tags OR non-tag text"
+msgstr "tags exacts U text senza tags"
+
+#: QML
+msgid "exclude phrase from non-tag text"
+msgstr "excluder la frasa dal text senza tags"
 
 #: QML
 msgid "exists"
@@ -2696,6 +2708,10 @@ msgid "phrase in non-tag text"
 msgstr "frasa en texts senza tags"
 
 #: QML
+msgid "phrase, excluding the second term"
+msgstr "frasa senza il segund term"
+
+#: QML
 msgid "pixels (long edge)"
 msgstr "pixels (vart lunga)"
 
@@ -2706,10 +2722,6 @@ msgstr "joker da prefix"
 #: QML
 msgid "previews"
 msgstr "previstas"
-
-#: QML
-msgid "single token"
-msgstr "singul term"
 
 #: QML
 msgid "spaces"

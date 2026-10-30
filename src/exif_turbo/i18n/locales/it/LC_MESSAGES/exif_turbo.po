@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-30 19:17+0100\n"
+"POT-Creation-Date: 2026-10-30 20:41+0100\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: it\n"
@@ -1420,6 +1420,10 @@ msgid "FOLDERS"
 msgstr "CARTELLE"
 
 #: QML
+msgid "FTS OR plus an exact tag"
+msgstr "OR FTS con un tag esatto"
+
+#: QML
 msgid "Factory default: %1 (%2 CPU threads detected)"
 msgstr "Impostazione predefinita: %1 (%2 thread CPU rilevati)"
 
@@ -2587,6 +2591,10 @@ msgid "all exact tag values; exclusions apply"
 msgstr "tutti i valori esatti dei tag; le esclusioni vengono applicate"
 
 #: QML
+msgid "all terms in indexed text"
+msgstr "tutti i termini nel testo indicizzato"
+
+#: QML
 msgid "at least"
 msgstr "almeno"
 
@@ -2635,12 +2643,16 @@ msgid "exact phrase"
 msgstr "frase esatta"
 
 #: QML
-msgid "exclude phrase from non-tag text"
-msgstr "escludi la frase dai campi di testo non tag"
+msgid "exact tag AND description"
+msgstr "tag esatto E descrizione"
 
 #: QML
-msgid "exclude token"
-msgstr "escludi termine"
+msgid "exact tags OR non-tag text"
+msgstr "tag esatti O testo non-tag"
+
+#: QML
+msgid "exclude phrase from non-tag text"
+msgstr "escludi la frase dai campi di testo non tag"
 
 #: QML
 msgid "exists"
@@ -2695,6 +2707,10 @@ msgid "phrase in non-tag text"
 msgstr "frase nei campi di testo non tag"
 
 #: QML
+msgid "phrase, excluding the second term"
+msgstr "frase senza il secondo termine"
+
+#: QML
 msgid "pixels (long edge)"
 msgstr "pixel (lato lungo)"
 
@@ -2705,10 +2721,6 @@ msgstr "carattere jolly di prefisso"
 #: QML
 msgid "previews"
 msgstr "anteprime"
-
-#: QML
-msgid "single token"
-msgstr "termine singolo"
 
 #: QML
 msgid "spaces"

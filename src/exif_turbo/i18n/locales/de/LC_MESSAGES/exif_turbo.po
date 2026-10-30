@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-30 19:17+0100\n"
+"POT-Creation-Date: 2026-10-30 20:41+0100\n"
 "PO-Revision-Date: 2026-04-25 17:34+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: de\n"
@@ -1426,6 +1426,10 @@ msgid "FOLDERS"
 msgstr "ORDNER"
 
 #: QML
+msgid "FTS OR plus an exact tag"
+msgstr "FTS-OR mit einem exakten Tag"
+
+#: QML
 msgid "Factory default: %1 (%2 CPU threads detected)"
 msgstr "Werkseinstellung: %1 (%2 erkannte CPU-Threads)"
 
@@ -2592,6 +2596,10 @@ msgid "all exact tag values; exclusions apply"
 msgstr "Alle exakten Tag-Werte; Ausschlüsse gelten"
 
 #: QML
+msgid "all terms in indexed text"
+msgstr "Alle Begriffe im indizierten Text"
+
+#: QML
 msgid "at least"
 msgstr "mindestens"
 
@@ -2640,12 +2648,16 @@ msgid "exact phrase"
 msgstr "exakte Wortfolge"
 
 #: QML
-msgid "exclude phrase from non-tag text"
-msgstr "Phrase aus Textfeldern ohne Tags ausschließen"
+msgid "exact tag AND description"
+msgstr "Exakter Tag UND Beschreibung"
 
 #: QML
-msgid "exclude token"
-msgstr "Begriff ausschliessen"
+msgid "exact tags OR non-tag text"
+msgstr "Exakte Tags ODER Text ohne Tags"
+
+#: QML
+msgid "exclude phrase from non-tag text"
+msgstr "Phrase aus Textfeldern ohne Tags ausschließen"
 
 #: QML
 msgid "exists"
@@ -2700,6 +2712,10 @@ msgid "phrase in non-tag text"
 msgstr "Phrase in Textfeldern ohne Tags"
 
 #: QML
+msgid "phrase, excluding the second term"
+msgstr "Wortgruppe ohne den zweiten Begriff"
+
+#: QML
 msgid "pixels (long edge)"
 msgstr "Pixel (lange Seite)"
 
@@ -2710,10 +2726,6 @@ msgstr "Präfix-Platzhalter"
 #: QML
 msgid "previews"
 msgstr "Vorschaubilder"
-
-#: QML
-msgid "single token"
-msgstr "einzelner Begriff"
 
 #: QML
 msgid "spaces"
