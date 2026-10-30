@@ -2235,6 +2235,47 @@ class AppController(QObject):
             return
         self._run_search()
 
+    @Slot(int, int, result=bool)
+    def openImageSetMemberInSearch(self, set_id: int, image_id: int) -> bool:
+        if self._repo is None or self._is_locked:
+            return False
+        image_path = self._repo.get_indexed_image_path(image_id)
+        if (
+            set_id < 1
+            or image_path is None
+            or not self._repo.image_set_contains_path(set_id, image_path)
+        ):
+            self._set_status(_("This image is no longer in the selected set."))
+            return False
+
+        self.setAiSearchMode(False)
+        self._last_ai_query = ""
+        self._query_text = ""
+        self._current_result_row = 0
+        if self._folder_filter:
+            self._folder_filter = ""
+            self.folderFilterChanged.emit()
+        if self._search_folder_filters:
+            self._search_folder_filters.clear()
+            self.searchFolderFiltersChanged.emit()
+        if self._ext_filter:
+            self._ext_filter = ""
+            self.extFilterChanged.emit()
+        if self._date_from is not None or self._date_to is not None:
+            self._date_from = None
+            self._date_to = None
+            self.dateFilterChanged.emit()
+        if self._checked_only_filter_active:
+            self._checked_only_filter_active = False
+            self.checkedOnlyFilterChanged.emit()
+        if self._search_image_set_id != set_id:
+            self._search_image_set_id = set_id
+            self.searchImageSetFilterChanged.emit()
+
+        self._pending_restore_image_id = image_id
+        self._run_search()
+        return True
+
     @Slot(str)
     def setFolderFilter(self, path: str) -> None:
         if self._folder_filter == path:

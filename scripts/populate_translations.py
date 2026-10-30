@@ -75,6 +75,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "custom sidecar tags only": "Nur benutzerdefinierte Sidecar-Tags",
             "exclude phrase from non-tag text": "Phrase aus Textfeldern ohne Tags ausschlie\u00dfen",
             "phrase in non-tag text": "Phrase in Textfeldern ohne Tags",
+                    "Open in Search filtered to this set": "In Search mit diesem Set-Filter \u00f6ffnen",
         "Tips": "Tipps",
         "\u2022 Operators AND, OR, NOT must be UPPERCASE\n\u2022 Quote multi-word phrases\n\u2022 In ExifTool keys (e.g. GPS:GPSLatitude) the colon acts as a separator":
             "\u2022 Operatoren AND, OR, NOT m\u00fcssen GROSSGESCHRIEBEN sein\n\u2022 Mehrwortausdr\u00fccke in Anf\u00fchrungszeichen setzen\n\u2022 In ExifTool-Schl\u00fcsseln (z.B. GPS:GPSLatitude) wirkt der Doppelpunkt als Trennzeichen",
@@ -418,6 +419,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "custom sidecar tags only": "tags personnalis\u00e9s du sidecar uniquement",
             "exclude phrase from non-tag text": "exclure l’expression des champs hors tags",
             "phrase in non-tag text": "expression dans les champs hors tags",
+                    "Open in Search filtered to this set": "Ouvrir dans Search avec ce filtre de set",
         "Tips": "Astuces",
         "\u2022 Operators AND, OR, NOT must be UPPERCASE\n\u2022 Quote multi-word phrases\n\u2022 In ExifTool keys (e.g. GPS:GPSLatitude) the colon acts as a separator":
             "\u2022 Les op\u00e9rateurs AND, OR, NOT doivent \u00eatre en MAJUSCULES\n\u2022 Mettre les expressions de plusieurs mots entre guillemets\n\u2022 Dans les cl\u00e9s ExifTool (p.\u00a0ex. GPS:GPSLatitude), le deux-points sert de s\u00e9parateur",
@@ -765,6 +767,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "custom sidecar tags only": "solo tag personalizzati del sidecar",
             "exclude phrase from non-tag text": "escludi la frase dai campi di testo non tag",
             "phrase in non-tag text": "frase nei campi di testo non tag",
+                    "Open in Search filtered to this set": "Apri in Search con questo filtro del set",
         "Tips": "Suggerimenti",
         "• Operators AND, OR, NOT must be UPPERCASE\n• Quote multi-word phrases\n• In ExifTool keys (e.g. GPS:GPSLatitude) the colon acts as a separator":
             "• Gli operatori AND, OR, NOT devono essere in MAIUSCOLO\n• Racchiudere le frasi di più parole tra virgolette\n• Nelle chiavi ExifTool (es. GPS:GPSLatitude) i due punti fungono da separatore",
@@ -1117,6 +1120,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "custom sidecar tags only": "mo tags persunalisads dal sidecar",
             "exclude phrase from non-tag text": "excluder la frasa dal text senza tags",
             "phrase in non-tag text": "frasa en texts senza tags",
+                    "Open in Search filtered to this set": "Avrir en Search cun quest filter da set",
         "Tips": "Cussegls",
         "• Operators AND, OR, NOT must be UPPERCASE\n• Quote multi-word phrases\n• In ExifTool keys (e.g. GPS:GPSLatitude) the colon acts as a separator":
             "• Ils operaturs AND, OR, NOT ston esser scrits en MAJUSCULAS\n• Metter frasas da pliras pleds tranter virgulettas\n• En las clavs ExifTool (p.ex. GPS:GPSLatitude) ils dus puncts gioghan il rolla d'in separatur",

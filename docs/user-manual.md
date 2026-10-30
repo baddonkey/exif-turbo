@@ -763,6 +763,12 @@ from Browse restores the previous set filter with the rest of the Search state.
 If that set was deleted in the meantime, the filter returns to **Ignore**, and
 **Current results** on the Sets tab also ignores the deleted set.
 
+Click the **Open in Search filtered to this set** button on a member row to
+jump to Search, select that set, and select the image so its preview and details
+load. The jump leaves AI mode and clears the current query and other Search
+filters so they cannot hide the selected member. It does not change set
+membership. The member row remains highlighted when you return to Sets.
+
 ### Saved filters
 
 A set can store one optional filter. Choose **Save current Search** to save the

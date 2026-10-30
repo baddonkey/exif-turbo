@@ -12,15 +12,17 @@ Item {
     required property var appController
     readonly property bool canEditSets: !!appController && !appController.imageSetOperationRunning
     signal taggingRequested()
+    signal openImageInSearch(int setId, int imageId)
     property color accentColor: Material.accent
     property var sets: []
     property var members: []
     property int selectedSetId: -1
     property int deletingSetId: -1
     property int renamingSetId: -1
-    property real setListPaneWidth: 280
+    property real setListPaneWidth: 560
     property int memberOffset: 0
     property bool memberHasMore: false
+    property string focusedMemberPath: ""
     readonly property var selectedSet: {
         for (var i = 0; i < sets.length; i++) {
             if (sets[i].id === selectedSetId)
@@ -98,6 +100,7 @@ Item {
             reloadSets()
     }
     onSelectedSetIdChanged: {
+        focusedMemberPath = ""
         reloadMembers()
         if (visible && appController)
             appController.setActionImageSet(selectedSetId)
@@ -469,6 +472,7 @@ Item {
                     id: memberDelegate
                     objectName: "imageSetMemberDelegate"
                     required property var modelData
+                    required property int index
                     width: memberList.width
                     height: 68
                     leftPadding: 14
@@ -476,10 +480,17 @@ Item {
                     topPadding: 0
                     bottomPadding: 0
                     highlighted: !!root.appController
-                        && modelData.path === root.appController.selectedSetMemberPath
+                        && (modelData.path === root.focusedMemberPath
+                            || modelData.path === root.appController.selectedSetMemberPath)
                     enabled: !!root.appController
-                    onClicked: root.appController.selectImageSetMember(modelData.path)
+                    onClicked: {
+                        root.focusedMemberPath = modelData.path
+                        memberList.currentIndex = memberDelegate.index
+                        root.appController.selectImageSetMember(modelData.path)
+                    }
                     onDoubleClicked: {
+                        root.focusedMemberPath = modelData.path
+                        memberList.currentIndex = memberDelegate.index
                         root.appController.selectImageSetMember(modelData.path)
                         root.taggingRequested()
                     }
@@ -521,6 +532,24 @@ Item {
                                 elide: Text.ElideMiddle
                                 opacity: 0.55
                                 font.pixelSize: 10
+                            }
+                        }
+                        ToolButton {
+                            objectName: "openImageSetMemberInSearchButton"
+                            icon.name: "edit-find"
+                            Accessible.name: qsTr("Open in Search filtered to this set")
+                            ToolTip.text: qsTr("Open in Search filtered to this set")
+                            ToolTip.visible: hovered
+                            ToolTip.delay: 400
+                            onClicked: {
+                                root.focusedMemberPath = memberDelegate.modelData.path
+                                memberList.currentIndex = memberDelegate.index
+                                root.appController.selectImageSetMember(
+                                    memberDelegate.modelData.path
+                                )
+                                root.openImageInSearch(
+                                    root.selectedSetId, memberDelegate.modelData.id
+                                )
                             }
                         }
                         Button {
