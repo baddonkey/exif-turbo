@@ -49,7 +49,7 @@ build = [
   "torchvision",
   "setuptools==84.2.1",
   "wheel==0.48.0",
-  "uv==0.13.5",
+  "uv==0.13.6",
 ]
 dev = ["exif-turbo[build]", "pytest", "pytest-qt", "pytest-timeout"]
 
