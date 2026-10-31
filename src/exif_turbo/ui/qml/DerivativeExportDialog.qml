@@ -186,11 +186,6 @@ Dialog {
             Layout.fillWidth: true
             spacing: 2
             Label {
-                text: qsTr("Export Derivatives")
-                font.pixelSize: 22
-                font.weight: Font.DemiBold
-            }
-            Label {
                 text: qsTr("Generate derivative images using the selected export flavours.")
                 opacity: 0.7
                 wrapMode: Text.WordWrap
