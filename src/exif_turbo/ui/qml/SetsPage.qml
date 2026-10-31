@@ -73,6 +73,35 @@ Item {
         }
     }
 
+    function navigateMemberList(key) {
+        var step
+        switch (key) {
+        case Qt.Key_Down: step = 1; break
+        case Qt.Key_Up: step = -1; break
+        case Qt.Key_PageDown: step = Math.max(1, Math.floor(memberList.height / 68)); break
+        case Qt.Key_PageUp: step = -Math.max(1, Math.floor(memberList.height / 68)); break
+        default: return false
+        }
+        if (members.length === 0)
+            return true
+
+        var nextIndex
+        if (memberList.currentIndex < 0)
+            nextIndex = step > 0 ? step - 1 : members.length - 1
+        else
+            nextIndex = memberList.currentIndex + step
+        while (nextIndex >= members.length && memberHasMore)
+            loadMembers()
+        nextIndex = Math.max(0, Math.min(nextIndex, members.length - 1))
+
+        var member = members[nextIndex]
+        focusedMemberPath = member.path
+        memberList.currentIndex = nextIndex
+        appController.selectImageSetMember(member.path)
+        memberList.positionViewAtIndex(nextIndex, ListView.Contain)
+        return true
+    }
+
     function applyFilter(mode, confirmed) {
         if (appController && appController.reapplyImageSetFilter(selectedSetId, mode, confirmed))
             reloadSets()
@@ -467,7 +496,19 @@ Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
+                activeFocusOnTab: true
+                Keys.priority: Keys.BeforeItem
+                Keys.onPressed: function(event) {
+                    if (root.navigateMemberList(event.key))
+                        event.accepted = true
+                }
                 model: root.members
+                ScrollBar.vertical: ScrollBar {
+                    objectName: "imageSetMemberScrollBar"
+                    policy: ScrollBar.AlwaysOn
+                    width: 12
+                    active: true
+                }
                 delegate: ItemDelegate {
                     id: memberDelegate
                     objectName: "imageSetMemberDelegate"
@@ -476,7 +517,7 @@ Item {
                     width: memberList.width
                     height: 68
                     leftPadding: 14
-                    rightPadding: 14
+                    rightPadding: 26
                     topPadding: 0
                     bottomPadding: 0
                     highlighted: !!root.appController
@@ -487,6 +528,7 @@ Item {
                         root.focusedMemberPath = modelData.path
                         memberList.currentIndex = memberDelegate.index
                         root.appController.selectImageSetMember(modelData.path)
+                        memberList.forceActiveFocus()
                     }
                     onDoubleClicked: {
                         root.focusedMemberPath = modelData.path

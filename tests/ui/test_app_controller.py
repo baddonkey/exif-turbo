@@ -717,6 +717,72 @@ def test_sets_member_double_click_toggles_shared_tagging_drawer(
     assert not bool(copy_button.property("enabled"))
 
 
+def test_sets_member_list_scrolls_and_navigates_across_pages(
+    qtbot: QtBot,
+    tmp_path: Path,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    set_id = controller.createImageSet("Keyboard navigation set")
+    assert controller._repo is not None
+    member_paths = [
+        str(tmp_path / f"set_member_{index:03d}.jpg")
+        for index in range(205)
+    ]
+    controller._repo.upsert_images_batch([
+        (path, Path(path).name, float(index), 1, {}, Path(path).name, None, None)
+        for index, path in enumerate(member_paths)
+    ])
+    assert controller._repo.add_images_to_set(set_id, member_paths) == 205
+
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    sets_page = root.findChild(QObject, "setsPage")
+    member_list = root.findChild(QQuickItem, "imageSetMemberList")
+    scroll_bar = root.findChild(QObject, "imageSetMemberScrollBar")
+    assert tab_bar is not None
+    assert sets_page is not None
+    assert member_list is not None
+    assert scroll_bar is not None
+
+    # Act
+    tab_bar.setProperty("currentIndex", 2)
+    sets_page.setProperty("selectedSetId", set_id)
+    qtbot.waitUntil(lambda: int(member_list.property("count")) == 200)
+    qtbot.waitUntil(lambda: float(scroll_bar.property("size")) < 1.0)
+    content_item = scroll_bar.property("contentItem")
+    assert content_item is not None
+    qtbot.waitUntil(lambda: float(content_item.property("opacity")) > 0.0)
+
+    root.requestActivate()
+    member_list.setProperty("currentIndex", 0)
+    controller.selectImageSetMember(member_paths[0])
+    member_list.forceActiveFocus()
+    qtbot.waitUntil(lambda: bool(member_list.hasActiveFocus()))
+    QTest.keyClick(root, Qt.Key.Key_Down)
+    assert int(member_list.property("currentIndex")) == 1
+    QTest.keyClick(root, Qt.Key.Key_Down)
+    assert int(member_list.property("currentIndex")) == 2
+    QTest.keyClick(root, Qt.Key.Key_Up)
+    assert int(member_list.property("currentIndex")) == 1
+    QTest.keyClick(root, Qt.Key.Key_PageDown)
+    assert int(member_list.property("currentIndex")) > 1
+    QTest.keyClick(root, Qt.Key.Key_PageUp)
+    assert int(member_list.property("currentIndex")) == 1
+
+    member_list.setProperty("currentIndex", 199)
+    controller.selectImageSetMember(member_paths[199])
+    QTest.keyClick(root, Qt.Key.Key_Down)
+
+    # Assert
+    assert int(member_list.property("count")) == 205
+    assert int(member_list.property("currentIndex")) == 200
+    assert controller.selectedSetMemberPath == member_paths[200]
+    assert not bool(sets_page.property("memberHasMore"))
+
+
 def test_sets_operation_running_shows_progress_and_cancel_controls(
     qtbot: QtBot,
     window: tuple[AppController, SearchListModel, QQuickWindow],
