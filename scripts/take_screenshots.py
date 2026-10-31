@@ -745,6 +745,23 @@ def _run_gui(
 
     def step_8_action_grab() -> None:
         _grab(root, "14_set_action_menu")
+        from PySide6.QtCore import QObject, QMetaObject, Qt
+
+        menu_bar = root.findChild(QObject, "mainMenuBar")
+        action_menu = None
+        if menu_bar is not None:
+            action_menu = next(
+                (
+                    child
+                    for child in menu_bar.children()
+                    if str(child.property("title") or "").replace("&", "") == "Action"
+                ),
+                None,
+            )
+        if action_menu is None or not QMetaObject.invokeMethod(
+            action_menu, "close", Qt.ConnectionType.DirectConnection
+        ):
+            raise RuntimeError("Unable to close the Action menu after its capture")
         QTimer.singleShot(300, step_9_derivative_settings)
 
     def step_9_derivative_settings() -> None:
