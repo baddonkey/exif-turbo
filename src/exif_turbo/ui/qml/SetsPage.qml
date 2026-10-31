@@ -241,8 +241,10 @@ Item {
                 model: root.sets
                 delegate: ItemDelegate {
                     id: setDelegate
+                    objectName: "setListDelegate"
                     required property var modelData
                     width: setList.width
+                    hoverEnabled: false
                     highlighted: modelData.id === root.selectedSetId
                     onClicked: root.selectedSetId = modelData.id
                     contentItem: RowLayout {

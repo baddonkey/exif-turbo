@@ -814,6 +814,53 @@ def test_sets_member_list_scrolls_and_navigates_across_pages(
     assert not bool(sets_page.property("memberHasMore"))
 
 
+def test_sets_list_hover_does_not_show_selection(
+    qtbot: QtBot,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    first_set_id = controller.createImageSet("Selected set")
+    hovered_set_id = controller.createImageSet("Hovered set")
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    sets_page = root.findChild(QObject, "setsPage")
+    set_list = root.findChild(QQuickItem, "setList")
+    assert tab_bar is not None
+    assert sets_page is not None
+    assert set_list is not None
+
+    tab_bar.setProperty("currentIndex", 2)
+    sets_page.setProperty("selectedSetId", first_set_id)
+    content = set_list.property("contentItem")
+    qtbot.waitUntil(lambda: sum(
+        item.objectName() == "setListDelegate" for item in content.childItems()
+    ) == 2)
+    delegates = [
+        item for item in content.childItems()
+        if item.objectName() == "setListDelegate"
+    ]
+    selected_delegate = next(item for item in delegates if item.property("highlighted"))
+    hovered_delegate = next(item for item in delegates if not item.property("highlighted"))
+    hover_pos = hovered_delegate.mapToScene(QPointF(
+        float(hovered_delegate.property("width")) / 2,
+        float(hovered_delegate.property("height")) / 2,
+    ))
+
+    # Act
+    QTest.mouseMove(root, QPoint(int(hover_pos.x()), int(hover_pos.y())))
+    qtbot.wait(50)
+
+    # Assert
+    assert not bool(hovered_delegate.property("hovered"))
+    assert not bool(hovered_delegate.property("highlighted"))
+    assert bool(selected_delegate.property("highlighted"))
+    hovered_delegate.clicked.emit()
+    qtbot.waitUntil(lambda: int(sets_page.property("selectedSetId")) == hovered_set_id)
+    assert bool(hovered_delegate.property("highlighted"))
+
+
 def test_sets_operation_running_shows_progress_and_cancel_controls(
     qtbot: QtBot,
     window: tuple[AppController, SearchListModel, QQuickWindow],
