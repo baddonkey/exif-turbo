@@ -3928,6 +3928,8 @@ ApplicationWindow {
             Qt.callLater(function() {
                 searchToolbar.queryText = ""
                 root._aiSearchMode = false
+                root._restoreSearchPosition = true
+                root._searchRestoreAttempts = 0
                 controller.openImageSetMemberInSearch(setId, imageId)
             })
         }
