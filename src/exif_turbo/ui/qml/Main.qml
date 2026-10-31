@@ -3922,7 +3922,7 @@ ApplicationWindow {
         visible: !_isLocked && mainTabBar.currentIndex === 2
         appController: controller
         accentColor: root._accentColor
-        onTaggingRequested: taggingDrawer.openTaggingPanel()
+        onTaggingRequested: taggingDrawer.opened ? taggingDrawer.close() : taggingDrawer.openTaggingPanel()
         onOpenImageInSearch: (setId, imageId) => {
             mainTabBar.currentIndex = 0
             Qt.callLater(function() {
