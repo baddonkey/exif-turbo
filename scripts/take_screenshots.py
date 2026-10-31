@@ -121,6 +121,12 @@ _STEPS = [
     "16_derivative_export_dialog",
 ]
 
+_TAB_SEARCH = 0
+_TAB_BROWSE = 1
+_TAB_SETS = 2
+_TAB_INDEXED_FOLDERS = 3
+_TAB_DERIVATIVE_EXPORT = 4
+
 
 # -- Database builder ----------------------------------------------------------
 
@@ -458,7 +464,7 @@ def _run_gui(
 
     # -- Step 0: lock screen ---------------------------------------------------
     def step_0_lock() -> None:
-        switch_tab(0)
+        switch_tab(_TAB_SEARCH)
         if not demo_only and not derivative_only:
             _grab(root, "01_lock_screen")
         ctrl.unlock("")
@@ -481,7 +487,7 @@ def _run_gui(
         _wait_for_preview(root, ctrl, step_1_search_all, prev_source="")
 
     def step_demo_folders() -> None:
-        switch_tab(2)
+        switch_tab(_TAB_INDEXED_FOLDERS)
         QTimer.singleShot(400, step_demo_folders_grab)
 
     def step_demo_folders_grab() -> None:
@@ -490,7 +496,7 @@ def _run_gui(
 
     # -- Step 1: search tab (all results) -------------------------------------
     def step_1_search_all() -> None:
-        switch_tab(0)
+        switch_tab(_TAB_SEARCH)
         if demo_only:
             from PySide6.QtCore import QObject
 
@@ -534,7 +540,7 @@ def _run_gui(
 
     def step_demo_ai_grab() -> None:
         _grab_demo(root, "demo_ai_mode")
-        switch_tab(1)
+        switch_tab(_TAB_BROWSE)
         ctrl.browseFolder(str(SAMPLE_FOLDERS[2]))
         ctrl.selectResult(0)
         print("  Browse tab -- waiting for demo preview to decode ...")
@@ -572,7 +578,7 @@ def _run_gui(
     # -- Step 3: milky way search → browse tab --------------------------------
     def step_3_milky_way() -> None:
         _grab(root, "04_search_milky_way")
-        switch_tab(1)
+        switch_tab(_TAB_BROWSE)
         ctrl.browseFolder(str(SAMPLE_FOLDERS[2]))
         # browseFolder only populates the list; nothing is selected yet.
         # Select the first result so the preview panel shows a full image.
@@ -584,7 +590,7 @@ def _run_gui(
     # -- Step 4: browse tab ---------------------------------------------------
     def step_4_browse_grab() -> None:
         _grab(root, "05_browse_tab")
-        switch_tab(2)
+        switch_tab(_TAB_INDEXED_FOLDERS)
         print("  Indexed Folders tab -- waiting for view to settle ...")
         QTimer.singleShot(1000, step_5_folders)
 
@@ -603,7 +609,7 @@ def _run_gui(
     # -- Step 5a: indexed folders tab, Expert mode ----------------------------
     def step_5_folders_expert() -> None:
         _grab(root, "06_indexed_folders_expert")
-        switch_tab(0)
+        switch_tab(_TAB_SEARCH)
         ctrl.search("")
         # Select Schlösser filter so its results appear in the background
         ctrl.toggleSearchFolderFilter(str(SAMPLE_FOLDERS[0]))
@@ -655,7 +661,7 @@ def _run_gui(
 
         if tagged_sample is None:
             raise RuntimeError("A temporary tagged sample is required for set captures")
-        switch_tab(3)
+        switch_tab(_TAB_SETS)
         sets_page = root.findChild(QObject, "setsPage")
         if sets_page is None:
             raise RuntimeError("Sets page not found")
@@ -743,7 +749,7 @@ def _run_gui(
 
     def step_9_derivative_settings() -> None:
         root.setProperty("height", 1000)
-        switch_tab(4)
+        switch_tab(_TAB_DERIVATIVE_EXPORT)
         QTimer.singleShot(500, step_9_select_web_jpeg)
 
     def step_9_select_web_jpeg() -> None:
@@ -769,7 +775,7 @@ def _run_gui(
             if flavour.get("name") == "Web PNG":
                 flavour["selected_by_default"] = False
         settings.setDerivativeExportFlavours(json.dumps(flavours))
-        switch_tab(2)
+        switch_tab(_TAB_SETS)
         QTimer.singleShot(500, step_9_open_dialog)
 
     def step_9_open_dialog() -> None:
