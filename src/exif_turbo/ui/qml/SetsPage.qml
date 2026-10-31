@@ -23,6 +23,7 @@ Item {
     property int memberOffset: 0
     property bool memberHasMore: false
     property string focusedMemberPath: ""
+    readonly property int memberRowHeight: 68
     readonly property var selectedSet: {
         for (var i = 0; i < sets.length; i++) {
             if (sets[i].id === selectedSetId)
@@ -57,9 +58,11 @@ Item {
         loadMembers()
     }
 
-    function loadMembers() {
+    function loadMembers(preserveScroll) {
         if (!appController || selectedSetId < 1)
             return
+        var previousContentY = memberList.contentY
+        var requestedSetId = selectedSetId
         try {
             var page = JSON.parse(
                 appController.imageSetMembersJson(selectedSetId, 200, memberOffset)
@@ -67,10 +70,62 @@ Item {
             members = members.concat(page)
             memberOffset += page.length
             memberHasMore = page.length === 200
+            if (preserveScroll && page.length > 0) {
+                var nextOffset = memberOffset
+                Qt.callLater(function() {
+                    if (root.selectedSetId !== requestedSetId
+                            || root.memberOffset !== nextOffset)
+                        return
+                    memberList.forceLayout()
+                    if (memberList.contentY < previousContentY)
+                        memberList.contentY = previousContentY
+                })
+            }
         } catch (error) {
             members = []
             memberHasMore = false
         }
+    }
+
+    function loadMoreMembersOnScroll() {
+        if (!memberHasMore || members.length === 0)
+            return
+        var remaining = memberList.contentHeight - memberList.contentY - memberList.height
+        if (remaining <= root.memberRowHeight * 3)
+            loadMembers(true)
+    }
+
+    function navigateMemberList(key) {
+        var step
+        switch (key) {
+        case Qt.Key_Down: step = 1; break
+        case Qt.Key_Up: step = -1; break
+        case Qt.Key_PageDown:
+            step = Math.max(1, Math.floor(memberList.height / root.memberRowHeight))
+            break
+        case Qt.Key_PageUp:
+            step = -Math.max(1, Math.floor(memberList.height / root.memberRowHeight))
+            break
+        default: return false
+        }
+        if (members.length === 0)
+            return true
+
+        var nextIndex
+        if (memberList.currentIndex < 0)
+            nextIndex = step > 0 ? step - 1 : members.length - 1
+        else
+            nextIndex = memberList.currentIndex + step
+        while (nextIndex >= members.length && memberHasMore)
+            loadMembers()
+        nextIndex = Math.max(0, Math.min(nextIndex, members.length - 1))
+
+        var member = members[nextIndex]
+        focusedMemberPath = member.path
+        memberList.currentIndex = nextIndex
+        appController.selectImageSetMember(member.path)
+        memberList.positionViewAtIndex(nextIndex, ListView.Contain)
+        return true
     }
 
     function applyFilter(mode, confirmed) {
@@ -186,8 +241,10 @@ Item {
                 model: root.sets
                 delegate: ItemDelegate {
                     id: setDelegate
+                    objectName: "setListDelegate"
                     required property var modelData
                     width: setList.width
+                    hoverEnabled: false
                     highlighted: modelData.id === root.selectedSetId
                     onClicked: root.selectedSetId = modelData.id
                     contentItem: RowLayout {
@@ -467,18 +524,32 @@ Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
+                activeFocusOnTab: true
+                Keys.priority: Keys.BeforeItem
+                Keys.onPressed: function(event) {
+                    if (root.navigateMemberList(event.key))
+                        event.accepted = true
+                }
                 model: root.members
+                onContentYChanged: root.loadMoreMembersOnScroll()
+                ScrollBar.vertical: ScrollBar {
+                    objectName: "imageSetMemberScrollBar"
+                    policy: ScrollBar.AlwaysOn
+                    width: 12
+                    active: true
+                }
                 delegate: ItemDelegate {
                     id: memberDelegate
                     objectName: "imageSetMemberDelegate"
                     required property var modelData
                     required property int index
                     width: memberList.width
-                    height: 68
+                    height: root.memberRowHeight
                     leftPadding: 14
-                    rightPadding: 14
+                    rightPadding: 26
                     topPadding: 0
                     bottomPadding: 0
+                    hoverEnabled: false
                     highlighted: !!root.appController
                         && (modelData.path === root.focusedMemberPath
                             || modelData.path === root.appController.selectedSetMemberPath)
@@ -487,6 +558,7 @@ Item {
                         root.focusedMemberPath = modelData.path
                         memberList.currentIndex = memberDelegate.index
                         root.appController.selectImageSetMember(modelData.path)
+                        memberList.forceActiveFocus()
                     }
                     onDoubleClicked: {
                         root.focusedMemberPath = modelData.path

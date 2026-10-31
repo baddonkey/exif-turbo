@@ -18,7 +18,8 @@ from typing import Generator
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import Q_ARG, QMetaObject, QObject, QPoint, QPointF, QThread, Qt, QUrl
+from PySide6.QtCore import Q_ARG, QCoreApplication, QMetaObject, QObject, QPoint, QPointF, QThread, Qt, QUrl
+from PySide6.QtGui import QWheelEvent
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtTest import QTest
@@ -715,6 +716,210 @@ def test_sets_member_double_click_toggles_shared_tagging_drawer(
     copy_button = root.findChild(QObject, "copyTagsButton")
     assert copy_button is not None
     assert not bool(copy_button.property("enabled"))
+
+
+def _send_member_list_wheel(member_list: QQuickItem, window: QQuickWindow) -> None:
+    scene_pos = member_list.mapToScene(
+        QPointF(float(member_list.property("width")) / 2, float(member_list.property("height")) / 2)
+    )
+    global_pos = QPointF(window.x() + scene_pos.x(), window.y() + scene_pos.y())
+    event = QWheelEvent(
+        scene_pos,
+        global_pos,
+        QPoint(0, -3),
+        QPoint(0, -120),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    QCoreApplication.sendEvent(window, event)
+    QCoreApplication.processEvents()
+
+
+def test_sets_member_list_scrolls_and_navigates_across_pages(
+    qtbot: QtBot,
+    tmp_path: Path,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    set_id = controller.createImageSet("Keyboard navigation set")
+    assert controller._repo is not None
+    member_paths = [
+        str(tmp_path / f"set_member_{index:03d}.jpg")
+        for index in range(405)
+    ]
+    controller._repo.upsert_images_batch([
+        (path, Path(path).name, float(index), 1, {}, Path(path).name, None, None)
+        for index, path in enumerate(member_paths)
+    ])
+    assert controller._repo.add_images_to_set(set_id, member_paths) == 405
+
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    sets_page = root.findChild(QObject, "setsPage")
+    member_list = root.findChild(QQuickItem, "imageSetMemberList")
+    scroll_bar = root.findChild(QObject, "imageSetMemberScrollBar")
+    assert tab_bar is not None
+    assert sets_page is not None
+    assert member_list is not None
+    assert scroll_bar is not None
+
+    # Act
+    tab_bar.setProperty("currentIndex", 2)
+    sets_page.setProperty("selectedSetId", set_id)
+    qtbot.waitUntil(lambda: int(member_list.property("count")) == 200)
+    qtbot.waitUntil(lambda: float(scroll_bar.property("size")) < 1.0)
+    content_item = scroll_bar.property("contentItem")
+    assert content_item is not None
+    qtbot.waitUntil(lambda: float(content_item.property("opacity")) > 0.0)
+
+    root.requestActivate()
+    member_list.setProperty("currentIndex", 0)
+    controller.selectImageSetMember(member_paths[0])
+    member_list.forceActiveFocus()
+    qtbot.waitUntil(lambda: bool(member_list.hasActiveFocus()))
+    QTest.keyClick(root, Qt.Key.Key_Down)
+    assert int(member_list.property("currentIndex")) == 1
+    QTest.keyClick(root, Qt.Key.Key_Down)
+    assert int(member_list.property("currentIndex")) == 2
+    QTest.keyClick(root, Qt.Key.Key_Up)
+    assert int(member_list.property("currentIndex")) == 1
+    QTest.keyClick(root, Qt.Key.Key_PageDown)
+    assert int(member_list.property("currentIndex")) > 1
+    QTest.keyClick(root, Qt.Key.Key_PageUp)
+    assert int(member_list.property("currentIndex")) == 1
+
+    content_height = float(member_list.property("contentHeight"))
+    list_height = float(member_list.property("height"))
+    content_y = content_height - list_height - (68 * 3) - 5
+    member_list.setProperty("contentY", content_y)
+    qtbot.waitUntil(lambda: float(member_list.property("contentY")) == pytest.approx(content_y))
+    assert int(member_list.property("count")) == 200
+    _send_member_list_wheel(member_list, root)
+    qtbot.waitUntil(lambda: int(member_list.property("count")) == 400)
+    qtbot.waitUntil(lambda: float(member_list.property("contentY")) >= content_y)
+    assert float(member_list.property("contentY")) > content_y
+
+    member_list.setProperty("currentIndex", 399)
+    controller.selectImageSetMember(member_paths[399])
+    QTest.keyClick(root, Qt.Key.Key_Down)
+
+    # Assert
+    assert int(member_list.property("count")) == 405
+    assert int(member_list.property("currentIndex")) == 400
+    assert controller.selectedSetMemberPath == member_paths[400]
+    assert not bool(sets_page.property("memberHasMore"))
+
+
+def test_sets_list_hover_does_not_show_selection(
+    qtbot: QtBot,
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    first_set_id = controller.createImageSet("Selected set")
+    hovered_set_id = controller.createImageSet("Hovered set")
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    sets_page = root.findChild(QObject, "setsPage")
+    set_list = root.findChild(QQuickItem, "setList")
+    assert tab_bar is not None
+    assert sets_page is not None
+    assert set_list is not None
+
+    tab_bar.setProperty("currentIndex", 2)
+    sets_page.setProperty("selectedSetId", first_set_id)
+    content = set_list.property("contentItem")
+    qtbot.waitUntil(lambda: sum(
+        item.objectName() == "setListDelegate" for item in content.childItems()
+    ) == 2)
+    delegates = [
+        item for item in content.childItems()
+        if item.objectName() == "setListDelegate"
+    ]
+    selected_delegate = next(item for item in delegates if item.property("highlighted"))
+    hovered_delegate = next(item for item in delegates if not item.property("highlighted"))
+    hover_pos = hovered_delegate.mapToScene(QPointF(
+        float(hovered_delegate.property("width")) / 2,
+        float(hovered_delegate.property("height")) / 2,
+    ))
+
+    # Act
+    QTest.mouseMove(root, QPoint(int(hover_pos.x()), int(hover_pos.y())))
+    qtbot.wait(50)
+
+    # Assert
+    assert not bool(hovered_delegate.property("hovered"))
+    assert not bool(hovered_delegate.property("highlighted"))
+    assert bool(selected_delegate.property("highlighted"))
+    hovered_delegate.clicked.emit()
+    qtbot.waitUntil(lambda: int(sets_page.property("selectedSetId")) == hovered_set_id)
+    assert bool(hovered_delegate.property("highlighted"))
+
+
+def test_set_member_list_hover_does_not_highlight_unselected_member(
+    qtbot: QtBot,
+    demo_db: tuple[Path, Path],
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    set_id = controller.createImageSet("Member hover set")
+    member_paths = [
+        str(demo_db[1] / "images" / filename)
+        for filename, _, _, _ in _CAMERAS[:2]
+    ]
+    assert controller._repo is not None
+    assert controller._repo.add_images_to_set(set_id, member_paths) == 2
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    sets_page = root.findChild(QObject, "setsPage")
+    member_list = root.findChild(QQuickItem, "imageSetMemberList")
+    assert tab_bar is not None
+    assert sets_page is not None
+    assert member_list is not None
+
+    tab_bar.setProperty("currentIndex", 2)
+    sets_page.setProperty("selectedSetId", set_id)
+    qtbot.waitUntil(lambda: int(member_list.property("count")) == 2)
+    selected_path = member_paths[0]
+    controller.selectImageSetMember(selected_path)
+    content = member_list.property("contentItem")
+    qtbot.waitUntil(lambda: sum(
+        item.objectName() == "imageSetMemberDelegate" for item in content.childItems()
+    ) == 2)
+    delegates = [
+        item for item in content.childItems()
+        if item.objectName() == "imageSetMemberDelegate"
+    ]
+    selected_delegate = next(
+        item for item in delegates if item.property("modelData")["path"] == selected_path
+    )
+    hovered_delegate = next(
+        item for item in delegates if item.property("modelData")["path"] != selected_path
+    )
+    hover_pos = hovered_delegate.mapToScene(QPointF(
+        float(hovered_delegate.property("width")) / 2,
+        float(hovered_delegate.property("height")) / 2,
+    ))
+
+    # Act
+    QTest.mouseMove(root, QPoint(int(hover_pos.x()), int(hover_pos.y())))
+    qtbot.wait(50)
+
+    # Assert
+    assert not bool(hovered_delegate.property("hovered"))
+    assert not bool(hovered_delegate.property("highlighted"))
+    assert bool(selected_delegate.property("highlighted"))
+    hovered_path = hovered_delegate.property("modelData")["path"]
+    hovered_delegate.clicked.emit()
+    qtbot.waitUntil(lambda: controller.selectedSetMemberPath == hovered_path)
+    assert bool(hovered_delegate.property("highlighted"))
 
 
 def test_sets_operation_running_shows_progress_and_cancel_controls(
