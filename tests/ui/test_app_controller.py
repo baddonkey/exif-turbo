@@ -861,6 +861,67 @@ def test_sets_list_hover_does_not_show_selection(
     assert bool(hovered_delegate.property("highlighted"))
 
 
+def test_set_member_list_hover_does_not_highlight_unselected_member(
+    qtbot: QtBot,
+    demo_db: tuple[Path, Path],
+    window: tuple[AppController, SearchListModel, QQuickWindow],
+) -> None:
+    # Arrange
+    controller, _, root = window
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+        controller.unlock(_TEST_PASSWORD)
+    set_id = controller.createImageSet("Member hover set")
+    member_paths = [
+        str(demo_db[1] / "images" / filename)
+        for filename, _, _, _ in _CAMERAS[:2]
+    ]
+    assert controller._repo is not None
+    assert controller._repo.add_images_to_set(set_id, member_paths) == 2
+    tab_bar = root.findChild(QObject, "mainTabBar")
+    sets_page = root.findChild(QObject, "setsPage")
+    member_list = root.findChild(QQuickItem, "imageSetMemberList")
+    assert tab_bar is not None
+    assert sets_page is not None
+    assert member_list is not None
+
+    tab_bar.setProperty("currentIndex", 2)
+    sets_page.setProperty("selectedSetId", set_id)
+    qtbot.waitUntil(lambda: int(member_list.property("count")) == 2)
+    selected_path = member_paths[0]
+    controller.selectImageSetMember(selected_path)
+    content = member_list.property("contentItem")
+    qtbot.waitUntil(lambda: sum(
+        item.objectName() == "imageSetMemberDelegate" for item in content.childItems()
+    ) == 2)
+    delegates = [
+        item for item in content.childItems()
+        if item.objectName() == "imageSetMemberDelegate"
+    ]
+    selected_delegate = next(
+        item for item in delegates if item.property("modelData")["path"] == selected_path
+    )
+    hovered_delegate = next(
+        item for item in delegates if item.property("modelData")["path"] != selected_path
+    )
+    hover_pos = hovered_delegate.mapToScene(QPointF(
+        float(hovered_delegate.property("width")) / 2,
+        float(hovered_delegate.property("height")) / 2,
+    ))
+
+    # Act
+    QTest.mouseMove(root, QPoint(int(hover_pos.x()), int(hover_pos.y())))
+    qtbot.wait(50)
+
+    # Assert
+    assert not bool(hovered_delegate.property("hovered"))
+    assert not bool(hovered_delegate.property("highlighted"))
+    assert bool(selected_delegate.property("highlighted"))
+    hovered_path = hovered_delegate.property("modelData")["path"]
+    hovered_delegate.clicked.emit()
+    qtbot.waitUntil(lambda: controller.selectedSetMemberPath == hovered_path)
+    assert bool(hovered_delegate.property("highlighted"))
+
+
 def test_sets_operation_running_shows_progress_and_cancel_controls(
     qtbot: QtBot,
     window: tuple[AppController, SearchListModel, QQuickWindow],

@@ -549,6 +549,7 @@ Item {
                     rightPadding: 26
                     topPadding: 0
                     bottomPadding: 0
+                    hoverEnabled: false
                     highlighted: !!root.appController
                         && (modelData.path === root.focusedMemberPath
                             || modelData.path === root.appController.selectedSetMemberPath)
