@@ -635,7 +635,7 @@ def test_sets_plus_button_creates_set_through_name_dialog(
     qtbot.waitUntil(lambda: not bool(create_dialog.property("visible")))
 
 
-def test_sets_member_selection_opens_shared_tagging_drawer(
+def test_sets_member_double_click_toggles_shared_tagging_drawer(
     qtbot: QtBot,
     demo_db: tuple[Path, Path],
     window: tuple[AppController, SearchListModel, QQuickWindow],
@@ -673,15 +673,19 @@ def test_sets_member_selection_opens_shared_tagging_drawer(
         item for item in content.childItems()
         if item.objectName() == "imageSetMemberDelegate"
     )
-    delegate.clicked.emit()
+    delegate.doubleClicked.emit()
+    qtbot.waitUntil(lambda: bool(drawer.property("opened")))
     assert controller.selectedSetMemberPath == image_path
     assert bool(delegate.property("highlighted"))
     assert bool(tagging_button.property("visible"))
-    tagging_button.clicked.emit()
-    qtbot.waitUntil(lambda: bool(drawer.property("opened")))
     assert bool(drawer.property("hasSelection"))
     assert drawer.property("selectedFilename") == _CAMERAS[0][0]
     assert bool(drawer.property("setMode"))
+    delegate.doubleClicked.emit()
+    qtbot.waitUntil(lambda: not bool(drawer.property("opened")))
+    assert controller.selectedSetMemberPath == image_path
+    tagging_button.clicked.emit()
+    qtbot.waitUntil(lambda: bool(drawer.property("opened")))
     copy_target.setProperty("currentIndex", 1)
     assert copy_target.property("currentValue") == "set"
     assert "Tagging drawer set" in str(copy_target.property("currentText"))
