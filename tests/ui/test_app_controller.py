@@ -18,7 +18,8 @@ from typing import Generator
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import Q_ARG, QMetaObject, QObject, QPoint, QPointF, QThread, Qt, QUrl
+from PySide6.QtCore import Q_ARG, QCoreApplication, QMetaObject, QObject, QPoint, QPointF, QThread, Qt, QUrl
+from PySide6.QtGui import QWheelEvent
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtTest import QTest
@@ -717,6 +718,25 @@ def test_sets_member_double_click_toggles_shared_tagging_drawer(
     assert not bool(copy_button.property("enabled"))
 
 
+def _send_member_list_wheel(member_list: QQuickItem, window: QQuickWindow) -> None:
+    scene_pos = member_list.mapToScene(
+        QPointF(float(member_list.property("width")) / 2, float(member_list.property("height")) / 2)
+    )
+    global_pos = QPointF(window.x() + scene_pos.x(), window.y() + scene_pos.y())
+    event = QWheelEvent(
+        scene_pos,
+        global_pos,
+        QPoint(0, -3),
+        QPoint(0, -120),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    QCoreApplication.sendEvent(window, event)
+    QCoreApplication.processEvents()
+
+
 def test_sets_member_list_scrolls_and_navigates_across_pages(
     qtbot: QtBot,
     tmp_path: Path,
@@ -730,13 +750,13 @@ def test_sets_member_list_scrolls_and_navigates_across_pages(
     assert controller._repo is not None
     member_paths = [
         str(tmp_path / f"set_member_{index:03d}.jpg")
-        for index in range(205)
+        for index in range(405)
     ]
     controller._repo.upsert_images_batch([
         (path, Path(path).name, float(index), 1, {}, Path(path).name, None, None)
         for index, path in enumerate(member_paths)
     ])
-    assert controller._repo.add_images_to_set(set_id, member_paths) == 205
+    assert controller._repo.add_images_to_set(set_id, member_paths) == 405
 
     tab_bar = root.findChild(QObject, "mainTabBar")
     sets_page = root.findChild(QObject, "setsPage")
@@ -772,14 +792,25 @@ def test_sets_member_list_scrolls_and_navigates_across_pages(
     QTest.keyClick(root, Qt.Key.Key_PageUp)
     assert int(member_list.property("currentIndex")) == 1
 
-    member_list.setProperty("currentIndex", 199)
-    controller.selectImageSetMember(member_paths[199])
+    content_height = float(member_list.property("contentHeight"))
+    list_height = float(member_list.property("height"))
+    content_y = content_height - list_height - (68 * 3) - 5
+    member_list.setProperty("contentY", content_y)
+    qtbot.waitUntil(lambda: float(member_list.property("contentY")) == pytest.approx(content_y))
+    assert int(member_list.property("count")) == 200
+    _send_member_list_wheel(member_list, root)
+    qtbot.waitUntil(lambda: int(member_list.property("count")) == 400)
+    qtbot.waitUntil(lambda: float(member_list.property("contentY")) >= content_y)
+    assert float(member_list.property("contentY")) > content_y
+
+    member_list.setProperty("currentIndex", 399)
+    controller.selectImageSetMember(member_paths[399])
     QTest.keyClick(root, Qt.Key.Key_Down)
 
     # Assert
-    assert int(member_list.property("count")) == 205
-    assert int(member_list.property("currentIndex")) == 200
-    assert controller.selectedSetMemberPath == member_paths[200]
+    assert int(member_list.property("count")) == 405
+    assert int(member_list.property("currentIndex")) == 400
+    assert controller.selectedSetMemberPath == member_paths[400]
     assert not bool(sets_page.property("memberHasMore"))
 
 

@@ -23,6 +23,7 @@ Item {
     property int memberOffset: 0
     property bool memberHasMore: false
     property string focusedMemberPath: ""
+    readonly property int memberRowHeight: 68
     readonly property var selectedSet: {
         for (var i = 0; i < sets.length; i++) {
             if (sets[i].id === selectedSetId)
@@ -57,9 +58,11 @@ Item {
         loadMembers()
     }
 
-    function loadMembers() {
+    function loadMembers(preserveScroll) {
         if (!appController || selectedSetId < 1)
             return
+        var previousContentY = memberList.contentY
+        var requestedSetId = selectedSetId
         try {
             var page = JSON.parse(
                 appController.imageSetMembersJson(selectedSetId, 200, memberOffset)
@@ -67,10 +70,29 @@ Item {
             members = members.concat(page)
             memberOffset += page.length
             memberHasMore = page.length === 200
+            if (preserveScroll && page.length > 0) {
+                var nextOffset = memberOffset
+                Qt.callLater(function() {
+                    if (root.selectedSetId !== requestedSetId
+                            || root.memberOffset !== nextOffset)
+                        return
+                    memberList.forceLayout()
+                    if (memberList.contentY < previousContentY)
+                        memberList.contentY = previousContentY
+                })
+            }
         } catch (error) {
             members = []
             memberHasMore = false
         }
+    }
+
+    function loadMoreMembersOnScroll() {
+        if (!memberHasMore || members.length === 0)
+            return
+        var remaining = memberList.contentHeight - memberList.contentY - memberList.height
+        if (remaining <= root.memberRowHeight * 3)
+            loadMembers(true)
     }
 
     function navigateMemberList(key) {
@@ -78,8 +100,12 @@ Item {
         switch (key) {
         case Qt.Key_Down: step = 1; break
         case Qt.Key_Up: step = -1; break
-        case Qt.Key_PageDown: step = Math.max(1, Math.floor(memberList.height / 68)); break
-        case Qt.Key_PageUp: step = -Math.max(1, Math.floor(memberList.height / 68)); break
+        case Qt.Key_PageDown:
+            step = Math.max(1, Math.floor(memberList.height / root.memberRowHeight))
+            break
+        case Qt.Key_PageUp:
+            step = -Math.max(1, Math.floor(memberList.height / root.memberRowHeight))
+            break
         default: return false
         }
         if (members.length === 0)
@@ -503,6 +529,7 @@ Item {
                         event.accepted = true
                 }
                 model: root.members
+                onContentYChanged: root.loadMoreMembersOnScroll()
                 ScrollBar.vertical: ScrollBar {
                     objectName: "imageSetMemberScrollBar"
                     policy: ScrollBar.AlwaysOn
@@ -515,7 +542,7 @@ Item {
                     required property var modelData
                     required property int index
                     width: memberList.width
-                    height: 68
+                    height: root.memberRowHeight
                     leftPadding: 14
                     rightPadding: 26
                     topPadding: 0
