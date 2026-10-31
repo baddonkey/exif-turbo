@@ -18,9 +18,10 @@ from typing import Generator
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import Q_ARG, QMetaObject, QObject, QPointF, QThread, QUrl
+from PySide6.QtCore import Q_ARG, QMetaObject, QObject, QPoint, QPointF, QThread, Qt, QUrl
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtTest import QTest
 from pytestqt.qtbot import QtBot
 
 from exif_turbo.config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
@@ -29,6 +30,7 @@ from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.models.image_sidecar import ImageSidecar, SidecarSource
 from exif_turbo.models.image_tag import ImageTag, TagProvenance
 from exif_turbo.tagging.sidecar_repository import FilesystemSidecarRepository
+from exif_turbo.ui.models.checked_filter_proxy_model import CheckedFilterProxyModel
 from exif_turbo.ui.models.exif_list_model import ExifListModel
 from exif_turbo.ui.models.folder_list_model import FolderListModel
 from exif_turbo.ui.models.search_list_model import SearchListModel
@@ -112,6 +114,9 @@ def window(
     folder_model = FolderListModel()
     settings_model = SettingsModel(base / "settings.json")
     controller = AppController(db_path, search_model, exif_model, folder_model)
+    filter_proxy = CheckedFilterProxyModel()
+    filter_proxy.setSourceModel(search_model)
+    controller.set_filter_proxy(filter_proxy)
 
     engine = QQmlApplicationEngine()
     engine.addImageProvider("preview", PreviewImageProvider())
@@ -119,6 +124,7 @@ def window(
     ctx = engine.rootContext()
     ctx.setContextProperty("controller", controller)
     ctx.setContextProperty("searchModel", search_model)
+    ctx.setContextProperty("filteredSearchModel", filter_proxy)
     ctx.setContextProperty("exifModel", exif_model)
     ctx.setContextProperty("folderListModel", folder_model)
     ctx.setContextProperty("settingsModel", settings_model)
@@ -128,6 +134,11 @@ def window(
 
     qtbot.waitUntil(lambda: bool(engine.rootObjects()), timeout=5000)
     root: QQuickWindow = engine.rootObjects()[0]  # type: ignore[assignment]
+    root.setVisible(True)
+    try:
+        qtbot.waitExposed(root, timeout=3000)
+    except Exception:
+        qtbot.wait(100)
 
     yield controller, search_model, root
 
@@ -744,44 +755,81 @@ def test_sets_operation_running_shows_progress_and_cancel_controls(
     qtbot.waitUntil(lambda: not bool(progress_row.property("visible")))
 
 
-def test_set_member_search_button_opens_filtered_search_and_selects_image(
+def test_set_member_search_button_preserves_selection_and_scrolls_into_view(
     qtbot: QtBot,
     demo_db: tuple[Path, Path],
     window: tuple[AppController, SearchListModel, QQuickWindow],
 ) -> None:
     # Arrange
-    controller, _, root = window
+    controller, search_model, root = window
     with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
         controller.unlock(_TEST_PASSWORD)
-    image_path = str(demo_db[1] / "images" / _CAMERAS[0][0])
+    root.showNormal()
+    root.resize(1200, 900)
+    image_paths = [str(demo_db[1] / "images" / camera[0]) for camera in _CAMERAS]
+    image_path = search_model.get_path(search_model.rowCount() - 1)
+    assert image_path in image_paths
     set_id = controller.createImageSet("Search member set")
     assert controller._repo is not None
-    controller._repo.add_images_to_set(set_id, [image_path])
+    controller._repo.add_images_to_set(set_id, image_paths)
     with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
         controller.search("no-image-can-match-this-query")
 
     tab_bar = root.findChild(QObject, "mainTabBar")
     sets_page = root.findChild(QQuickItem, "setsPage")
     member_list = root.findChild(QQuickItem, "imageSetMemberList")
+    results_list = root.findChild(QQuickItem, "resultsList")
     assert tab_bar is not None
     assert sets_page is not None
     assert member_list is not None
+    assert results_list is not None
 
     tab_bar.setProperty("currentIndex", 2)
     sets_page.setProperty("selectedSetId", set_id)
+    qtbot.waitUntil(lambda: member_list.height() > 0.0)
     content = member_list.property("contentItem")
-    qtbot.waitUntil(lambda: any(
-        item.objectName() == "imageSetMemberDelegate" for item in content.childItems()
-    ))
+    target_index = next(
+        index
+        for index, member in enumerate(
+            json.loads(controller.imageSetMembersJson(set_id, 200, 0))
+        )
+        if member["path"] == image_path
+    )
+    qtbot.waitUntil(
+        lambda: any(
+            item.objectName() == "imageSetMemberDelegate"
+            and int(item.property("index")) == target_index
+            for item in content.childItems()
+        )
+    )
     delegate = next(
         item for item in content.childItems()
         if item.objectName() == "imageSetMemberDelegate"
+        and int(item.property("index")) == target_index
     )
     search_button = delegate.findChild(QObject, "openImageSetMemberInSearchButton")
-    assert search_button is not None
+    assert isinstance(search_button, QQuickItem)
+    restore_state_changes: list[bool] = []
+    getattr(root, "_restoreSearchPositionChanged").connect(
+        lambda: restore_state_changes.append(
+            bool(root.property("_restoreSearchPosition"))
+        )
+    )
+    restore_ready: list[bool] = []
+    controller.searchRestoreReady.connect(
+        lambda: restore_ready.append(True)
+    )
 
     # Act
-    search_button.clicked.emit()
+    click_pos = search_button.mapToScene(
+        QPointF(search_button.width() / 2.0, search_button.height() / 2.0)
+    )
+    QTest.mouseClick(
+        root,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+        QPoint(int(click_pos.x()), int(click_pos.y())),
+    )
 
     # Assert
     qtbot.waitUntil(
@@ -789,12 +837,24 @@ def test_set_member_search_button_opens_filtered_search_and_selects_image(
         and controller.searchImageSetId == set_id
         and controller._search_model.get_path(controller.currentResultRow) == image_path
     )
+    qtbot.waitUntil(lambda: bool(restore_ready))
+    assert True in restore_state_changes
     assert controller._query_text == ""
-    assert "EOS R5" in controller._details_plain_text
+    assert Path(image_path).name in controller._details_plain_text
 
-    tab_bar.setProperty("currentIndex", 2)
-    qtbot.waitUntil(lambda: bool(delegate.property("highlighted")))
-    assert int(member_list.property("currentIndex")) == 0
+    def assert_selected_result_is_visible() -> None:
+        current_item = results_list.property("currentItem")
+        assert current_item is not None
+        assert int(results_list.property("currentIndex")) == controller.currentProxyResultRow
+        assert controller.currentProxyResultRow > 0
+        viewport_top = float(results_list.property("contentY"))
+        viewport_bottom = viewport_top + float(results_list.property("height"))
+        item_top = float(current_item.property("y"))
+        item_bottom = item_top + float(current_item.property("height"))
+        assert item_top >= viewport_top
+        assert item_bottom <= viewport_bottom
+
+    qtbot.waitUntil(assert_selected_result_is_visible, timeout=3000)
 
 
 def test_sets_reapply_group_filter_changes_update_enabled_state(
