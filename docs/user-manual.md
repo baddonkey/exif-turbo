@@ -1,4 +1,4 @@
-<<<<<<<<<<<<# exif-turbo User Manual
+# exif-turbo User Manual
 
 **exif-turbo** lets you scan image folders, build a searchable index of all EXIF
 metadata, and instantly find any photo by camera model, lens, date, location, or any
