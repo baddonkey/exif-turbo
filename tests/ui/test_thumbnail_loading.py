@@ -1,15 +1,4 @@
-"""E2E tests reproducing the thumbnail-loading bug on the Search tab.
-
-Manual observation (bug report):
-  - After searching and selecting a result, the full-size preview loads correctly.
-  - BUT the small thumbnails in the search-result cards remain blank.
-
-Root cause (to be fixed later):
-  ``_start_auto_thumbs()`` is only triggered after an indexing run completes.
-  When the app opens against a pre-existing indexed DB with no pending folder
-  scans, thumb building is never started, so every ``ThumbnailSourceRole`` stays
-  ``""`` for the lifetime of the session — even though the images are fully
-  indexed and the preview provider works fine.
+"""E2E tests for thumbnail loading in the Search tab.
 
 Test structure:
   * test_search_and_select_loads_preview
@@ -22,12 +11,9 @@ Test structure:
   * test_start_auto_thumbs_populates_thumbnail_source
       If _start_auto_thumbs() IS called explicitly, thumbs are built and
       refresh_thumbnails() makes them available via the model.
-  * test_thumbnail_source_stays_empty_for_preindexed_db_without_pending_scans
-      BUG: Opening the app with an already-indexed DB (no pending folder scans)
-      never triggers thumb building.  thumbnailSource stays "" and
-      isBuildingThumbs stays False throughout the session.
-      This test PASSES now (documents the current broken state) and should be
-      **updated or removed** once the fix is in place.
+    * test_thumbnail_building_triggered_for_preindexed_db_without_pending_scans
+            Opening an already-indexed DB with no pending folder scans builds the
+            thumbnail cache and updates the result cards.
 
 Run with:
     pytest tests/ui/test_thumbnail_loading.py -v -s
@@ -327,27 +313,27 @@ def test_thumbnail_building_triggered_for_preindexed_db_without_pending_scans(
     qtbot: QtBot,
     ctrl_empty_cache: AppController,
 ) -> None:
-    """FIX: thumbnail building IS triggered when opening a pre-existing indexed DB.
-
-    unlock() now calls _start_auto_thumbs() when the scan queue is empty,
-    so thumbnails are built immediately rather than staying blank forever.
-    """
+    """Pre-indexed databases build thumbnails without a pending scan."""
     ctrl = ctrl_empty_cache
 
-    # Arrange + Act — unlock; thumb worker should start right away
+    # Act — unlock the pre-indexed database.
     with qtbot.waitSignal(ctrl.totalResultsChanged, timeout=3000):
         ctrl.unlock("")
 
-    # Assert — thumb building was triggered synchronously inside unlock()
-    assert ctrl.isBuildingThumbs, (
-        "Expected isBuildingThumbs=True immediately after unlock() on a pre-indexed DB"
+    # Wait for the generated thumbnails to reach the result model. The worker
+    # may finish before the unlock signal waiter resumes on fast machines.
+    qtbot.waitUntil(
+        lambda: ctrl._search_model.rowCount() == 3
+        and all(
+            source.startswith("image://thumb/")
+            for source in _thumb_sources(ctrl)
+        ),
+        timeout=15_000,
     )
 
-    # Wait for the worker to finish and refresh the model
-    qtbot.waitUntil(lambda: not ctrl.isBuildingThumbs, timeout=15_000)
-
-    # Assert — thumbnails are now populated in the search result cards
+    # Assert — thumbnails are populated in every search result card.
     sources = _thumb_sources(ctrl)
+    assert len(sources) == 3
     assert all(src.startswith("image://thumb/") for src in sources), (
         f"Expected image://thumb/ URIs after unlock on pre-indexed DB, got: {sources}"
     )
