@@ -1,9 +1,8 @@
 ---
+name: run-tests
 description: "Run the full test suite, wait until it has completely finished, and report the failed tests"
-name: "Run tests"
-agent: "agent"
+disable-model-invocation: true
 ---
-
 Run the complete exif-turbo test suite and report the failed tests. Follow
 these steps exactly. Do not change any code, do not try to fix failures, and do
 not run pytest in any other way.

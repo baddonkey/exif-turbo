@@ -1,10 +1,9 @@
 ---
+name: release-exif-turbo
 description: "Cut a new release: bump version, tag, and build Windows/macOS installers"
-name: "Release exif-turbo"
+disable-model-invocation: true
 argument-hint: "new version, e.g. 0.2.0"
-agent: "agent"
 ---
-
 Cut a new release of exif-turbo.
 
 ## Inputs

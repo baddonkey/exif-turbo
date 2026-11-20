@@ -1,10 +1,9 @@
 ---
+name: update-linux-packages-on-existing-release
 description: "Rebuild the Linux DEB and RPM packages and upload them to an existing GitHub release"
-name: "Update Linux packages on existing release"
+disable-model-invocation: true
 argument-hint: "version tag, e.g. 1.8.1"
-agent: "agent"
 ---
-
 Rebuild the Linux DEB and RPM packages for an existing release using containerised
 builds, and upload them, replacing any previous Linux assets.
 
