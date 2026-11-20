@@ -1,10 +1,9 @@
 ---
+name: update-arm-dmg-on-existing-release
 description: "Rebuild the macOS ARM DMG and upload it to an existing GitHub release"
-name: "Update ARM DMG on existing release"
+disable-model-invocation: true
 argument-hint: "version tag, e.g. 1.8.1"
-agent: "agent"
 ---
-
 Rebuild the macOS Apple Silicon (arm64) DMG for an existing release and upload it,
 replacing any previous ARM macOS asset.
 
