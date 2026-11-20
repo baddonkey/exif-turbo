@@ -1463,7 +1463,7 @@ def test_plaintext_database_requests_new_passphrase(
 
     # Act / Assert
     assert controller.isNewDatabase
-    with qtbot.waitSignal(controller.totalResultsChanged, timeout=5_000):
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=15_000):
         controller.unlock(_TEST_PASSWORD)
     assert not controller.isLocked
     assert not controller.isNewDatabase

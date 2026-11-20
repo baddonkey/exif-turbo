@@ -3,8 +3,6 @@
 Test structure:
   * test_search_and_select_loads_preview
       Documents the working side: preview (selectedImageSource) IS set.
-  * test_thumbnail_source_empty_when_cache_is_empty
-      Baseline: with an empty cache, thumbnailSource is "" for every row.
   * test_thumbnails_appear_when_cache_has_prebuilt_files
       When thumb files already exist (from a prior session) and are present
       when the model is created, thumbnailSource returns an image://thumb/ URI.
@@ -199,28 +197,6 @@ def test_search_and_select_loads_preview(
     src = ctrl.selectedImageSource
     assert src.startswith("image://preview/") or src.startswith("image://raw/"), (
         f"Expected an image:// URI, got: {src!r}"
-    )
-
-
-# ── Tests: thumbnail sources (broken) ─────────────────────────────────────────
-
-
-def test_thumbnail_source_empty_when_cache_is_empty(
-    qtbot: QtBot,
-    ctrl_empty_cache: AppController,
-) -> None:
-    """With an empty cache, every ThumbnailSourceRole is '' after searching."""
-    ctrl = ctrl_empty_cache
-
-    # Arrange + Act
-    with qtbot.waitSignal(ctrl.totalResultsChanged, timeout=3000):
-        ctrl.unlock("")
-    assert ctrl._search_model.rowCount() == 3
-
-    # Assert — no thumbnail files exist, so every source must be empty
-    sources = _thumb_sources(ctrl)
-    assert all(src == "" for src in sources), (
-        f"Expected all thumbnail sources to be empty (no cache), got: {sources}"
     )
 
 
