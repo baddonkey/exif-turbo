@@ -12,6 +12,22 @@ import pytest
 from scripts import build_windows
 
 
+def test_ffmpeg_assets_use_immutable_autobuild_release() -> None:
+    # Arrange
+    release_url = (
+        f"https://github.com/{build_windows._FFMPEG_BUILDS_REPO}/releases/download/"
+        f"{build_windows._FFMPEG_RELEASE_TAG}"
+    )
+
+    # Assert
+    assert build_windows._FFMPEG_ARCHIVE_URL == (
+        f"{release_url}/{build_windows._FFMPEG_ARCHIVE}"
+    )
+    assert build_windows._FFMPEG_CHECKSUMS_URL == f"{release_url}/checksums.sha256"
+    assert "/download/latest/" not in build_windows._FFMPEG_ARCHIVE_URL
+    assert "/download/latest/" not in build_windows._FFMPEG_CHECKSUMS_URL
+
+
 def test_windows_installer_media_features_separate_tools_and_licenses() -> None:
     # Arrange
     source = Path(__file__).resolve().parents[2] / "installer/exif-turbo.wxs"

@@ -60,23 +60,26 @@ _IMAGEMAGICK_SBOM_URL = (
 _IMAGEMAGICK_SBOM_SHA256 = (
     "fddfaa608e57215897e83d7e9933f5e692ce07883510a00310605a540382390f"
 )
-_FFMPEG_ARCHIVE = "ffmpeg-n9.0-latest-win64-lgpl-shared-9.0.zip"
+_FFMPEG_BUILDS_REPO = "FFmpeg-Builds/FFmpeg-Builds"
+_FFMPEG_RELEASE_TAG = "autobuild-2026-11-20-12-40"
+_FFMPEG_ARCHIVE = "ffmpeg-n9.0.2-61-gd59078794d-win64-lgpl-shared-9.0.zip"
 _FFMPEG_ARCHIVE_URL = (
-    "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/"
-    f"{_FFMPEG_ARCHIVE}"
+    f"https://github.com/{_FFMPEG_BUILDS_REPO}/releases/download/"
+    f"{_FFMPEG_RELEASE_TAG}/{_FFMPEG_ARCHIVE}"
 )
 _FFMPEG_ARCHIVE_SHA256 = (
-    "ce7c09bf3897333bff873edc5873f31425a429f9da99fba9add844da5fa0b64b"
+    "4bb5e4c160463533d2e020bdc9b8429e9d1b8cdff1cddafa264db09a25f56069"
 )
 _FFMPEG_CHECKSUMS_URL = (
-    "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/checksums.sha256"
+    f"https://github.com/{_FFMPEG_BUILDS_REPO}/releases/download/"
+    f"{_FFMPEG_RELEASE_TAG}/checksums.sha256"
 )
 _FFMPEG_CHECKSUMS_SHA256 = (
-    "48f9147a98a35319f265119cecce5f2221018df80b3be0448b7a0e952955a502"
+    "30b7dd5f11733bd89db9a4babb7735c2f3f4b1032804b011a0eee97339db3dd2"
 )
-_FFMPEG_BUILDS_COMMIT = "b4a2b1d7cc241786eb8e2b588a7ade40cad48bbd"
+_FFMPEG_BUILDS_COMMIT = "7f2a6b1050d302144de8366afa37a75e46f326aa"
 _FFMPEG_BUILDS_SOURCE_URL = (
-    "https://github.com/BtbN/FFmpeg-Builds/archive/"
+    f"https://github.com/{_FFMPEG_BUILDS_REPO}/archive/"
     f"{_FFMPEG_BUILDS_COMMIT}.zip"
 )
 _MEDIA_TOOLS_LAYOUT_VERSION = 1
@@ -550,11 +553,11 @@ def stage_media_tools() -> Path:
             "COPYING.LGPLv2.1"
         )
         btb_license_url = (
-            "https://raw.githubusercontent.com/BtbN/FFmpeg-Builds/"
+            f"https://raw.githubusercontent.com/{_FFMPEG_BUILDS_REPO}/"
             f"{_FFMPEG_BUILDS_COMMIT}/LICENSE"
         )
         btb_readme_url = (
-            "https://raw.githubusercontent.com/BtbN/FFmpeg-Builds/"
+            f"https://raw.githubusercontent.com/{_FFMPEG_BUILDS_REPO}/"
             f"{_FFMPEG_BUILDS_COMMIT}/README.md"
         )
         btb_source_url = _FFMPEG_BUILDS_SOURCE_URL
