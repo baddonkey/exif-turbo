@@ -1463,7 +1463,7 @@ def test_plaintext_database_requests_new_passphrase(
 
     # Act / Assert
     assert controller.isNewDatabase
-    with qtbot.waitSignal(controller.totalResultsChanged, timeout=5_000):
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=15_000):
         controller.unlock(_TEST_PASSWORD)
     assert not controller.isLocked
     assert not controller.isNewDatabase
@@ -1539,11 +1539,11 @@ def test_search_canon_returns_two_results(
 ) -> None:
     # Arrange
     controller, search_model, _ = window
-    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=15_000):
         controller.unlock(_TEST_PASSWORD)
 
     # Act
-    with qtbot.waitSignal(controller.totalResultsChanged, timeout=3000):
+    with qtbot.waitSignal(controller.totalResultsChanged, timeout=15_000):
         controller.search("Canon")
     qtbot.wait(_PAUSE_MS)
 

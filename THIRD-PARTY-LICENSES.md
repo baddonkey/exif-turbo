@@ -169,9 +169,10 @@ Perl Artistic and GPL license texts in `Licenses_Strawberry_Perl.zip`.
 ### FFmpeg (Windows x64)
 
 - **Installer entry:** FFmpeg (optional, selected by default, independent of ImageMagick)
-- **Version branch:** FFmpeg 9.0 LGPL shared build from BtbN FFmpeg-Builds
-- **Archive:** `ffmpeg-n9.0-latest-win64-lgpl-shared-9.0.zip`
-- **SHA-256:** `ce7c09bf3897333bff873edc5873f31425a429f9da99fba9add844da5fa0b64b`
+- **Version branch:** FFmpeg 9.0.2 LGPL shared build from FFmpeg-Builds
+- **Build tag:** `autobuild-2026-11-20-12-40`
+- **Archive:** `ffmpeg-n9.0.2-61-gd59078794d-win64-lgpl-shared-9.0.zip`
+- **SHA-256:** `4bb5e4c160463533d2e020bdc9b8429e9d1b8cdff1cddafa264db09a25f56069`
 - **License:** LGPL 2.1 or later for the selected FFmpeg build, plus the
   individual licenses of its linked components. The staged build is rejected if
   its configuration enables GPL or nonfree components.
