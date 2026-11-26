@@ -1,9 +1,8 @@
 ---
+name: rebuild-documentation
 description: "Rebuild everything: demo DB, index, thumbnails, screenshots, user manual content, and PDF"
-name: "Rebuild documentation"
-agent: "agent"
+disable-model-invocation: true
 ---
-
 Fully rebuild the exif-turbo documentation artefacts from scratch.
 
 ## Steps

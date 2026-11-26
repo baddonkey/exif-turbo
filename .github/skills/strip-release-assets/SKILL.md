@@ -1,10 +1,9 @@
 ---
+name: strip-release-assets
 description: "Remove all uploaded assets (MSI, DMG, etc.) from a specific GitHub release without deleting the release itself. Asks for confirmation before deleting."
-name: "Strip Release Assets"
+disable-model-invocation: true
 argument-hint: "vX.Y.Z"
-agent: "agent"
 ---
-
 Remove all binary assets from a GitHub release, leaving the release page and its notes intact.
 
 ## Inputs
