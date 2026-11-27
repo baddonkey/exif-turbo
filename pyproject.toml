@@ -16,6 +16,7 @@ dependencies = [
   "sqlcipher3>=0.6",
   "markdown>=3.10",
   "cryptography>=49.0",
+  "certifi",
   "pyvips>=3.1",
   "pyvips-binary>=8.18",
   "open-clip-torch>=3.3",

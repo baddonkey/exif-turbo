@@ -28,7 +28,7 @@ def _check_runtime() -> None:
     import numpy as np
     from open_clip.tokenizer import HFTokenizer
     from tokenizers import Tokenizer
-    from tokenizers.models import WordLevel
+    from tokenizers.models import Unigram
     from tokenizers.pre_tokenizers import Whitespace
     from transformers import XLMRobertaTokenizerFast
 
@@ -42,10 +42,10 @@ def _check_runtime() -> None:
     extension = bundled_vec1_extension()
     with tempfile.TemporaryDirectory(prefix="exif-turbo-smoke-") as work:
         root = Path(work)
-        backend = Tokenizer(WordLevel({
-            "<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3,
-            "dog": 4, "car": 5, "house": 6, "bottle": 7,
-        }, unk_token="<unk>"))
+        backend = Tokenizer(Unigram([
+            ("<s>", 0.0), ("<pad>", 0.0), ("</s>", 0.0), ("<unk>", 0.0),
+            ("dog", -1.0), ("car", -1.0), ("house", -1.0), ("bottle", -1.0),
+        ], unk_id=3))
         backend.pre_tokenizer = Whitespace()
         tokenizer_dir = root / "tokenizer"
         XLMRobertaTokenizerFast(tokenizer_object=backend).save_pretrained(tokenizer_dir)

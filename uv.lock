@@ -112,6 +112,15 @@ wheels = [
 ]
 
 [[package]]
+name = "certifi"
+version = "2026.11.20"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/51/33/4cd27639502f010084bcef7a2036391dd637439901341ce1a530f36f6e51/certifi-2026.11.20.tar.gz", hash = "sha256:af1cb240a8133f105aa52684a3a3258339d7f2fd0bd4e2812698ff5cf5588c4e", size = 128901, upload-time = "2026-11-20T23:37:49.522Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6d/39/5eec3296860b94ac20bb8ed807725b88f6adfab3f343df592afd975f5f86/certifi-2026.11.20-py3-none-any.whl", hash = "sha256:7422df25243767b9877031a2248cb14d09ddac9beee846f4cef3d5c9191d488f", size = 127913, upload-time = "2026-11-20T23:37:48.117Z" },
+]
+
+[[package]]
 name = "cffi"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -251,6 +260,7 @@ version = "1.23.2"
 source = { editable = "." }
 dependencies = [
     { name = "av" },
+    { name = "certifi" },
     { name = "cryptography" },
     { name = "markdown" },
     { name = "mcp" },
@@ -297,6 +307,7 @@ dev = [
 requires-dist = [
     { name = "av", specifier = ">=18.0" },
     { name = "babel", marker = "extra == 'build'" },
+    { name = "certifi" },
     { name = "cryptography", specifier = ">=49.0" },
     { name = "exif-turbo", extras = ["build"], marker = "extra == 'dev'" },
     { name = "markdown", specifier = ">=3.10" },
