@@ -52,7 +52,6 @@ _open_clip_import_lock = threading.Lock()
 @contextmanager
 def _huggingface_offline() -> Iterator[None]:
     import huggingface_hub.constants as constants
-    from huggingface_hub.utils._http import reset_sessions
 
     previous_value = os.environ.get("HF_HUB_OFFLINE")
     previous_offline = constants.HF_HUB_OFFLINE
@@ -64,7 +63,7 @@ def _huggingface_offline() -> Iterator[None]:
     constants.HF_HUB_OFFLINE = True
     if transformers_hub is not None:
         setattr(transformers_hub, "_is_offline_mode", True)
-    reset_sessions()
+    _reset_huggingface_sessions()
     try:
         yield
     finally:
@@ -77,7 +76,21 @@ def _huggingface_offline() -> Iterator[None]:
         transformers_hub = sys.modules.get("transformers.utils.hub")
         if transformers_hub is not None:
             setattr(transformers_hub, "_is_offline_mode", previous_transformers_offline)
+        _reset_huggingface_sessions()
+
+
+def _reset_huggingface_sessions() -> None:
+    """Reset cached Hub HTTP state across Hugging Face Hub API versions."""
+    try:
+        from huggingface_hub.utils import close_session  # noqa: PLC0415
+    except ImportError:
+        try:
+            from huggingface_hub.utils._http import reset_sessions  # noqa: PLC0415
+        except ImportError:
+            return
         reset_sessions()
+    else:
+        close_session()
 
 
 @contextmanager
@@ -227,7 +240,11 @@ class AiIndexerService:
             # takes the exact same code path as before device support existed.
             if ai_device.is_gpu_enabled():
                 device = ai_device.resolve_device()
-                if device.type != "cpu":
+                # XLM-R transformers text inference has native CUDA stream/graph
+                # crashes on some Windows torch/CUDA builds. Keep text queries
+                # CPU-safe; image tensors and all non-CUDA backends remain GPU
+                # accelerated.
+                if device.type not in ("cpu", "cuda", "rocm"):
                     try:
                         self._model.to(device)  # type: ignore[union-attr]
                         with torch.no_grad():
@@ -239,6 +256,10 @@ class AiIndexerService:
                     except Exception as exc:  # noqa: BLE001
                         ai_device.mark_gpu_failed(exc)
                         self._model.to("cpu")  # type: ignore[union-attr]
+            # Text inference is deliberately CPU-safe on CUDA/ROCm hosts.
+            # The shared cached model may currently be resident on a GPU from
+            # image indexing, so move it back before feeding CPU tokens.
+            self._model.to("cpu")  # type: ignore[union-attr]
             with torch.no_grad():
                 tokens = tokenizer(batch_texts)
                 encoded = self._model.encode_text(tokens).float()  # type: ignore[union-attr]

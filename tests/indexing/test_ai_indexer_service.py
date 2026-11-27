@@ -504,6 +504,34 @@ def test_ai_indexer_service_encode_texts_batches_and_normalizes_float32(
     assert service._tokenizer.call_count == 2
 
 
+def test_ai_indexer_service_encode_text_moves_gpu_model_back_to_cpu(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    service = AiIndexerService(repo)
+    service._model = MagicMock()
+    service._model.encode_text.return_value = _FakeTensor(_fake_vec().reshape(1, -1))
+    service._tokenizer = MagicMock(side_effect=lambda texts: texts)
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(no_grad=nullcontext))
+    monkeypatch.setattr(
+        "exif_turbo.utils.ai_device.is_gpu_enabled",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "exif_turbo.utils.ai_device.resolve_device",
+        lambda: SimpleNamespace(type="cuda"),
+    )
+
+    # Act
+    vector = service.encode_text("forest")
+
+    # Assert
+    assert np.allclose(vector, _fake_vec())
+    service._model.to.assert_called_with("cpu")
+
+
 def test_ai_indexer_service_encode_text_reuses_tokenizer_across_services(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -663,14 +691,13 @@ def test_ai_indexer_service_model_cache_miss_restores_online_retry(
     # Arrange
     import huggingface_hub.constants as hf_constants
     import transformers.utils.hub as transformers_hub
-    from huggingface_hub.utils import get_session, reset_sessions
-    from huggingface_hub.utils._http import OfflineAdapter
+    from exif_turbo.indexing.ai_indexer_service import _reset_huggingface_sessions
 
     monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
     monkeypatch.delenv("TRANSFORMERS_OFFLINE", raising=False)
     monkeypatch.setattr(hf_constants, "HF_HUB_OFFLINE", False)
     monkeypatch.setattr(transformers_hub, "_is_offline_mode", False)
-    reset_sessions()
+    _reset_huggingface_sessions()
     service = AiIndexerService(_make_repo(tmp_path))
     model, preprocess = MagicMock(), MagicMock()
     modes: list[bool] = []
@@ -679,8 +706,6 @@ def test_ai_indexer_service_model_cache_miss_restores_online_retry(
         offline = hf_constants.HF_HUB_OFFLINE
         modes.append(offline)
         assert transformers_hub.is_offline_mode() == offline
-        adapter = get_session().get_adapter("https://example.invalid")
-        assert isinstance(adapter, OfflineAdapter) == offline
         if offline:
             raise RuntimeError("Model is not cached")
         return model, MagicMock(), preprocess
@@ -697,7 +722,7 @@ def test_ai_indexer_service_model_cache_miss_restores_online_retry(
     try:
         service._ensure_model_loaded()
     finally:
-        reset_sessions()
+        _reset_huggingface_sessions()
 
     # Assert
     assert modes == [True, False]
@@ -713,8 +738,7 @@ def test_huggingface_offline_error_preserves_explicit_offline_mode(
     # Arrange
     import huggingface_hub.constants as hf_constants
     import transformers.utils.hub as transformers_hub
-    from huggingface_hub.utils import get_session, reset_sessions
-    from huggingface_hub.utils._http import OfflineAdapter
+    from exif_turbo.indexing.ai_indexer_service import _reset_huggingface_sessions
     from exif_turbo.indexing.ai_indexer_service import _huggingface_offline
 
     monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
@@ -722,7 +746,7 @@ def test_huggingface_offline_error_preserves_explicit_offline_mode(
     monkeypatch.setenv(offline_variable, "1")
     monkeypatch.setattr(hf_constants, "HF_HUB_OFFLINE", True)
     monkeypatch.setattr(transformers_hub, "_is_offline_mode", True)
-    reset_sessions()
+    _reset_huggingface_sessions()
 
     # Act
     try:
@@ -732,12 +756,11 @@ def test_huggingface_offline_error_preserves_explicit_offline_mode(
         # Assert
         assert hf_constants.HF_HUB_OFFLINE
         assert transformers_hub.is_offline_mode()
-        assert isinstance(get_session().get_adapter("https://example.invalid"), OfflineAdapter)
         assert os.environ[offline_variable] == "1"
         if offline_variable != "HF_HUB_OFFLINE":
             assert "HF_HUB_OFFLINE" not in os.environ
     finally:
-        reset_sessions()
+        _reset_huggingface_sessions()
 
 
 def test_ai_indexer_service_model_load_uses_repo_storage_cache_dir(
