@@ -763,6 +763,23 @@ def test_huggingface_offline_error_preserves_explicit_offline_mode(
         _reset_huggingface_sessions()
 
 
+def test_huggingface_offline_blocks_hub_http_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    import huggingface_hub.constants as hf_constants
+    from huggingface_hub.errors import OfflineModeIsEnabled
+    from huggingface_hub.utils import get_session
+    from exif_turbo.indexing.ai_indexer_service import _huggingface_offline
+
+    monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
+    monkeypatch.setattr(hf_constants, "HF_HUB_OFFLINE", False)
+
+    # Act / Assert
+    with _huggingface_offline(), pytest.raises(OfflineModeIsEnabled):
+        get_session().get("https://example.invalid")
+
+
 def test_ai_indexer_service_model_load_uses_repo_storage_cache_dir(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

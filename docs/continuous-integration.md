@@ -91,9 +91,10 @@ packaging. On macOS it is signed before hashing and excluded from subsequent
 re-signing.
 
 The frozen executable runs an offline smoke check before installer creation:
-HTTPS certificate availability, real local text tokenization, encrypted Vec1
-insertion, database reopening, and filtered search. This check creates only
-temporary synthetic data and never downloads model weights or tokenizer assets.
+HTTPS certificate availability, real local text tokenization and a small XLM-R
+model forward pass, encrypted Vec1 insertion, database reopening, and filtered
+search. This check creates only temporary synthetic data and never downloads
+model weights or tokenizer assets.
 `certifi` is an explicit runtime dependency so isolated builds include the
 certificate bundle rather than relying on a developer environment's packages.
 Windows also runs it against the administratively extracted MSI payload.

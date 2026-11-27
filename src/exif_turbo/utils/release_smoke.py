@@ -30,7 +30,7 @@ def _check_runtime() -> None:
     from tokenizers import Tokenizer
     from tokenizers.models import Unigram
     from tokenizers.pre_tokenizers import Whitespace
-    from transformers import XLMRobertaTokenizerFast
+    from transformers import AutoModel, XLMRobertaConfig, XLMRobertaTokenizerFast
 
     from ..data.ai_vec1_repository import AiVec1Repository
     from ..data.image_index_repository import ImageIndexRepository
@@ -55,6 +55,13 @@ def _check_runtime() -> None:
         tokens = tokenizer(["bottle", "dog"])
         if tokens.shape != (2, 8) or tokens[0].equal(tokens[1]):
             raise RuntimeError("The packaged text tokenizer is not working")
+
+        model = AutoModel.from_config(XLMRobertaConfig(
+            vocab_size=8, hidden_size=8, num_hidden_layers=1,
+            num_attention_heads=1, intermediate_size=16, max_position_embeddings=32,
+        ))
+        if model(input_ids=tokens).last_hidden_state.shape != (2, 8, 8):
+            raise RuntimeError("The packaged text model is not working")
 
         database = root / "index.db"
         password = "temporary-release-smoke-key"

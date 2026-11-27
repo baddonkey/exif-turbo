@@ -80,17 +80,10 @@ def _huggingface_offline() -> Iterator[None]:
 
 
 def _reset_huggingface_sessions() -> None:
-    """Reset cached Hub HTTP state across Hugging Face Hub API versions."""
-    try:
-        from huggingface_hub.utils import close_session  # noqa: PLC0415
-    except ImportError:
-        try:
-            from huggingface_hub.utils._http import reset_sessions  # noqa: PLC0415
-        except ImportError:
-            return
-        reset_sessions()
-    else:
-        close_session()
+    """Reset the Hub's shared HTTP client after changing offline mode."""
+    from huggingface_hub.utils import close_session  # noqa: PLC0415
+
+    close_session()
 
 
 @contextmanager
