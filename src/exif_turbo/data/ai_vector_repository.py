@@ -6,13 +6,17 @@ import json
 import os
 from pathlib import Path
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Dict, List, Set
 
 import numpy as np
 
 from ..models.ai_model_profile import AiModelProfile, DEFAULT_AI_MODEL_PROFILE
-from .ai_vector_storage import AiVectorAuthenticationError, AiVectorStorage
+from .ai_vector_storage import (
+    AiVectorAuthenticationError,
+    AiVectorMigrationCanceled,
+    AiVectorStorage,
+)
 
 
 class AiVectorIndexError(RuntimeError):
@@ -41,6 +45,7 @@ class AiVectorRepository:
         self._faiss = None
         self._index = None
         self._authenticated_snapshot = False
+        self._migration_fingerprint: str | None = None
         # Maps str(sequential_faiss_id) to an image path and deterministic view.
         self._id_map: Dict[str, dict[str, str]] = {}
         self._path_map: Dict[str, List[int]] = {}
@@ -64,14 +69,19 @@ class AiVectorRepository:
         """Load existing index + map from disk; create empty ones if absent."""
         self._load(require_authenticated=False)
 
-    def load_migration_source(self) -> None:
+    def load_migration_source(
+        self, *, cancel_check: Callable[[], bool] | None = None
+    ) -> None:
         """Load an authenticated snapshot without rewriting or deleting it."""
-        self._load(require_authenticated=True)
+        self._load(require_authenticated=True, cancel_check=cancel_check)
 
-    def _load(self, *, require_authenticated: bool) -> None:
+    def _load(
+        self, *, require_authenticated: bool, cancel_check: Callable[[], bool] | None = None
+    ) -> None:
         import faiss  # noqa: PLC0415
 
         self._authenticated_snapshot = False
+        self._migration_fingerprint = None
         self._faiss = faiss
         paths = (self._index_path, self._id_map_path, self._metadata_path)
         existing = tuple(path.exists() for path in paths)
@@ -90,14 +100,52 @@ class AiVectorRepository:
             )
 
         try:
-            if encrypted:
+            if require_authenticated:
+                with self._storage.authenticated_index_chunks(cancel_check=cancel_check) as snapshot:
+                    map_bytes, metadata_bytes, chunks, index_checksum = snapshot
+                    pending = memoryview(b"")
+                    canceled = False
+
+                    def read_chunk(size: int) -> bytes:
+                        nonlocal pending, canceled
+                        if cancel_check is not None and cancel_check():
+                            canceled = True
+                            return b""
+                        result = bytearray()
+                        while len(result) < size:
+                            if not pending:
+                                try:
+                                    pending = memoryview(next(chunks))
+                                except StopIteration:
+                                    break
+                                except AiVectorMigrationCanceled:
+                                    canceled = True
+                                    return b""
+                            count = min(size - len(result), len(pending))
+                            result.extend(pending[:count])
+                            pending = pending[count:]
+                        return bytes(result)
+
+                    reader = faiss.PyCallbackIOReader(read_chunk)
+                    buffered = faiss.BufferedIOReader(reader, self._storage._CHUNK_SIZE)
+                    try:
+                        index = faiss.read_index(buffered)
+                    except RuntimeError as exc:
+                        if canceled or (cancel_check is not None and cancel_check()):
+                            raise AiVectorMigrationCanceled("AI snapshot loading canceled") from exc
+                        raise
+                    if canceled or (cancel_check is not None and cancel_check()):
+                        raise AiVectorMigrationCanceled("AI snapshot loading canceled")
+            elif encrypted:
                 index_bytes, map_bytes, metadata_bytes = self._storage.load()
                 index = faiss.deserialize_index(np.frombuffer(index_bytes, dtype=np.uint8))
+                index_checksum = hashlib.sha256(index_bytes).hexdigest()
             else:
                 index_bytes = self._index_path.read_bytes()
                 map_bytes = self._id_map_path.read_bytes()
                 metadata_bytes = self._metadata_path.read_bytes()
                 index = faiss.deserialize_index(np.frombuffer(index_bytes, dtype=np.uint8))
+                index_checksum = hashlib.sha256(index_bytes).hexdigest()
             raw_map = json.loads(map_bytes)
             metadata = json.loads(metadata_bytes)
             if not isinstance(raw_map, dict) or not isinstance(metadata, dict):
@@ -133,11 +181,11 @@ class AiVectorRepository:
             }
             if index.ntotal != len(id_map) or index.ntotal != int(metadata["count"]):
                 raise ValueError("FAISS count, ID map, and metadata count differ")
-            if hashlib.sha256(index_bytes).hexdigest() != str(metadata["index_sha256"]):
+            if index_checksum != str(metadata["index_sha256"]):
                 raise ValueError("FAISS index checksum does not match metadata")
             if hashlib.sha256(map_bytes).hexdigest() != str(metadata["map_sha256"]):
                 raise ValueError("ID map checksum does not match metadata")
-        except (AiVectorIndexError, AiVectorAuthenticationError):
+        except (AiVectorIndexError, AiVectorAuthenticationError, AiVectorMigrationCanceled):
             raise
         except Exception as exc:  # noqa: BLE001
             raise AiVectorIndexError(
@@ -147,7 +195,9 @@ class AiVectorRepository:
         self._index = index
         self._id_map = id_map
         self._rebuild_path_map()
-        self._authenticated_snapshot = encrypted
+        self._authenticated_snapshot = encrypted and require_authenticated
+        if self._authenticated_snapshot:
+            self._migration_fingerprint = hashlib.sha256(metadata_bytes).hexdigest()
         if not require_authenticated and self._key and (not encrypted or any(existing)):
             self._storage.migrate(*paths)
 
@@ -164,6 +214,12 @@ class AiVectorRepository:
             str(index) not in self._id_map for index in range(self._index.ntotal)
         ):
             raise AiVectorIndexError("The AI snapshot has invalid vector identifiers")
+
+    def migration_fingerprint(self) -> str:
+        """Identify the authenticated source, including its validated checksums."""
+        if not self._authenticated_snapshot or self._migration_fingerprint is None:
+            raise AiVectorIndexError("An authenticated AI snapshot must be loaded first")
+        return self._migration_fingerprint
 
     def iter_migration_vectors(self) -> Iterator[tuple[str, str, np.ndarray]]:
         """Yield losslessly reconstructed rows from an authenticated flat index."""
@@ -190,6 +246,7 @@ class AiVectorRepository:
         if self._faiss is None:
             raise RuntimeError("load() must be called before reset()")
         self._authenticated_snapshot = False
+        self._migration_fingerprint = None
         self._index = self._faiss.IndexFlatIP(self._dimension)
         self._id_map = {}
         self._path_map = {}
@@ -205,6 +262,7 @@ class AiVectorRepository:
         self._faiss = None
         self._index = None
         self._authenticated_snapshot = False
+        self._migration_fingerprint = None
         self._id_map = {}
         self._path_map = {}
 

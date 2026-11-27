@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 import sqlcipher3
 
+from exif_turbo.data._connection import open_encrypted_connection
 from exif_turbo.data.ai_vec1_repository import (
     AiVec1IndexError,
     AiVec1MigrationCanceled,
@@ -20,13 +21,15 @@ from exif_turbo.data.ai_vec1_repository import (
     AiVec1TrainingCanceled,
 )
 from exif_turbo.data.ai_vector_repository import AiVectorIndexError, AiVectorRepository
-from exif_turbo.data.ai_vector_storage import AiVectorAuthenticationError, AiVectorStorage
-from exif_turbo.data._connection import open_encrypted_connection
+from exif_turbo.data.ai_vector_storage import (
+    AiVectorAuthenticationError,
+    AiVectorStorage,
+)
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.models.ai_model_profile import (
-    AiModelProfile,
     DEFAULT_AI_MODEL_PROFILE,
     LEGACY_OPENAI_CLIP_PROFILE,
+    AiModelProfile,
 )
 
 _DATABASE_KEY = "test-vec1-database-password"
@@ -811,6 +814,166 @@ def test_ai_vec1_staging_cancellation_removes_stage_and_preserves_active_index(
         source.close()
 
 
+def test_ai_vec1_staging_canceled_replacement_preserves_completed_stage(
+    tmp_path: Path, vec1_extension_path: Path
+) -> None:
+    image = tmp_path / "image.jpg"
+    db_path = tmp_path / "index.db"
+    _create_indexed_images(db_path, [image])
+    index_path = tmp_path / "legacy.faiss"
+    map_path = tmp_path / "map.json"
+    source = AiVectorRepository(index_path, map_path, key=_DATABASE_KEY)
+    source.load()
+    vector = np.zeros(512, dtype=np.float32)
+    vector[0] = 1.0
+    source.add_images(vector, [str(image)])
+    source.save()
+    source.close()
+    source.load_migration_source()
+    target = _make_repository(db_path, vec1_extension_path)
+    replacement = AiVectorRepository(
+        tmp_path / "replacement.faiss", tmp_path / "replacement-map.json", key=_DATABASE_KEY
+    )
+    replacement.load()
+    other = np.zeros(512, dtype=np.float32)
+    other[1] = 1.0
+    replacement.add_images(other, [str(image)])
+    replacement.save()
+    replacement.close()
+    replacement.load_migration_source()
+    try:
+        target.stage_faiss_snapshot(source)
+        progress: list[int] = []
+        with pytest.raises(AiVec1MigrationCanceled):
+            target.stage_faiss_snapshot(
+                replacement, batch_size=1,
+                on_progress=lambda done, total: progress.append(done),
+                cancel_check=lambda: bool(progress),
+            )
+
+        assert target.verify_staged_snapshot(source).staged_vectors == 1
+        assert target.stage_faiss_snapshot(replacement).staged_vectors == 1
+        assert target.verify_staged_snapshot(replacement).staged_vectors == 1
+        with pytest.raises(AiVec1IndexError, match="does not match"):
+            target.verify_staged_snapshot(source)
+    finally:
+        replacement.close()
+        target.close()
+        source.close()
+
+
+def test_ai_vec1_staging_replacement_failure_rolls_back_completed_stage(
+    tmp_path: Path, vec1_extension_path: Path
+) -> None:
+    image = tmp_path / "image.jpg"
+    db_path = tmp_path / "index.db"
+    _create_indexed_images(db_path, [image])
+    source = AiVectorRepository(tmp_path / "legacy.faiss", tmp_path / "map.json", key=_DATABASE_KEY)
+    source.load()
+    vector = np.zeros(512, dtype=np.float32)
+    vector[0] = 1.0
+    source.add_images(vector, [str(image)])
+    source.save()
+    source.close()
+    source.load_migration_source()
+    target = _make_repository(db_path, vec1_extension_path)
+    try:
+        target.stage_faiss_snapshot(source)
+
+        def deny_rename(
+            action: int, arg1: str | None, arg2: str | None,
+            database: str | None, trigger: str | None,
+        ) -> int:
+            return sqlcipher3.SQLITE_DENY if action == sqlcipher3.SQLITE_ALTER_TABLE else sqlcipher3.SQLITE_OK
+
+        target._connection().set_authorizer(deny_rename)
+        try:
+            with pytest.raises(sqlcipher3.DatabaseError, match="authorized"):
+                target.stage_faiss_snapshot(source)
+        finally:
+            target._connection().set_authorizer(None)
+
+        assert target.verify_staged_snapshot(source).staged_vectors == 1
+        assert target._connection().execute(
+            "SELECT count(*) FROM sqlite_master WHERE name='ai_vec1_build_status'"
+        ).fetchone() == (0,)
+    finally:
+        target.close()
+        source.close()
+
+
+def test_ai_vec1_staging_failed_backup_preserves_previous_completed_stage(
+    tmp_path: Path, vec1_extension_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    image = tmp_path / "image.jpg"
+    db_path = tmp_path / "index.db"
+    _create_indexed_images(db_path, [image])
+    source = AiVectorRepository(tmp_path / "legacy.faiss", tmp_path / "map.json", key=_DATABASE_KEY)
+    source.load()
+    vector = np.zeros(512, dtype=np.float32)
+    vector[0] = 1.0
+    source.add_images(vector, [str(image)])
+    source.save()
+    source.close()
+    source.load_migration_source()
+    target = _make_repository(db_path, vec1_extension_path)
+    try:
+        target.stage_faiss_snapshot(source)
+        old_build = target._connection().execute(
+            "SELECT build_id FROM ai_vec1_staging_status"
+        ).fetchone()
+        disk = shutil.disk_usage(tmp_path)
+        checks: list[int] = []
+
+        def disk_usage(_path: Path) -> object:
+            checks.append(1)
+            return disk if len(checks) == 1 else disk._replace(free=0)
+
+        with monkeypatch.context() as patch:
+            patch.setattr("exif_turbo.data.ai_vec1_repository.shutil.disk_usage", disk_usage)
+            with pytest.raises(AiVec1IndexError, match="backup verification"):
+                target.stage_faiss_snapshot(source, verify_backup=True)
+
+        assert target._connection().execute(
+            "SELECT build_id FROM ai_vec1_staging_status"
+        ).fetchone() == old_build
+        assert target.verify_staged_snapshot(source).staged_vectors == 1
+        assert not list(tmp_path.glob(".index.db.vec1-backup-*"))
+    finally:
+        target.close()
+        source.close()
+
+
+def test_ai_vec1_staging_superseded_attempt_preserves_new_completed_stage(
+    tmp_path: Path, vec1_extension_path: Path
+) -> None:
+    image = tmp_path / "image.jpg"
+    db_path = tmp_path / "index.db"
+    _create_indexed_images(db_path, [image])
+    source = AiVectorRepository(tmp_path / "legacy.faiss", tmp_path / "map.json", key=_DATABASE_KEY)
+    source.load()
+    vector = np.zeros(512, dtype=np.float32)
+    vector[0] = 1.0
+    source.add_images(vector, [str(image)])
+    source.save()
+    source.close()
+    source.load_migration_source()
+    first = _make_repository(db_path, vec1_extension_path)
+    second = _make_repository(db_path, vec1_extension_path)
+    try:
+        def finish_other_attempt(_done: int, _total: int) -> None:
+            assert second.stage_faiss_snapshot(source).staged_vectors == 1
+
+        with pytest.raises(AiVec1IndexError, match="metadata database changed"):
+            first.stage_faiss_snapshot(source, batch_size=1, on_progress=finish_other_attempt)
+
+        assert second.verify_staged_snapshot(source).staged_vectors == 1
+    finally:
+        first.close()
+        second.close()
+        source.close()
+
+
 def test_ai_vec1_reopened_staging_verification_rejects_modified_vector(
     tmp_path: Path, vec1_extension_path: Path
 ) -> None:
@@ -840,6 +1003,72 @@ def test_ai_vec1_reopened_staging_verification_rejects_modified_vector(
             )
 
         with pytest.raises(AiVec1IndexError, match="does not match"):
+            target.verify_staged_snapshot(source)
+    finally:
+        target.close()
+        source.close()
+
+
+def test_ai_vec1_staging_verification_rejects_different_snapshot_with_same_known_vectors(
+    tmp_path: Path, vec1_extension_path: Path
+) -> None:
+    image = tmp_path / "image.jpg"
+    db_path = tmp_path / "index.db"
+    _create_indexed_images(db_path, [image])
+    vectors = np.zeros((2, 512), dtype=np.float32)
+    vectors[:, 0] = 1.0
+    sources = []
+    for number in (1, 2):
+        source = AiVectorRepository(
+            tmp_path / f"source{number}.faiss", tmp_path / f"map{number}.json", key=_DATABASE_KEY
+        )
+        source.load()
+        source.add_images(vectors, [str(image), str(tmp_path / f"missing{number}.jpg")])
+        source.save()
+        source.close()
+        source.load_migration_source()
+        sources.append(source)
+    target = _make_repository(db_path, vec1_extension_path)
+    try:
+        target.stage_faiss_snapshot(sources[0])
+        target.close()
+        target = _make_repository(db_path, vec1_extension_path)
+
+        with pytest.raises(AiVec1IndexError, match="does not match the snapshot"):
+            target.verify_staged_snapshot(sources[1])
+        assert target.verify_staged_snapshot(sources[0]).staged_vectors == 1
+    finally:
+        target.close()
+        for source in sources:
+            source.close()
+
+
+def test_ai_vec1_staging_verification_rejects_updated_image_stamp(
+    tmp_path: Path, vec1_extension_path: Path
+) -> None:
+    image = tmp_path / "image.jpg"
+    db_path = tmp_path / "index.db"
+    _create_indexed_images(db_path, [image])
+    source = AiVectorRepository(tmp_path / "legacy.faiss", tmp_path / "map.json", key=_DATABASE_KEY)
+    source.load()
+    vector = np.zeros(512, dtype=np.float32)
+    vector[0] = 1.0
+    source.add_images(vector, [str(image)])
+    source.save()
+    source.close()
+    source.load_migration_source()
+    target = _make_repository(db_path, vec1_extension_path)
+    try:
+        target.stage_faiss_snapshot(source)
+        target.close()
+        images = ImageIndexRepository(db_path, key=_DATABASE_KEY)
+        try:
+            images.upsert_image(str(image), "image.jpg", 2.0, 100, {}, "")
+        finally:
+            images.close()
+        target = _make_repository(db_path, vec1_extension_path)
+
+        with pytest.raises(AiVec1IndexError, match="image changed"):
             target.verify_staged_snapshot(source)
     finally:
         target.close()
@@ -883,6 +1112,96 @@ def test_ai_vec1_staging_online_encrypted_backup_restores_verified_stage(
         source.close()
 
 
+def test_ai_vec1_staging_backup_verification_cleans_temporary_encrypted_copy(
+    tmp_path: Path, vec1_extension_path: Path
+) -> None:
+    image = tmp_path / "image.jpg"
+    db_path = tmp_path / "index.db"
+    _create_indexed_images(db_path, [image])
+    source = AiVectorRepository(tmp_path / "legacy.faiss", tmp_path / "map.json", key=_DATABASE_KEY)
+    source.load()
+    vector = np.zeros(512, dtype=np.float32)
+    vector[0] = 1.0
+    source.add_images(vector, [str(image)])
+    source.save()
+    source.close()
+    source.load_migration_source()
+    target = _make_repository(db_path, vec1_extension_path)
+    try:
+        expected = target.stage_faiss_snapshot(source)
+
+        assert target.verify_staged_backup(source) == expected
+        assert not list(tmp_path.glob(".index.db.vec1-backup-*"))
+    finally:
+        target.close()
+        source.close()
+
+
+def test_ai_vec1_staging_backup_cancel_preserves_stage_and_removes_copy(
+    tmp_path: Path, vec1_extension_path: Path
+) -> None:
+    image = tmp_path / "image.jpg"
+    db_path = tmp_path / "index.db"
+    _create_indexed_images(db_path, [image])
+    source = AiVectorRepository(tmp_path / "legacy.faiss", tmp_path / "map.json", key=_DATABASE_KEY)
+    source.load()
+    vector = np.zeros(512, dtype=np.float32)
+    vector[0] = 1.0
+    source.add_images(vector, [str(image)])
+    source.save()
+    source.close()
+    source.load_migration_source()
+    target = _make_repository(db_path, vec1_extension_path)
+    try:
+        target.stage_faiss_snapshot(source)
+        checks: list[int] = []
+
+        def cancel_during_backup() -> bool:
+            checks.append(1)
+            return len(checks) > 1
+
+        with pytest.raises(AiVec1MigrationCanceled):
+            target.verify_staged_backup(source, cancel_check=cancel_during_backup)
+
+        assert target.verify_staged_snapshot(source).staged_vectors == 1
+        assert not list(tmp_path.glob(".index.db.vec1-backup-*"))
+    finally:
+        target.close()
+        source.close()
+
+
+def test_ai_vec1_staging_backup_rejects_modified_stage_and_removes_copy(
+    tmp_path: Path, vec1_extension_path: Path
+) -> None:
+    image = tmp_path / "image.jpg"
+    db_path = tmp_path / "index.db"
+    _create_indexed_images(db_path, [image])
+    source = AiVectorRepository(tmp_path / "legacy.faiss", tmp_path / "map.json", key=_DATABASE_KEY)
+    source.load()
+    vector = np.zeros(512, dtype=np.float32)
+    vector[0] = 1.0
+    source.add_images(vector, [str(image)])
+    source.save()
+    source.close()
+    source.load_migration_source()
+    target = _make_repository(db_path, vec1_extension_path)
+    try:
+        target.stage_faiss_snapshot(source)
+        vector[0], vector[1] = 0.0, 1.0
+        with target._connection():
+            target._connection().execute(
+                "UPDATE ai_vec1_staging_vectors SET embedding = ? WHERE rowid = 1",
+                (vector.tobytes(),),
+            )
+
+        with pytest.raises(AiVec1IndexError, match="does not match"):
+            target.verify_staged_backup(source)
+        assert not list(tmp_path.glob(".index.db.vec1-backup-*"))
+    finally:
+        target.close()
+        source.close()
+
+
 def test_ai_vec1_staging_rejects_concurrent_metadata_changes(
     tmp_path: Path, vec1_extension_path: Path
 ) -> None:
@@ -914,6 +1233,37 @@ def test_ai_vec1_staging_rejects_concurrent_metadata_changes(
         assert target._connection().execute(
             "SELECT count(*) FROM sqlite_master WHERE name='ai_vec1_staging_status'"
         ).fetchone() == (0,)
+    finally:
+        target.close()
+        source.close()
+
+
+def test_ai_vec1_staging_rejects_source_modified_during_staging(
+    tmp_path: Path, vec1_extension_path: Path
+) -> None:
+    image = tmp_path / "image.jpg"
+    db_path = tmp_path / "index.db"
+    _create_indexed_images(db_path, [image])
+    source = AiVectorRepository(tmp_path / "legacy.faiss", tmp_path / "map.json", key=_DATABASE_KEY)
+    source.load()
+    vector = np.zeros(512, dtype=np.float32)
+    vector[0] = 1.0
+    source.add_images(vector, [str(image)])
+    source.save()
+    source.close()
+    source.load_migration_source()
+    target = _make_repository(db_path, vec1_extension_path)
+    try:
+        def mutate_source(_done: int, _total: int) -> None:
+            source.add_images(vector, [str(tmp_path / "another.jpg")])
+
+        with pytest.raises(AiVectorIndexError, match="authenticated AI snapshot"):
+            target.stage_faiss_snapshot(source, batch_size=1, on_progress=mutate_source)
+
+        assert target._connection().execute(
+            "SELECT count(*) FROM sqlite_master WHERE name='ai_vec1_build_status'"
+        ).fetchone() == (0,)
+        assert target.get_vector_count() == 0
     finally:
         target.close()
         source.close()
@@ -966,9 +1316,12 @@ def test_ai_vec1_staging_interrupted_process_can_restart_without_changing_active
     source.add_images(vectors, [str(path) for path in images])
     source.save()
     source.close()
+    source.load_migration_source()
     target = _make_repository(db_path, vec1_extension_path)
     target.add_images(vectors[0], [str(images[0])])
+    target.stage_faiss_snapshot(source)
     target.close()
+    source.close()
     code = """
 import os
 import sys
@@ -994,8 +1347,9 @@ target.stage_faiss_snapshot(source, batch_size=1, on_progress=lambda count, tota
         assert child.returncode == 79
         assert target.get_vector_count() == 1
         assert target._connection().execute(
-            "SELECT complete FROM ai_vec1_staging_status"
+            "SELECT complete FROM ai_vec1_build_status"
         ).fetchone() == (0,)
+        assert target.verify_staged_snapshot(source).staged_vectors == 2
         assert target.stage_faiss_snapshot(source, batch_size=1).staged_vectors == 2
         assert target.get_vector_count() == 1
     finally:

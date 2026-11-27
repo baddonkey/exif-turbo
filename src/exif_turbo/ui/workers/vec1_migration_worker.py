@@ -9,6 +9,7 @@ from ...config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
 from ...data.ai_search_session import AiSearchSession
 from ...data.ai_vec1_repository import AiVec1MigrationCanceled, AiVec1Repository
 from ...data.ai_vector_repository import AiVectorIndexError, AiVectorRepository
+from ...data.ai_vector_storage import AiVectorMigrationCanceled
 
 
 class Vec1MigrationWorker(QThread):
@@ -37,17 +38,18 @@ class Vec1MigrationWorker(QThread):
         target = AiVec1Repository(self._db_path, self._key, self._extension_path)
         try:
             generation = session.disk_generation()
-            source.load_migration_source()
+            source.load_migration_source(cancel_check=self.isInterruptionRequested)
             if session.disk_generation() != generation:
                 raise AiVectorIndexError("The AI snapshot changed while loading")
             if self.isInterruptionRequested():
                 raise AiVec1MigrationCanceled("AI vector staging canceled")
             target.load()
-            target.stage_faiss_snapshot(
+            staged = target.stage_faiss_snapshot(
                 source,
                 cancel_check=self.isInterruptionRequested,
                 source_is_current=lambda: session.disk_generation() == generation,
                 on_progress=self.progress.emit,
+                verify_backup=True,
             )
             target.close()
             target.load()
@@ -56,8 +58,10 @@ class Vec1MigrationWorker(QThread):
                 cancel_check=self.isInterruptionRequested,
                 source_is_current=lambda: session.disk_generation() == generation,
             )
+            if staged != result:
+                raise AiVectorIndexError("The reopened AI migration stage has changed")
             self.completed.emit(result)
-        except AiVec1MigrationCanceled:
+        except (AiVec1MigrationCanceled, AiVectorMigrationCanceled):
             self.canceled.emit()
         except Exception as exc:  # noqa: BLE001
             self.failed.emit(str(exc))

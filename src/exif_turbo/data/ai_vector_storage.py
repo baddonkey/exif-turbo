@@ -4,19 +4,27 @@ import os
 import hashlib
 import io
 from pathlib import Path
+import shutil
 import struct
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Generator, Iterator
+from contextlib import contextmanager
 from typing import BinaryIO
 
+import sqlcipher3
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from ..utils.thumb_crypto import ThumbCrypto, WrongPasswordError
+from ._connection import _passphrase_for_pragma
 
 
 class AiVectorAuthenticationError(ValueError):
     """Encrypted AI storage could not be authenticated; never rebuild silently."""
+
+
+class AiVectorMigrationCanceled(Exception):
+    """Loading the legacy snapshot for migration was canceled."""
 
 
 class AiVectorStorage:
@@ -106,11 +114,98 @@ class AiVectorStorage:
         if sum(lengths) > size - header_size:
             raise ValueError("Incomplete AI snapshot")
 
+    @contextmanager
+    def authenticated_index_chunks(
+        self, *, cancel_check: Callable[[], bool] | None = None
+    ) -> Generator[tuple[bytes, bytes, Iterator[bytes], str], None, None]:
+        """Authenticate before exposing index chunks from an encrypted scratch database."""
+        def check_canceled() -> None:
+            if cancel_check is not None and cancel_check():
+                raise AiVectorMigrationCanceled("AI snapshot loading canceled")
+
+        if not self._key:
+            raise AiVectorAuthenticationError("A password is required for the AI index")
+        check_canceled()
+        snapshot_size = self.path.stat().st_size
+        if shutil.disk_usage(self.path.parent).free < 16 * 1024 * 1024 + snapshot_size * 2:
+            raise OSError("Insufficient disk space for authenticated AI snapshot loading")
+        descriptor, name = tempfile.mkstemp(
+            prefix=f".{self.path.name}.migration-", suffix=".db", dir=self.path.parent
+        )
+        os.close(descriptor)
+        scratch_path = Path(name)
+        conn: sqlcipher3.Connection | None = None
+        try:
+            conn = sqlcipher3.connect(str(scratch_path))
+            conn.execute(f"PRAGMA key={_passphrase_for_pragma(self._key)}")
+            conn.execute("PRAGMA temp_store=MEMORY")
+            conn.execute("CREATE TABLE chunks (id INTEGER PRIMARY KEY, payload BLOB NOT NULL)")
+            conn.execute("BEGIN")
+            header_size = len(self._MAGIC) + self._LENGTHS.size
+            header = bytearray()
+            destinations = (io.BytesIO(), io.BytesIO())
+            lengths: list[int | None] = []
+            position = 0
+            digest = hashlib.sha256()
+
+            def consume(chunk: bytes) -> None:
+                nonlocal position
+                assert conn is not None
+                view = memoryview(chunk)
+                if len(header) < header_size:
+                    count = min(header_size - len(header), len(view))
+                    header.extend(view[:count])
+                    view = view[count:]
+                    if len(header) == header_size:
+                        if not header.startswith(self._MAGIC):
+                            raise ValueError("Unsupported AI snapshot format")
+                        lengths.extend(self._LENGTHS.unpack_from(header, len(self._MAGIC)))
+                        lengths.append(None)
+                while view:
+                    remaining = lengths[position]
+                    if remaining == 0:
+                        position += 1
+                        continue
+                    count = len(view) if remaining is None else min(remaining, len(view))
+                    part = view[:count]
+                    if position < 2:
+                        if remaining is None:
+                            raise ValueError("Invalid AI snapshot framing")
+                        destinations[position].write(part)
+                        lengths[position] = remaining - count
+                    else:
+                        digest.update(part)
+                        conn.execute("INSERT INTO chunks(payload) VALUES (?)", (part,))
+                    view = view[count:]
+
+            with self.path.open("rb") as stream:
+                self._decrypt_stream(stream, consume, check_canceled=check_canceled)
+            if len(header) != header_size or any(length for length in lengths[:2]):
+                raise ValueError("Incomplete AI snapshot")
+            check_canceled()
+            conn.commit()
+            cursor = conn.execute("SELECT payload FROM chunks ORDER BY id")
+
+            def chunks() -> Iterator[bytes]:
+                for (payload,) in cursor:
+                    check_canceled()
+                    yield bytes(payload)
+
+            yield destinations[0].getvalue(), destinations[1].getvalue(), chunks(), digest.hexdigest()
+        finally:
+            if conn is not None:
+                conn.close()
+            for suffix in ("", "-journal", "-wal", "-shm"):
+                Path(f"{scratch_path}{suffix}").unlink(missing_ok=True)
+
     def _master_key(self) -> bytes:
         self._crypto()
         return ThumbCrypto._unwrap_key_file(self.key_dir / ".thumb_key", self._key)
 
-    def _decrypt_stream(self, stream: BinaryIO, consume: Callable[[bytes], object]) -> None:
+    def _decrypt_stream(
+        self, stream: BinaryIO, consume: Callable[[bytes], object],
+        *, check_canceled: Callable[[], None] | None = None,
+    ) -> None:
         master_key = self._master_key()
         size = stream.seek(0, os.SEEK_END)
         if size < 28:
@@ -125,6 +220,8 @@ class AiVectorStorage:
         framing_error: Exception | None = None
         try:
             while remaining:
+                if check_canceled is not None:
+                    check_canceled()
                 chunk = stream.read(min(self._CHUNK_SIZE, remaining))
                 if not chunk:
                     raise AiVectorAuthenticationError("Incomplete AI snapshot")

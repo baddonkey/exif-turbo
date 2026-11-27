@@ -186,7 +186,9 @@ The experimental repository import accepts only an authenticated encrypted
 FAISS snapshot with the matching model and view strategy. It requires an
 `IndexFlatIP` with valid, unique image/view mappings and finite normalized
 vectors; unsupported indexes require re-encoding rather than approximate
-reconstruction. Imported float32 bytes are checked against the stored Vec1
+reconstruction. The migration-specific loader must validate the model and view
+strategy; a normal search load cannot authorize migration. Imported float32
+bytes are checked against the stored Vec1
 rows. Snapshot paths absent from the metadata database are skipped and
 counted. Disabled folders are retained so re-enabling them does not require
 re-encoding.
@@ -210,21 +212,39 @@ The experimental migration worker can alternatively stage the authenticated
 snapshot in separate Vec1 tables inside the encrypted database. It commits
 bounded batches, verifies each vector and samples search parity, detects
 concurrent metadata or snapshot changes, and leaves the existing Vec1 and
-FAISS indexes untouched. Cancellation removes the stage; a process interrupted
-between batches can restart by replacing its incomplete stage. The worker
-closes and reopens the encrypted database and verifies the staged rows again.
-It reports image contents as unverified because legacy snapshots do not contain
-the media stamps needed to establish freshness.
-On Windows, a focused test also takes an online SQLCipher backup containing a
-completed stage, reopens it, verifies the staged vectors against the source,
-and rejects an incorrect password.
+FAISS indexes untouched. A new stage is built separately and replaces the last
+completed stage in one transaction only after verification. Cancellation
+removes the new build; a process interrupted between batches can restart by
+replacing its incomplete build without deleting the last completed stage.
+The worker verifies a temporary encrypted online backup of the new build
+against the source before replacing that stage. It then closes and reopens the
+encrypted database and verifies the staged rows again before reporting
+completion. A failed backup leaves the previous completed stage intact. The
+temporary backup is deleted on normal
+completion, cancellation, or error; an abrupt process exit can leave an
+encrypted temporary copy behind. The worker reports image contents as
+unverified because legacy snapshots do not contain the media stamps needed to
+establish freshness. Staging stores a fingerprint of the authenticated snapshot
+and each image's current indexed modification time and size. Reverification
+rejects a different snapshot or changed indexed stamps, including after a
+reopen; these stamps cannot prove that the original legacy embeddings were
+fresh. A separate Windows test rejects an incorrect backup password.
+
+The migration-specific reader authenticates the snapshot before giving FAISS
+access to its index bytes, using a temporary SQLCipher database with the same
+password and bounded encrypted chunks instead of holding a second serialized
+index in memory. It checks disk space and supports cancellation; temporary
+files are removed on normal completion or error, but an abrupt process exit
+may leave an encrypted scratch file. FAISS still holds the full index in
+memory, and the mapping is also loaded in memory, so total migration memory is
+not bounded independently of collection size.
 
 This is not yet a complete migration: the worker is not connected to the UI,
-the legacy reader still loads the complete snapshot into memory, and promotion
-and backend activation are not implemented. Unsupported index re-encoding,
-media-content freshness, and enforcement of a backup/restore promotion gate also
-remain unimplemented. These limitations must be addressed before exposing
-migration or activating Vec1.
+and promotion and backend activation are not implemented. Unsupported index re-encoding,
+media-content freshness, durable metadata-generation identity at promotion,
+and enforcement of backup/restore verification at promotion also remain
+unimplemented. These limitations must be addressed before exposing migration
+or activating Vec1.
 
 ## Hybrid search integration
 

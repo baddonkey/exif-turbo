@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import numpy as np
 import pytest
+import sqlcipher3
 
 from exif_turbo.data.ai_vector_repository import (
     AiVectorIndexError,
@@ -13,7 +15,11 @@ from exif_turbo.data.ai_vector_repository import (
     _is_inside,
 )
 from exif_turbo.models.ai_model_profile import AiModelProfile, DEFAULT_AI_MODEL_PROFILE
-from exif_turbo.data.ai_vector_storage import AiVectorAuthenticationError, AiVectorStorage
+from exif_turbo.data.ai_vector_storage import (
+    AiVectorAuthenticationError,
+    AiVectorMigrationCanceled,
+    AiVectorStorage,
+)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -113,6 +119,88 @@ def test_ai_vector_storage_wrong_password_rejects_snapshot(tmp_path: Path) -> No
     # Act / Assert
     with pytest.raises(AiVectorAuthenticationError):
         wrong.load()
+
+
+def test_ai_vector_storage_migration_chunks_are_encrypted_and_removed(tmp_path: Path) -> None:
+    storage = AiVectorStorage(tmp_path / "ai_index.faiss", "test-password")
+    index = b"vector-secret-marker" * 150000
+    mapping = b"/private-photo-marker"
+    metadata = b"metadata"
+    storage.save(index, mapping, metadata)
+
+    with storage.authenticated_index_chunks() as (actual_map, actual_metadata, chunks, digest):
+        scratch = list(tmp_path.glob(".ai_index.faiss.enc.migration-*"))
+        assert scratch
+        scratch_db = next(path for path in scratch if path.suffix == ".db")
+        assert not scratch_db.read_bytes().startswith(b"SQLite format 3\x00")
+        wrong = sqlcipher3.connect(str(scratch_db))
+        try:
+            with pytest.raises(sqlcipher3.DatabaseError):
+                wrong.execute("SELECT count(*) FROM chunks").fetchone()
+        finally:
+            wrong.close()
+        assert all(index[:128] not in path.read_bytes() for path in scratch if path.is_file())
+        assert all(mapping not in path.read_bytes() for path in scratch if path.is_file())
+        pieces = list(chunks)
+
+    import hashlib
+    assert actual_map == mapping
+    assert actual_metadata == metadata
+    assert b"".join(pieces) == index
+    assert max(map(len, pieces)) <= storage._CHUNK_SIZE
+    assert digest == hashlib.sha256(index).hexdigest()
+    assert not list(tmp_path.glob(".ai_index.faiss.enc.migration-*"))
+
+
+def test_ai_vector_storage_migration_rejects_tampering_before_exposing_chunks(
+    tmp_path: Path,
+) -> None:
+    storage = AiVectorStorage(tmp_path / "ai_index.faiss", "test-password")
+    storage.save(b"vectors" * 400000, b"paths", b"metadata")
+    ciphertext = bytearray(storage.path.read_bytes())
+    ciphertext[-1] ^= 1
+    storage.path.write_bytes(ciphertext)
+
+    with pytest.raises(AiVectorAuthenticationError):
+        with storage.authenticated_index_chunks():
+            pytest.fail("Unauthenticated index chunks were exposed")
+
+    assert not list(tmp_path.glob(".ai_index.faiss.enc.migration-*"))
+
+
+def test_ai_vector_storage_migration_cancel_removes_encrypted_scratch(tmp_path: Path) -> None:
+    storage = AiVectorStorage(tmp_path / "ai_index.faiss", "test-password")
+    storage.save(b"vectors" * 400000, b"paths", b"metadata")
+    checks: list[int] = []
+
+    def cancel_during_read() -> bool:
+        checks.append(1)
+        return len(checks) > 2
+
+    with pytest.raises(AiVectorMigrationCanceled):
+        with storage.authenticated_index_chunks(cancel_check=cancel_during_read):
+            pytest.fail("Canceled snapshot was exposed")
+
+    assert not list(tmp_path.glob(".ai_index.faiss.enc.migration-*"))
+
+
+def test_ai_vector_storage_migration_low_disk_space_preserves_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage = AiVectorStorage(tmp_path / "ai_index.faiss", "test-password")
+    storage.save(b"vectors", b"paths", b"metadata")
+    original = storage.path.read_bytes()
+    disk = shutil.disk_usage(tmp_path)
+    monkeypatch.setattr(
+        "exif_turbo.data.ai_vector_storage.shutil.disk_usage", lambda _: disk._replace(free=0)
+    )
+
+    with pytest.raises(OSError, match="Insufficient disk space"):
+        with storage.authenticated_index_chunks():
+            pytest.fail("Low-disk migration was allowed")
+
+    assert storage.path.read_bytes() == original
+    assert not list(tmp_path.glob(".ai_index.faiss.enc.migration-*"))
 
 
 def test_ai_vector_storage_interrupted_save_preserves_generation(
@@ -224,6 +312,67 @@ def test_ai_vector_repository_modified_snapshot_rejected_for_migration(
     with pytest.raises(AiVectorIndexError, match="authenticated AI snapshot"):
         list(repo.iter_migration_vectors())
     repo.close()
+
+
+def test_ai_vector_repository_migration_load_streams_multichunk_faiss_index(
+    tmp_path: Path,
+) -> None:
+    repo = _make_repo(tmp_path, "test-password")
+    vector = _random_vec()
+    paths = [f"/private/{index}.jpg" for index in range(1200)]
+    repo.add_images(np.tile(vector, (len(paths), 1)), paths)
+    repo.save()
+    repo.close()
+
+    repo.load_migration_source()
+
+    assert repo.get_vector_count() == len(paths)
+    np.testing.assert_array_equal(repo.get_vector(paths[-1]), vector)
+    assert not list(tmp_path.glob(".ai_index.faiss.enc.migration-*"))
+    repo.close()
+
+
+def test_ai_vector_repository_migration_cancel_during_faiss_read_cleans_scratch(
+    tmp_path: Path,
+) -> None:
+    repo = _make_repo(tmp_path, "test-password")
+    vector = _random_vec()
+    paths = [f"/private/{index}.jpg" for index in range(1200)]
+    repo.add_images(np.tile(vector, (len(paths), 1)), paths)
+    repo.save()
+    repo.close()
+    checks: list[int] = []
+
+    def cancel_during_index_read() -> bool:
+        checks.append(1)
+        return len(checks) > 6
+
+    with pytest.raises(AiVectorMigrationCanceled):
+        repo.load_migration_source(cancel_check=cancel_during_index_read)
+
+    assert not list(tmp_path.glob(".ai_index.faiss.enc.migration-*"))
+    repo.close()
+
+
+def test_ai_vector_repository_normal_load_does_not_authorize_unvalidated_migration(
+    tmp_path: Path,
+) -> None:
+    repo = _make_repo(tmp_path, "test-password")
+    repo.add_images(_random_vec(), ["/private/a.jpg"])
+    repo.save()
+    repo.close()
+    storage = AiVectorStorage(tmp_path / "ai_index.faiss", "test-password")
+    index, mapping, raw_metadata = storage.load()
+    metadata = json.loads(raw_metadata)
+    metadata["view_strategy"] = "incompatible"
+    storage.save(index, mapping, json.dumps(metadata).encode())
+
+    repo.load()
+    with pytest.raises(AiVectorIndexError, match="authenticated AI snapshot"):
+        list(repo.iter_migration_vectors())
+    repo.close()
+    with pytest.raises(AiVectorIndexError, match="view strategy"):
+        repo.load_migration_source()
 
 
 def test_ai_vector_repository_migration_load_retains_legacy_files(
