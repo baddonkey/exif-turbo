@@ -29,6 +29,13 @@ class SearchQueryParseError(ValueError):
     """Raised when a structured search expression is malformed."""
 
 
+@dataclass(frozen=True)
+class HybridSearchQuery:
+    metadata_query: str
+    semantic_text: str
+    explicit_and: bool
+
+
 _OPERATOR_PATTERN = re.compile(
     r"(?:embedded-tags|custom-tags|description|text-not|text|tags):=", re.IGNORECASE
 )
@@ -40,6 +47,60 @@ _OPERATOR_KINDS: dict[str, SearchFilterKind] = {
     "text": "text",
     "tags": "tags",
 }
+
+
+def parse_hybrid_search_query(query: str) -> HybridSearchQuery:
+    """Split one positive AI clause from metadata, or parse discovery text."""
+    clause: tuple[int, int, str] | None = None
+    position = 0
+    depth = 0
+    while position < len(query):
+        character = query[position]
+        if character == '"':
+            position = _quoted_end(query, position)
+            continue
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth = max(0, depth - 1)
+        if (
+            query[position:position + 4].lower() == "ai:="
+            and (position == 0 or query[position - 1].isspace() or query[position - 1] == "(")
+        ):
+            if clause is not None:
+                raise SearchQueryParseError("Hybrid search supports only one AI clause.")
+            if depth:
+                raise SearchQueryParseError("An AI clause cannot be inside a group.")
+            value_start = position + 4
+            while value_start < len(query) and query[value_start].isspace():
+                value_start += 1
+            if value_start >= len(query) or query[value_start] != '"':
+                raise SearchQueryParseError('ai:= requires a quoted value.')
+            value, end = _read_quoted_value(query, value_start)
+            if not value.strip():
+                raise SearchQueryParseError("ai:= requires a non-empty value.")
+            if end < len(query) and not query[end].isspace():
+                raise SearchQueryParseError("An AI clause must be separated by whitespace.")
+            clause = position, end, value.strip()
+            position = end
+            continue
+        position += 1
+
+    if clause is None:
+        parsed = parse_search_query(query)
+        return HybridSearchQuery(query.strip(), parsed.text, False)
+
+    start, end, semantic_text = clause
+    before, after = query[:start], query[end:]
+    if re.search(r"\b(?:OR|NOT)\s*$", before, re.IGNORECASE) or re.match(
+        r"\s*(?:OR|NOT)\b", after, re.IGNORECASE
+    ):
+        raise SearchQueryParseError("An AI clause supports AND, not OR or NOT.")
+    before = re.sub(r"\bAND\s*$", "", before, flags=re.IGNORECASE)
+    after = re.sub(r"^\s*AND\b", "", after, flags=re.IGNORECASE)
+    metadata_query = " ".join(part.strip() for part in (before, after) if part.strip())
+    parse_search_query(metadata_query)
+    return HybridSearchQuery(metadata_query, semantic_text, True)
 
 
 def parse_search_query(query: str) -> ParsedSearchQuery:

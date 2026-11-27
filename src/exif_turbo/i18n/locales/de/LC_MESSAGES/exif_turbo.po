@@ -4006,3 +4006,55 @@ msgstr "← Ordner auswählen, um Bilder zu durchsuchen"
 #~ "• Quote multi-word phrases\n"
 #~ "• In ExifTool keys (e.g. GPS:GPSLatitude) the colon acts as a separator"
 #~ msgstr ""
+
+#: Hybrid search
+msgid "Hybrid"
+msgstr "Hybrid"
+
+#: Hybrid search
+msgid "Search metadata and images…"
+msgstr "Metadaten und Bilder durchsuchen…"
+
+#: Hybrid search
+msgid "metadata AND visual match"
+msgstr "Metadaten UND visuelle Übereinstimmung"
+
+#: Hybrid search
+msgid "Relevance"
+msgstr "Relevanz"
+
+#: Hybrid search
+msgid "%1 of %2 (AI results limited)"
+msgstr "%1 von %2 (KI-Ergebnisse begrenzt)"
+
+#: Hybrid search
+msgid "Hybrid search view"
+msgstr "Hybride Suchansicht"
+
+#: Hybrid search
+msgid "Save view"
+msgstr "Ansicht speichern"
+
+#: Hybrid search
+msgid "Restore view"
+msgstr "Ansicht wiederherstellen"
+
+#: Hybrid search
+msgid "Run a Hybrid search before saving its view."
+msgstr "Führen Sie vor dem Speichern der Ansicht eine hybride Suche aus."
+
+#: Hybrid search
+msgid "Hybrid search view saved."
+msgstr "Hybride Suchansicht gespeichert."
+
+#: Hybrid search
+msgid "Enable AI search before restoring this Hybrid view."
+msgstr "Aktivieren Sie die KI-Suche, bevor Sie diese hybride Ansicht wiederherstellen."
+
+#: Hybrid search
+msgid "Hybrid search view restored."
+msgstr "Hybride Suchansicht wiederhergestellt."
+
+#: Hybrid search
+msgid "Unknown search sort order."
+msgstr "Unbekannte Sortierreihenfolge."

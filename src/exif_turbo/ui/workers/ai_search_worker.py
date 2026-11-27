@@ -7,6 +7,7 @@ from PySide6.QtCore import QThread, Signal
 
 from ...config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
 from ...data.ai_search_session import AiSearchSession
+from ...data.ai_vector_backend import AiVectorBackend
 from ...data.ai_vector_repository import AiVectorRepository
 from ...data.image_index_repository import ImageIndexRepository
 from ...indexing.ai_indexer_service import AiIndexerService
@@ -94,7 +95,7 @@ class AiSearchWorker(QThread):
                 self._session.close()
             self._key = ""
 
-    def _search(self, vector_repo: AiVectorRepository) -> None:
+    def _search(self, vector_repo: AiVectorBackend) -> None:
         image_repo = ImageIndexRepository(self._db_path, key=self._key)
         try:
             # Facet scope excludes dates so selecting a year keeps the timeline.

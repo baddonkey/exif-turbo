@@ -5,9 +5,10 @@ import math
 import os
 import re
 import unicodedata
+from collections import Counter
 from os.path import commonpath
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Mapping, Tuple
 
 import sqlcipher3
 
@@ -17,6 +18,7 @@ from ..metadata_values import (
     metadata_text_without_embedded_keywords,
 )
 from ..models.image_sidecar import ImageSidecar
+from ..models.hybrid_search_state import HybridSearchState
 from ..search_query import ParsedSearchQuery, StructuredSearchFilter, parse_search_query
 from ._connection import open_encrypted_connection, rekey_connection
 from .password_policy import validate_new_database_password
@@ -134,6 +136,7 @@ class ImageIndexRepository:
                 normalized_name TEXT NOT NULL UNIQUE,
                 apply_filter_json TEXT,
                 apply_filter_version INTEGER,
+                saved_search_json TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
@@ -236,6 +239,12 @@ class ImageIndexRepository:
             """
         )
         self._init_description_search_index()
+        set_columns = {
+            row[1] for row in self.conn.execute("PRAGMA table_info(image_sets)").fetchall()
+        }
+        if "saved_search_json" not in set_columns:
+            self.conn.execute("ALTER TABLE image_sets ADD COLUMN saved_search_json TEXT")
+            self.conn.commit()
         sidecar_state_columns = {
             row[1]
             for row in self.conn.execute(
@@ -843,7 +852,7 @@ class ImageIndexRepository:
 
     def list_image_sets(self) -> list[dict[str, Any]]:
         rows = self.conn.execute(
-            "SELECT s.id, s.name, s.apply_filter_json, s.apply_filter_version, "
+            "SELECT s.id, s.name, s.apply_filter_json, s.apply_filter_version, s.saved_search_json, "
             "COUNT(m.image_id) "
             "FROM image_sets s LEFT JOIN image_set_members m ON m.set_id = s.id "
             "GROUP BY s.id ORDER BY s.normalized_name, s.id"
@@ -854,10 +863,38 @@ class ImageIndexRepository:
                 "name": str(name),
                 "apply_filter": json.loads(filter_json) if filter_json is not None else None,
                 "apply_filter_version": filter_version,
+                "saved_search": json.loads(saved_search) if saved_search is not None else None,
                 "member_count": int(member_count),
             }
-            for set_id, name, filter_json, filter_version, member_count in rows
+            for set_id, name, filter_json, filter_version, saved_search, member_count in rows
         ]
+
+    def set_image_set_search_state(self, set_id: int, state: HybridSearchState) -> None:
+        validated = HybridSearchState.from_dict(state.to_dict())
+        with self.conn:
+            cursor = self.conn.execute(
+                "UPDATE image_sets SET saved_search_json = ?, updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = ?",
+                (json.dumps(validated.to_dict(), ensure_ascii=False, sort_keys=True), set_id),
+            )
+            if cursor.rowcount == 0:
+                raise KeyError(f"Image set {set_id} does not exist.")
+
+    def get_image_set_search_state(self, set_id: int) -> HybridSearchState:
+        row = self.conn.execute(
+            "SELECT saved_search_json FROM image_sets WHERE id = ?", (set_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Image set {set_id} does not exist.")
+        if row[0] is None:
+            raise ValueError("This image set has no saved search.")
+        try:
+            data = json.loads(row[0])
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("The saved search is invalid JSON.") from exc
+        if not isinstance(data, dict):
+            raise ValueError("The saved search must be an object.")
+        return HybridSearchState.from_dict(data)
 
     def image_set_contains_path(self, set_id: int, path: str) -> bool:
         return bool(self.conn.execute(
@@ -1932,6 +1969,70 @@ class ImageIndexRepository:
             cur = self.conn.execute(sql, args)
         return [row[0] for row in cur.fetchall()]
 
+    def iter_hybrid_candidates(
+        self,
+        query: str,
+        *,
+        scope_only: bool = False,
+        sort_by: str = "",
+        ext_filter: str = "",
+        path_filter: List[str] | None = None,
+        restrict_to_enabled_folders: bool = False,
+        marked_only: bool = False,
+        date_from: int | None = None,
+        date_to: int | None = None,
+        image_set_id: int | None = None,
+    ) -> Iterator[tuple[int, str]]:
+        """Yield lightweight, deterministically ordered Hybrid candidate references."""
+        fts_query, structured_clause, structured_args = self._compile_search_query(query)
+        ext_clause, ext_args = self._build_ext_clause(ext_filter)
+        path_clause, path_args = self._build_path_clause(path_filter)
+        date_clause, date_args = self._build_date_clause(date_from, date_to)
+        set_clause, set_args = self._build_image_set_clause(image_set_id)
+        marks_clause = "AND images.marked = 1" if marked_only else ""
+        enabled_clause = (
+            self._ENABLED_CLAUSE
+            if restrict_to_enabled_folders and self._has_indexed_folders_table()
+            else ""
+        )
+        where = (
+            f"{ext_clause} {path_clause} {date_clause} {marks_clause} "
+            f"{enabled_clause} {set_clause} {structured_clause}"
+        )
+        args = ext_args + path_args + date_args + set_args + structured_args
+        if fts_query and not scope_only:
+            order = self._resolve_sort(sort_by) if sort_by else "bm25(images_fts)"
+            sql = (
+                "SELECT images.id, images.path FROM images_fts "
+                "JOIN images ON images_fts.rowid = images.id "
+                f"WHERE images_fts MATCH ? {where} ORDER BY {order}, images.id ASC"
+            )
+            cursor = self._execute_fts_query(sql, (fts_query,) + args, fts_query)
+        else:
+            order = self._resolve_sort(sort_by) if sort_by else "images.id ASC"
+            sql = (
+                f"SELECT images.id, images.path FROM images WHERE 1=1 {where} "
+                f"ORDER BY {order}, images.id ASC"
+            )
+            cursor = self.conn.execute(sql, args)
+        for image_id, path in cursor:
+            yield int(image_id), str(path)
+
+    def get_images_by_ids(
+        self, image_ids: List[int]
+    ) -> List[Tuple[int, str, str, str, int, float]]:
+        """Hydrate a bounded page of image IDs in the requested order."""
+        if not image_ids:
+            return []
+        placeholders = ",".join("?" * len(image_ids))
+        rows = self.conn.execute(
+            "SELECT id, path, filename, metadata_json, size, mtime FROM images "
+            f"WHERE id IN ({placeholders})",
+            tuple(image_ids),
+        )
+        by_id = {row[0]: row for row in rows}
+        return [by_id[image_id] for image_id in image_ids if image_id in by_id]
+
     def _build_ext_clause(self, ext_filter: str) -> tuple[str, tuple]:
         """Build a SQL clause and args tuple for extension filtering."""
         if not ext_filter:
@@ -2091,30 +2192,38 @@ class ImageIndexRepository:
 
     def get_format_counts_by_paths(self, paths: List[str]) -> List[Tuple[str, int]]:
         """Return extension counts for the provided subset of image *paths*."""
-        if not paths:
-            return []
-        placeholders = ",".join("?" * len(paths))
-        cur = self.conn.execute(
-            f"SELECT ext, COUNT(*) AS cnt FROM images WHERE path IN ({placeholders}) AND ext <> '' "
-            "GROUP BY ext ORDER BY cnt DESC, ext ASC",
-            tuple(paths),
-        )
-        return [(str(row[0]), int(row[1])) for row in cur.fetchall()]
+        counts: Counter[str] = Counter()
+        for batch in self._path_batches(paths):
+            placeholders = ",".join("?" * len(batch))
+            cur = self.conn.execute(
+                f"SELECT ext, COUNT(*) FROM images WHERE path IN ({placeholders}) AND ext <> '' "
+                "GROUP BY ext",
+                batch,
+            )
+            for ext, count in cur:
+                counts[str(ext)] += int(count)
+        return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
 
     def get_year_counts_by_paths(self, paths: List[str]) -> List[Tuple[int, int]]:
         """Return ``[(year, count)]`` for *paths* using non-null ``captured_at``."""
-        if not paths:
-            return []
-        placeholders = ",".join("?" * len(paths))
-        cur = self.conn.execute(
-            "SELECT CAST(strftime('%Y', datetime(captured_at, 'unixepoch')) AS INTEGER) AS yr, "
-            "COUNT(*) AS cnt "
-            "FROM images "
-            f"WHERE path IN ({placeholders}) AND captured_at IS NOT NULL "
-            "GROUP BY yr ORDER BY yr",
-            tuple(paths),
-        )
-        return [(int(row[0]), int(row[1])) for row in cur.fetchall()]
+        counts: Counter[int] = Counter()
+        for batch in self._path_batches(paths):
+            placeholders = ",".join("?" * len(batch))
+            cur = self.conn.execute(
+                "SELECT CAST(strftime('%Y', datetime(captured_at, 'unixepoch')) AS INTEGER) AS yr, "
+                "COUNT(*) FROM images "
+                f"WHERE path IN ({placeholders}) AND captured_at IS NOT NULL GROUP BY yr",
+                batch,
+            )
+            for year, count in cur:
+                counts[int(year)] += int(count)
+        return sorted(counts.items())
+
+    @staticmethod
+    def _path_batches(paths: List[str]) -> Iterator[tuple[str, ...]]:
+        unique_paths = tuple(dict.fromkeys(paths))
+        for start in range(0, len(unique_paths), 500):
+            yield unique_paths[start:start + 500]
 
     def get_folder_tree(self) -> List[Dict[str, Any]]:
         """Return folder nodes for the tree browser, sorted by path.

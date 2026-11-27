@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+from collections.abc import Iterator
 from typing import Dict, List, Set
 
 import numpy as np
@@ -39,6 +40,7 @@ class AiVectorRepository:
         self._storage = AiVectorStorage(index_path, key)
         self._faiss = None
         self._index = None
+        self._authenticated_snapshot = False
         # Maps str(sequential_faiss_id) to an image path and deterministic view.
         self._id_map: Dict[str, dict[str, str]] = {}
         self._path_map: Dict[str, List[int]] = {}
@@ -60,12 +62,22 @@ class AiVectorRepository:
 
     def load(self) -> None:
         """Load existing index + map from disk; create empty ones if absent."""
+        self._load(require_authenticated=False)
+
+    def load_migration_source(self) -> None:
+        """Load an authenticated snapshot without rewriting or deleting it."""
+        self._load(require_authenticated=True)
+
+    def _load(self, *, require_authenticated: bool) -> None:
         import faiss  # noqa: PLC0415
 
+        self._authenticated_snapshot = False
         self._faiss = faiss
         paths = (self._index_path, self._id_map_path, self._metadata_path)
         existing = tuple(path.exists() for path in paths)
         encrypted = self._storage.path.exists()
+        if require_authenticated and not encrypted:
+            raise AiVectorIndexError("An authenticated AI snapshot is required for migration")
         if not encrypted and not any(existing):
             self._index = faiss.IndexFlatIP(self._dimension)
             self._id_map = {}
@@ -97,6 +109,12 @@ class AiVectorRepository:
                     f"index uses model {metadata['model_fingerprint']}, "
                     f"expected {self._profile.identifier}"
                 )
+            if require_authenticated and (
+                metadata["model_name"] != self._profile.model_name
+                or metadata["pretrained"] != self._profile.pretrained
+                or metadata["view_strategy"] != "full-plus-four-corners-v1"
+            ):
+                raise ValueError("AI snapshot model or view strategy does not match")
             if int(metadata["dimension"]) != self._dimension or index.d != self._dimension:
                 raise ValueError(
                     f"expected {self._dimension}-dimensional vectors, found {index.d}"
@@ -129,14 +147,64 @@ class AiVectorRepository:
         self._index = index
         self._id_map = id_map
         self._rebuild_path_map()
-        if self._key and (not encrypted or any(existing)):
+        self._authenticated_snapshot = encrypted
+        if not require_authenticated and self._key and (not encrypted or any(existing)):
             self._storage.migrate(*paths)
+
+    def validate_migration_source(self) -> None:
+        """Reject unauthenticated or unreconstructable migration sources."""
+        if not self._authenticated_snapshot or self._faiss is None or self._index is None:
+            raise AiVectorIndexError("An authenticated AI snapshot must be loaded first")
+        if (
+            type(self._index) is not self._faiss.IndexFlatIP
+            or self._index.metric_type != self._faiss.METRIC_INNER_PRODUCT
+        ):
+            raise AiVectorIndexError("Only exact FAISS IndexFlatIP snapshots can be migrated")
+        if len(self._id_map) != self._index.ntotal or any(
+            str(index) not in self._id_map for index in range(self._index.ntotal)
+        ):
+            raise AiVectorIndexError("The AI snapshot has invalid vector identifiers")
+
+    def iter_migration_vectors(self) -> Iterator[tuple[str, str, np.ndarray]]:
+        """Yield losslessly reconstructed rows from an authenticated flat index."""
+        self.validate_migration_source()
+        assert self._index is not None
+        seen: set[tuple[str, str]] = set()
+        for index in range(self._index.ntotal):
+            row = self._id_map[str(index)]
+            identity = (row["path"], row["view_id"])
+            if not identity[0] or not identity[1].strip() or identity in seen:
+                raise AiVectorIndexError("The AI snapshot has invalid or duplicate image views")
+            seen.add(identity)
+            vector = np.empty(self._dimension, dtype=np.float32)
+            self._index.reconstruct(index, vector)
+            if not np.isfinite(vector).all() or not np.any(vector):
+                raise AiVectorIndexError("The AI snapshot contains an invalid vector")
+            norm = float(np.linalg.norm(vector.astype(np.float64)))
+            if abs(norm - 1.0) > 1e-5:
+                raise AiVectorIndexError("The AI snapshot contains a non-normalized vector")
+            yield identity[0], identity[1], vector
 
     def reset(self) -> None:
         """Replace the loaded index with an empty index for the active model."""
         if self._faiss is None:
             raise RuntimeError("load() must be called before reset()")
+        self._authenticated_snapshot = False
         self._index = self._faiss.IndexFlatIP(self._dimension)
+        self._id_map = {}
+        self._path_map = {}
+
+    def rebuild(self) -> None:
+        """Reconstruct the in-memory FAISS index from its persisted vectors."""
+        if self._index is None:
+            raise RuntimeError("load() must be called before rebuild()")
+        self._replace_with_ids(list(range(self._index.ntotal)))
+
+    def close(self) -> None:
+        """Release the in-memory index and its path mappings."""
+        self._faiss = None
+        self._index = None
+        self._authenticated_snapshot = False
         self._id_map = {}
         self._path_map = {}
 
@@ -215,6 +283,11 @@ class AiVectorRepository:
         """Return the set of image paths that already have a vector."""
         return set(self._path_map)
 
+    def get_vector_count(self) -> int:
+        if self._index is None:
+            raise RuntimeError("load() must be called before get_vector_count()")
+        return int(self._index.ntotal)
+
     def get_vector(self, image_path: str) -> "np.ndarray | None":
         """Return the full-view vector for *image_path*, or its first view."""
         if self._index is None:
@@ -292,11 +365,84 @@ class AiVectorRepository:
                 f"embeddings must have shape ({n}, {self._dimension}), got {vecs.shape}"
             )
         start_id = self._index.ntotal
+        self._authenticated_snapshot = False
         self._index.add(vecs)
         for i, (path, view_id) in enumerate(rows):
             row_id = start_id + i
             self._id_map[str(row_id)] = {"path": path, "view_id": view_id}
             self._path_map.setdefault(path, []).append(row_id)
+
+    def upsert_images(
+        self,
+        embeddings: "np.ndarray",
+        paths: List[str],
+        *,
+        view_ids: List[str] | None = None,
+    ) -> None:
+        """Atomically replace all vectors for the images represented in a batch."""
+        if not paths:
+            return
+        if self._faiss is None or self._index is None:
+            raise RuntimeError("load() must be called before upsert_images()")
+        count = len(paths)
+        row_view_ids = view_ids if view_ids is not None else ["full"] * count
+        if len(row_view_ids) != count:
+            raise ValueError("view_ids and paths must have the same length")
+        if any(not view_id.strip() for view_id in row_view_ids):
+            raise ValueError("view IDs must not be empty")
+        rows = list(zip(paths, row_view_ids))
+        if len(set(rows)) != len(rows):
+            raise ValueError("path and view rows must be unique within a batch")
+        vectors = np.asarray(embeddings, dtype=np.float32)
+        if vectors.ndim == 1:
+            vectors = vectors.reshape(1, -1)
+        if vectors.shape != (count, self._dimension):
+            raise ValueError(
+                f"embeddings must have shape ({count}, {self._dimension}), "
+                f"got {vectors.shape}"
+            )
+
+        replaced_paths = set(paths)
+        keep_ids = [
+            int(row_id)
+            for row_id, row in self._id_map.items()
+            if row["path"] not in replaced_paths
+        ]
+        retained = np.zeros((len(keep_ids), self._dimension), dtype=np.float32)
+        retained_map: Dict[str, dict[str, str]] = {}
+        for new_id, old_id in enumerate(keep_ids):
+            self._index.reconstruct(old_id, retained[new_id])
+            retained_map[str(new_id)] = self._id_map[str(old_id)]
+
+        combined = np.concatenate((retained, vectors), axis=0)
+        new_index = self._faiss.IndexFlatIP(self._dimension)
+        new_index.add(combined)
+        new_map = retained_map
+        first_new_id = len(keep_ids)
+        new_map.update(
+            {
+                str(first_new_id + row): {"path": path, "view_id": view_id}
+                for row, (path, view_id) in enumerate(rows)
+            }
+        )
+        self._authenticated_snapshot = False
+        self._index = new_index
+        self._id_map = new_map
+        self._rebuild_path_map()
+
+    def delete_images(self, image_paths: Set[str]) -> None:
+        """Delete every view vector for the specified image paths."""
+        if not image_paths:
+            return
+        if self._faiss is None or self._index is None:
+            raise RuntimeError("load() must be called before delete_images()")
+        keep_ids = [
+            int(row_id)
+            for row_id, row in self._id_map.items()
+            if row["path"] not in image_paths
+        ]
+        if len(keep_ids) != self._index.ntotal:
+            self._replace_with_ids(keep_ids)
 
     def remove_folder(self, folder_path: str) -> None:
         """Remove every vector whose path is inside *folder_path*.
@@ -316,6 +462,13 @@ class AiVectorRepository:
         if len(keep_ids) == self._index.ntotal:
             return  # nothing to remove
 
+        self._replace_with_ids(keep_ids)
+
+    def _replace_with_ids(self, keep_ids: List[int]) -> None:
+        if self._faiss is None or self._index is None:
+            raise RuntimeError("load() must be called before rebuilding the index")
+
+        self._authenticated_snapshot = False
         if not keep_ids:
             self._index = self._faiss.IndexFlatIP(self._dimension)
             self._id_map = {}

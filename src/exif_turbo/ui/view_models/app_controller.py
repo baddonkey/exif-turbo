@@ -36,6 +36,7 @@ from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication, QImage
 
 from ...config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
 from ...data.ai_search_session import AiSearchSession
+from ...data.hybrid_search import HybridSearchResults
 from ...data.ai_vector_storage import AiVectorStorage
 from .search_coordinator import SearchCoordinator
 from ...data.image_index_repository import (
@@ -53,6 +54,7 @@ from ...indexing.ai_indexer_service import (
 )
 from ...indexing.image_utils import RAW_EXTENSIONS
 from ...models.indexed_folder import IndexedFolder
+from ...models.hybrid_search_state import HybridSearchState
 from ...models.derivative_export_flavour import DerivativeExportFlavour
 from ...models.search_result import SearchResult
 from ...tagging.derivative_export_service import (
@@ -78,6 +80,8 @@ from ..models.search_list_model import SearchListModel
 from ..models.settings_model import SettingsModel
 from ..workers.ai_scan_worker import AiScanWorker
 from ..workers.ai_search_worker import AiSearchWorker
+from ..workers.hybrid_page_worker import HybridPageWorker
+from ..workers.hybrid_search_worker import HybridSearchWorker
 from ..workers.bulk_op_worker import BulkOpWorker
 from ..workers.copy_tags_worker import CopyTagsWorker
 from ..workers.derivative_export_worker import DerivativeExportWorker
@@ -119,6 +123,9 @@ class AppController(QObject):
     isBuildingPreviewsChanged = Signal()
     isAiScanningChanged = Signal()
     isAiSearchModeChanged = Signal()
+    isHybridSearchModeChanged = Signal()
+    hybridSortByChanged = Signal()
+    hybridSearchStateChanged = Signal()
     aiEnabledChanged = Signal()
     aiScanFolderIdChanged = Signal()
     aiScanFolderNameChanged = Signal()
@@ -302,6 +309,15 @@ class AppController(QObject):
         self._ai_scan_worker: AiScanWorker | None = None
         self._is_ai_scanning: bool = False
         self._is_ai_search_mode: bool = False
+        self._is_hybrid_search_mode: bool = False
+        self._hybrid_sort_by = ""
+        self._hybrid_results: HybridSearchResults | None = None
+        self._hybrid_search_worker: HybridSearchWorker | None = None
+        self._hybrid_data_version = 0
+        self._hybrid_index_generation: tuple[tuple[int, int, int, int] | None, ...] | None = None
+        self._hybrid_invalidation_timer = QTimer(self)
+        self._hybrid_invalidation_timer.setInterval(1000)
+        self._hybrid_invalidation_timer.timeout.connect(self._check_hybrid_generation)
         self._ai_enabled: bool = self._settings.ai_enabled if self._settings else False
         self._ai_search_worker: AiSearchWorker | None = None
         self._ai_search_session = AiSearchSession(
@@ -345,7 +361,7 @@ class AppController(QObject):
         self._pending_year_counts_serial: int = 0
         self._is_loading_year_counts: bool = False
         self._year_counts_loading_serial: int = 0
-        self._load_more_worker: SearchPageWorker | None = None
+        self._load_more_worker: SearchPageWorker | HybridPageWorker | None = None
         self._page_load_mode = "append"
         self._search_coordinator = SearchCoordinator()
         self._date_from: int | None = None
@@ -576,6 +592,26 @@ class AppController(QObject):
     def isAiSearchMode(self) -> bool:
         return self._is_ai_search_mode
 
+    @Property(bool, notify=isHybridSearchModeChanged)
+    def isHybridSearchMode(self) -> bool:
+        return self._is_hybrid_search_mode
+
+    @Property(str, notify=hybridSortByChanged)
+    def hybridSortBy(self) -> str:
+        return self._hybrid_sort_by
+
+    @Property(str, notify=hybridSearchStateChanged)
+    def hybridQuery(self) -> str:
+        return self._query_text
+
+    @Property(str, notify=hybridSearchStateChanged)
+    def hybridPrecision(self) -> str:
+        return self._last_ai_precision
+
+    @Property(int, notify=totalResultsChanged)
+    def hybridTotalMatched(self) -> int:
+        return self._hybrid_results.total_count if self._hybrid_results is not None else 0
+
     @Property(bool, notify=aiEnabledChanged)
     def aiEnabled(self) -> bool:
         return self._ai_enabled
@@ -593,6 +629,9 @@ class AppController(QObject):
         if not value and self._is_ai_search_mode:
             self._is_ai_search_mode = False
             self.isAiSearchModeChanged.emit()
+        if not value and self._is_hybrid_search_mode:
+            self.setHybridSearchMode(False)
+            self._run_search()
         self.aiEnabledChanged.emit()
 
     # ── Tagging ───────────────────────────────────────────────────────────────
@@ -1239,6 +1278,12 @@ class AppController(QObject):
             restrict_to_enabled_folders=(self._folder_repo is not None),
             marked_only=True,
         )
+        if self._is_hybrid_search_mode:
+            self._checked_in_results_count = sum(
+                self._search_model.is_path_checked(match.path)
+                for match in (self._hybrid_results.matches if self._hybrid_results else ())
+            )
+            return
         path_filter = self._current_path_filter()
         self._checked_in_results_count = self._repo.count_images(
             self._query_text, ext_filter=self._ext_filter,
@@ -1343,6 +1388,8 @@ class AppController(QObject):
             self._repo.mark_image(path, is_checked_now)
         self._recompute_checked_in_results()
         self.checkedCountChanged.emit()
+        if self._is_hybrid_search_mode and self._checked_only_filter_active:
+            self._run_search()
 
     @Slot(int)
     def setActionImageSet(self, set_id: int) -> None:
@@ -1440,8 +1487,9 @@ class AppController(QObject):
             _("Selecting all matching images\u2026"),
             mark_value=True,
             image_paths=(
-                [result.path for result in self._ai_result_cache]
-                if self._is_ai_search_mode and self._action_image_set_id is None
+                self._reference_result_paths()
+                if (self._is_ai_search_mode or self._is_hybrid_search_mode)
+                and self._action_image_set_id is None
                 else None
             ),
         )
@@ -1550,6 +1598,11 @@ class AppController(QObject):
         if self._is_busy or self._action_image_set_id == 0:
             return
         set_scoped = self._action_image_set_id is not None
+        if (
+            self._is_hybrid_search_mode and not set_scoped
+            and operation in {"select_all", "deselect_all", "invert", "select_missing_thumbs"}
+        ):
+            image_paths = self._reference_result_paths()
         self._bulk_worker = BulkOpWorker(
             self._db_path,
             self._key,
@@ -1653,6 +1706,11 @@ class AppController(QObject):
                         count=worker.result_export_count, name=fp.name
                     )
                 )
+        if self._is_hybrid_search_mode and worker._operation in {
+            "select_all", "deselect_all", "invert", "select_missing_thumbs"
+        }:
+            self._run_search()
+
     def _on_bulk_failed(self, msg: str) -> None:
         self._is_busy = False
         self._bulk_worker = None
@@ -2196,6 +2254,23 @@ class AppController(QObject):
 
     @Slot(str)
     def setSortBy(self, sort: str) -> None:
+        if self._is_hybrid_search_mode:
+            if sort and sort not in ImageIndexRepository._SORT_MAP:
+                self._set_search_error(_("Unknown search sort order."))
+                return
+            if self._hybrid_sort_by != sort:
+                self._hybrid_sort_by = sort
+                self._current_result_row = 0
+                self.hybridSortByChanged.emit()
+                cached = (
+                    self._hybrid_results
+                    if self._hybrid_results is not None and self._hybrid_generation_is_current()
+                    else None
+                )
+                self._start_hybrid_search_worker(
+                    self._query_text, self._last_ai_precision, cached_results=cached
+                )
+            return
         if self._sort_by == sort:
             return
         self._sort_by = sort
@@ -2248,6 +2323,7 @@ class AppController(QObject):
             self._set_status(_("This image is no longer in the selected set."))
             return False
 
+        self.setHybridSearchMode(False)
         self.setAiSearchMode(False)
         self._last_ai_query = ""
         self._query_text = ""
@@ -2351,6 +2427,11 @@ class AppController(QObject):
         """
         return self._is_ai_search_mode and not self._ai_search_is_unfiltered_empty()
 
+    def _reference_result_paths(self) -> list[str]:
+        if self._is_hybrid_search_mode:
+            return [match.path for match in self._hybrid_results.matches] if self._hybrid_results else []
+        return [result.path for result in self._ai_result_cache]
+
     def _run_empty_ai_fallback_search(self) -> None:
         """Show all in-scope images via the normal paginated search pipeline.
 
@@ -2451,6 +2532,8 @@ class AppController(QObject):
             "date_to": self._date_to,
             "checked_only_filter": self._checked_only_filter_active,
             "was_ai_search_mode": self._is_ai_search_mode,
+            "was_hybrid_search_mode": self._is_hybrid_search_mode,
+            "hybrid_results": self._hybrid_results,
             "current_image_id": self._search_model.get_image_id(self._current_result_row) or 0,
             "ai_rows": list(self._ai_result_cache) if self._results_use_ai_pipeline() else None,
             "ai_facet_paths": list(self._ai_facet_paths) if self._is_ai_search_mode else None,
@@ -2458,6 +2541,8 @@ class AppController(QObject):
             "ai_loaded_results": self._loaded_results if self._is_ai_search_mode else 0,
         }
         self.searchStateSnapshotChanged.emit()
+        if self._is_hybrid_search_mode:
+            self.setHybridSearchMode(False)
         if self._is_ai_search_mode:
             self._is_ai_search_mode = False
             self.isAiSearchModeChanged.emit()
@@ -2474,10 +2559,10 @@ class AppController(QObject):
         if self._date_from is not None or self._date_to is not None:
             self._date_from = None
             self._date_to = None
+            self.dateFilterChanged.emit()
         if self._checked_only_filter_active:
             self._checked_only_filter_active = False
             self.checkedOnlyFilterChanged.emit()
-            self.dateFilterChanged.emit()
         # Do not run a search here — the Browse tab triggers its own
         # query when the user picks a folder (browseFolder).
 
@@ -2504,6 +2589,7 @@ class AppController(QObject):
             self._folder_filter = ""
             self.folderFilterChanged.emit()
         restore_ai_search_mode = bool(snapshot.get("was_ai_search_mode", False))
+        restore_hybrid_search_mode = bool(snapshot.get("was_hybrid_search_mode", False))
         if self._is_ai_search_mode != restore_ai_search_mode:
             self._is_ai_search_mode = restore_ai_search_mode
             self.isAiSearchModeChanged.emit()
@@ -2533,7 +2619,11 @@ class AppController(QObject):
         if snapshot.get("checked_only_filter", False) != self._checked_only_filter_active:
             self._checked_only_filter_active = snapshot.get("checked_only_filter", False)
             self.checkedOnlyFilterChanged.emit()
-        if self._is_ai_search_mode and snapshot.get("ai_rows") is not None:
+        if restore_hybrid_search_mode:
+            self.setHybridSearchMode(True)
+            self._pending_restore_image_id = image_id
+            self._run_search()
+        elif self._is_ai_search_mode and snapshot.get("ai_rows") is not None:
             # Restore AI results directly — no re-search, no model reload.
             saved_rows = snapshot["ai_rows"]
             self._ai_result_cache = saved_rows
@@ -2628,6 +2718,9 @@ class AppController(QObject):
     ) -> None:
         if self._repo is None or self._db_path is None:
             return
+        if self._is_hybrid_search_mode:
+            self._start_hybrid_search_worker(self._query_text, self._last_ai_precision)
+            return
         self._clear_status_for_primary_action()
         path_filter = self._current_path_filter()
         params = dict(
@@ -2697,13 +2790,19 @@ class AppController(QObject):
         if self._app_closing:
             return
         ai_facet_paths: list[str] | None = None
+        sender = self.sender()
+        hybrid = isinstance(sender, HybridSearchWorker)
+        if isinstance(sender, SearchWorker) and sender is not self._search_worker:
+            return
         if self.sender() is self._ai_search_worker:
             ai_facet_paths = list(
                 getattr(self._ai_search_worker, "facet_paths", []) or []
             )
             self._ai_search_worker = None
-        old_worker = self._search_worker
-        self._search_worker = None
+        normal_sender = isinstance(sender, SearchWorker) or sender is None
+        old_worker = self._search_worker if normal_sender else None
+        if normal_sender:
+            self._search_worker = None
         # Keep a Python reference to the outgoing worker until QThread.finished
         # fires (_on_search_worker_done).  Without this, the GC can destroy the
         # Python wrapper while QThreadWrapper::run() is still unwinding its
@@ -2712,7 +2811,7 @@ class AppController(QObject):
             self._finishing_search_workers.add(old_worker)
         # If newer params are waiting, fire a follow-up search and discard
         # these (now stale) results — only the latest request matters.
-        pending = self._search_coordinator.take_pending()
+        pending = self._search_coordinator.take_pending() if normal_sender else None
         if pending is not None:
             self._start_search_request(
                 pending.params, pending.show_busy_ui, pending.serial
@@ -2720,12 +2819,9 @@ class AppController(QObject):
             return
         # Discard results that belong to a superseded search.
         if not self._search_coordinator.is_current(serial):
-            self._search_shows_busy_ui = False
-            self._set_search_busy_ui(False)
             return
         self._set_search_error("")
         search_offset = 0
-        sender = self.sender()
         if isinstance(sender, SearchWorker):
             search_offset = sender._offset  # type: ignore[attr-defined]
         all_results = [
@@ -2735,7 +2831,11 @@ class AppController(QObject):
         # For AI searches, store all results in-memory and load only the first
         # page into the model; further pages are served from _ai_result_cache
         # by loadMore() without touching the database.
-        if self._results_use_ai_pipeline():
+        if hybrid:
+            self._ai_result_cache = []
+            first_page = all_results
+            self._loaded_offset = 0
+        elif self._results_use_ai_pipeline():
             self._ai_result_cache = all_results
             # Timeline facet source: the semantic set before date filtering.
             # Fall back to the (date-filtered) result paths if the worker did
@@ -2775,18 +2875,23 @@ class AppController(QObject):
                 self._search_model.find_row_by_id(target_id) < 0
                 and self._loaded_results < self._total_results
             ):
-                more_rows = self._repo.search_images(
-                    self._query_text,
-                    _PAGE_SIZE,
-                    self._loaded_results,
-                    sort_by=self._sort_by,
-                    ext_filter=self._ext_filter,
-                    path_filter=self._current_path_filter(),
-                    restrict_to_enabled_folders=(self._folder_repo is not None),
-                    marked_only=self._checked_only_filter_active,
-                    date_from=self._date_from,
-                    date_to=self._date_to,
-                )
+                if hybrid and self._hybrid_results is not None:
+                    more_rows = self._hybrid_results.hydrate_page(
+                        self._repo, self._loaded_results, _PAGE_SIZE
+                    )
+                else:
+                    more_rows = self._repo.search_images(
+                        self._query_text,
+                        _PAGE_SIZE,
+                        self._loaded_results,
+                        sort_by=self._sort_by,
+                        ext_filter=self._ext_filter,
+                        path_filter=self._current_path_filter(),
+                        restrict_to_enabled_folders=(self._folder_repo is not None),
+                        marked_only=self._checked_only_filter_active,
+                        date_from=self._date_from,
+                        date_to=self._date_to,
+                    )
                 if not more_rows:
                     break
                 more_results = [
@@ -2865,6 +2970,8 @@ class AppController(QObject):
         """Refresh year counts after the current search result has rendered."""
         if self._app_closing:
             return
+        if self._is_hybrid_search_mode:
+            return
         self._year_counts_loading_serial = serial
         self._set_year_counts_loading(True)
         if self._results_use_ai_pipeline():
@@ -2942,12 +3049,18 @@ class AppController(QObject):
     def _on_search_failed(self, error: str) -> None:
         if self._app_closing:
             return
-        if self.sender() is self._ai_search_worker:
+        sender = self.sender()
+        if isinstance(sender, SearchWorker) and sender is not self._search_worker:
+            return
+        if sender is self._ai_search_worker:
             self._ai_search_worker = None
-        old_worker = self._search_worker
-        self._search_worker = None
+        old_worker = self._search_worker if isinstance(sender, SearchWorker) or sender is None else None
+        if old_worker is not None:
+            self._search_worker = None
         if old_worker is not None:
             self._finishing_search_workers.add(old_worker)
+        if isinstance(sender, (SearchWorker, AiSearchWorker)) and not self._search_coordinator.is_current(sender._serial):
+            return
         _log.error("Search failed: %s", error)
         self._set_search_error(error)
         self._search_model.set_rows([])
@@ -3130,6 +3243,25 @@ class AppController(QObject):
         if self._loading:
             self._pending_load_more_request = True
             return False
+        if self._is_hybrid_search_mode:
+            if self._hybrid_results is None or self._loaded_results >= self._total_results:
+                self._pending_load_more_request = False
+                return False
+            if not self._hybrid_generation_is_current():
+                self._start_hybrid_search_worker(self._query_text, self._last_ai_precision)
+                return False
+            self._loading = True
+            worker = HybridPageWorker(
+                self._db_path, self._key, self._hybrid_results,
+                self._loaded_results, _PAGE_SIZE, self._search_coordinator.serial,
+            )
+            worker.results_ready.connect(self._on_hybrid_page_ready)
+            worker.failed.connect(self._on_hybrid_page_failed)
+            worker.finished.connect(self._on_search_worker_done)
+            self._load_more_worker = worker
+            self._finishing_search_workers.add(worker)
+            worker.start()
+            return True
         if self._results_use_ai_pipeline():
             if self._loaded_results >= self._total_results:
                 self._pending_load_more_request = False
@@ -3213,6 +3345,34 @@ class AppController(QObject):
         self._consume_pending_load_more_request()
         # Notify QML so it can clear any pending upward-prepend hold state even
         # though the row count did not change.
+        self.loadedResultsChanged.emit()
+
+    @Slot(list, int)
+    def _on_hybrid_page_ready(self, rows: list, serial: int) -> None:
+        if self.sender() is not self._load_more_worker:
+            return
+        if not self._search_coordinator.is_current(serial) or not self._is_hybrid_search_mode:
+            self._load_more_worker = None
+            self._loading = False
+            return
+        if not self._hybrid_generation_is_current():
+            self._load_more_worker = None
+            self._loading = False
+            self._start_hybrid_search_worker(self._query_text, self._last_ai_precision)
+            return
+        self._on_load_more_finished(rows, serial)
+
+    @Slot(str, int)
+    def _on_hybrid_page_failed(self, error: str, serial: int) -> None:
+        if self.sender() is not self._load_more_worker or not self._search_coordinator.is_current(serial):
+            return
+        self._load_more_worker = None
+        self._loading = False
+        if not self._hybrid_generation_is_current():
+            self._start_hybrid_search_worker(self._query_text, self._last_ai_precision)
+            return
+        self._set_search_error(error)
+        _log.error("Hybrid page failed: %s", error)
         self.loadedResultsChanged.emit()
 
     @Slot(int)
@@ -4122,10 +4282,167 @@ class AppController(QObject):
 
     @Slot(bool)
     def setAiSearchMode(self, enabled: bool) -> None:
+        if enabled and self._is_hybrid_search_mode:
+            self.setHybridSearchMode(False)
         if self._is_ai_search_mode == enabled:
             return
         self._is_ai_search_mode = enabled
         self.isAiSearchModeChanged.emit()
+
+    @Slot(bool)
+    def setHybridSearchMode(self, enabled: bool) -> None:
+        if self._is_hybrid_search_mode == enabled:
+            return
+        if enabled and self._is_ai_search_mode:
+            self.setAiSearchMode(False)
+        self._is_hybrid_search_mode = enabled
+        self._search_coordinator.clear()
+        self._search_coordinator.begin_secondary_search()
+        if self._hybrid_search_worker is not None:
+            self._hybrid_search_worker.requestInterruption()
+            self._hybrid_search_worker = None
+        if isinstance(self._load_more_worker, HybridPageWorker):
+            self._load_more_worker.requestInterruption()
+            self._load_more_worker = None
+            self._loading = False
+        self._hybrid_results = None
+        self._hybrid_invalidation_timer.stop()
+        self._set_search_busy_ui(False)
+        self.isHybridSearchModeChanged.emit()
+        self.totalResultsChanged.emit()
+
+    @Slot(str, str)
+    def hybridSearch(self, query: str, precision: str = "normal") -> None:
+        if self._repo is None or self._db_path is None:
+            return
+        self._query_text = query.strip()
+        self._last_ai_precision = precision
+        self.hybridSearchStateChanged.emit()
+        self._current_result_row = 0
+        self._ai_select_first = True
+        self._start_hybrid_search_worker(self._query_text, precision)
+
+    def _hybrid_generation_is_current(self) -> bool:
+        return (
+            self._repo is not None
+            and int(self._repo.conn.execute("PRAGMA data_version").fetchone()[0])
+            == self._hybrid_data_version
+            and self._ai_search_session.disk_generation() == self._hybrid_index_generation
+        )
+
+    def _check_hybrid_generation(self) -> None:
+        if (
+            self._is_hybrid_search_mode and self._hybrid_results is not None
+            and not self._hybrid_generation_is_current()
+        ):
+            self._start_hybrid_search_worker(self._query_text, self._last_ai_precision)
+
+    def _start_hybrid_search_worker(
+        self, query: str, precision: str, *, cached_results: HybridSearchResults | None = None
+    ) -> None:
+        if self._repo is None or self._db_path is None or not self._is_hybrid_search_mode:
+            return
+        if self._hybrid_search_worker is not None:
+            self._hybrid_search_worker.requestInterruption()
+        if isinstance(self._load_more_worker, HybridPageWorker):
+            self._load_more_worker.requestInterruption()
+            self._load_more_worker = None
+            self._loading = False
+        self._clear_status_for_primary_action()
+        self._search_coordinator.clear()
+        serial = self._search_coordinator.begin_secondary_search()
+        data_version = int(
+            self._repo.conn.execute("PRAGMA data_version").fetchone()[0]
+        )
+        index_generation = self._ai_search_session.disk_generation()
+        if (
+            data_version != self._hybrid_data_version
+            or index_generation != self._hybrid_index_generation
+        ):
+            cached_results = None
+        self._hybrid_results = None
+        self._hybrid_data_version = data_version
+        self._hybrid_index_generation = index_generation
+        worker = HybridSearchWorker(
+            self._db_path, self._key, query, serial,
+            page_size=_PAGE_SIZE,
+            precision=precision,
+            sort_by=self._hybrid_sort_by,
+            path_filter=self._current_path_filter(),
+            ext_filter=self._ext_filter,
+            restrict_to_enabled_folders=self._folder_repo is not None,
+            marked_only=self._checked_only_filter_active,
+            date_from=self._date_from,
+            date_to=self._date_to,
+            image_set_id=self._search_image_set_id,
+            session=self._ai_search_session,
+            cached_results=cached_results,
+        )
+        worker.results_ready.connect(self._on_hybrid_search_ready)
+        worker.failed.connect(self._on_hybrid_search_failed)
+        worker.canceled.connect(self._on_hybrid_search_canceled)
+        worker.finished.connect(self._on_search_worker_done)
+        self._hybrid_search_worker = worker
+        self._finishing_search_workers.add(worker)
+        self._set_search_busy_ui(True)
+        worker.start()
+
+    @Slot(list, int, int)
+    def _on_hybrid_search_ready(self, rows: list, total: int, serial: int) -> None:
+        worker = self.sender()
+        if (
+            not isinstance(worker, HybridSearchWorker)
+            or worker is not self._hybrid_search_worker
+            or not self._search_coordinator.is_current(serial)
+            or not self._is_hybrid_search_mode
+            or self._app_closing
+        ):
+            return
+        if not self._hybrid_generation_is_current():
+            self._start_hybrid_search_worker(self._query_text, self._last_ai_precision)
+            return
+        self._hybrid_search_worker = None
+        self._hybrid_results = worker.results
+        self._hybrid_invalidation_timer.start()
+        self._year_counts = json.dumps([
+            {"year": year, "count": count} for year, count in worker.year_counts
+        ])
+        self.yearCountsChanged.emit()
+        self._on_search_finished(rows, total, worker.format_counts, serial)
+
+    @Slot(str, int)
+    def _on_hybrid_search_failed(self, error: str, serial: int) -> None:
+        if (
+            self.sender() is not self._hybrid_search_worker
+            or not self._search_coordinator.is_current(serial)
+            or not self._is_hybrid_search_mode
+            or self._app_closing
+        ):
+            return
+        if not self._hybrid_generation_is_current():
+            self._start_hybrid_search_worker(self._query_text, self._last_ai_precision)
+            return
+        self._hybrid_search_worker = None
+        self._hybrid_results = None
+        self._search_model.set_rows([])
+        self._total_results = 0
+        self._loaded_results = 0
+        self._loading = False
+        self._set_search_error(error)
+        self._clear_details()
+        self._set_search_busy_ui(False)
+        self.totalResultsChanged.emit()
+        self.loadedResultsChanged.emit()
+        _log.error("Hybrid search failed: %s", error)
+
+    @Slot(int)
+    def _on_hybrid_search_canceled(self, serial: int) -> None:
+        if (
+            self.sender() is self._hybrid_search_worker
+            and self._search_coordinator.is_current(serial)
+        ):
+            self._hybrid_search_worker = None
+            self._set_search_busy_ui(False)
 
     @Slot(str, str)
     def aiSearch(self, query: str, precision: str = "normal") -> None:
@@ -4202,6 +4519,8 @@ class AppController(QObject):
         completed_folder_name = self._ai_scan_folder_name
         was_full_rescan = self._ai_scan_is_full_rescan
         self._clear_ai_scan_state()
+        if self._is_hybrid_search_mode:
+            self._run_search()
         msg = _("{n} images vectorised").format(n=indexed)
         if errors:
             msg += "; " + _("{n} files could not be processed").format(n=errors)
@@ -4733,6 +5052,74 @@ class AppController(QObject):
         if self._current_result_row >= 0:
             index = self._search_model.index(self._current_result_row)
             self._search_model.dataChanged.emit(index, index, [])
+        if self._is_hybrid_search_mode:
+            self._run_search()
+
+    @Slot(int, result=bool)
+    def saveHybridSearchToImageSet(self, set_id: int) -> bool:
+        if self._repo is None or self._is_locked or not self._is_hybrid_search_mode:
+            self._set_image_set_status(_("Run a Hybrid search before saving its view."))
+            return False
+        state = HybridSearchState(
+            query=self._query_text,
+            precision=self._last_ai_precision,
+            sort_by=self._hybrid_sort_by,
+            path_filter=tuple(self._current_path_filter() or ()),
+            ext_filter=self._ext_filter,
+            date_from=self._date_from,
+            date_to=self._date_to,
+            marked_only=self._checked_only_filter_active,
+            image_set_id=self._search_image_set_id,
+        )
+        try:
+            self._repo.set_image_set_search_state(set_id, state)
+        except (ValueError, KeyError, sqlcipher3.Error) as exc:
+            self._set_image_set_status(str(exc))
+            return False
+        self._set_image_set_status(_("Hybrid search view saved."))
+        self.imageSetsChanged.emit()
+        return True
+
+    @Slot(int, result=bool)
+    def restoreHybridSearchFromImageSet(self, set_id: int) -> bool:
+        if self._repo is None or self._is_locked:
+            self._set_image_set_status(_("Unlock the database to manage sets."))
+            return False
+        if not self._ai_enabled:
+            self._set_image_set_status(_("Enable AI search before restoring this Hybrid view."))
+            return False
+        try:
+            state = self._repo.get_image_set_search_state(set_id)
+            if state.image_set_id is not None and state.image_set_id > 0 and not any(
+                item["id"] == state.image_set_id for item in self._repo.list_image_sets()
+            ):
+                raise ValueError("The saved search refers to an image set that no longer exists.")
+        except (ValueError, KeyError, sqlcipher3.Error) as exc:
+            self._set_image_set_status(str(exc))
+            return False
+        self.setHybridSearchMode(True)
+        self._query_text = state.query
+        self._last_ai_precision = state.precision
+        self._hybrid_sort_by = state.sort_by
+        self._folder_filter = ""
+        self._search_folder_filters = set(state.path_filter)
+        self._ext_filter = state.ext_filter
+        self._date_from = state.date_from
+        self._date_to = state.date_to
+        self._checked_only_filter_active = state.marked_only
+        self._search_image_set_id = state.image_set_id
+        self._current_result_row = 0
+        self.hybridSearchStateChanged.emit()
+        self.hybridSortByChanged.emit()
+        self.folderFilterChanged.emit()
+        self.searchFolderFiltersChanged.emit()
+        self.extFilterChanged.emit()
+        self.dateFilterChanged.emit()
+        self.checkedOnlyFilterChanged.emit()
+        self.searchImageSetFilterChanged.emit()
+        self._set_image_set_status(_("Hybrid search view restored."))
+        self._run_search()
+        return True
 
     @Slot(str, result=int)
     def createImageSet(self, name: str) -> int:
@@ -4804,10 +5191,13 @@ class AppController(QObject):
         image_paths = None
         if target_scope == "results":
             if snapshot is not None:
-                if snapshot["ai_rows"] is not None:
+                hybrid_results = snapshot.get("hybrid_results")
+                if hybrid_results is not None:
+                    image_paths = [match.path for match in hybrid_results.matches]
+                elif snapshot["ai_rows"] is not None:
                     image_paths = [result.path for result in snapshot["ai_rows"]]
-            elif self._results_use_ai_pipeline():
-                image_paths = [result.path for result in self._ai_result_cache]
+            elif self._results_use_ai_pipeline() or self._is_hybrid_search_mode:
+                image_paths = self._reference_result_paths()
         self._image_set_worker = ImageSetMembershipWorker(
             self._db_path,
             self._key,
@@ -5146,9 +5536,9 @@ class AppController(QObject):
             if target_scope == "folder" and not self._folder_filter:
                 self._tagging.show_copy_error(_("Choose a folder in Browse first."))
                 return
-            if self._results_use_ai_pipeline():
+            if self._results_use_ai_pipeline() or self._is_hybrid_search_mode:
                 worker_kwargs = {
-                    "image_paths": [result.path for result in self._ai_result_cache]
+                    "image_paths": self._reference_result_paths()
                 }
             else:
                 worker_kwargs = {
@@ -5211,10 +5601,10 @@ class AppController(QObject):
                 image_set_id=self._action_image_set_id, **flavour_options,
             )
             return
-        if self._results_use_ai_pipeline():
+        if self._results_use_ai_pipeline() or self._is_hybrid_search_mode:
             self._start_derivative_export(
                 output_url,
-                image_paths=[result.path for result in self._ai_result_cache],
+                image_paths=self._reference_result_paths(),
                 **flavour_options,
             )
             return
@@ -5806,6 +6196,8 @@ class AppController(QObject):
     def close(self) -> None:
         self._app_closing = True
         self._search_coordinator.clear()
+        self._hybrid_results = None
+        self._search_state_snapshot = None
         self._pending_year_counts_serial = 0
         self._scan_queue.clear()
         self._folder_workflow_queue.clear()
@@ -5829,6 +6221,7 @@ class AppController(QObject):
             self._folder_tree_worker,
             self._ai_scan_worker,
             self._ai_search_worker,
+            self._hybrid_search_worker,
             self._bulk_worker,
             self._image_set_worker,
             *self._finishing_search_workers,
@@ -5858,6 +6251,7 @@ class AppController(QObject):
         self._folder_tree_worker = None
         self._ai_scan_worker = None
         self._ai_search_worker = None
+        self._hybrid_search_worker = None
         self._bulk_worker = None
         self._image_set_worker = None
         self._finishing_search_workers.clear()

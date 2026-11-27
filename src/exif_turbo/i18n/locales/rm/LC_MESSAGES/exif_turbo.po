@@ -4002,3 +4002,55 @@ msgstr "← Tscherner ina cartella per navigar ils maletgs"
 #~ "• Quote multi-word phrases\n"
 #~ "• In ExifTool keys (e.g. GPS:GPSLatitude) the colon acts as a separator"
 #~ msgstr ""
+
+#: Hybrid search
+msgid "Hybrid"
+msgstr "Hybrid"
+
+#: Hybrid search
+msgid "Search metadata and images…"
+msgstr "Tschertgar metadatas e maletgs…"
+
+#: Hybrid search
+msgid "metadata AND visual match"
+msgstr "metadatas E correspundenza visuala"
+
+#: Hybrid search
+msgid "Relevance"
+msgstr "Relevanza"
+
+#: Hybrid search
+msgid "%1 of %2 (AI results limited)"
+msgstr "%1 da %2 (resultats IA limitads)"
+
+#: Hybrid search
+msgid "Hybrid search view"
+msgstr "Vista da tschertga hybrida"
+
+#: Hybrid search
+msgid "Save view"
+msgstr "Memorisar vista"
+
+#: Hybrid search
+msgid "Restore view"
+msgstr "Restabilir vista"
+
+#: Hybrid search
+msgid "Run a Hybrid search before saving its view."
+msgstr "Exequì ina tschertga hybrida avant memorisar la vista."
+
+#: Hybrid search
+msgid "Hybrid search view saved."
+msgstr "Vista da tschertga hybrida memorisada."
+
+#: Hybrid search
+msgid "Enable AI search before restoring this Hybrid view."
+msgstr "Activar la tschertga IA avant restabilir questa vista hybrida."
+
+#: Hybrid search
+msgid "Hybrid search view restored."
+msgstr "Vista da tschertga hybrida restabilida."
+
+#: Hybrid search
+msgid "Unknown search sort order."
+msgstr "Successiun da sortiment nunenconuschenta."

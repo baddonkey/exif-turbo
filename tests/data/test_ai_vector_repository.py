@@ -156,6 +156,140 @@ def test_ai_vector_repository_encrypted_round_trip_preserves_views(tmp_path: Pat
     assert not (tmp_path / "ai_index_meta.json").exists()
 
 
+def test_ai_vector_repository_upsert_delete_and_rebuild_preserve_vectors(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    original = np.zeros(512, dtype=np.float32)
+    original[0] = 1.0
+    replacement = np.zeros(512, dtype=np.float32)
+    replacement[1] = 1.0
+    unrelated = np.zeros(512, dtype=np.float32)
+    unrelated[2] = 1.0
+    repo.add_images(
+        np.stack([original, unrelated]),
+        ["/private/a.jpg", "/private/b.jpg"],
+    )
+
+    # Act
+    with pytest.raises(ValueError, match="embeddings must have shape"):
+        repo.upsert_images(
+            np.zeros((1, 512), dtype=np.float32),
+            ["/private/a.jpg", "/private/b.jpg"],
+        )
+    assert np.allclose(repo.get_vector("/private/a.jpg"), original)
+    repo.upsert_images(
+        np.stack([replacement, original]),
+        ["/private/a.jpg", "/private/a.jpg"],
+        view_ids=["full", "top_left"],
+    )
+    repo.delete_images({"/private/b.jpg"})
+    repo.rebuild()
+
+    # Assert
+    assert repo.get_vector_count() == 2
+    assert repo.get_indexed_paths() == {"/private/a.jpg"}
+    assert set(repo.get_view_vectors("/private/a.jpg")) == {"full", "top_left"}
+    assert np.allclose(repo.get_vector("/private/a.jpg"), replacement)
+
+
+def test_ai_vector_repository_plaintext_snapshot_rejected_for_migration(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path)
+    repo.add_images(_random_vec(), ["/private/a.jpg"])
+    repo.save()
+    repo.close()
+
+    # Act / Assert
+    with pytest.raises(AiVectorIndexError, match="authenticated AI snapshot"):
+        repo.load_migration_source()
+    assert (tmp_path / "ai_index.faiss").exists()
+
+
+def test_ai_vector_repository_modified_snapshot_rejected_for_migration(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path, "test-password")
+    repo.add_images(_random_vec(), ["/private/a.jpg"])
+    repo.save()
+    repo.close()
+    repo.load_migration_source()
+    repo.add_images(_random_vec(), ["/private/b.jpg"])
+
+    # Act / Assert
+    with pytest.raises(AiVectorIndexError, match="authenticated AI snapshot"):
+        list(repo.iter_migration_vectors())
+    repo.close()
+
+
+def test_ai_vector_repository_migration_load_retains_legacy_files(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path, "test-password")
+    repo.add_images(_random_vec(), ["/private/a.jpg"])
+    repo.save()
+    repo.close()
+    legacy_file = tmp_path / "ai_index.faiss"
+    legacy_file.write_bytes(b"retained legacy data")
+
+    # Act
+    repo.load_migration_source()
+    vectors = list(repo.iter_migration_vectors())
+
+    # Assert
+    assert legacy_file.read_bytes() == b"retained legacy data"
+    assert [(path, view) for path, view, _ in vectors] == [("/private/a.jpg", "full")]
+    repo.close()
+
+
+def test_ai_vector_repository_non_normalized_snapshot_rejected_for_migration(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    repo = _make_repo(tmp_path, "test-password")
+    repo.add_images(_random_vec() * 2, ["/private/a.jpg"])
+    repo.save()
+    repo.close()
+    repo.load_migration_source()
+
+    # Act / Assert
+    with pytest.raises(AiVectorIndexError, match="non-normalized vector"):
+        list(repo.iter_migration_vectors())
+    repo.close()
+
+
+def test_ai_vector_repository_nonflat_snapshot_rejected_for_migration(
+    tmp_path: Path,
+) -> None:
+    # Arrange
+    import faiss
+    import hashlib
+
+    repo = _make_repo(tmp_path, "test-password")
+    repo.add_images(_random_vec(), ["/private/a.jpg"])
+    repo.save()
+    repo.close()
+    storage = AiVectorStorage(tmp_path / "ai_index.faiss", "test-password")
+    _, mapping, raw_metadata = storage.load()
+    metadata = json.loads(raw_metadata)
+    index = faiss.IndexFlatL2(512)
+    index.add(_random_vec().reshape(1, -1))
+    encoded = faiss.serialize_index(index).tobytes()
+    metadata["index_sha256"] = hashlib.sha256(encoded).hexdigest()
+    storage.save(encoded, mapping, json.dumps(metadata).encode())
+    repo.load_migration_source()
+
+    # Act / Assert
+    with pytest.raises(AiVectorIndexError, match="IndexFlatIP"):
+        list(repo.iter_migration_vectors())
+    repo.close()
+
+
 def test_ai_vector_repository_plaintext_load_migrates_snapshot(tmp_path: Path) -> None:
     # Arrange
     repo = _make_repo(tmp_path)

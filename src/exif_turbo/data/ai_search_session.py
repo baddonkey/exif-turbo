@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from threading import RLock
 
+from .ai_vector_backend import AiVectorBackend
 from .ai_vector_repository import AiVectorIndexError, AiVectorRepository
 
 
@@ -13,12 +14,12 @@ class AiSearchSession:
 
     def __init__(
         self, index_path: Path, map_path: Path, metadata_path: Path,
-        *, repository_factory: Callable[..., AiVectorRepository] = AiVectorRepository,
+        *, repository_factory: Callable[..., AiVectorBackend] = AiVectorRepository,
     ) -> None:
         self._paths = (index_path, map_path, metadata_path)
         self._factory = repository_factory
         self._lock = RLock()
-        self._repository: AiVectorRepository | None = None
+        self._repository: AiVectorBackend | None = None
         self._generation: tuple[tuple[int, int, int, int] | None, ...] | None = None
         self._key = ""
         self._closed = False
@@ -38,35 +39,45 @@ class AiSearchSession:
                 generation.append((stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns))
         return tuple(generation)
 
+    def disk_generation(self) -> tuple[tuple[int, int, int, int] | None, ...]:
+        """Return the current on-disk snapshot identity without loading it."""
+        return self._disk_generation()
+
     @contextmanager
-    def repository(self, key: str) -> Iterator[AiVectorRepository]:
+    def repository(self, key: str) -> Iterator[AiVectorBackend]:
         """Lease a read-only snapshot, serializing load/search against close."""
         with self._lock:
             if self._closed:
                 raise RuntimeError("AI search session is closed")
             generation = self._disk_generation()
             if self._repository is None or self._generation != generation or self._key != key:
-                self._repository = None
-                self._generation = None
-                self._key = ""
+                self._discard_repository()
                 candidate = self._factory(*self._paths, key=key)
                 candidate.load()
                 loaded_generation = self._disk_generation()
                 if loaded_generation != generation:
+                    candidate.close()
                     candidate = self._factory(*self._paths, key=key)
                     candidate.load()
                     if self._disk_generation() != loaded_generation:
+                        candidate.close()
                         raise AiVectorIndexError("AI index changed while loading; retry the search")
                 self._repository = candidate
                 self._generation = loaded_generation
                 self._key = key
             yield self._repository
 
+    def _discard_repository(self) -> None:
+        repository = self._repository
+        self._repository = None
+        self._generation = None
+        self._key = ""
+        if repository is not None:
+            repository.close()
+
     def invalidate(self) -> None:
         with self._lock:
-            self._repository = None
-            self._generation = None
-            self._key = ""
+            self._discard_repository()
 
     def close(self) -> None:
         with self._lock:

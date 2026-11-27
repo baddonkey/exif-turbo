@@ -380,10 +380,10 @@ While a search is running, a semi-transparent grey overlay dims the entire UI
 and the cursor changes to a busy indicator. The overlay clears automatically
 when results are ready.
 
-### AI semantic search (EXIF/AI toggle)
+### AI semantic search
 
 When **AI Features** are enabled in **Settings**, the search bar shows an
-**EXIF / AI** toggle. Switch to **AI** mode to search by meaning instead of
+**EXIF / AI / Hybrid** toggle. Switch to **AI** mode to search by meaning instead of
 exact metadata terms.
 
 ![Search tab in AI mode](screenshots/09_ai_search_mode.png)
@@ -410,6 +410,28 @@ reports missing or incompatible AI index metadata after an upgrade, run
 Note for macOS Intel users: AI features are unavailable on macOS Intel (x86_64)
 targets and are shown disabled in **Settings**. This is due to PyTorch support
 for Python 3.13+ on that platform.
+
+### Hybrid search
+
+Choose **Hybrid** to search metadata and image content together. For example,
+`red deer in snow` returns metadata matches or visually similar images. Results
+matching both are combined into one ranked list. Use **Relevance** for the
+default ranking, or select another sort order.
+
+To require both metadata and a visual match, use a single `ai:="..."` clause,
+for example `Canon ai:="red deer in snow"` or
+`tags:="wildlife" ai:="forest"`. Folder, format, date, set, marked-only, and
+structured metadata filters remain restrictions. An empty query shows all
+images in scope. The **Fine**, **Normal**, and **Broad** controls set the same
+visual similarity thresholds as AI search.
+
+Hybrid searches with visual text require an available AI index. If it is
+missing or empty, the search reports an error rather than silently dropping
+the visual condition. At most 2,000 visual candidates are displayed after
+filters; metadata matches are retained in discovery searches. When a limit
+applies, the result count shows both the displayed and total matches. Timeline
+counts include all matching images before that limit and ignore the selected
+date range. Hybrid searches are limited to one million images in scope.
 
 ### Filtering by format
 
@@ -785,6 +807,14 @@ membership until you choose **Add matches** or **Replace members**.
 Reapplying checks the whole active database, independent of Search filters and
 pagination. Long operations show progress and can be canceled; changes already
 completed are not rolled back.
+
+### Saved Hybrid views
+
+After running a Hybrid search, select a set and choose **Save view** to save
+the search text, precision, sort order, and filters. Choose **Restore view** to
+return to that search. This view is separate from the set's saved membership
+filter: restoring it does not change set members, and **Add matches** or
+**Replace members** still use the saved membership filter.
 
 ![Set filter editor](screenshots/11_set_filter_editor.png)
 

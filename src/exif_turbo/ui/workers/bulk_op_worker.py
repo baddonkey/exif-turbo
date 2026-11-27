@@ -141,16 +141,27 @@ class BulkOpWorker(QThread):
             self.canceled.emit()
             return
         self.progress.emit(0, 0)
-        added, removed = repo.bulk_invert_images(
-            query=self._query,
-            ext_filter=self._ext_filter,
-            path_filter=self._path_filter,
-            restrict_to_enabled_folders=self._restrict_to_enabled_folders,
-            marked_only=self._marked_only,
-            date_from=self._date_from,
-            date_to=self._date_to,
-            image_set_id=self._image_set_id,
-        )
+        if self._image_paths is None:
+            added, removed = repo.bulk_invert_images(
+                query=self._query,
+                ext_filter=self._ext_filter,
+                path_filter=self._path_filter,
+                restrict_to_enabled_folders=self._restrict_to_enabled_folders,
+                marked_only=self._marked_only,
+                date_from=self._date_from,
+                date_to=self._date_to,
+                image_set_id=self._image_set_id,
+            )
+        else:
+            added, removed = [], []
+            with repo.conn:
+                for path in self._image_paths:
+                    row = repo.conn.execute(
+                        "UPDATE images SET marked = 1 - marked WHERE path = ? RETURNING marked",
+                        (path,),
+                    ).fetchone()
+                    if row is not None:
+                        (added if row[0] else removed).append(path)
         affected = len(added) + len(removed)
         self.progress.emit(affected, affected)
         self.result_paths_added = added
@@ -176,15 +187,19 @@ class BulkOpWorker(QThread):
 
         self.progress.emit(0, 0)
 
-        paths = repo.get_matching_paths(
-            self._query,
-            ext_filter=self._ext_filter,
-            path_filter=self._path_filter,
-            restrict_to_enabled_folders=self._restrict_to_enabled_folders,
-            marked_only=self._marked_only,
-            date_from=self._date_from,
-            date_to=self._date_to,
-            image_set_id=self._image_set_id,
+        paths = (
+            list(self._image_paths)
+            if self._image_paths is not None
+            else repo.get_matching_paths(
+                self._query,
+                ext_filter=self._ext_filter,
+                path_filter=self._path_filter,
+                restrict_to_enabled_folders=self._restrict_to_enabled_folders,
+                marked_only=self._marked_only,
+                date_from=self._date_from,
+                date_to=self._date_to,
+                image_set_id=self._image_set_id,
+            )
         )
         if self._is_canceled():
             self.canceled.emit()

@@ -68,6 +68,98 @@ _COLORS = [
 ]
 
 
+def test_hybrid_mode_button_opens_browse_all_and_relevance_sort(
+    qtbot: QtBot, window: tuple[AppController, SearchListModel, QQuickWindow]
+) -> None:
+    controller, model, root = window
+    controller.unlock(_TEST_PASSWORD)
+    qtbot.waitUntil(
+        lambda: not controller.isLocked and not controller.isSearching
+        and controller.totalResults == 5,
+        timeout=10000,
+    )
+    controller.setAiEnabled(True)
+    button = root.findChild(QQuickItem, "hybridSearchModeButton")
+    assert button is not None
+    overlay = root.findChild(QQuickItem, "searchBusyOverlay")
+    assert overlay is not None
+    qtbot.waitUntil(lambda: button.isVisible() and button.width() > 0 and not overlay.isVisible())
+
+    center = button.mapToScene(QPointF(button.width() / 2, button.height() / 2))
+    QTest.mouseMove(root, QPoint(int(center.x()), int(center.y())))
+    qtbot.waitUntil(lambda: bool(button.property("hovered")))
+    QTest.mouseClick(
+        root, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
+        QPoint(int(center.x()), int(center.y())),
+    )
+    qtbot.waitUntil(
+        lambda: controller.isHybridSearchMode and not controller.isSearching
+        and controller.totalResults == 5,
+        timeout=10000,
+    )
+
+    assert model.rowCount() == 5
+    assert controller.hybridSortBy == ""
+    sort_combo = root.findChild(QQuickItem, "sortCombo")
+    assert sort_combo is not None and sort_combo.isVisible()
+
+
+def test_hybrid_view_buttons_save_and_restore_search_state(
+    qtbot: QtBot, window: tuple[AppController, SearchListModel, QQuickWindow]
+) -> None:
+    controller, _, root = window
+    controller.unlock(_TEST_PASSWORD)
+    qtbot.waitUntil(
+        lambda: not controller.isLocked and not controller.isSearching
+        and controller.totalResults == 5,
+        timeout=10000,
+    )
+    controller.setAiEnabled(True)
+    controller.setHybridSearchMode(True)
+    search_field = root.findChild(QQuickItem, "searchField")
+    assert search_field is not None
+    search_field.setProperty("text", 'tags:="wildlife"')
+    controller.hybridSearch('tags:="wildlife"', "broad")
+    qtbot.waitUntil(lambda: not controller.isSearching, timeout=10000)
+    set_id = controller.createImageSet("Hybrid view")
+    tab_bar = root.findChild(QQuickItem, "mainTabBar")
+    sets_page = root.findChild(QQuickItem, "setsPage")
+    assert tab_bar is not None and sets_page is not None
+    tab_bar.setProperty("currentIndex", 2)
+    sets_page.setProperty("selectedSetId", set_id)
+
+    def click(name: str) -> None:
+        button = root.findChild(QQuickItem, name)
+        assert button is not None
+        qtbot.waitUntil(lambda: button.isVisible() and button.isEnabled(), timeout=10000)
+        def hover() -> bool:
+            center = button.mapToScene(QPointF(button.width() / 2, button.height() / 2))
+            QTest.mouseMove(root, QPoint(int(center.x()), int(center.y())))
+            return bool(button.property("hovered"))
+
+        qtbot.waitUntil(hover, timeout=10000)
+        center = button.mapToScene(QPointF(button.width() / 2, button.height() / 2))
+        position = QPoint(int(center.x()), int(center.y()))
+        QTest.mouseClick(root, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, position)
+
+    click("saveHybridSearchViewButton")
+    controller.setHybridSearchMode(False)
+    controller.search("")
+    qtbot.waitUntil(lambda: not controller.isSearching, timeout=10000)
+    click("restoreHybridSearchViewButton")
+    qtbot.waitUntil(
+        lambda: controller.isHybridSearchMode and not controller.isSearching
+        and tab_bar.property("currentIndex") == 0,
+        timeout=10000,
+    )
+
+    search_field = root.findChild(QQuickItem, "searchField")
+    assert search_field is not None
+    assert search_field.property("text") == 'tags:="wildlife"'
+    assert controller.hybridPrecision == "broad"
+    assert root.property("_aiSearchPrecision") == "broad"
+
+
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 

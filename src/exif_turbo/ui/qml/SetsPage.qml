@@ -13,6 +13,7 @@ Item {
     readonly property bool canEditSets: !!appController && !appController.imageSetOperationRunning
     signal taggingRequested()
     signal openImageInSearch(int setId, int imageId)
+    signal restoreHybridSearch(int setId)
     property color accentColor: Material.accent
     property var sets: []
     property var members: []
@@ -434,6 +435,39 @@ Item {
                                      && root.canEditSets
                             text: qsTr("Clear filter")
                             onClicked: root.appController.clearImageSetFilter(root.selectedSetId)
+                        }
+                    }
+                }
+
+                Column {
+                    id: searchViewActionGroup
+                    width: Math.min(parent.width, saveSearchViewButton.implicitWidth + restoreSearchViewButton.implicitWidth + 8)
+                    spacing: 4
+                    Label {
+                        width: parent.width
+                        text: qsTr("Hybrid search view")
+                        font.pixelSize: 12
+                        font.weight: Font.DemiBold
+                        wrapMode: Text.Wrap
+                    }
+                    Flow {
+                        width: parent.width
+                        spacing: 8
+                        Button {
+                            id: saveSearchViewButton
+                            objectName: "saveHybridSearchViewButton"
+                            text: qsTr("Save view")
+                            enabled: root.selectedSet !== null && root.canEditSets
+                                     && root.appController.isHybridSearchMode
+                            onClicked: root.appController.saveHybridSearchToImageSet(root.selectedSetId)
+                        }
+                        Button {
+                            id: restoreSearchViewButton
+                            objectName: "restoreHybridSearchViewButton"
+                            text: qsTr("Restore view")
+                            enabled: root.selectedSet !== null && root.canEditSets
+                                     && !!root.selectedSet.saved_search
+                            onClicked: root.restoreHybridSearch(root.selectedSetId)
                         }
                     }
                 }

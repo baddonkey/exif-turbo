@@ -58,6 +58,9 @@ class _FakeAiVectorRepository:
     def load(self) -> None:
         pass
 
+    def close(self) -> None:
+        pass
+
     def search(self, _query_vec, top_k: int = 800, threshold: float = 0.20):  # type: ignore[no-untyped-def]
         return [hit for hit in self.hits if hit[1] >= threshold][:top_k]
 

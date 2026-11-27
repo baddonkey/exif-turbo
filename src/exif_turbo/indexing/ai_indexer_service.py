@@ -28,7 +28,7 @@ import urllib.request
 
 import numpy as np
 
-from ..data.ai_vector_repository import AiVectorRepository
+from ..data.ai_vector_backend import AiVectorBackend
 from ..models.ai_model_profile import AiModelProfile, DEFAULT_AI_MODEL_PROFILE
 from ..utils.preview_cache import preview_cache_name_from_stamp, preview_cache_path, preview_dir
 from ..utils.thumb_crypto import ThumbCrypto
@@ -123,7 +123,7 @@ class AiIndexerService:
 
     def __init__(
         self,
-        vector_repo: AiVectorRepository,
+        vector_repo: AiVectorBackend,
         cache_dir: Path | None = None,
         *,
         profile: AiModelProfile = DEFAULT_AI_MODEL_PROFILE,
