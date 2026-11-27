@@ -52,7 +52,7 @@ _open_clip_import_lock = threading.Lock()
 @contextmanager
 def _huggingface_offline() -> Iterator[None]:
     import huggingface_hub.constants as constants
-    from huggingface_hub.utils import reset_sessions
+    from huggingface_hub.utils._http import reset_sessions
 
     previous_value = os.environ.get("HF_HUB_OFFLINE")
     previous_offline = constants.HF_HUB_OFFLINE

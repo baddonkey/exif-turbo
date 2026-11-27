@@ -38,9 +38,13 @@ from pathlib import Path, PurePosixPath
 try:
     from audit_release_artifact import audit_release_payload
     from release_environment import ensure_release_environment
+    from smoke_release import smoke_release
+    from build_vec1 import verify_staged_binary
 except ModuleNotFoundError:
     from scripts.audit_release_artifact import audit_release_payload
     from scripts.release_environment import ensure_release_environment
+    from scripts.smoke_release import smoke_release
+    from scripts.build_vec1 import verify_staged_binary
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -731,6 +735,7 @@ def audit_msi(msi: Path) -> None:
             expect_exiftool=True,
             expect_media_tools=True,
         )
+        smoke_release(executables[0])
 
 
 def generate_icon() -> Path:
@@ -766,11 +771,15 @@ def main() -> None:
 
     compile_translations()
 
-    stage_vec1()
+    vec1_stage = stage_vec1()
     run([pyinstaller, "exif-turbo.spec", "--noconfirm", "--clean"])
     print("  PyInstaller build complete.")
 
     app_dir = (REPO_ROOT / "dist" / "exif-turbo").resolve()
+    verify_staged_binary(
+        vec1_stage, app_dir / "_internal" / "exif_turbo" / "assets" / "native" / "vec1.dll"
+    )
+    smoke_release(app_dir / "exif-turbo.exe")
     msi_out = REPO_ROOT / "dist" / f"exif-turbo-{version}-windows.msi"
     icon_file = generate_icon()
     exiftool_dir = stage_exiftool()

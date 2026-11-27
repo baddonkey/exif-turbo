@@ -36,10 +36,12 @@ try:
     from audit_release_artifact import audit_release_payload
     from build_vec1 import STAGE_ENV, staged_vec1, verify_staged_binary
     from release_environment import ensure_release_environment
+    from smoke_release import smoke_release
 except ModuleNotFoundError:
     from scripts.audit_release_artifact import audit_release_payload
     from scripts.build_vec1 import STAGE_ENV, staged_vec1, verify_staged_binary
     from scripts.release_environment import ensure_release_environment
+    from scripts.smoke_release import smoke_release
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -364,16 +366,15 @@ def main() -> None:
     with staged_vec1(REPO_ROOT / "build") as vec1_stage:
         env = os.environ.copy()
         env.pop(STAGE_ENV, None)
-        if vec1_stage is not None:
-            env[STAGE_ENV] = str(vec1_stage)
+        env[STAGE_ENV] = str(vec1_stage)
         if not args.rpm_only:
             run([pyinstaller, "--noconfirm", "--clean", "exif-turbo-deb.spec"], env=env)
             print("  PyInstaller DEB build complete.")
             deb_bundle = REPO_ROOT / "dist" / "exif-turbo-deb"
-            if vec1_stage is not None:
-                verify_staged_binary(
-                    vec1_stage, deb_bundle / "_internal" / "exif_turbo" / "assets" / "native" / "vec1.so"
-                )
+            verify_staged_binary(
+                vec1_stage, deb_bundle / "_internal" / "exif_turbo" / "assets" / "native" / "vec1.so"
+            )
+            smoke_release(deb_bundle / "exif-turbo")
             artifacts.append(deb_bundle)
             deb_out = build_deb(deb_bundle, version, deb_arch_override=args.deb_arch)
             artifacts.append(deb_out)
@@ -382,10 +383,10 @@ def main() -> None:
             run([pyinstaller, "--noconfirm", "--clean", "exif-turbo-rpm.spec"], env=env)
             print("  PyInstaller RPM build complete.")
             rpm_bundle = REPO_ROOT / "dist" / "exif-turbo-rpm"
-            if vec1_stage is not None:
-                verify_staged_binary(
-                    vec1_stage, rpm_bundle / "_internal" / "exif_turbo" / "assets" / "native" / "vec1.so"
-                )
+            verify_staged_binary(
+                vec1_stage, rpm_bundle / "_internal" / "exif_turbo" / "assets" / "native" / "vec1.so"
+            )
+            smoke_release(rpm_bundle / "exif-turbo")
             artifacts.append(rpm_bundle)
             rpm_out = build_rpm(rpm_bundle, version)
             artifacts.append(rpm_out)

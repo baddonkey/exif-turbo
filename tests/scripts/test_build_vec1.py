@@ -91,7 +91,7 @@ def test_staged_vec1_supported_platform_hashes_final_binary(
         assert hidden == ["_vec1_release_hash"]
 
 
-def test_staged_vec1_unsupported_platform_omits_download(
+def test_staged_vec1_unsupported_platform_rejects_release_without_download(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(build_vec1.sys, "platform", "linux")
@@ -100,8 +100,9 @@ def test_staged_vec1_unsupported_platform_omits_download(
         build_vec1, "_download_verified",
         lambda *_args: pytest.fail("unsupported platforms must not download Vec1"),
     )
-    with build_vec1.staged_vec1(tmp_path) as stage:
-        assert stage is None
+    with pytest.raises(RuntimeError, match="unavailable for release target"):
+        with build_vec1.staged_vec1(tmp_path):
+            pytest.fail("unsupported releases must not omit Vec1")
 
 
 def test_staged_vec1_nonreproducible_compiler_output_rejected(

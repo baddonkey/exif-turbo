@@ -75,3 +75,47 @@ artifact and generated locally under the ignored `logs/quality/` directory.
 Large-memory AI benchmarks are intentionally excluded from shared-runner merge
 gates. Run the reproducible commands in `docs/ai-performance.md` on an adequately
 provisioned machine and attach measurements to performance-focused changes.
+
+## Native Installer Builds
+
+The `Native Packages` workflow runs on relevant pull-request changes and manual
+dispatch. It builds Windows x64 MSI, Linux x86_64 and ARM64 DEB/RPM, and macOS
+Apple Silicon DMG on native runners with the committed dependency lock. It
+uploads installers as 14-day workflow artifacts; it does not publish releases,
+create tags, change versions, or commit files.
+
+All builds require the pinned Vec1 extension. Unsupported targets fail rather
+than silently shipping without AI search. The extension is compiled twice,
+checked for reproducibility, and verified against its embedded SHA-256 after
+packaging. On macOS it is signed before hashing and excluded from subsequent
+re-signing.
+
+The frozen executable runs an offline smoke check before installer creation:
+HTTPS certificate availability, real local text tokenization, encrypted Vec1
+insertion, database reopening, and filtered search. This check creates only
+temporary synthetic data and never downloads model weights or tokenizer assets.
+Windows also runs it against the administratively extracted MSI payload.
+Failures, missing reports, and 120-second timeouts stop the build.
+
+Build locally on the matching platform:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_windows.py
+```
+
+```sh
+python scripts/build_linux.py                 # DEB and RPM
+python scripts/build_macos.py --arch arm64     # ad-hoc signed DMG
+python scripts/build_macos.py --arch arm64 --sign "Developer ID Application: Your Name (TEAMID)"
+```
+
+Windows needs Visual Studio C++ x64 Build Tools, WiX 6 with its UI extension,
+and 7-Zip. Linux needs a C compiler, `dpkg-deb`, and `rpmbuild`; macOS needs
+Xcode Command Line Tools. Builds download verified native sources and staging
+materials and need adequate free disk space. ExifTool and media tools are
+bundled only in the MSI; Unix users install external tools separately.
+
+The workflow's macOS DMG is ad-hoc signed, not notarized. Developer ID signing,
+Apple notarization, Gatekeeper installation, MSI upgrade/uninstall behavior,
+and distribution-specific Linux installation remain release acceptance checks;
+a successful build alone does not certify them.

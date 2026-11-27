@@ -41,14 +41,12 @@ def _download_verified(url: str, destination: Path, expected: str) -> None:
 
 
 @contextmanager
-def staged_vec1(build_dir: Path, *, sign_identity: str | None = None) -> Generator[Path | None]:
-    """Create a private build stage, or omit Vec1 on unsupported hosts."""
+def staged_vec1(build_dir: Path, *, sign_identity: str | None = None) -> Generator[Path]:
+    """Create a private build stage; reject unsupported release targets."""
     system, machine = sys.platform, platform.machine()
     name = binary_name(system, machine)
     if name is None:
-        print(f"  Vec1 is unavailable for {system}/{machine}; building without it.")
-        yield None
-        return
+        raise RuntimeError(f"Vec1 is unavailable for release target {system}/{machine}")
 
     build_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="vec1-unix-", dir=build_dir) as work:

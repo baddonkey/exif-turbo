@@ -32,10 +32,12 @@ try:
     from audit_release_artifact import audit_release_payload
     from build_vec1 import STAGE_ENV, staged_vec1, verify_staged_binary
     from release_environment import ensure_release_environment
+    from smoke_release import smoke_release
 except ModuleNotFoundError:
     from scripts.audit_release_artifact import audit_release_payload
     from scripts.build_vec1 import STAGE_ENV, staged_vec1, verify_staged_binary
     from scripts.release_environment import ensure_release_environment
+    from scripts.smoke_release import smoke_release
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -261,23 +263,21 @@ def main() -> None:
     with staged_vec1(REPO_ROOT / "build", sign_identity=args.sign_identity) as vec1_stage:
         env = os.environ.copy()
         env.pop(STAGE_ENV, None)
-        if vec1_stage is not None:
-            env[STAGE_ENV] = str(vec1_stage)
+        env[STAGE_ENV] = str(vec1_stage)
         run([pyinstaller, "--noconfirm", "--clean", spec_file], env=env)
         print("  PyInstaller build complete.")
 
         app = REPO_ROOT / "dist" / "exif-turbo.app"
         binary = app / "Contents" / "Resources" / "exif_turbo" / "assets" / "native" / "vec1.dylib"
-        if vec1_stage is not None:
-            verify_staged_binary(vec1_stage, binary)
+        verify_staged_binary(vec1_stage, binary)
         create_lproj_dirs(app)
         audit_release_payload(app, verify_native_hashes=False)
         sign_bundle(app, args.sign_identity)
-        if vec1_stage is not None:
-            verify_staged_binary(vec1_stage, binary)
-            run(["codesign", "--verify", "--strict", str(binary)])
+        verify_staged_binary(vec1_stage, binary)
+        run(["codesign", "--verify", "--strict", str(binary)])
         run(["codesign", "--verify", "--deep", "--strict", str(app)])
         audit_release_payload(app, verify_native_hashes=False)
+        smoke_release(app / "Contents" / "MacOS" / "exif-turbo")
         dmg_out = build_dmg(app, version, arch_suffix)
 
     print()

@@ -53,6 +53,7 @@ protects](docs/user-manual.md#what-the-password-protects) for the full scope.
 - [User Manual](docs/user-manual.md)
 - [AI performance measurements](docs/ai-performance.md)
 - [CI quality checks](docs/continuous-integration.md)
+- [Native installer builds](docs/continuous-integration.md#native-installer-builds)
 - [License](LICENSE) and [third-party software notices](THIRD-PARTY-LICENSES.md)
 
 Sample-photo sources and licenses are listed in the [attribution manifest](tests/sample-data/ATTRIBUTION.md).

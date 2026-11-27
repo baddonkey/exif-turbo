@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -98,3 +100,48 @@ def test_bundled_vec1_extension_resolves_platform_binary(
     binary.write_bytes(b"modified extension")
     with pytest.raises(RuntimeError, match="integrity verification"):
         bundled_vec1_extension()
+
+
+def test_release_smoke_checks_real_tokenizer_and_encrypted_vec1(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    from exif_turbo.utils.release_smoke import run_release_smoke_test
+
+    extension_value = os.environ.get("EXIF_TURBO_VEC1_EXTENSION")
+    if not extension_value:
+        pytest.skip("EXIF_TURBO_VEC1_EXTENSION is not configured")
+    extension = Path(extension_value)
+    monkeypatch.setattr(vec1_extension, "bundled_vec1_extension", lambda: extension)
+    monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+    monkeypatch.setenv("TRANSFORMERS_OFFLINE", "1")
+    report = tmp_path / "result.json"
+
+    # Act
+    run_release_smoke_test(report)
+
+    # Assert
+    assert json.loads(report.read_text(encoding="utf-8")) == {"status": "passed"}
+
+
+def test_release_smoke_integrity_failure_reports_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    from exif_turbo.utils.release_smoke import run_release_smoke_test
+
+    def missing_extension() -> Path:
+        raise RuntimeError("bundled Vec1 failed integrity verification")
+
+    monkeypatch.setattr(vec1_extension, "bundled_vec1_extension", missing_extension)
+    monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+    monkeypatch.setenv("TRANSFORMERS_OFFLINE", "1")
+    report = tmp_path / "result.json"
+
+    # Act / Assert
+    with pytest.raises(SystemExit) as caught:
+        run_release_smoke_test(report)
+    assert caught.value.code == 1
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    assert payload["status"] == "failed"
+    assert "failed integrity verification" in payload["error"]
