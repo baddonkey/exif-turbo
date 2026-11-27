@@ -5,15 +5,14 @@ from typing import TypedDict
 
 from PySide6.QtCore import QThread, Signal
 
-from ...config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
 from ...data.ai_search_session import AiSearchSession
-from ...data.ai_vector_repository import AiVectorRepository
 from ...data.hybrid_search import (
     HybridSearchCanceled,
     HybridSearchResults,
     build_hybrid_results,
 )
 from ...data.image_index_repository import ImageIndexRepository
+from ...i18n import _
 from ...indexing.ai_indexer_service import AiIndexerService
 from ...search_query import parse_hybrid_search_query
 from .ai_search_worker import AiSearchWorker
@@ -76,10 +75,7 @@ class HybridSearchWorker(QThread):
             "date_to": date_to,
             "image_set_id": image_set_id,
         }
-        self._session = session or AiSearchSession(
-            ai_index_path(db_path), ai_id_map_path(db_path),
-            ai_vector_metadata_path(db_path), repository_factory=AiVectorRepository,
-        )
+        self._session = session or AiSearchSession(db_path)
         self._owns_session = session is None
         self._cached_results = cached_results
         self.results: HybridSearchResults | None = None
@@ -100,7 +96,9 @@ class HybridSearchWorker(QThread):
                 elif parsed.semantic_text:
                     with self._session.repository(self._key) as vectors:
                         if not vectors.get_vector_count():
-                            raise RuntimeError("AI search is unavailable: the AI index is empty.")
+                            raise RuntimeError(_(
+                                "AI index is empty. Run AI Full Scan for every indexed folder."
+                            ))
                         if self.isInterruptionRequested():
                             raise HybridSearchCanceled("Hybrid search was canceled.")
                         query_vector = AiIndexerService(vectors).encode_text(parsed.semantic_text)

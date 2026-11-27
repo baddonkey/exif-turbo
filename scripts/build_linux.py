@@ -8,6 +8,7 @@ Produces:
 
 Requirements:
     pip install uv==0.13.0
+    cc                 — C compiler for the pinned Vec1 extension
     dpkg-deb   (apt install dpkg)      — for DEB
     rpmbuild   (apt install rpm)       — for RPM
 
@@ -21,6 +22,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import platform
 import re
 import shutil
@@ -32,9 +34,11 @@ from pathlib import Path
 
 try:
     from audit_release_artifact import audit_release_payload
+    from build_vec1 import STAGE_ENV, staged_vec1, verify_staged_binary
     from release_environment import ensure_release_environment
 except ModuleNotFoundError:
     from scripts.audit_release_artifact import audit_release_payload
+    from scripts.build_vec1 import STAGE_ENV, staged_vec1, verify_staged_binary
     from scripts.release_environment import ensure_release_environment
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -45,9 +49,9 @@ def fail(msg: str) -> None:
     sys.exit(1)
 
 
-def run(cmd: list[str]) -> None:
+def run(cmd: list[str], *, env: dict[str, str] | None = None) -> None:
     print(f"  $ {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=REPO_ROOT)
+    result = subprocess.run(cmd, cwd=REPO_ROOT, env=env, check=False)
     if result.returncode != 0:
         fail(f"Command failed ({result.returncode}): {' '.join(cmd)}")
 
@@ -334,12 +338,14 @@ def main() -> None:
     parser.add_argument(
         "--deb-arch",
         choices=("amd64", "arm64"),
-        help="Override DEB architecture metadata (useful in cross-arch container builds).",
+        help="Override DEB architecture metadata (must match the build host).",
     )
     args = parser.parse_args()
 
     if args.deb_arch and args.rpm_only:
         fail("--deb-arch cannot be used with --rpm-only")
+    if args.deb_arch and args.deb_arch != deb_arch():
+        fail("--deb-arch must match the build host architecture")
 
     ensure_release_environment(Path(__file__))
     pyinstaller = find_tool("pyinstaller", venv_subpath=".venv/bin/pyinstaller")
@@ -355,21 +361,34 @@ def main() -> None:
 
     artifacts: list[Path] = []
 
-    if not args.rpm_only:
-        run([pyinstaller, "--noconfirm", "--clean", "exif-turbo-deb.spec"])
-        print("  PyInstaller DEB build complete.")
-        deb_bundle = REPO_ROOT / "dist" / "exif-turbo-deb"
-        artifacts.append(deb_bundle)
-        deb_out = build_deb(deb_bundle, version, deb_arch_override=args.deb_arch)
-        artifacts.append(deb_out)
+    with staged_vec1(REPO_ROOT / "build") as vec1_stage:
+        env = os.environ.copy()
+        env.pop(STAGE_ENV, None)
+        if vec1_stage is not None:
+            env[STAGE_ENV] = str(vec1_stage)
+        if not args.rpm_only:
+            run([pyinstaller, "--noconfirm", "--clean", "exif-turbo-deb.spec"], env=env)
+            print("  PyInstaller DEB build complete.")
+            deb_bundle = REPO_ROOT / "dist" / "exif-turbo-deb"
+            if vec1_stage is not None:
+                verify_staged_binary(
+                    vec1_stage, deb_bundle / "_internal" / "exif_turbo" / "assets" / "native" / "vec1.so"
+                )
+            artifacts.append(deb_bundle)
+            deb_out = build_deb(deb_bundle, version, deb_arch_override=args.deb_arch)
+            artifacts.append(deb_out)
 
-    if not args.deb_only:
-        run([pyinstaller, "--noconfirm", "--clean", "exif-turbo-rpm.spec"])
-        print("  PyInstaller RPM build complete.")
-        rpm_bundle = REPO_ROOT / "dist" / "exif-turbo-rpm"
-        artifacts.append(rpm_bundle)
-        rpm_out = build_rpm(rpm_bundle, version)
-        artifacts.append(rpm_out)
+        if not args.deb_only:
+            run([pyinstaller, "--noconfirm", "--clean", "exif-turbo-rpm.spec"], env=env)
+            print("  PyInstaller RPM build complete.")
+            rpm_bundle = REPO_ROOT / "dist" / "exif-turbo-rpm"
+            if vec1_stage is not None:
+                verify_staged_binary(
+                    vec1_stage, rpm_bundle / "_internal" / "exif_turbo" / "assets" / "native" / "vec1.so"
+                )
+            artifacts.append(rpm_bundle)
+            rpm_out = build_rpm(rpm_bundle, version)
+            artifacts.append(rpm_out)
 
     print()
     print("Done! Artifacts:")

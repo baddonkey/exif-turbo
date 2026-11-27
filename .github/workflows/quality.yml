@@ -62,15 +62,42 @@ jobs:
         run: exiftool -ver
       - name: Install locked development environment
         run: uv sync --locked --no-default-groups --extra dev --python ${{ matrix.python }} --no-managed-python
+      - name: Build Vec1 test extension (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .venv\Scripts\python.exe -c "from scripts.build_windows import stage_vec1; stage_vec1()"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "EXIF_TURBO_VEC1_EXTENSION=$pwd\build\vec1\vec1.dll" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Build Vec1 test extension (Linux and macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          .venv/bin/python - <<'PY'
+          import os
+          import shutil
+          from pathlib import Path
+          from scripts.build_vec1 import staged_vec1
+
+          root = Path(os.environ["RUNNER_TEMP"])
+          with staged_vec1(root) as stage:
+              if stage is None:
+                  raise RuntimeError("Vec1 is unavailable for this test runner")
+              binary = next(path for path in stage.iterdir() if path.suffix in (".so", ".dylib"))
+              target = root / binary.name
+              shutil.copy2(binary, target)
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as env:
+              env.write(f"EXIF_TURBO_VEC1_EXTENSION={target}\n")
+          PY
       - name: Check Linux Qt display startup
         if: runner.os == 'Linux'
         run: xvfb-run -a .venv/bin/python -c "from PySide6.QtWidgets import QApplication; app = QApplication([]); print('Qt platform:', app.platformName())"
       - name: Focused AI safety regressions (Windows)
         if: runner.os == 'Windows'
-        run: .venv\Scripts\python.exe scripts/run_tests_logged.py -k "ai_vector_storage or ai_search_session or date_eligibility"
+        run: .venv\Scripts\python.exe scripts/run_tests_logged.py -k "ai_vec1_repository or ai_search_session or date_eligibility"
       - name: Focused AI safety regressions (Linux)
         if: runner.os == 'Linux'
-        run: xvfb-run -a .venv/bin/python scripts/run_tests_logged.py -k "ai_vector_storage or ai_search_session or date_eligibility"
+        run: xvfb-run -a .venv/bin/python scripts/run_tests_logged.py -k "ai_vec1_repository or ai_search_session or date_eligibility"
       - name: Complete isolated suite (Windows)
         if: runner.os == 'Windows'
         run: .venv\Scripts\python.exe scripts/run_tests_logged.py
@@ -79,7 +106,7 @@ jobs:
         run: xvfb-run -a .venv/bin/python scripts/run_tests_logged.py
       - name: Focused AI safety regressions (macOS)
         if: runner.os == 'macOS'
-        run: .venv/bin/python scripts/run_tests_logged.py -k "ai_vector_storage or ai_search_session or date_eligibility"
+        run: .venv/bin/python scripts/run_tests_logged.py -k "ai_vec1_repository or ai_search_session or date_eligibility"
       - name: Complete isolated suite (macOS)
         if: runner.os == 'macOS'
         run: .venv/bin/python scripts/run_tests_logged.py

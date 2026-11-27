@@ -1,9 +1,13 @@
-# exif-turbo: migrate FAISS to SQLite Vec1 and implement hybrid search
+# exif-turbo: use SQLite Vec1 and implement hybrid search
 
 **Developer handoff / VS Code GitHub Copilot Agent Mode**  
 Repository: https://github.com/baddonkey/exif-turbo  
 Decision: use SQLite Vec1 as the vector engine; keep CLIP and the existing SQLCipher metadata database.  
 Reference baseline: main branch documentation for v1.23.2 (reviewed 25 November 2026). Verify the actual checkout before coding.
+
+**Updated direction:** Remove FAISS and rebuild AI vectors from the original
+images. Earlier references below to retaining FAISS describe the original
+transition plan; platform validation and performance gates remain open.
 
 ## Copilot task
 
@@ -11,7 +15,7 @@ Implement this plan in small, reviewable changes with tests. Start by mapping th
 
 ## 1. Goal and non-goals
 
-- Store image embeddings and the Vec1 index in the same SQLCipher database as metadata and FTS5. In production, no separate FAISS index should be needed after a verified migration.
+- Store image embeddings and the Vec1 index in the same SQLCipher database as metadata and FTS5. Rebuild the AI index from originals rather than migrating FAISS vectors.
 - Preserve metadata-only and AI-only modes; add a Hybrid mode using both engines in one result list.
 - Keep results stable across infinite scrolling and enforce date, folder, format, set and metadata restrictions before candidate limits.
 - Preserve local-first operation, existing password protection, cancellation, incremental/full scans and per-database configuration.
@@ -140,19 +144,21 @@ Temporary tables are connection-local: keep the session on its owning worker con
 
 **Exit gate:** Exhaustive paging tests demonstrate stable membership/order, complete union, correct counts, and no AI requery per page.
 
-## 7. Phase F — migrate existing encrypted FAISS stores
+## 7. Phase F — rebuild the AI index
 
-- [ ] Use the current authenticated snapshot reader only. Inspect FAISS index type, reconstruction capabilities and existing map to recover real vectors and view identities losslessly; do not treat approximate reconstructed vectors as exact originals. If the snapshot cannot be faithfully reconstructed, regenerate embeddings from media with the existing CLIP pipeline; report unavailable originals and retain the old snapshot.
-- [ ] Validate model identity, dimension, current image identity/path mapping and folder state. Skip/report stale or unknown records without deleting source files. Migrate in background with progress, bounded batches, disk-space preflight and cancellation. Keep a staging generation until complete.
-- [ ] Make migration restartable and idempotent. On cancellation, crash, low disk or authentication failure, keep legacy snapshot and readable SQLite metadata, clean or resume staging safely. Do not fall back to plaintext.
-- [ ] Validate counts by image/view, sampled vector values and search results; train/build index, verify encrypted close/reopen and backup/restore. Only then atomically mark Vec1 active. Keep legacy snapshot and its matching key through rollback window.
-- [ ] On first successful rollout, provide clearly documented rollback and cleanup. Remove legacy files only after verification and explicit user-facing cleanup policy; do not remove original media. A previous release may not understand the new schema: document safe backup/restore and downgrade constraints.
-- [ ] After migration support is stable, remove FAISS dependency, snapshot write path, duplicated encryption and mapping code in a separate reviewed change. Retain migration reader for a defined compatibility window; avoid silently dropping upgrade support from old releases.
+- [ ] Do not migrate vectors from FAISS. Inform users that switching to Vec1
+  starts an empty AI index and requires an **AI Full Scan** for every indexed
+  folder. EXIF metadata and original media are unaffected.
+- [ ] Handle unavailable originals and interrupted scans explicitly. Existing
+  AI index files remain untouched. No in-app rollback workflow is required.
+- [ ] Verify encrypted close/reopen, AI search, incremental scans and deletion
+  against the rebuilt index. Windows packaging and performance still need
+  validation.
 
 ## 8. Phase G — packaging, UI and docs
 
 - [ ] Integrate deterministic native Vec1 build into Windows MSI, macOS Apple silicon DMG and Linux DEB/RPM targets that currently ship AI; cover relevant x86/ARM architectures and frozen application specs. Keep optional AI/platform capability checks (including existing unsupported Intel macOS behaviour). Add source/license notices and update SBOM where applicable.
-- [ ] Add translated labels/tooltips, syntax help, precision controls, relevance sort, optional match badges, indexing/training progress, migration errors and cancellation. Retain accessibility and keyboard navigation.
+- [ ] Add translated labels/tooltips, syntax help, precision controls, relevance sort, optional match badges, indexing/training progress, re-indexing errors and cancellation. Retain accessibility and keyboard navigation.
 - [ ] Update user manual, project spec, AI performance docs, backup/password protection explanation and release notes. State that original media and exports remain outside database encryption.
 - [ ] Add integration tests that run against bundled SQLCipher and Vec1, not merely stock sqlite3; retain test doubles only for unit tests. Validate release artifacts on clean environments.
 
@@ -169,7 +175,7 @@ Use reproducible fixtures generated locally plus representative real libraries w
 | Paging | Every candidate exactly once across pages; no new embedding inference or vector search on next page; stale-generation results ignored |
 | Facets | Timeline counts match exact oracle before display cap and ignore active date selection as specified; format/folder counts retain current semantics |
 | Encryption | Correct/wrong password, encrypted reopen, WAL/temp/staging/backup inspection using synthetic known marker data, no plaintext vector cache |
-| Reliability | Insert/update/delete/disable, model changes, folder removal, rollback and migration interruption, cancellation, lock/unlock, concurrent metadata updates |
+| Reliability | Insert/update/delete/disable, model changes, folder removal, re-index interruption, cancellation, lock/unlock, concurrent metadata updates |
 | Performance | Compare p50/p95 first-result and page latency, memory, disk, training and incremental indexing at 10k, 100k, 500k, and 1M images where hardware permits; report vectors per image separately |
 | Packaging | Native smoke tests on supported release architectures; metadata-only mode works if Vec1/AI is unavailable |
 
@@ -179,11 +185,11 @@ Target first-page p95 no worse than legacy by more than 20% at comparable recall
 
 1. **ADR + encrypted native feasibility spike**. Dependency pin, supported matrix, actual schema/worker audit, benchmarks harness.
 2. **Vec1 repository + exact AI parity**. Schema/transactions, feature switch, tests; keep FAISS default until verified.
-3. **ANN optimization + migration**. Training, filtered query strategy, exact fallback, crash/reopen/rollback tests; switch only after validation.
+3. **ANN optimization + AI re-indexing**. Training, filtered query strategy, exact fallback and crash/reopen tests; switch only after validation.
 4. **Hybrid query and paging**. Explicit AND, discovery OR, RRF, facets, generation IDs, UI and saved sets.
 5. **Release hardening + gradual FAISS removal**. Packaged builds, docs, performance report, compatibility window and later cleanup.
 
-Definition of done: new and migrated collections use a single encrypted metadata/vector database; search and paging pass correctness and performance tests; unsupported AI configurations still support normal search; installers and migration/rollback documentation are verified; no uncontrolled plaintext artifacts or lost images. Include a summary of changed files, actual commands/test results, benchmark table, and outstanding limitations in every PR. Do not claim a test passed if it was not run.
+Definition of done: rebuilt collections use a single encrypted metadata/vector database; search and paging pass correctness and performance tests; unsupported AI configurations still support normal search; installers and re-indexing documentation are verified; no uncontrolled plaintext artifacts or lost images. Include a summary of changed files, actual commands/test results, benchmark table, and outstanding limitations in every PR. Do not claim a test passed if it was not run.
 
 ## Primary references
 

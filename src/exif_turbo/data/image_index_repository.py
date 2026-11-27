@@ -2407,9 +2407,9 @@ class ImageIndexRepository:
         """Fetch full image rows for a list of *paths*, preserving order.
 
         Returns ``(id, path, filename, metadata_json, size, mtime)`` tuples in
-        the same order as *paths* (FAISS score order), skipping paths not in
+        the same order as *paths* (similarity score order), skipping paths not in
         the DB.  Used by :class:`~exif_turbo.ui.workers.ai_search_worker.AiSearchWorker`
-        to hydrate FAISS hits into the same row format consumed by
+        to hydrate AI hits into the same row format consumed by
         ``_on_search_finished``.
         """
         if not paths:

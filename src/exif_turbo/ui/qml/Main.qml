@@ -4687,6 +4687,16 @@ ApplicationWindow {
                         }
                     }
 
+                    Label {
+                        visible: root._aiFeatureAvailable && aiEnabledSwitch.checked
+                        text: qsTr("After upgrading, run AI Full Scan for every indexed folder to rebuild the AI index from your original images.")
+                        font.pixelSize: 12
+                        opacity: 0.6
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 28
+                    }
+
                     // ── GPU Acceleration (experimental) ────────────────────
                     Label {
                         visible: _aiFeatureAvailable

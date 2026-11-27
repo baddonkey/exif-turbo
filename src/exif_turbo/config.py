@@ -50,21 +50,6 @@ def thumb_cache_dir(db_path: Path) -> Path:
     return database_data_dir(db_path) / "thumbs"
 
 
-def ai_index_path(db_path: Path) -> Path:
-    """Path to the FAISS vector index file for the given database."""
-    return database_data_dir(db_path) / "ai_index.faiss"
-
-
-def ai_id_map_path(db_path: Path) -> Path:
-    """Path to the JSON id-map (FAISS integer ID → image path) for the given database."""
-    return database_data_dir(db_path) / "ai_id_map.json"
-
-
-def ai_vector_metadata_path(db_path: Path) -> Path:
-    """Path to model and integrity metadata for the AI vector index."""
-    return database_data_dir(db_path) / "ai_index_meta.json"
-
-
 def settings_path(db_path: Path) -> Path:
     """Per-database settings file.
 

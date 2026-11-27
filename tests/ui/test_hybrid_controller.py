@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from pathlib import Path
 from threading import Event
@@ -8,9 +9,8 @@ import numpy as np
 import pytest
 from pytestqt.qtbot import QtBot
 
-from exif_turbo.config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
+from exif_turbo.data.ai_vec1_repository import AiVec1Repository
 from exif_turbo.data.ai_vector_backend import AiVectorBackend
-from exif_turbo.data.ai_vector_repository import AiVectorRepository
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.ui.models.exif_list_model import ExifListModel
 from exif_turbo.ui.models.folder_list_model import FolderListModel
@@ -23,6 +23,10 @@ from exif_turbo.ui.workers.hybrid_search_worker import HybridSearchWorker
 def hybrid_controller(
     qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[tuple[AppController, SearchListModel, list[str], list[str]]]:
+    extension = os.environ.get("EXIF_TURBO_VEC1_EXTENSION")
+    if not extension:
+        pytest.skip("EXIF_TURBO_VEC1_EXTENSION is not configured")
+    extension_path = Path(extension)
     db_path = tmp_path / "test.db"
     paths = [str(tmp_path / f"{index:03}.jpg") for index in range(125)]
     repo = ImageIndexRepository(db_path, key="")
@@ -32,10 +36,7 @@ def hybrid_controller(
         for index, path in enumerate(paths)
     ])
     repo.close()
-    vector_paths = (
-        ai_index_path(db_path), ai_id_map_path(db_path), ai_vector_metadata_path(db_path)
-    )
-    vectors = AiVectorRepository(*vector_paths)
+    vectors = AiVec1Repository(db_path, "", extension_path)
     vectors.load()
     vector = np.ones(512, dtype=np.float32)
     vector /= np.linalg.norm(vector)
@@ -53,6 +54,9 @@ def hybrid_controller(
             return vector
 
     monkeypatch.setattr("exif_turbo.ui.workers.hybrid_search_worker.AiIndexerService", FakeEncoder)
+    monkeypatch.setattr(
+        "exif_turbo.data.ai_search_session.bundled_vec1_extension", lambda: extension_path
+    )
     model = SearchListModel(cache_dir=tmp_path / "thumbs")
     controller = AppController(db_path, model, ExifListModel(), FolderListModel())
     controller.unlock("")

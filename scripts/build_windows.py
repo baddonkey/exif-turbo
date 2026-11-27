@@ -83,6 +83,13 @@ _FFMPEG_BUILDS_SOURCE_URL = (
     f"{_FFMPEG_BUILDS_COMMIT}.zip"
 )
 _MEDIA_TOOLS_LAYOUT_VERSION = 1
+_VEC1_COMMIT = "803d64f73ba09b9a0ea338b5c621493ac857d1e3"
+_VEC1_SOURCE_URL = (
+    f"https://raw.githubusercontent.com/sqlite/sqlite/{_VEC1_COMMIT}/ext/vec1/vec1.c"
+)
+_VEC1_SOURCE_SHA256 = "2fdaf637bf06639780f4c26ee165dbdbaa50849362f87d86e8388537567a2701"
+_VEC1_HEADERS_URL = "https://www.sqlite.org/2025/sqlite-amalgamation-3510100.zip"
+_VEC1_HEADERS_SHA256 = "84a85d6a1b920234349f01720912c12391a4f0cb5cb998087e641dee3ef8ef2e"
 
 
 def fail(msg: str) -> None:
@@ -253,6 +260,78 @@ def _download_verified(url: str, destination: Path, expected_sha256: str) -> Non
             f"SHA-256 mismatch for {url}: expected {expected_sha256}, "
             f"received {actual_sha256}"
         )
+
+
+def stage_vec1() -> Path:
+    """Build the pinned Windows extension twice and embed its verified digest."""
+    program_files = os.environ.get("ProgramFiles(x86)")
+    if not program_files:
+        raise RuntimeError("Visual Studio Build Tools are required to build Vec1")
+    vswhere = Path(program_files) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+    if not vswhere.is_file():
+        raise RuntimeError("Visual Studio Build Tools discovery is unavailable")
+    found = subprocess.run(
+        [
+            str(vswhere), "-latest", "-products", "*", "-requires",
+            "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+            "-property", "installationPath",
+        ],
+        check=True, capture_output=True, text=True,
+    )
+    location = found.stdout.strip()
+    if not location:
+        raise RuntimeError("Visual Studio C++ x64 Build Tools were not found")
+    vcvars = Path(location) / "VC" / "Auxiliary" / "Build" / "vcvars64.bat"
+    if not vcvars.is_file():
+        raise RuntimeError("Visual Studio x64 compiler initialization is unavailable")
+    build_dir = REPO_ROOT / "build"
+    build_dir.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="vec1-build-", dir=build_dir) as work:
+        root = Path(work)
+        source = root / "vec1.c"
+        headers = root / "headers.zip"
+        _download_verified(_VEC1_SOURCE_URL, source, _VEC1_SOURCE_SHA256)
+        _download_verified(_VEC1_HEADERS_URL, headers, _VEC1_HEADERS_SHA256)
+        include = root / "include"
+        include.mkdir()
+        with zipfile.ZipFile(headers) as archive:
+            for name in ("sqlite3.h", "sqlite3ext.h"):
+                (include / name).write_bytes(
+                    archive.read(f"sqlite-amalgamation-3510100/{name}")
+                )
+        binaries: list[bytes] = []
+        for name in ("first", "second"):
+            directory = root / name
+            directory.mkdir()
+            commands = (
+                'call "%VEC1_VCVARS%" >nul && '
+                'cl /nologo /c /O2 /MT /Brepro /I"..\\include" /DVEC1SIMD=SCALAR '
+                '"..\\vec1.c" /Fovec1scalar.obj && '
+                'cl /nologo /c /O2 /MT /Brepro /arch:AVX2 /I"..\\include" '
+                '/DVEC1SIMD=AVX2 "..\\vec1.c" /Fovec1avx2.obj && '
+                'link /nologo /dll /Brepro /out:vec1.dll vec1scalar.obj vec1avx2.obj'
+            )
+            script = directory / "build.cmd"
+            script.write_text(commands + "\n", encoding="ascii")
+            environment = {
+                **os.environ,
+                "VEC1_VCVARS": str(vcvars),
+            }
+            subprocess.run(
+                [os.environ["COMSPEC"], "/d", "/c", str(script)],
+                cwd=directory, env=environment, check=True,
+            )
+            binaries.append((directory / "vec1.dll").read_bytes())
+        if binaries[0] != binaries[1]:
+            raise RuntimeError("The Vec1 Windows build is not reproducible")
+        digest = hashlib.sha256(binaries[0]).hexdigest()
+        destination = build_dir / "vec1"
+        destination.mkdir(exist_ok=True)
+        (destination / "vec1.dll").write_bytes(binaries[0])
+        (destination / "_vec1_release_hash.py").write_text(
+            f'EXPECTED_SHA256 = "{digest}"\n', encoding="ascii"
+        )
+    return destination
 
 
 def _download_to_path(url: str, destination: Path) -> str:
@@ -687,6 +766,7 @@ def main() -> None:
 
     compile_translations()
 
+    stage_vec1()
     run([pyinstaller, "exif-turbo.spec", "--noconfirm", "--clean"])
     print("  PyInstaller build complete.")
 

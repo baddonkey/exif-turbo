@@ -34,10 +34,8 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication, QImage
 
-from ...config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
 from ...data.ai_search_session import AiSearchSession
 from ...data.hybrid_search import HybridSearchResults
-from ...data.ai_vector_storage import AiVectorStorage
 from .search_coordinator import SearchCoordinator
 from ...data.image_index_repository import (
     ImageIndexRepository,
@@ -320,10 +318,7 @@ class AppController(QObject):
         self._hybrid_invalidation_timer.timeout.connect(self._check_hybrid_generation)
         self._ai_enabled: bool = self._settings.ai_enabled if self._settings else False
         self._ai_search_worker: AiSearchWorker | None = None
-        self._ai_search_session = AiSearchSession(
-            ai_index_path(self._db_path), ai_id_map_path(self._db_path),
-            ai_vector_metadata_path(self._db_path),
-        )
+        self._ai_search_session = AiSearchSession(self._db_path)
         self._last_ai_query: str = ""
         self._last_ai_precision: str = "normal"
         self._has_ai_search_run: bool = False
@@ -1948,11 +1943,6 @@ class AppController(QObject):
             repo = ImageIndexRepository(self._db_path, key=password)
             repo.count_images("")  # verify key — raises DatabaseError on wrong key
             folder_repo = IndexedFolderRepository(self._db_path, key=password)
-            if password:
-                AiVectorStorage(ai_index_path(self._db_path), password).migrate(
-                    ai_index_path(self._db_path), ai_id_map_path(self._db_path),
-                    ai_vector_metadata_path(self._db_path),
-                )
             self._repo = repo
             self._folder_repo = folder_repo
             self._key = password
@@ -2405,7 +2395,7 @@ class AppController(QObject):
         any search-field-area filter (folder, format, marked-only) is active,
         the semantic result set is simply "everything in scope". In that case
         the normal paginated search yields the same images without touching the
-        FAISS/AI database or hydrating every indexed row at once.
+        AI index or hydrating every indexed row at once.
         """
         return (
             not self._last_ai_query.strip()
@@ -2436,7 +2426,7 @@ class AppController(QObject):
         """Show all in-scope images via the normal paginated search pipeline.
 
         Used when AI mode has a blank query and no active filters, avoiding the
-        cost of loading the FAISS index and hydrating every indexed row at once.
+        cost of loading the AI index and hydrating every indexed row at once.
         """
         self._query_text = ""
         self._current_result_row = 0
@@ -2922,7 +2912,7 @@ class AppController(QObject):
                 )
                 self._select_source_row(row)
             _did_restore = True
-        # Fresh AI search: always land on row 0 (FAISS best match).
+        # Fresh AI search: always land on row 0 (best match).
         if self._ai_select_first:
             self._ai_select_first = False
             if self._loaded_results > 0 and not _did_restore:

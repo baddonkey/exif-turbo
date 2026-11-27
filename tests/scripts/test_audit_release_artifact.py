@@ -80,6 +80,28 @@ def test_audit_release_payload_complete_payload_succeeds(tmp_path: Path) -> None
     audit_release_payload(tmp_path)
 
 
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "_internal/faiss/_swigfaiss.pyd",
+        "_internal/faiss_cpu.libs/libfaiss.so",
+        "_internal/faiss_cpu-1.dist-info/METADATA",
+    ],
+)
+def test_audit_release_payload_bundled_faiss_raises_error(
+    tmp_path: Path, relative_path: str
+) -> None:
+    # Arrange
+    _write_compliant_payload(tmp_path)
+    bundled = tmp_path / relative_path
+    bundled.parent.mkdir(parents=True, exist_ok=True)
+    bundled.write_bytes(b"unexpected dependency")
+
+    # Act / Assert
+    with pytest.raises(ArtifactAuditError, match="FAISS must not be bundled"):
+        audit_release_payload(tmp_path)
+
+
 def test_audit_release_payload_bundled_media_tools_succeed(tmp_path: Path) -> None:
     # Arrange
     _write_compliant_payload(tmp_path)

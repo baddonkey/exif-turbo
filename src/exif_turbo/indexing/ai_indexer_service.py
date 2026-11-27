@@ -1,17 +1,4 @@
-"""Vectorise images using OpenCLIP (ViT-B/32) and add them to AiVectorRepository.
-
-Usage::
-
-    repo = AiVectorRepository(index_path, id_map_path)
-    repo.load()
-    service = AiIndexerService(repo)
-    indexed, errors = service.build_index(
-        image_paths,
-        on_progress=lambda done, total, path: ...,
-        cancel_check=lambda: False,
-    )
-    repo.save()
-"""
+"""Vectorise images using OpenCLIP and store them in the AI index."""
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -64,11 +51,20 @@ _open_clip_import_lock = threading.Lock()
 
 @contextmanager
 def _huggingface_offline() -> Iterator[None]:
+    import huggingface_hub.constants as constants
+    from huggingface_hub.utils import reset_sessions
+
     previous_value = os.environ.get("HF_HUB_OFFLINE")
+    previous_offline = constants.HF_HUB_OFFLINE
+    transformers_hub = sys.modules.get("transformers.utils.hub")
+    previous_transformers_offline = (
+        getattr(transformers_hub, "_is_offline_mode", previous_offline)
+    )
     os.environ["HF_HUB_OFFLINE"] = "1"
-    constants = sys.modules.get("huggingface_hub.constants")
-    if constants is not None:
-        constants.HF_HUB_OFFLINE = True
+    constants.HF_HUB_OFFLINE = True
+    if transformers_hub is not None:
+        setattr(transformers_hub, "_is_offline_mode", True)
+    reset_sessions()
     try:
         yield
     finally:
@@ -76,10 +72,12 @@ def _huggingface_offline() -> Iterator[None]:
             os.environ.pop("HF_HUB_OFFLINE", None)
         else:
             os.environ["HF_HUB_OFFLINE"] = previous_value
-        constants = sys.modules.get("huggingface_hub.constants")
-        if constants is not None:
-            effective_value = previous_value or os.environ.get("TRANSFORMERS_OFFLINE", "")
-            constants.HF_HUB_OFFLINE = effective_value.upper() in {"1", "ON", "YES", "TRUE"}
+        constants.HF_HUB_OFFLINE = previous_offline
+        # Transformers and Hub HTTP sessions cache offline state at import/creation.
+        transformers_hub = sys.modules.get("transformers.utils.hub")
+        if transformers_hub is not None:
+            setattr(transformers_hub, "_is_offline_mode", previous_transformers_offline)
+        reset_sessions()
 
 
 @contextmanager
@@ -325,22 +323,29 @@ class AiIndexerService:
                 else:
                     try:
                         with _huggingface_cache(self._cache_dir), _huggingface_offline():
-                            _cached_tokenizer = open_clip.get_tokenizer(
+                            tokenizer = open_clip.get_tokenizer(
                                 self._profile.model_ref,
                                 **tokenizer_kwargs,
                             )
-                        _check_tokenizer_has_vocab(_cached_tokenizer)
-                    except (FileNotFoundError, OSError, RuntimeError, ValueError):
+                        _check_tokenizer_has_vocab(tokenizer)
+                    except (FileNotFoundError, OSError, RuntimeError, ValueError, AttributeError) as exc:
+                        # Transformers' fast-tokenizer conversion calls endswith on
+                        # a missing vocab_file instead of reporting a cache miss.
+                        if isinstance(exc, AttributeError) and (
+                            exc.name != "endswith" or exc.obj is not None
+                        ):
+                            raise
                         _log.info(
                             "AI tokenizer %s is not fully cached; allowing one online acquisition",
                             self._profile.identifier,
                         )
                         with _huggingface_cache(self._cache_dir):
-                            _cached_tokenizer = open_clip.get_tokenizer(
+                            tokenizer = open_clip.get_tokenizer(
                                 self._profile.model_ref,
                                 **tokenizer_kwargs,
                             )
-                        _check_tokenizer_has_vocab(_cached_tokenizer)
+                        _check_tokenizer_has_vocab(tokenizer)
+                    _cached_tokenizer = tokenizer
                 _cached_tokenizer_profile_identifier = self._profile.identifier
             self._tokenizer = _cached_tokenizer
         return self._tokenizer

@@ -1,4 +1,4 @@
-"""Shared contract for transitional AI vector repositories."""
+"""Contract for AI vector storage."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,8 +9,12 @@ import numpy as np
 from ..models.ai_model_profile import AiModelProfile
 
 
+class AiVectorIndexError(RuntimeError):
+    """The persisted image-vector index is incomplete or incompatible."""
+
+
 class AiVectorBackend(Protocol):
-    """Operations shared by the FAISS and SQLite Vec1 implementations."""
+    """Operations used by AI indexing and search."""
 
     @property
     def profile(self) -> AiModelProfile: ...

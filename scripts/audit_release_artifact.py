@@ -29,6 +29,21 @@ def _is_shared_library(path: Path) -> bool:
     return name.endswith((".dll", ".dylib", ".pyd", ".so")) or ".so." in name
 
 
+def omit_faiss_metadata(
+    datas: list[tuple[str, str, str]],
+) -> list[tuple[str, str, str]]:
+    """Remove optional FAISS distribution metadata collected by PyInstaller hooks."""
+    return [
+        item
+        for item in datas
+        if not any(
+            part.casefold().startswith(("faiss-", "faiss_", "faiss."))
+            and part.casefold().endswith(".dist-info")
+            for part in item[0].replace("\\", "/").split("/")
+        )
+    ]
+
+
 def _manifest_version(manifest: str, distribution: str) -> str:
     match = re.search(
         rf"^{re.escape(distribution)}\s+([^\s]+)\s+\[",
@@ -118,6 +133,14 @@ def audit_release_payload(
         for path in files
         if not path.is_relative_to(license_root) and path.stat().st_size > 0
     ]
+    for path in runtime_files:
+        parts = (part.casefold() for part in path.relative_to(root).parts)
+        if any(
+            part == "faiss"
+            or part.startswith(("faiss.", "faiss_", "faiss-", "libfaiss"))
+            for part in parts
+        ):
+            raise ArtifactAuditError(f"FAISS must not be bundled: {path}")
     _require_file(runtime_files, "open_clip/bpe_simple_vocab_16e6.txt.gz")
 
     runtime_by_name = {path.name.casefold(): path for path in runtime_files}

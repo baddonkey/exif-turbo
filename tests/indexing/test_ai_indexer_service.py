@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from exif_turbo.data.ai_vector_repository import AiVectorRepository
+from exif_turbo.data.ai_vector_backend import AiVectorBackend
 from exif_turbo.indexing.ai_indexer_service import AiIndexerService
 from exif_turbo.models.ai_model_profile import (
     AiModelProfile,
@@ -44,13 +44,27 @@ def _fake_image_vectors(batch):  # type: ignore[no-untyped-def]
 def _make_repo(
     tmp_path: Path,
     profile: AiModelProfile = DEFAULT_AI_MODEL_PROFILE,
-) -> AiVectorRepository:
-    repo = AiVectorRepository(
-        tmp_path / "ai_index.faiss",
-        tmp_path / "ai_id_map.json",
-        profile=profile,
-    )
-    repo.load()
+) -> AiVectorBackend:
+    repo = MagicMock(spec=AiVectorBackend)
+    repo.profile = profile
+    repo.dimension = profile.dimension
+    repo.storage_dir = tmp_path
+    views: dict[str, dict[str, np.ndarray]] = {}
+
+    def add_images(
+        embeddings: np.ndarray,
+        paths: list[str],
+        *,
+        view_ids: list[str] | None = None,
+    ) -> None:
+        vectors = np.atleast_2d(embeddings)
+        ids = view_ids if view_ids is not None else ["full"] * len(paths)
+        for path, view_id, vector in zip(paths, ids, vectors, strict=True):
+            views.setdefault(path, {})[view_id] = vector.copy()
+
+    repo.get_indexed_paths.side_effect = lambda: set(views)
+    repo.get_view_vectors.side_effect = lambda path: views.get(path, {})
+    repo.add_images.side_effect = add_images
     return repo
 
 
@@ -581,6 +595,149 @@ def test_ai_indexer_service_offline_tokenizer_without_vocab_falls_back_online(
     # Assert
     assert tokenizer is full_vocab
     assert offline_values == ["1", None]
+
+
+def test_ai_indexer_service_missing_fast_tokenizer_vocab_retries_online(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    from tokenizers import Tokenizer
+    from tokenizers.models import WordLevel
+    from tokenizers.pre_tokenizers import Whitespace
+    from transformers import XLMRobertaTokenizerFast
+
+    monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
+    backend = Tokenizer(WordLevel({
+        "<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3,
+        "dog": 4, "car": 5, "house": 6, "bottle": 7,
+    }, unk_token="<unk>"))
+    backend.pre_tokenizer = Whitespace()
+    complete_tokenizer = XLMRobertaTokenizerFast(tokenizer_object=backend)
+    offline_values: list[str | None] = []
+
+    def get_tokenizer(*args: object, **kwargs: object) -> SimpleNamespace:
+        offline = os.environ.get("HF_HUB_OFFLINE")
+        offline_values.append(offline)
+        if offline == "1":
+            # Real Transformers failure when neither tokenizer.json nor vocab exists.
+            return SimpleNamespace(tokenizer=XLMRobertaTokenizerFast())
+        return SimpleNamespace(tokenizer=complete_tokenizer)
+
+    monkeypatch.setitem(sys.modules, "open_clip", SimpleNamespace(get_tokenizer=get_tokenizer))
+    monkeypatch.setattr("exif_turbo.indexing.ai_indexer_service._cached_tokenizer", None)
+    monkeypatch.setattr(
+        "exif_turbo.indexing.ai_indexer_service._cached_tokenizer_profile_identifier", None,
+    )
+    service = AiIndexerService(_make_repo(tmp_path))
+
+    # Act
+    tokenizer = service._get_tokenizer()
+
+    # Assert
+    assert offline_values == ["1", None]
+    assert tokenizer.tokenizer("bottle", add_special_tokens=False)["input_ids"] == [7]
+    assert AiIndexerService(_make_repo(tmp_path))._get_tokenizer() is tokenizer
+    assert offline_values == ["1", None]
+
+
+def test_ai_indexer_service_unrelated_tokenizer_attribute_error_is_not_retried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    error = AttributeError("Unexpected tokenizer attribute", name="missing_method", obj=None)
+    factory = MagicMock(side_effect=error)
+    monkeypatch.setitem(sys.modules, "open_clip", SimpleNamespace(get_tokenizer=factory))
+    monkeypatch.setattr("exif_turbo.indexing.ai_indexer_service._cached_tokenizer", None)
+    service = AiIndexerService(_make_repo(tmp_path))
+
+    # Act / Assert
+    with pytest.raises(AttributeError, match="Unexpected tokenizer attribute") as caught:
+        service._get_tokenizer()
+    assert caught.value is error
+    assert factory.call_count == 1
+
+
+def test_ai_indexer_service_model_cache_miss_restores_online_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    import huggingface_hub.constants as hf_constants
+    import transformers.utils.hub as transformers_hub
+    from huggingface_hub.utils import get_session, reset_sessions
+    from huggingface_hub.utils._http import OfflineAdapter
+
+    monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
+    monkeypatch.delenv("TRANSFORMERS_OFFLINE", raising=False)
+    monkeypatch.setattr(hf_constants, "HF_HUB_OFFLINE", False)
+    monkeypatch.setattr(transformers_hub, "_is_offline_mode", False)
+    reset_sessions()
+    service = AiIndexerService(_make_repo(tmp_path))
+    model, preprocess = MagicMock(), MagicMock()
+    modes: list[bool] = []
+
+    def create_model(*args: object, **kwargs: object) -> tuple[MagicMock, MagicMock, MagicMock]:
+        offline = hf_constants.HF_HUB_OFFLINE
+        modes.append(offline)
+        assert transformers_hub.is_offline_mode() == offline
+        adapter = get_session().get_adapter("https://example.invalid")
+        assert isinstance(adapter, OfflineAdapter) == offline
+        if offline:
+            raise RuntimeError("Model is not cached")
+        return model, MagicMock(), preprocess
+
+    monkeypatch.setitem(
+        sys.modules, "open_clip",
+        SimpleNamespace(create_model_and_transforms=create_model),
+    )
+    monkeypatch.setattr("exif_turbo.indexing.ai_indexer_service._cached_model", None)
+    monkeypatch.setattr("exif_turbo.indexing.ai_indexer_service._cached_preprocess", None)
+    monkeypatch.setattr("exif_turbo.indexing.ai_indexer_service._cached_profile_identifier", None)
+
+    # Act
+    try:
+        service._ensure_model_loaded()
+    finally:
+        reset_sessions()
+
+    # Assert
+    assert modes == [True, False]
+    assert service._model is model
+    assert service._preprocess is preprocess
+    assert "HF_HUB_OFFLINE" not in os.environ
+
+
+@pytest.mark.parametrize("offline_variable", ["HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"])
+def test_huggingface_offline_error_preserves_explicit_offline_mode(
+    monkeypatch: pytest.MonkeyPatch, offline_variable: str,
+) -> None:
+    # Arrange
+    import huggingface_hub.constants as hf_constants
+    import transformers.utils.hub as transformers_hub
+    from huggingface_hub.utils import get_session, reset_sessions
+    from huggingface_hub.utils._http import OfflineAdapter
+    from exif_turbo.indexing.ai_indexer_service import _huggingface_offline
+
+    monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
+    monkeypatch.delenv("TRANSFORMERS_OFFLINE", raising=False)
+    monkeypatch.setenv(offline_variable, "1")
+    monkeypatch.setattr(hf_constants, "HF_HUB_OFFLINE", True)
+    monkeypatch.setattr(transformers_hub, "_is_offline_mode", True)
+    reset_sessions()
+
+    # Act
+    try:
+        with pytest.raises(RuntimeError, match="cache miss"), _huggingface_offline():
+            raise RuntimeError("cache miss")
+
+        # Assert
+        assert hf_constants.HF_HUB_OFFLINE
+        assert transformers_hub.is_offline_mode()
+        assert isinstance(get_session().get_adapter("https://example.invalid"), OfflineAdapter)
+        assert os.environ[offline_variable] == "1"
+        if offline_variable != "HF_HUB_OFFLINE":
+            assert "HF_HUB_OFFLINE" not in os.environ
+    finally:
+        reset_sessions()
 
 
 def test_ai_indexer_service_model_load_uses_repo_storage_cache_dir(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from threading import Event, Thread
 
@@ -7,146 +8,85 @@ import numpy as np
 import pytest
 
 from exif_turbo.data.ai_search_session import AiSearchSession
-from exif_turbo.data.ai_vector_repository import AiVectorRepository
-from exif_turbo.data.ai_vector_storage import AiVectorAuthenticationError, AiVectorStorage
+from exif_turbo.data.ai_vec1_repository import AiVec1Repository
+from exif_turbo.data.ai_vector_backend import AiVectorIndexError
+from exif_turbo.data.image_index_repository import ImageIndexRepository
 
 
-class _RepositoryFactory:
-    def __init__(self) -> None:
-        self.created = 0
-
-    def __call__(self, *paths: Path, key: str) -> AiVectorRepository:
-        self.created += 1
-        return AiVectorRepository(*paths, key=key)
-
-
-def _session(tmp_path: Path, factory: _RepositoryFactory) -> AiSearchSession:
-    return AiSearchSession(
-        tmp_path / "ai_index.faiss", tmp_path / "ai_id_map.json",
-        tmp_path / "ai_index_meta.json", repository_factory=factory,
-    )
+@pytest.fixture
+def extension_path() -> Path:
+    value = os.environ.get("EXIF_TURBO_VEC1_EXTENSION")
+    if not value:
+        pytest.skip("EXIF_TURBO_VEC1_EXTENSION is not configured")
+    path = Path(value)
+    if not path.is_file():
+        pytest.fail("EXIF_TURBO_VEC1_EXTENSION does not point to a file")
+    return path
 
 
-def _save(tmp_path: Path, paths: list[str], key: str = "test-passphrase") -> None:
-    repository = AiVectorRepository(tmp_path / "ai_index.faiss", tmp_path / "ai_id_map.json", key=key)
-    repository.load()
-    repository.reset()
-    if paths:
-        repository.add_images(np.ones((len(paths), 512), dtype=np.float32), paths)
-    repository.save()
+def _seed(db_path: Path, image_paths: list[str]) -> None:
+    repo = ImageIndexRepository(db_path, key="")
+    try:
+        for path in image_paths:
+            repo.upsert_image(path, Path(path).name, 1.0, 100, {}, "")
+    finally:
+        repo.close()
 
 
-def test_ai_search_session_unchanged_generation_reuses_validated_snapshot(tmp_path: Path) -> None:
+def test_ai_search_session_reopened_lease_observes_new_vectors(
+    tmp_path: Path, extension_path: Path
+) -> None:
     # Arrange
-    _save(tmp_path, ["/photos/a.jpg"])
-    factory = _RepositoryFactory()
-    session = _session(tmp_path, factory)
+    db_path = tmp_path / "index.db"
+    first, second = str(tmp_path / "first.jpg"), str(tmp_path / "second.jpg")
+    _seed(db_path, [first, second])
+    session = AiSearchSession(db_path, extension_resolver=lambda: extension_path)
+    writer = AiVec1Repository(db_path, "", extension_path)
+    writer.load()
+    vector = np.ones(512, dtype=np.float32)
+    writer.add_images(vector, [first])
 
     # Act
-    with session.repository("test-passphrase") as first:
-        expected = first.get_vector("/photos/a.jpg")
-    with session.repository("test-passphrase") as second:
-        actual = second.get_vector("/photos/a.jpg")
-
-    # Assert
-    assert first is second
-    assert factory.created == 1
-    assert np.allclose(actual, expected)
-    session.close()
-
-
-def test_ai_search_session_published_scan_preserves_active_snapshot_and_refreshes_next_search(tmp_path: Path) -> None:
-    # Arrange
-    _save(tmp_path, ["/photos/a.jpg"])
-    factory = _RepositoryFactory()
-    session = _session(tmp_path, factory)
-
-    # Act
-    with session.repository("test-passphrase") as original:
-        _save(tmp_path, ["/photos/b.jpg"])
+    with session.repository("") as original:
         original_paths = original.get_indexed_paths()
-    with session.repository("test-passphrase") as updated:
+    writer.add_images(vector, [second])
+    with session.repository("") as updated:
         updated_paths = updated.get_indexed_paths()
-
-    # Assert
-    assert original_paths == {"/photos/a.jpg"}
-    assert updated_paths == {"/photos/b.jpg"}
-    assert factory.created == 2
+    writer.close()
     session.close()
 
-
-def test_ai_search_session_deleted_snapshot_drops_cached_paths(tmp_path: Path) -> None:
-    # Arrange
-    _save(tmp_path, ["/photos/a.jpg"])
-    session = _session(tmp_path, _RepositoryFactory())
-    with session.repository("test-passphrase"):
-        pass
-    (tmp_path / "ai_index.faiss.enc").unlink()
-
-    # Act
-    with session.repository("test-passphrase") as repository:
-        actual = repository.get_indexed_paths()
-
     # Assert
-    assert actual == set()
-    session.close()
+    assert original_paths == {first}
+    assert updated_paths == {first, second}
 
 
-def test_ai_search_session_key_rewrap_rejects_old_password(tmp_path: Path) -> None:
+def test_ai_search_session_concurrent_index_change_rejects_stale_results(
+    tmp_path: Path, extension_path: Path
+) -> None:
     # Arrange
-    _save(tmp_path, ["/photos/a.jpg"])
-    session = _session(tmp_path, _RepositoryFactory())
-    with session.repository("test-passphrase"):
-        pass
-    AiVectorStorage(tmp_path / "ai_index.faiss", "test-passphrase").change_password("new-passphrase")
+    db_path = tmp_path / "index.db"
+    image = str(tmp_path / "image.jpg")
+    _seed(db_path, [image])
+    session = AiSearchSession(db_path, extension_resolver=lambda: extension_path)
 
     # Act / Assert
-    with pytest.raises(AiVectorAuthenticationError):
-        with session.repository("test-passphrase"):
-            pass
-    with session.repository("new-passphrase") as repository:
-        assert repository.get_indexed_paths() == {"/photos/a.jpg"}
+    with pytest.raises(AiVectorIndexError, match="changed during search"), session.repository(""):
+        writer = AiVec1Repository(db_path, "", extension_path)
+        try:
+            writer.load()
+            writer.add_images(np.ones(512, dtype=np.float32), [image])
+        finally:
+            writer.close()
     session.close()
 
 
-def test_ai_search_session_corrupt_generation_never_serves_cached_results(tmp_path: Path) -> None:
+def test_ai_search_session_close_waits_for_lease_and_rejects_late_search(
+    tmp_path: Path, extension_path: Path
+) -> None:
     # Arrange
-    _save(tmp_path, ["/photos/a.jpg"])
-    session = _session(tmp_path, _RepositoryFactory())
-    with session.repository("test-passphrase"):
-        pass
-    encrypted = tmp_path / "ai_index.faiss.enc"
-    encrypted.write_bytes(b"corrupt snapshot")
-
-    # Act / Assert
-    with pytest.raises(AiVectorAuthenticationError):
-        with session.repository("test-passphrase"):
-            pass
-    session.close()
-
-
-def test_ai_search_session_invalidation_reloads_unchanged_generation(tmp_path: Path) -> None:
-    # Arrange
-    _save(tmp_path, ["/photos/a.jpg"])
-    factory = _RepositoryFactory()
-    session = _session(tmp_path, factory)
-    with session.repository("test-passphrase"):
-        pass
-
-    # Act
-    session.invalidate()
-    with session.repository("test-passphrase") as repository:
-        actual = repository.get_indexed_paths()
-
-    # Assert
-    assert actual == {"/photos/a.jpg"}
-    assert factory.created == 2
-    session.close()
-
-
-def test_ai_search_session_close_waits_for_active_lease_and_rejects_late_search(tmp_path: Path) -> None:
-    # Arrange
-    session = _session(tmp_path, _RepositoryFactory())
+    db_path = tmp_path / "index.db"
+    _seed(db_path, [])
+    session = AiSearchSession(db_path, extension_resolver=lambda: extension_path)
     started, closed = Event(), Event()
 
     def close_session() -> None:
@@ -164,6 +104,5 @@ def test_ai_search_session_close_waits_for_active_lease_and_rejects_late_search(
 
     # Assert
     assert closed.is_set()
-    with pytest.raises(RuntimeError, match="closed"):
-        with session.repository(""):
-            pass
+    with pytest.raises(RuntimeError, match="closed"), session.repository(""):
+        pass

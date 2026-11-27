@@ -1,36 +1,31 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 from threading import RLock
 
-from .ai_vector_backend import AiVectorBackend
-from .ai_vector_repository import AiVectorIndexError, AiVectorRepository
+from ..utils.vec1_extension import bundled_vec1_extension
+from .ai_index_revision import AiIndexRevision
+from .ai_vec1_repository import AiVec1Repository
+from .ai_vector_backend import AiVectorBackend, AiVectorIndexError
 
 
 class AiSearchSession:
-    """Own one validated search snapshot; scans publish separate repositories."""
+    """Serialize local searches and reject results from a changed AI index."""
 
     def __init__(
-        self, index_path: Path, map_path: Path, metadata_path: Path,
-        *, repository_factory: Callable[..., AiVectorBackend] = AiVectorRepository,
+        self, db_path: Path, *, extension_resolver: Callable[[], Path] | None = None
     ) -> None:
-        self._paths = (index_path, map_path, metadata_path)
-        self._factory = repository_factory
+        self._db_path = db_path
+        self._extension_resolver = extension_resolver
         self._lock = RLock()
-        self._repository: AiVectorBackend | None = None
-        self._generation: tuple[tuple[int, int, int, int] | None, ...] | None = None
-        self._key = ""
         self._closed = False
 
-    def _disk_generation(self) -> tuple[tuple[int, int, int, int] | None, ...]:
-        index_path = self._paths[0]
-        encrypted_path = index_path.with_name(index_path.name + ".enc")
-        key_dir = index_path.with_name(index_path.name + ".keys")
-        paths = (*self._paths, encrypted_path, key_dir / ".thumb_key", key_dir / "password.pending")
+    def disk_generation(self) -> tuple[tuple[int, int, int, int] | None, ...]:
+        """Return the database and WAL file identities for cached hybrid results."""
         generation: list[tuple[int, int, int, int] | None] = []
-        for path in paths:
+        for path in (self._db_path, self._db_path.with_name(self._db_path.name + "-wal")):
             try:
                 stat = path.stat()
             except FileNotFoundError:
@@ -39,47 +34,28 @@ class AiSearchSession:
                 generation.append((stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns))
         return tuple(generation)
 
-    def disk_generation(self) -> tuple[tuple[int, int, int, int] | None, ...]:
-        """Return the current on-disk snapshot identity without loading it."""
-        return self._disk_generation()
-
     @contextmanager
-    def repository(self, key: str) -> Iterator[AiVectorBackend]:
-        """Lease a read-only snapshot, serializing load/search against close."""
+    def repository(self, key: str) -> Generator[AiVectorBackend]:
         with self._lock:
             if self._closed:
                 raise RuntimeError("AI search session is closed")
-            generation = self._disk_generation()
-            if self._repository is None or self._generation != generation or self._key != key:
-                self._discard_repository()
-                candidate = self._factory(*self._paths, key=key)
-                candidate.load()
-                loaded_generation = self._disk_generation()
-                if loaded_generation != generation:
-                    candidate.close()
-                    candidate = self._factory(*self._paths, key=key)
-                    candidate.load()
-                    if self._disk_generation() != loaded_generation:
-                        candidate.close()
-                        raise AiVectorIndexError("AI index changed while loading; retry the search")
-                self._repository = candidate
-                self._generation = loaded_generation
-                self._key = key
-            yield self._repository
-
-    def _discard_repository(self) -> None:
-        repository = self._repository
-        self._repository = None
-        self._generation = None
-        self._key = ""
-        if repository is not None:
-            repository.close()
+            resolver = self._extension_resolver or bundled_vec1_extension
+            candidate = AiVec1Repository(self._db_path, key, resolver())
+            candidate.load()
+            try:
+                revision = AiIndexRevision(self._db_path, key)
+                state = revision.state()
+                yield candidate
+                if revision.state() != state:
+                    raise AiVectorIndexError("AI index changed during search; retry the search")
+            finally:
+                candidate.close()
 
     def invalidate(self) -> None:
+        """Wait for any active lease to finish."""
         with self._lock:
-            self._discard_repository()
+            pass
 
     def close(self) -> None:
         with self._lock:
-            self.invalidate()
             self._closed = True

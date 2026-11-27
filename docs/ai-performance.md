@@ -1,5 +1,51 @@
 # AI Runtime Benchmark
 
+## Model loading
+
+AI first checks the local model cache without network access, then retries
+online if assets are missing. The cache check restores both Hugging Face HTTP
+sessions and Transformers' cached offline state before retrying. Explicit
+offline settings remain respected. Restart the application after updating to
+clear offline state left by an earlier failed scan.
+
+Image scanning and text search use separate assets. If the image weights are
+cached but the text tokenizer vocabulary is missing, the first AI/Hybrid search
+downloads the tokenizer. Missing-vocabulary failures during the cache check
+also trigger this retry, including Transformers' fast-tokenizer conversion
+error (`'NoneType' object has no attribute 'endswith'`). Existing image vectors
+do not need to be re-indexed for this fix.
+
+## Current Vec1 benchmark
+
+The current benchmark uses an encrypted Vec1 database and synthetic image paths
+and vectors. Supply the path to a compatible Vec1 extension binary:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/benchmark_ai_search.py --extension PATH --images 10000 --repeats 20
+```
+
+The script prints JSON to standard output. It reports indexing time, search
+latency percentiles, database size, and process RSS where available. It does
+not encode original images or measure end-to-end application performance.
+
+On Windows, a pre-query-optimization run with 10,000 synthetic images, five
+512-dimensional vectors per image, 20 warm searches, top 800 and threshold -1
+measured p50/p95 of 2,640.61/3,578.35 ms. Insertion took 6.12 s and the
+encrypted database occupied 216,760,320 bytes. After choosing a vector-first
+query plan for broad scopes, a separate run of the same benchmark measured
+p50/p95 of 1,083.34/1,623.30 ms, insertion of 9.93 s, and 216,858,624 bytes.
+RSS was unavailable. Both runs had other work active; they are not directly
+comparable to the historical FAISS measurements below or to end-to-end
+application latency. The proposed latency target has not been demonstrated.
+
+## Historical FAISS results
+
+The remaining sections describe the former FAISS implementation and its
+historical synthetic benchmarks. FAISS is no longer the application backend.
+Implementation details, compatibility statements, commands, and performance
+figures below describe that earlier work, not the current Vec1 runtime.
+The old benchmark harness and its options are not the current benchmark.
+
 ## Phase 4: Date Eligibility and Facets
 
 Non-empty AI queries now search date-eligible paths for the capped display
@@ -42,18 +88,10 @@ constructing a set of every vector row for every batch. This requires no second
 full-index membership set. Appends, reloads, resets, and folder removal keep the
 path map consistent.
 
-## Reproduction
+## Historical benchmark method
 
-Run each measurement in a fresh process from the project virtual environment:
-
-```powershell
-.\.venv\Scripts\python.exe scripts/benchmark_ai_search.py --images 10000 --output logs/ai-benchmarks/10000-plain.json
-.\.venv\Scripts\python.exe scripts/benchmark_ai_search.py --images 10000 --encrypted --output logs/ai-benchmarks/10000-encrypted.json
-.\.venv\Scripts\python.exe scripts/benchmark_ai_search.py --images 100000 --output logs/ai-benchmarks/100000-plain.json
-.\.venv\Scripts\python.exe scripts/benchmark_ai_search.py --images 100000 --encrypted --output logs/ai-benchmarks/100000-encrypted.json
-```
-
-The deterministic seed is 42, batches contain 256 images, and every image has
+The historical harness used fresh processes. Its deterministic seed was 42,
+batches contained 256 images, and every image had
 five normalized synthetic vectors. FAISS uses one CPU thread. Each search
 returns up to 2,000 unique images with threshold 0; cached and reloaded results
 must have identical paths, ranking, and scores. Each reported search median
@@ -139,8 +177,8 @@ outside the synthetic workload.
 
 ### Compression Evaluation
 
-Use `--compare-indexes --repeats 5` with the benchmark commands above to compare
-FAISS float16 and 8-bit scalar quantization against the exact reference. The
+The historical harness compared FAISS float16 and 8-bit scalar quantization
+against the exact reference. The
 candidate path max-pools all five views per image and reports image recall at
 100, maximum score error, threshold eligibility changes at 0.18/0.20/0.22,
 and serialized vector size. Queries and embeddings are independent synthetic

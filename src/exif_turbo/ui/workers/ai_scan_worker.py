@@ -6,14 +6,17 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
-from ...config import ai_id_map_path, ai_index_path, ai_vector_metadata_path, thumb_cache_dir
-from ...data.ai_vector_repository import AiVectorIndexError, AiVectorRepository
+from ...config import thumb_cache_dir
+from ...data.ai_vec1_repository import AiVec1Repository
+from ...data.ai_vector_backend import AiVectorBackend
 from ...data.image_index_repository import ImageIndexRepository
 from ...indexing.ai_indexer_service import AiIndexerService, image_paths_for_folder
+from ...utils.ai_index_write_lock import AiIndexWriteLock
+from ...utils.vec1_extension import bundled_vec1_extension
 
 
 class AiScanWorker(QThread):
-    """Encode all images in a folder with CLIP and persist to the FAISS index.
+    """Encode all images in a folder with CLIP and persist to the active AI index.
 
     Signals mirror those of IndexWorker for consistency:
       finished(indexed_count, error_count)
@@ -53,6 +56,16 @@ class AiScanWorker(QThread):
 
     def run(self) -> None:
         try:
+            with AiIndexWriteLock(self._db_path):
+                self._run_locked()
+        except Exception as exc:  # noqa: BLE001
+            self.failed.emit(str(exc))
+        finally:
+            self._key = ""
+
+    def _run_locked(self) -> None:
+        vector_repo: AiVectorBackend | None = None
+        try:
             # 1. Collect image paths for the folder from the regular index DB.
             repo = ImageIndexRepository(self._db_path, key=self._key)
             stamps = repo.get_folder_stamps(self._folder_id)
@@ -66,21 +79,11 @@ class AiScanWorker(QThread):
                 self.finished.emit(0, 0)
                 return
 
-            # 2. Load (or create) the FAISS index.
-            idx_path = ai_index_path(self._db_path)
-            map_path = ai_id_map_path(self._db_path)
-            vector_repo = AiVectorRepository(
-                idx_path,
-                map_path,
-                ai_vector_metadata_path(self._db_path),
-                key=self._key,
+            # 2. Load (or create) the active AI index.
+            vector_repo = AiVec1Repository(
+                self._db_path, self._key, bundled_vec1_extension(),
             )
-            try:
-                vector_repo.load()
-            except AiVectorIndexError:
-                if not self._force_rebuild:
-                    raise
-                vector_repo.reset()
+            vector_repo.load()
             if self._force_rebuild:
                 vector_repo.remove_folder(self._folder_path)
 
@@ -106,6 +109,8 @@ class AiScanWorker(QThread):
 
             # 4. Persist regardless of cancel so partial work is not lost.
             vector_repo.save()
+            vector_repo.close()
+            vector_repo = None
 
             if self._cancel_event.is_set():
                 self.canceled.emit(indexed)
@@ -115,4 +120,6 @@ class AiScanWorker(QThread):
         except Exception as exc:  # noqa: BLE001
             self.failed.emit(str(exc))
         finally:
+            if vector_repo is not None:
+                vector_repo.close()
             self._key = ""

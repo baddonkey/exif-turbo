@@ -18,6 +18,12 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
+msgid "After upgrading, run AI Full Scan for every indexed folder to rebuild the AI index from your original images."
+msgstr ""
+
+msgid "AI index is empty. Run AI Full Scan for every indexed folder."
+msgstr ""
+
 #: src/exif_turbo/ui/models/settings_model.py:77
 msgid "PyTorch is not available on macOS Intel for Python 3.13+."
 msgstr "PyTorch na è betg disponibel sin macOS Intel per Python 3.13+."

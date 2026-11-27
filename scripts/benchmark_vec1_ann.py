@@ -1,13 +1,12 @@
-"""Compare synthetic Vec1 ANN candidates against exact FAISS neighbors."""
+"""Compare synthetic Vec1 ANN candidates against exact NumPy neighbors."""
 from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import platform
 import time
+from pathlib import Path
 
-import faiss
 import numpy as np
 import sqlcipher3
 
@@ -19,14 +18,11 @@ def main() -> None:
     if not args.extension.is_file():
         parser.error("--extension must name a Vec1 library")
 
-    faiss.omp_set_num_threads(1)
     rng = np.random.default_rng(20261127)
     vectors = rng.standard_normal((1600, 512)).astype(np.float32)
     vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
     queries = rng.standard_normal((8, 512)).astype(np.float32)
     queries /= np.linalg.norm(queries, axis=1, keepdims=True)
-    reference = faiss.IndexFlatIP(512)
-    reference.add(vectors)
 
     conn = sqlcipher3.connect(":memory:")
     try:
@@ -60,8 +56,8 @@ def main() -> None:
             recalls = []
             durations_ms = []
             for query in queries:
-                _, ids = reference.search(query.reshape(1, -1), 100)
-                expected = set((ids[0] + 1).tolist())
+                scores = vectors @ query
+                expected = set((np.argsort(-scores, kind="stable")[:100] + 1).tolist())
                 blob = query.tobytes()
                 start = time.perf_counter()
                 rows = conn.execute(
@@ -82,7 +78,7 @@ def main() -> None:
             "platform": platform.platform(),
             "python": platform.python_version(),
             "vec1": vec1_info,
-            "faiss": faiss.__version__,
+            "reference": "NumPy exact cosine",
             "seed": 20261127,
             "vectors": len(vectors),
             "dimensions": vectors.shape[1],

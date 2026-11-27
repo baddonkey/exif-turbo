@@ -8,6 +8,10 @@ Requirements:
     pip install uv==0.13.0
     Xcode Command Line Tools (for iconutil and hdiutil)
 
+Vec1 is signed before its digest is embedded. PyInstaller collects it as a
+sealed resource, and the build verifies its signature and digest after signing.
+Notarization and hardened-runtime loading must still be verified on macOS.
+
 Usage:
     python scripts/build_macos.py
     python scripts/build_macos.py --sign "Developer ID Application: Your Name (TEAMID)"
@@ -16,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import shutil
 import subprocess
@@ -25,9 +30,11 @@ from pathlib import Path
 
 try:
     from audit_release_artifact import audit_release_payload
+    from build_vec1 import STAGE_ENV, staged_vec1, verify_staged_binary
     from release_environment import ensure_release_environment
 except ModuleNotFoundError:
     from scripts.audit_release_artifact import audit_release_payload
+    from scripts.build_vec1 import STAGE_ENV, staged_vec1, verify_staged_binary
     from scripts.release_environment import ensure_release_environment
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -38,9 +45,9 @@ def fail(msg: str) -> None:
     sys.exit(1)
 
 
-def run(cmd: list[str]) -> None:
+def run(cmd: list[str], *, env: dict[str, str] | None = None) -> None:
     print(f"  $ {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=REPO_ROOT)
+    result = subprocess.run(cmd, cwd=REPO_ROOT, env=env, check=False)
     if result.returncode != 0:
         fail(f"Command failed ({result.returncode}): {' '.join(cmd)}")
 
@@ -134,6 +141,9 @@ def sign_bundle(app: Path, identity: str | None) -> None:
     print("  Signing app bundle ...")
     for pattern in ("*.dylib", "*.so"):
         for lib in app.rglob(pattern):
+            # Vec1 was signed before hashing and must not be re-signed here.
+            if lib == app / "Contents" / "Resources" / "exif_turbo" / "assets" / "native" / "vec1.dylib":
+                continue
             sign_item(lib, identity)
     sign_item(app / "Contents" / "MacOS" / "exif-turbo", identity)
     sign_item(app, identity)
@@ -248,15 +258,27 @@ def main() -> None:
     compile_translations()
 
     pyinstaller = find_tool("pyinstaller", venv_subpath=".venv/bin/pyinstaller")
-    run([pyinstaller, "--noconfirm", "--clean", spec_file])
-    print("  PyInstaller build complete.")
+    with staged_vec1(REPO_ROOT / "build", sign_identity=args.sign_identity) as vec1_stage:
+        env = os.environ.copy()
+        env.pop(STAGE_ENV, None)
+        if vec1_stage is not None:
+            env[STAGE_ENV] = str(vec1_stage)
+        run([pyinstaller, "--noconfirm", "--clean", spec_file], env=env)
+        print("  PyInstaller build complete.")
 
-    app = REPO_ROOT / "dist" / "exif-turbo.app"
-    create_lproj_dirs(app)
-    audit_release_payload(app, verify_native_hashes=False)
-    sign_bundle(app, args.sign_identity)
-    audit_release_payload(app, verify_native_hashes=False)
-    dmg_out = build_dmg(app, version, arch_suffix)
+        app = REPO_ROOT / "dist" / "exif-turbo.app"
+        binary = app / "Contents" / "Resources" / "exif_turbo" / "assets" / "native" / "vec1.dylib"
+        if vec1_stage is not None:
+            verify_staged_binary(vec1_stage, binary)
+        create_lproj_dirs(app)
+        audit_release_payload(app, verify_native_hashes=False)
+        sign_bundle(app, args.sign_identity)
+        if vec1_stage is not None:
+            verify_staged_binary(vec1_stage, binary)
+            run(["codesign", "--verify", "--strict", str(binary)])
+        run(["codesign", "--verify", "--deep", "--strict", str(app)])
+        audit_release_payload(app, verify_native_hashes=False)
+        dmg_out = build_dmg(app, version, arch_suffix)
 
     print()
     print("Done! Artifacts:")

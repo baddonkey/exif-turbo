@@ -5,6 +5,11 @@
 - Scope: Phase A feasibility and initial Phase B repository for the proposed
   FAISS-to-Vec1 migration and initial Phase C exact-search evaluation
 
+The feasibility and experiment sections below are historical records. The
+current decision is Vec1-only AI search with a full re-index, as described in
+the Decision section; the migration and FAISS components discussed in those
+records have been removed.
+
 ## Context
 
 The migration plan proposes storing image vectors in the existing SQLCipher
@@ -21,9 +26,9 @@ changing production storage.
 - [`image_index_repository.py`](../../src/exif_turbo/data/image_index_repository.py)
   owns the `images` table, FTS5 indexes, foreign-key relationships, and the
   `completed_migrations` migration ledger.
-- AI vectors are currently held in a separate FAISS `IndexFlatIP` snapshot,
-  not in the metadata database. [`ai_vector_repository.py`](../../src/exif_turbo/data/ai_vector_repository.py)
-  uses normalized float32 inner-product vectors, the configured model
+- At the baseline, AI vectors were held in a separate FAISS `IndexFlatIP`
+  snapshot, not in the metadata database. The former vector repository used
+  normalized float32 inner-product vectors, the configured model
   dimension, and path/view mappings. The default profile is 512-dimensional.
 - [`ai_indexer_service.py`](../../src/exif_turbo/indexing/ai_indexer_service.py)
   builds a full-image view plus four corner crops where the image supports
@@ -33,9 +38,8 @@ changing production storage.
   applies eligible-path restrictions before the display cap, returns exact
   threshold-qualified facet paths, and caps displayed AI results at 2,000.
   The existing AI mode remains available alongside Hybrid.
-- For password-protected databases,
-  [`ai_vector_storage.py`](../../src/exif_turbo/data/ai_vector_storage.py)
-  stores the FAISS index, path/view mapping, and model metadata in an
+- At the baseline, password-protected databases used a separate storage module
+  for the FAISS index, path/view mapping, and model metadata in an
   authenticated encrypted snapshot separate from the SQLCipher database.
 - The default AI thresholds remain 0.18, 0.20, and 0.22, as documented in the
   [search manual](../user-manual.md#6-searching). Windows x64 exact-search
@@ -115,6 +119,16 @@ MSVC emitted non-fatal warnings (`C4456`, `C4244`, `C4310`, and `C4701`). The
 before selecting release warning policy. No changes were made to Vec1 source,
 and the temporary DLL was not added to the application.
 
+An additional local probe compiled the pinned source twice with MSVC 19.44,
+separate scalar and AVX2 objects, `/O2 /MT /Brepro`, and the SQLite 3.51.1
+amalgamation headers. Both DLLs had SHA-256
+`dd08cde3ec5200828e281fa9145219f678d24cd9ec0de8a1e70c75e92dc9ae9b`
+and depended only on `KERNEL32.dll`; the amalgamation ZIP hash was
+`84a85d6a1b920234349f01720912c12391a4f0cb5cb998087e641dee3ef8ef2e`.
+Twenty-nine focused SQLCipher/Vec1 tests passed with the rebuilt DLL. This
+checks repeatability with one local toolchain only; it is not a packaged or
+trusted release artifact.
+
 ## Phase B repository probe
 
 The initial repository implementation and its focused integration tests use
@@ -147,9 +161,10 @@ ordering. Failed first-time schema creation rolls back, and the reported vector
 count excludes vectors pending deletion.
 
 On the tested SQLite version, the original scoped query plan scanned the full
-embedding map. The query now starts with the temporary scope and uses indexed
-image path and image/view lookups before fetching Vec1 rows. This is a query
-plan observation, not a large-library performance measurement.
+embedding map. A later implementation started with the temporary scope and
+used indexed image path and image/view lookups before fetching Vec1 rows.
+The current implementation uses scope-first for narrow scopes and vector-first
+for broad scopes; both retain exact pooling and filtering.
 
 An exploratory synthetic ANN run used
 [`benchmark_vec1_ann.py`](../../scripts/benchmark_vec1_ann.py) with the pinned
@@ -239,12 +254,35 @@ may leave an encrypted scratch file. FAISS still holds the full index in
 memory, and the mapping is also loaded in memory, so total migration memory is
 not bounded independently of collection size.
 
+An experimental worker option can instead regenerate embeddings for the
+authenticated snapshot's image paths, including snapshots whose FAISS index
+type cannot be reconstructed losslessly. It reads originals rather than
+cached previews, hashes the exact bytes supplied to the CLIP image decoder,
+and checks the original before and after each batch. Missing or stale originals
+abort the attempt with counts before replacing the previous completed stage;
+the old snapshot is retained. Regenerated vectors are held in a temporary SQLCipher
+database, and batches are copied into the encrypted stage. The stage records
+per-image content hashes and indexed stamps, the original authenticated
+snapshot fingerprint, and a fingerprint covering every regenerated vector.
+After a restart, verification can check the original snapshot, staged
+image/view vectors, and media without the temporary working database. A
+completed stage records whether its encrypted backup verification succeeded.
+The working database is removed on normal completion, cancellation, or error;
+a process crash can leave an encrypted scratch database.
+
+This is not a production migration or an activation mechanism. The worker is
+not connected to the UI, the temporary experimental DLL is not a release
+binary, and promotion must still coordinate writers and repeat the media and
+source checks. Regeneration loads an original image's compressed bytes in
+memory while decoding it; FAISS and its mapping also remain memory-resident.
+Rollback after subsequent Vec1 writes, trusted Windows packaging, and packaged
+application validation are still required. FAISS remains the active backend.
+
 This is not yet a complete migration: the worker is not connected to the UI,
-and promotion and backend activation are not implemented. Unsupported index re-encoding,
-media-content freshness, durable metadata-generation identity at promotion,
-and enforcement of backup/restore verification at promotion also remain
-unimplemented. These limitations must be addressed before exposing migration
-or activating Vec1.
+and promotion and backend activation are not implemented. Durable
+metadata-generation identity and enforcement of backup/restore verification
+at promotion also remain unimplemented. These limitations must be addressed
+before exposing migration or activating Vec1.
 
 ## Hybrid search integration
 
@@ -271,12 +309,16 @@ performance measurements, and cross-platform release validation remain open.
 
 ## Decision
 
-Proceed with the Windows-validated Vec1 repository and exact-search work while
-deferring Linux/macOS builds and validation, as directed by the user. Keep
-FAISS as the production default until the supported release matrix, migration,
-packaging, and parity gates pass. Do not bypass SQLCipher, introduce an
-unencrypted sidecar, or treat successful extension loading as proof of release
-readiness.
+**Updated decision:** Vec1 is the sole AI backend. The user chose a full AI
+re-index rather than converting FAISS snapshots; import, staging, backup
+verification and rollback have been removed. Users run AI Full Scan for every
+indexed folder. Old FAISS files are left untouched. The migration sections
+above describe historical experiments, not current features.
+
+The native Windows repository has been exercised against SQLCipher, and build
+support has been added for Linux and macOS. Release validation and performance
+remain open. Do not bypass SQLCipher, introduce an unencrypted sidecar, or treat
+successful extension loading as proof of release readiness.
 
 ## Required work to clear the gate
 
@@ -294,12 +336,15 @@ readiness.
    and multiple views.
 5. Add reproducible builds and smoke tests for the supported release targets.
 
-The user has explicitly deferred Linux and macOS work, so it remains a
-production-release gate rather than a blocker for the current Windows
-implementation. Do not switch the production backend or remove FAISS until it
-is cleared.
-
-No representative Vec1 application, encrypted-disk, or resource benchmark has
-been run. The existing FAISS measurements in
+Linux and macOS release artifacts have not yet been validated. No
+representative end-to-end application benchmark has been run. The historical FAISS measurements in
 [`ai-performance.md`](../ai-performance.md) are not comparable to the
 synthetic ANN experiment.
+
+A separate warm, vector-only test with 10,000 synthetic images and one
+512-dimensional vector per image measured FAISS p50/p95 of 6.91/7.86 ms and
+the encrypted Vec1 exact query at 242.35/313.19 ms (20 runs, top 800,
+threshold -1). This is not an end-to-end application benchmark, but it shows
+the current Vec1 implementation does not meet the proposed 20% p95 target.
+The search latency remains a release concern; removing FAISS does not establish
+that the performance target has been met.

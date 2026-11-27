@@ -1,17 +1,36 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
+from typing import ClassVar
 
 import numpy as np
 import pytest
 
-from exif_turbo.config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
 from exif_turbo.data.ai_search_session import AiSearchSession
-from exif_turbo.data.ai_vector_repository import AiVectorRepository
+from exif_turbo.data.ai_vec1_repository import AiVec1Repository
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.data.indexed_folder_repository import IndexedFolderRepository
 from exif_turbo.ui.workers.ai_search_worker import AiSearchWorker
 from tests.conftest import make_jpeg
+
+
+@pytest.fixture(autouse=True)
+def _fake_backend_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "exif_turbo.data.ai_search_session.bundled_vec1_extension", lambda: Path(".")
+    )
+    monkeypatch.setattr(
+        "exif_turbo.data.ai_index_revision.AiIndexRevision.state",
+        lambda _selector: ("vec1", 0),
+    )
+
+
+def _extension() -> Path:
+    value = os.environ.get("EXIF_TURBO_VEC1_EXTENSION")
+    if not value:
+        pytest.skip("EXIF_TURBO_VEC1_EXTENSION is not configured")
+    return Path(value)
 
 
 def _seed_folder(db_path: Path, folder_path: Path, *, enabled: bool) -> int:
@@ -49,8 +68,9 @@ def _seed_image(
 
 
 class _FakeAiVectorRepository:
-    hits: list[tuple[str, float]] = []
+    hits: ClassVar[list[tuple[str, float]]] = []
     last_top_k: int | None = None
+    searches: int = 0
 
     def __init__(self, *_args, **_kwargs) -> None:
         pass
@@ -60,6 +80,9 @@ class _FakeAiVectorRepository:
 
     def close(self) -> None:
         pass
+
+    def get_vector_count(self) -> int:
+        return 1
 
     def search(self, _query_vec, top_k: int = 800, threshold: float = 0.20):  # type: ignore[no-untyped-def]
         return [hit for hit in self.hits if hit[1] >= threshold][:top_k]
@@ -73,6 +96,7 @@ class _FakeAiVectorRepository:
         threshold: float = 0.20,
     ):
         _FakeAiVectorRepository.last_top_k = top_k
+        _FakeAiVectorRepository.searches += 1
         filtered = [
             hit for hit in self.hits
             if hit[1] >= threshold and hit[0] in allowed_paths
@@ -88,7 +112,7 @@ class _FakeAiIndexerService:
         return object()
 
 
-def test_ai_search_worker_shared_session_reuses_repository_across_queries(
+def test_ai_search_worker_shared_session_returns_results_across_queries(
     tmp_path: Path, monkeypatch,
 ) -> None:
     # Arrange
@@ -98,29 +122,24 @@ def test_ai_search_worker_shared_session_reuses_repository_across_queries(
     image = make_jpeg(directory / "photo.jpg")
     folder_id = _seed_folder(db_path, directory, enabled=True)
     _seed_image(db_path, image, folder_id, "Canon")
-    paths = (ai_index_path(db_path), ai_id_map_path(db_path), ai_vector_metadata_path(db_path))
-    repository = AiVectorRepository(*paths)
+    extension = _extension()
+    repository = AiVec1Repository(db_path, "", extension)
     repository.load()
     vector = np.ones(512, dtype=np.float32)
     vector /= np.linalg.norm(vector)
     repository.add_images(vector, [str(image)])
     repository.save()
-    created: list[AiVectorRepository] = []
-
-    def factory(*files: Path, key: str) -> AiVectorRepository:
-        candidate = AiVectorRepository(*files, key=key)
-        created.append(candidate)
-        return candidate
+    repository.close()
 
     class FakeEncoder:
-        def __init__(self, vector_repo: AiVectorRepository) -> None:
+        def __init__(self, vector_repo: AiVec1Repository) -> None:
             pass
 
         def encode_text(self, text: str) -> np.ndarray:
             return vector
 
     monkeypatch.setattr("exif_turbo.ui.workers.ai_search_worker.AiIndexerService", FakeEncoder)
-    session = AiSearchSession(*paths, repository_factory=factory)
+    session = AiSearchSession(db_path, extension_resolver=lambda: extension)
     emitted: list[list[tuple]] = []
     failures: list[str] = []
 
@@ -134,10 +153,69 @@ def test_ai_search_worker_shared_session_reuses_repository_across_queries(
 
     # Assert
     assert failures == []
-    assert len(created) == 1
     assert len(emitted) == 2
     assert emitted[0] == emitted[1]
     assert [row[1] for row in emitted[0]] == [str(image)]
+
+
+def test_ai_search_worker_backend_changes_during_search_discards_results(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    db_path = tmp_path / "test.db"
+    directory = tmp_path / "photos"
+    directory.mkdir()
+    image = make_jpeg(directory / "photo.jpg")
+    folder_id = _seed_folder(db_path, directory, enabled=True)
+    _seed_image(db_path, image, folder_id, "Canon")
+    extension = _extension()
+    repository = AiVec1Repository(db_path, "", extension)
+    repository.load()
+    vector = np.ones(512, dtype=np.float32)
+    vector /= np.linalg.norm(vector)
+    repository.add_images(vector, [str(image)])
+    repository.save()
+    repository.close()
+    class ChangingEncoder:
+        def __init__(self, vector_repo: AiVec1Repository) -> None:
+            pass
+
+        def encode_text(self, text: str) -> np.ndarray:
+            changed = ImageIndexRepository(db_path, key="")
+            try:
+                with changed.conn:
+                    changed.conn.execute("UPDATE ai_vector_backend SET revision = revision + 1")
+            finally:
+                changed.close()
+            return vector
+
+    monkeypatch.setattr("exif_turbo.ui.workers.ai_search_worker.AiIndexerService", ChangingEncoder)
+    from exif_turbo.data._connection import open_encrypted_connection
+    from exif_turbo.data.ai_index_revision import AiIndexRevision
+
+    def state(selector: AiIndexRevision) -> tuple[str, int]:
+        conn = open_encrypted_connection(db_path, "")
+        try:
+            row = conn.execute("SELECT active, revision FROM ai_vector_backend").fetchone()
+            return (str(row[0]), int(row[1]))
+        finally:
+            conn.close()
+
+    monkeypatch.setattr(AiIndexRevision, "state", state)
+    session = AiSearchSession(db_path, extension_resolver=lambda: extension)
+    worker = AiSearchWorker(db_path, "", "photo", 1, session=session)
+    emitted: list[list[tuple]] = []
+    failures: list[str] = []
+    worker.results_ready.connect(lambda rows, total, facets, serial: emitted.append(rows))
+    worker.failed.connect(failures.append)
+
+    # Act
+    worker.run()
+    session.close()
+
+    # Assert
+    assert emitted == []
+    assert failures == ["AI index changed during search; retry the search"]
 
 
 def test_ai_search_worker_excludes_disabled_folder_hits(
@@ -164,7 +242,7 @@ def test_ai_search_worker_excludes_disabled_folder_hits(
         (str(enabled_path), 0.90),
     ]
     monkeypatch.setattr(
-        "exif_turbo.ui.workers.ai_search_worker.AiVectorRepository",
+        "exif_turbo.data.ai_search_session.AiVec1Repository",
         _FakeAiVectorRepository,
     )
     monkeypatch.setattr(
@@ -219,7 +297,7 @@ def test_ai_search_worker_applies_path_filter_to_hits(
         (str(alpha_path), 0.90),
     ]
     monkeypatch.setattr(
-        "exif_turbo.ui.workers.ai_search_worker.AiVectorRepository",
+        "exif_turbo.data.ai_search_session.AiVec1Repository",
         _FakeAiVectorRepository,
     )
     monkeypatch.setattr(
@@ -279,7 +357,7 @@ def test_ai_search_worker_applies_image_set_filter_to_hits(
         (str(member_path), 0.90),
     ]
     monkeypatch.setattr(
-        "exif_turbo.ui.workers.ai_search_worker.AiVectorRepository",
+        "exif_turbo.data.ai_search_session.AiVec1Repository",
         _FakeAiVectorRepository,
     )
     monkeypatch.setattr(
@@ -338,7 +416,7 @@ def test_ai_search_worker_filters_before_candidate_cap(
         (str(allowed_path), 0.80),
     ]
     monkeypatch.setattr(
-        "exif_turbo.ui.workers.ai_search_worker.AiVectorRepository",
+        "exif_turbo.data.ai_search_session.AiVec1Repository",
         _FakeAiVectorRepository,
     )
     monkeypatch.setattr(
@@ -402,7 +480,7 @@ def test_ai_search_worker_applies_ext_and_date_filters_to_hits(
         (str(jpg_path), 0.95),
     ]
     monkeypatch.setattr(
-        "exif_turbo.ui.workers.ai_search_worker.AiVectorRepository",
+        "exif_turbo.data.ai_search_session.AiVec1Repository",
         _FakeAiVectorRepository,
     )
     monkeypatch.setattr(
@@ -466,7 +544,7 @@ def test_ai_search_worker_date_filter_keeps_facet_paths_for_all_years(
         (str(path_2024), 0.95),
     ]
     monkeypatch.setattr(
-        "exif_turbo.ui.workers.ai_search_worker.AiVectorRepository",
+        "exif_turbo.data.ai_search_session.AiVec1Repository",
         _FakeAiVectorRepository,
     )
     monkeypatch.setattr(
@@ -522,7 +600,7 @@ def test_ai_search_worker_date_eligibility_precedes_cap_and_facets_are_uncapped(
     repository.commit()
     repository.close()
     _FakeAiVectorRepository.hits = [(path, 0.9) for path in outside_paths] + [(target, 0.8)]
-    monkeypatch.setattr("exif_turbo.ui.workers.ai_search_worker.AiVectorRepository", _FakeAiVectorRepository)
+    monkeypatch.setattr("exif_turbo.data.ai_search_session.AiVec1Repository", _FakeAiVectorRepository)
     monkeypatch.setattr("exif_turbo.ui.workers.ai_search_worker.AiIndexerService", _FakeAiIndexerService)
     worker = AiSearchWorker(db_path, "", "photo", 31,
                             date_from=1704067200 if date_filter_enabled else None,
@@ -570,7 +648,7 @@ def test_ai_search_worker_date_boundaries_and_open_ranges_preserve_facets(
     repository.commit()
     repository.close()
     _FakeAiVectorRepository.hits = [(path, 0.9) for path in paths]
-    monkeypatch.setattr("exif_turbo.ui.workers.ai_search_worker.AiVectorRepository", _FakeAiVectorRepository)
+    monkeypatch.setattr("exif_turbo.data.ai_search_session.AiVec1Repository", _FakeAiVectorRepository)
     monkeypatch.setattr("exif_turbo.ui.workers.ai_search_worker.AiIndexerService", _FakeAiIndexerService)
     worker = AiSearchWorker(db_path, "", query, 32, date_from=date_from, date_to=date_to)
     emitted: list[list[tuple]] = []
@@ -587,7 +665,7 @@ def test_ai_search_worker_date_boundaries_and_open_ranges_preserve_facets(
     assert set(worker.facet_paths) == set(paths)
 
 
-def test_ai_search_worker_calls_vector_search_with_2000_result_cap(
+def test_ai_search_worker_computes_facet_and_display_hits_once(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -602,8 +680,9 @@ def test_ai_search_worker_calls_vector_search_with_2000_result_cap(
 
     _FakeAiVectorRepository.hits = [(str(img_path), 0.91)]
     _FakeAiVectorRepository.last_top_k = 800
+    _FakeAiVectorRepository.searches = 0
     monkeypatch.setattr(
-        "exif_turbo.ui.workers.ai_search_worker.AiVectorRepository",
+        "exif_turbo.data.ai_search_session.AiVec1Repository",
         _FakeAiVectorRepository,
     )
     monkeypatch.setattr(
@@ -627,7 +706,8 @@ def test_ai_search_worker_calls_vector_search_with_2000_result_cap(
     # Assert
     assert failures == []
     assert len(emitted) == 1
-    assert _FakeAiVectorRepository.last_top_k == 2000
+    assert _FakeAiVectorRepository.last_top_k is None
+    assert _FakeAiVectorRepository.searches == 1
 
 
 def test_ai_search_worker_empty_query_returns_all_allowed_paths(
@@ -652,7 +732,7 @@ def test_ai_search_worker_empty_query_returns_all_allowed_paths(
     _FakeAiVectorRepository.hits = []
     _FakeAiVectorRepository.last_top_k = 800
     monkeypatch.setattr(
-        "exif_turbo.ui.workers.ai_search_worker.AiVectorRepository",
+        "exif_turbo.data.ai_search_session.AiVec1Repository",
         _FakeAiVectorRepository,
     )
     monkeypatch.setattr(

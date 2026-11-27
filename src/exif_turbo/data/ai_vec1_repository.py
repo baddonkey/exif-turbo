@@ -3,29 +3,24 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import sys
-import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
-from uuid import uuid4
 
 import numpy as np
 import sqlcipher3
 
 from ..config import database_data_dir
 from ..models.ai_model_profile import DEFAULT_AI_MODEL_PROFILE, AiModelProfile
-from ._connection import _passphrase_for_pragma, open_encrypted_connection
-from .ai_vector_repository import AiVectorIndexError, AiVectorRepository
+from ._connection import open_encrypted_connection
+from .ai_vector_backend import AiVectorIndexError
 
 _VEC1_VERSION = "0.8"
 _SCHEMA_VERSION = 1
 _MIGRATION_NAME = "ai-vec1-schema-v1"
 _VIEW_STRATEGY = "full-plus-four-corners-v1"
 _INDEX_PARAMETERS = {"distance": "cos", "index": "none"}
-_IMPORT_RESERVE_BYTES = 16 * 1024 * 1024
 
 
 def _preprocessing_description() -> str:
@@ -39,30 +34,8 @@ class AiVec1IndexError(AiVectorIndexError):
     """The Vec1 tables or model metadata are missing or incompatible."""
 
 
-class AiVec1MigrationCanceled(Exception):
-    """The snapshot import was canceled before it committed."""
-
-
 class AiVec1TrainingCanceled(Exception):
     """A Vec1 training transaction was canceled."""
-
-
-@dataclass(frozen=True)
-class AiVec1MigrationResult:
-    source_vectors: int
-    imported_vectors: int
-    imported_images: int
-    missing_vectors: int
-    matched_existing: bool = False
-
-
-@dataclass(frozen=True)
-class AiVec1StagingResult:
-    source_vectors: int
-    staged_vectors: int
-    staged_images: int
-    missing_vectors: int
-    unknown_content_images: int
 
 
 class AiVec1Repository:
@@ -237,6 +210,28 @@ class AiVec1Repository:
                 if trigger_exists is None:
                     raise AiVec1IndexError("The Vec1 deletion trigger is missing")
                 self._validate_metadata(conn, vec1_version)
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS ai_vector_backend ("
+                "singleton INTEGER PRIMARY KEY CHECK(singleton = 1), "
+                "active TEXT NOT NULL CHECK(active = 'vec1'), "
+                "revision INTEGER NOT NULL)"
+            )
+            conn.execute(
+                "INSERT INTO ai_vector_backend VALUES(1, 'vec1', 0) "
+                "ON CONFLICT(singleton) DO NOTHING"
+            )
+            state = conn.execute(
+                "SELECT active FROM ai_vector_backend WHERE singleton = 1"
+            ).fetchone()
+            if state != ("vec1",):
+                raise AiVec1IndexError("The AI index needs a full rescan")
+            for event in ("INSERT", "UPDATE", "DELETE"):
+                conn.execute(
+                    f"CREATE TRIGGER IF NOT EXISTS ai_vector_backend_revision_{event.lower()} "
+                    f"AFTER {event} ON image_embedding_map BEGIN "
+                    "UPDATE ai_vector_backend SET revision = revision + 1 "
+                    "WHERE singleton = 1 AND active = 'vec1'; END"
+                )
 
     def _metadata_values(self, vec1_version: str) -> tuple[object, ...]:
         return (
@@ -500,459 +495,6 @@ class AiVec1Repository:
     def get_vectors(self, image_paths: list[str]) -> dict[str, np.ndarray | None]:
         return {image_path: self.get_vector(image_path) for image_path in image_paths}
 
-    def import_faiss_snapshot(
-        self,
-        source: AiVectorRepository,
-        *,
-        cancel_check: Callable[[], bool] | None = None,
-        on_progress: Callable[[int, int], None] | None = None,
-    ) -> AiVec1MigrationResult:
-        """Import an authenticated snapshot or verify an identical existing import."""
-        if source.profile != self.profile:
-            raise AiVec1IndexError("The FAISS and Vec1 model profiles differ")
-        total = source.get_vector_count()
-        conn = self._connection()
-        imported = 0
-        missing = 0
-        with conn:
-            conn.execute("BEGIN IMMEDIATE")
-            self._drain_pending_deletes(conn)
-            mapped_count = int(conn.execute(
-                "SELECT count(*) FROM image_embedding_map"
-            ).fetchone()[0])
-            vector_count = int(conn.execute(
-                "SELECT count(*) FROM image_vectors"
-            ).fetchone()[0])
-            if vector_count != mapped_count:
-                raise AiVec1IndexError("The Vec1 index contains unmapped vectors")
-            matched_existing = mapped_count > 0
-            if not matched_existing and total:
-                # Account for vector data, mapping/index overhead, and WAL growth.
-                estimate = _IMPORT_RESERVE_BYTES + total * (self.dimension * 4 + 2048) * 2
-                if shutil.disk_usage(self._db_path.resolve().parent).free < estimate:
-                    raise AiVec1IndexError("Insufficient disk space for AI vector import")
-
-            for processed, (path, view_id, vector) in enumerate(
-                source.iter_migration_vectors(), start=1
-            ):
-                if cancel_check is not None and cancel_check():
-                    raise AiVec1MigrationCanceled("AI vector import canceled")
-                row = conn.execute("SELECT id FROM images WHERE path = ?", (path,)).fetchone()
-                if row is None:
-                    missing += 1
-                else:
-                    blob = vector.tobytes()
-                    if matched_existing:
-                        stored = conn.execute(
-                            "SELECT image_vectors.embedding FROM image_embedding_map "
-                            "JOIN image_vectors ON image_vectors.rowid = "
-                            "image_embedding_map.vector_id "
-                            "WHERE image_embedding_map.image_id = ? AND view_key = ?",
-                            (row[0], view_id),
-                        ).fetchone()
-                    else:
-                        cursor = conn.execute(
-                            "INSERT INTO image_embedding_map(image_id, view_key) "
-                            "VALUES (?, ?)",
-                            (row[0], view_id),
-                        )
-                        conn.execute(
-                            "INSERT INTO image_vectors(rowid, embedding) VALUES (?, ?)",
-                            (cursor.lastrowid, blob),
-                        )
-                        stored = conn.execute(
-                            "SELECT embedding FROM image_vectors WHERE rowid = ?",
-                            (cursor.lastrowid,),
-                        ).fetchone()
-                    if stored is None or stored[0] != blob:
-                        raise AiVec1IndexError(
-                            "The existing Vec1 index does not match the FAISS snapshot"
-                            if matched_existing else
-                            "Vec1 vector verification failed during import"
-                        )
-                    imported += 1
-                if on_progress is not None:
-                    on_progress(processed, total)
-            if cancel_check is not None and cancel_check():
-                raise AiVec1MigrationCanceled("AI vector import canceled")
-            images = int(conn.execute(
-                "SELECT count(DISTINCT image_id) FROM image_embedding_map"
-            ).fetchone()[0])
-            if imported + missing != total:
-                raise AiVec1IndexError("FAISS snapshot vector count changed during import")
-            if matched_existing and imported != mapped_count:
-                raise AiVec1IndexError(
-                    "The existing Vec1 index does not match the FAISS snapshot"
-                )
-        return AiVec1MigrationResult(total, imported, images, missing, matched_existing)
-
-    def stage_faiss_snapshot(
-        self,
-        source: AiVectorRepository,
-        *,
-        cancel_check: Callable[[], bool] | None = None,
-        source_is_current: Callable[[], bool] | None = None,
-        on_progress: Callable[[int, int], None] | None = None,
-        batch_size: int = 128,
-        verify_backup: bool = False,
-    ) -> AiVec1StagingResult:
-        """Stage a verified snapshot in encrypted tables without replacing the index."""
-        if source.profile != self.profile:
-            raise AiVec1IndexError("The FAISS and Vec1 model profiles differ")
-        if batch_size <= 0:
-            raise ValueError("batch_size must be positive")
-        source.validate_migration_source()
-        source_fingerprint = source.migration_fingerprint()
-        total = source.get_vector_count()
-        conn = self._connection()
-        estimate = _IMPORT_RESERVE_BYTES + total * (self.dimension * 4 + 2048) * 2
-        if shutil.disk_usage(self._db_path.resolve().parent).free < estimate:
-            raise AiVec1IndexError("Insufficient disk space for AI vector staging")
-        data_version = int(conn.execute("PRAGMA data_version").fetchone()[0])
-        build_id = uuid4().hex
-
-        def check_current() -> None:
-            if cancel_check is not None and cancel_check():
-                raise AiVec1MigrationCanceled("AI vector staging canceled")
-            if int(conn.execute("PRAGMA data_version").fetchone()[0]) != data_version:
-                raise AiVec1IndexError("The metadata database changed during AI vector staging")
-            if source.migration_fingerprint() != source_fingerprint:
-                raise AiVec1IndexError("The AI snapshot changed during vector staging")
-            if source_is_current is not None and not source_is_current():
-                raise AiVec1IndexError("The AI snapshot changed during vector staging")
-
-        check_current()
-        with conn:
-            conn.execute("BEGIN IMMEDIATE")
-            check_current()
-            self._drop_staging_tables(conn, building=True)
-            conn.execute(
-                "CREATE TABLE ai_vec1_build_map ("
-                "vector_id INTEGER PRIMARY KEY, "
-                "image_id INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE, "
-                "image_mtime REAL NOT NULL, image_size INTEGER NOT NULL, "
-                "view_key TEXT NOT NULL, UNIQUE(image_id, view_key))"
-            )
-            conn.execute("CREATE VIRTUAL TABLE ai_vec1_build_vectors USING vec1(embedding)")
-            conn.execute(
-                "INSERT INTO ai_vec1_build_vectors(cmd, arg) VALUES('rebuild', ?)",
-                (json.dumps(_INDEX_PARAMETERS, sort_keys=True),),
-            )
-            conn.execute(
-                "CREATE TABLE ai_vec1_build_status ("
-                "singleton INTEGER PRIMARY KEY CHECK(singleton = 1), "
-                "build_id TEXT NOT NULL, "
-                "source_fingerprint TEXT NOT NULL, "
-                "source_vectors INTEGER NOT NULL, staged_vectors INTEGER NOT NULL, "
-                "missing_vectors INTEGER NOT NULL, complete INTEGER NOT NULL)"
-            )
-            conn.execute(
-                "INSERT INTO ai_vec1_build_status VALUES(1, ?, ?, ?, 0, 0, 0)",
-                (build_id, source_fingerprint, total),
-            )
-        staged = 0
-        missing = 0
-        processed = 0
-        batch: list[tuple[str, str, bytes]] = []
-
-        def owns_build() -> bool:
-            exists = conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ai_vec1_build_status'"
-            ).fetchone()
-            if exists is None:
-                return False
-            owner = conn.execute(
-                "SELECT build_id FROM ai_vec1_build_status WHERE singleton = 1"
-            ).fetchone()
-            return owner is not None and owner[0] == build_id
-
-        def write_batch() -> None:
-            nonlocal staged, missing
-            check_current()
-            with conn:
-                conn.execute("BEGIN IMMEDIATE")
-                check_current()
-                if not owns_build():
-                    raise AiVec1IndexError("The AI vector staging attempt was superseded")
-                for path, view_id, blob in batch:
-                    row = conn.execute(
-                        "SELECT id, mtime, size FROM images WHERE path = ?", (path,)
-                    ).fetchone()
-                    if row is None:
-                        missing += 1
-                        continue
-                    cursor = conn.execute(
-                        "INSERT INTO ai_vec1_build_map(image_id, view_key, image_mtime, image_size) "
-                        "VALUES (?, ?, ?, ?)",
-                        (row[0], view_id, row[1], row[2]),
-                    )
-                    conn.execute(
-                        "INSERT INTO ai_vec1_build_vectors(rowid, embedding) VALUES (?, ?)",
-                        (cursor.lastrowid, blob),
-                    )
-                    stored = conn.execute(
-                        "SELECT embedding FROM ai_vec1_build_vectors WHERE rowid = ?",
-                        (cursor.lastrowid,),
-                    ).fetchone()
-                    if stored is None or stored[0] != blob:
-                        raise AiVec1IndexError("Vec1 staged vector verification failed")
-                    staged += 1
-                conn.execute(
-                    "UPDATE ai_vec1_build_status SET staged_vectors = ?, missing_vectors = ?",
-                    (staged, missing),
-                )
-            batch.clear()
-            if on_progress is not None:
-                on_progress(processed, total)
-            check_current()
-
-        try:
-            for path, view_id, vector in source.iter_migration_vectors():
-                if cancel_check is not None and cancel_check():
-                    raise AiVec1MigrationCanceled("AI vector staging canceled")
-                batch.append((path, view_id, vector.tobytes()))
-                processed += 1
-                if len(batch) == batch_size:
-                    write_batch()
-            if batch:
-                write_batch()
-            if processed != total:
-                raise AiVec1IndexError("FAISS snapshot vector count changed during staging")
-            check_current()
-            self._verify_staged_search(conn, source, building=True)
-            check_current()
-            with conn:
-                conn.execute("BEGIN IMMEDIATE")
-                check_current()
-                if not owns_build():
-                    raise AiVec1IndexError("The AI vector staging attempt was superseded")
-                map_count, image_count = conn.execute(
-                    "SELECT count(*), count(DISTINCT image_id) FROM ai_vec1_build_map"
-                ).fetchone()
-                vector_count = conn.execute("SELECT count(*) FROM ai_vec1_build_vectors").fetchone()[0]
-                if map_count != staged or vector_count != staged:
-                    raise AiVec1IndexError("The staged vector counts do not match")
-                conn.execute("UPDATE ai_vec1_build_status SET complete = 1")
-            if verify_backup:
-                backup_result = self.verify_staged_backup(
-                    source,
-                    cancel_check=cancel_check,
-                    source_is_current=source_is_current,
-                    _building=True,
-                )
-                expected = AiVec1StagingResult(total, staged, int(image_count), missing, int(image_count))
-                if backup_result != expected:
-                    raise AiVec1IndexError("The AI migration backup does not match the staged index")
-            check_current()
-            with conn:
-                conn.execute("BEGIN IMMEDIATE")
-                check_current()
-                if not owns_build():
-                    raise AiVec1IndexError("The AI vector staging attempt was superseded")
-                self._drop_staging_tables(conn)
-                conn.execute("ALTER TABLE ai_vec1_build_map RENAME TO ai_vec1_staging_map")
-                conn.execute("ALTER TABLE ai_vec1_build_vectors RENAME TO ai_vec1_staging_vectors")
-                conn.execute("ALTER TABLE ai_vec1_build_status RENAME TO ai_vec1_staging_status")
-            return AiVec1StagingResult(total, staged, int(image_count), missing, int(image_count))
-        except BaseException:
-            with conn:
-                conn.execute("BEGIN IMMEDIATE")
-                if owns_build():
-                    self._drop_staging_tables(conn, building=True)
-            raise
-
-    @staticmethod
-    def _verify_staged_search(
-        conn: sqlcipher3.Connection, source: AiVectorRepository, *, building: bool = False
-    ) -> None:
-        prefix = "ai_vec1_build" if building else "ai_vec1_staging"
-        paths = [
-            str(row[0]) for row in conn.execute(
-                f"SELECT DISTINCT images.path FROM {prefix}_map AS m "
-                "JOIN images ON images.id = m.image_id ORDER BY images.path LIMIT 16"
-            )
-        ]
-        if not paths:
-            return
-        samples = conn.execute(
-            f"SELECT embedding FROM {prefix}_vectors ORDER BY rowid LIMIT 3"
-        ).fetchall()
-        placeholders = ",".join("?" for _ in paths)
-        for (blob,) in samples:
-            query = np.frombuffer(blob, dtype=np.float32)
-            actual = {
-                str(path): 1.0 - float(distance)
-                for path, distance in conn.execute(
-                    "SELECT images.path, MIN(vec1_cos_distance(v.embedding, ?)) "
-                    f"FROM {prefix}_map AS m "
-                    "JOIN images ON images.id = m.image_id "
-                    f"JOIN {prefix}_vectors AS v ON v.rowid = m.vector_id "
-                    f"WHERE images.path IN ({placeholders}) GROUP BY images.id, images.path",
-                    (blob, *paths),
-                )
-            }
-            expected = {
-                path: max(float(np.dot(query, vector)) for vector in source.get_view_vectors(path).values())
-                for path in paths
-            }
-            if actual.keys() != expected.keys() or any(
-                abs(actual[path] - score) > 1e-5 for path, score in expected.items()
-            ):
-                raise AiVec1IndexError("The staged vector search failed parity verification")
-
-    def verify_staged_snapshot(
-        self,
-        source: AiVectorRepository,
-        *,
-        cancel_check: Callable[[], bool] | None = None,
-        source_is_current: Callable[[], bool] | None = None,
-        _building: bool = False,
-    ) -> AiVec1StagingResult:
-        """Verify a completed stage after reopening, without activating it."""
-        source.validate_migration_source()
-        source_fingerprint = source.migration_fingerprint()
-        if source.profile != self.profile:
-            raise AiVec1IndexError("The FAISS and Vec1 model profiles differ")
-        conn = self._connection()
-        data_version = int(conn.execute("PRAGMA data_version").fetchone()[0])
-
-        def check_current() -> None:
-            if cancel_check is not None and cancel_check():
-                raise AiVec1MigrationCanceled("AI vector staging canceled")
-            if source.migration_fingerprint() != source_fingerprint:
-                raise AiVec1IndexError("The AI snapshot changed during staging verification")
-            if source_is_current is not None and not source_is_current():
-                raise AiVec1IndexError("The AI snapshot changed during staging verification")
-
-        check_current()
-        conn.execute("BEGIN")
-        try:
-            prefix = "ai_vec1_build" if _building else "ai_vec1_staging"
-            status_columns = {
-                row[1] for row in conn.execute(f"PRAGMA table_info({prefix}_status)")
-            }
-            map_columns = {
-                row[1] for row in conn.execute(f"PRAGMA table_info({prefix}_map)")
-            }
-            if "source_fingerprint" not in status_columns or not {
-                "image_mtime", "image_size"
-            }.issubset(map_columns):
-                raise AiVec1IndexError("The staged AI index lacks source identity; stage it again")
-            status = conn.execute(
-                "SELECT source_vectors, staged_vectors, missing_vectors, complete, source_fingerprint "
-                f"FROM {prefix}_status WHERE singleton = 1"
-            ).fetchone()
-            if status is None or status[3] != 1 or status[0] != source.get_vector_count():
-                raise AiVec1IndexError("The staged AI vector index is incomplete")
-            if status[4] != source_fingerprint:
-                raise AiVec1IndexError("The staged AI vector index does not match the snapshot")
-            staged = 0
-            missing = 0
-            for index, (path, view_id, vector) in enumerate(source.iter_migration_vectors()):
-                if index % 128 == 0:
-                    check_current()
-                row = conn.execute(
-                    "SELECT id, mtime, size FROM images WHERE path = ?", (path,)
-                ).fetchone()
-                if row is None:
-                    missing += 1
-                    continue
-                stored = conn.execute(
-                    f"SELECT v.embedding, m.image_mtime, m.image_size FROM {prefix}_map AS m "
-                    f"JOIN {prefix}_vectors AS v ON v.rowid = m.vector_id "
-                    "WHERE m.image_id = ? AND m.view_key = ?",
-                    (row[0], view_id),
-                ).fetchone()
-                if stored is None or stored[0] != vector.tobytes():
-                    raise AiVec1IndexError("The staged vector index does not match the snapshot")
-                if (stored[1], stored[2]) != (row[1], row[2]):
-                    raise AiVec1IndexError("An indexed image changed after AI vector staging")
-                staged += 1
-            count, images = conn.execute(
-                f"SELECT count(*), count(DISTINCT image_id) FROM {prefix}_map"
-            ).fetchone()
-            vector_count = conn.execute(f"SELECT count(*) FROM {prefix}_vectors").fetchone()[0]
-            if (staged, missing, count, vector_count) != (status[1], status[2], staged, staged):
-                raise AiVec1IndexError("The staged vector counts do not match")
-            self._verify_staged_search(conn, source, building=_building)
-        finally:
-            conn.rollback()
-        check_current()
-        if int(conn.execute("PRAGMA data_version").fetchone()[0]) != data_version:
-            raise AiVec1IndexError("The metadata database changed during staging verification")
-        return AiVec1StagingResult(int(status[0]), staged, int(images), missing, int(images))
-
-    def verify_staged_backup(
-        self,
-        source: AiVectorRepository,
-        *,
-        cancel_check: Callable[[], bool] | None = None,
-        source_is_current: Callable[[], bool] | None = None,
-        _building: bool = False,
-    ) -> AiVec1StagingResult:
-        """Verify an encrypted online backup of the completed stage."""
-        if not self._key:
-            raise AiVec1IndexError("An encrypted database is required for migration backup")
-        conn = self._connection()
-        data_version = int(conn.execute("PRAGMA data_version").fetchone()[0])
-        page_count = int(conn.execute("PRAGMA page_count").fetchone()[0])
-        page_size = int(conn.execute("PRAGMA page_size").fetchone()[0])
-        directory = self._db_path.resolve().parent
-        if shutil.disk_usage(directory).free < _IMPORT_RESERVE_BYTES + page_count * page_size * 2:
-            raise AiVec1IndexError("Insufficient disk space for AI migration backup verification")
-
-        def check_current() -> None:
-            if cancel_check is not None and cancel_check():
-                raise AiVec1MigrationCanceled("AI vector backup verification canceled")
-            if source_is_current is not None and not source_is_current():
-                raise AiVec1IndexError("The AI snapshot changed during backup verification")
-            if int(conn.execute("PRAGMA data_version").fetchone()[0]) != data_version:
-                raise AiVec1IndexError("The metadata database changed during backup verification")
-
-        def on_backup_progress(_status: int, _remaining: int, _total: int) -> None:
-            if cancel_check is not None and cancel_check():
-                raise AiVec1MigrationCanceled("AI vector backup verification canceled")
-
-        check_current()
-        descriptor, name = tempfile.mkstemp(
-            prefix=f".{self._db_path.name}.vec1-backup-", suffix=".db", dir=directory
-        )
-        os.close(descriptor)
-        backup_path = Path(name)
-        try:
-            destination = sqlcipher3.connect(str(backup_path))
-            try:
-                destination.execute(f"PRAGMA key={_passphrase_for_pragma(self._key)}")
-                destination.execute("PRAGMA temp_store=MEMORY")
-                conn.backup(destination, pages=128, progress=on_backup_progress)
-            finally:
-                destination.close()
-            check_current()
-            restored = AiVec1Repository(
-                backup_path, self._key, self._extension_path, profile=self._profile
-            )
-            try:
-                restored.load()
-                if restored._connection().execute("PRAGMA integrity_check").fetchone() != ("ok",):
-                    raise AiVec1IndexError("The AI migration backup failed integrity verification")
-                result = restored.verify_staged_snapshot(
-                    source, cancel_check=cancel_check, source_is_current=source_is_current,
-                    _building=_building,
-                )
-            finally:
-                restored.close()
-            check_current()
-            return result
-        finally:
-            for suffix in ("", "-wal", "-shm", "-journal"):
-                Path(f"{backup_path}{suffix}").unlink(missing_ok=True)
-
-    @staticmethod
-    def _drop_staging_tables(conn: sqlcipher3.Connection, *, building: bool = False) -> None:
-        prefix = "ai_vec1_build" if building else "ai_vec1_staging"
-        conn.execute(f"DROP TABLE IF EXISTS {prefix}_map")
-        conn.execute(f"DROP TABLE IF EXISTS {prefix}_vectors")
-        conn.execute(f"DROP TABLE IF EXISTS {prefix}_status")
 
     def delete_images(self, image_paths: set[str]) -> None:
         if not image_paths:
@@ -1160,22 +702,30 @@ class AiVec1Repository:
         with conn:
             self._drain_pending_deletes(conn)
             source = """
-                FROM images
-                JOIN image_embedding_map
-                    ON image_embedding_map.image_id = images.id
-                JOIN image_vectors
-                    ON image_vectors.rowid = image_embedding_map.vector_id
+                FROM image_vectors
+                CROSS JOIN image_embedding_map
+                    ON image_embedding_map.vector_id = image_vectors.rowid
+                CROSS JOIN images ON images.id = image_embedding_map.image_id
             """
             if allowed_paths is not None:
                 self._materialize_paths(conn, allowed_paths)
-                source = """
-                    FROM _ai_vec1_scope_paths AS scope
-                    CROSS JOIN images ON images.path = scope.path
-                    CROSS JOIN image_embedding_map
-                        ON image_embedding_map.image_id = images.id
-                    CROSS JOIN image_vectors
-                        ON image_vectors.rowid = image_embedding_map.vector_id
-                """
+                indexed_images = int(conn.execute(
+                    "SELECT count(*) FROM ("
+                    "SELECT DISTINCT image_id FROM image_embedding_map)"
+                ).fetchone()[0])
+                if len(allowed_paths) * 2 < indexed_images:
+                    source = """
+                        FROM _ai_vec1_scope_paths AS scope
+                        CROSS JOIN images ON images.path = scope.path
+                        CROSS JOIN image_embedding_map
+                            ON image_embedding_map.image_id = images.id
+                        CROSS JOIN image_vectors
+                            ON image_vectors.rowid = image_embedding_map.vector_id
+                    """
+                else:
+                    source += """
+                        JOIN _ai_vec1_scope_paths AS scope ON scope.path = images.path
+                    """
 
             query_sql = f"""
                 WITH image_scores AS (

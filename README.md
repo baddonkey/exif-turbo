@@ -17,6 +17,7 @@ For AI assisted tagging, watch out the companion project [Exif Turbo AI Tagger](
 
 - **Search metadata:** Search EXIF, IPTC, XMP, and other embedded metadata with full-text and [structured tag, description, date, format, and folder filters](docs/user-manual.md#6-searching).
 - **Search by image meaning:** Find photos by visual content with local AI search after its model is available. See [AI search](docs/user-manual.md#6-searching).
+- **Upgrading AI search:** Run **AI Full Scan** for each indexed folder to rebuild older AI indexes. Original images and metadata are unchanged.
 - **Browse and inspect:** Browse [indexed folders](docs/user-manual.md#7-browsing-by-folder), preview media, and inspect [metadata and EXIF tags](docs/user-manual.md#9-viewing-metadata-and-exif-tags).
 - **Group with Image Sets:** Collect image references, filter Search by set, and optionally reapply saved filters. See [Image Sets](docs/user-manual.md#8-image-sets).
 - **Tag and export derivatives:** Add searchable custom tags and descriptions in sidecars, then create configurable derivative copies with format, resize, metadata, and embedded-tag/description controls. See [Custom Tags and Derivatives](docs/user-manual.md#11-custom-tags-and-derivatives).

@@ -2,9 +2,9 @@
   "pyright_version": "1.1.414",
   "diagnostics": [
     {
-      "file": "scripts/benchmark_ai_search.py",
-      "message": "Argument of type \"list[Literal['full', 'top_left', 'top_right', 'bottom_left', 'bottom_right']]\" cannot be assigned to parameter \"view_ids\" of type \"List[str] | None\" in function \"add_images\"\n\u00a0\u00a0Type \"list[Literal['full', 'top_left', 'top_right', 'bottom_left', 'bottom_right']]\" is not assignable to type \"List[str] | None\"\n\u00a0\u00a0\u00a0\u00a0\"list[Literal['full', 'top_left', 'top_right', 'bottom_left', 'bottom_right']]\" is not assignable to \"List[str]\"\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0Type parameter \"_T@list\" is invariant, but \"Literal['full', 'top_left', 'top_right', 'bottom_left', 'bottom_right']\" is not the same as \"str\"\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0Consider switching from \"list\" to \"Sequence\" which is covariant\n\u00a0\u00a0\u00a0\u00a0\"list[Literal['full', 'top_left', 'top_right', 'bottom_left', 'bottom_right']]\" is not assignable to \"None\"",
-      "rule": "reportArgumentType",
+      "file": "scripts/benchmark_vec1_ann.py",
+      "message": "\"connect\" is not a known attribute of module \"sqlcipher3\"",
+      "rule": "reportAttributeAccessIssue",
       "severity": "error",
       "tool": "pyright",
       "count": 1
@@ -170,9 +170,25 @@
       "count": 4
     },
     {
-      "file": "src/exif_turbo/data/ai_vector_repository.py",
-      "message": "\"search\" is not a known attribute of \"None\"",
-      "rule": "reportOptionalMemberAccess",
+      "file": "src/exif_turbo/data/ai_index_revision.py",
+      "message": "\"Connection\" is not a known attribute of module \"sqlcipher3\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 1
+    },
+    {
+      "file": "src/exif_turbo/data/ai_vec1_repository.py",
+      "message": "\"Connection\" is not a known attribute of module \"sqlcipher3\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 8
+    },
+    {
+      "file": "src/exif_turbo/data/ai_vec1_repository.py",
+      "message": "\"OperationalError\" is not a known attribute of module \"sqlcipher3\"",
+      "rule": "reportAttributeAccessIssue",
       "severity": "error",
       "tool": "pyright",
       "count": 1
@@ -615,7 +631,7 @@
       "rule": "unqualified",
       "severity": "warning",
       "tool": "qmllint",
-      "count": 834
+      "count": 847
     },
     {
       "file": "src/exif_turbo/ui/qml/TaggingDrawer.qml",
@@ -760,6 +776,14 @@
       "severity": "error",
       "tool": "pyright",
       "count": 1
+    },
+    {
+      "file": "src/exif_turbo/ui/view_models/app_controller.py",
+      "message": "\"Error\" is not a known attribute of module \"sqlcipher3\"",
+      "rule": "reportAttributeAccessIssue",
+      "severity": "error",
+      "tool": "pyright",
+      "count": 2
     },
     {
       "file": "src/exif_turbo/ui/view_models/app_controller.py",
