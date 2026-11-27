@@ -12,6 +12,21 @@ import pytest
 from scripts import build_windows
 
 
+def test_windows_installer_same_version_build_replaces_existing_product() -> None:
+    # Arrange
+    source = Path(__file__).resolve().parents[2] / "installer" / "exif-turbo.wxs"
+    namespace = {"wix": "http://wixtoolset.org/schemas/v4/wxs"}
+
+    # Act
+    upgrade = ET.parse(source).getroot().find("wix:Package/wix:MajorUpgrade", namespace)
+
+    # Assert
+    assert upgrade is not None
+    assert upgrade.attrib["AllowSameVersionUpgrades"] == "yes"
+    assert upgrade.attrib["Schedule"] == "afterInstallInitialize"
+    assert "DowngradeErrorMessage" in upgrade.attrib
+
+
 def test_ffmpeg_assets_use_immutable_autobuild_release() -> None:
     # Arrange
     release_url = (

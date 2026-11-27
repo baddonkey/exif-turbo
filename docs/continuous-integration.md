@@ -100,6 +100,11 @@ certificate bundle rather than relying on a developer environment's packages.
 Windows also runs it against the administratively extracted MSI payload.
 Failures, missing reports, and 120-second timeouts stop the build.
 
+On Windows, installing a rebuilt MSI with the same product version replaces
+earlier builds instead of installing alongside them. Windows Installer cannot
+order builds that share the same first three version components, so use a new
+version for each published release.
+
 Build locally on the matching platform:
 
 ```powershell
