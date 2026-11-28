@@ -30,7 +30,7 @@ def _check_runtime() -> None:
     from tokenizers import Tokenizer
     from tokenizers.models import Unigram
     from tokenizers.pre_tokenizers import Whitespace
-    from transformers import AutoModel, XLMRobertaConfig, XLMRobertaTokenizerFast
+    from transformers import AutoModel, XLMRobertaConfig, XLMRobertaTokenizer
 
     from ..data.ai_vec1_repository import AiVec1Repository
     from ..data.image_index_repository import ImageIndexRepository
@@ -48,7 +48,7 @@ def _check_runtime() -> None:
         ], unk_id=3))
         backend.pre_tokenizer = Whitespace()
         tokenizer_dir = root / "tokenizer"
-        XLMRobertaTokenizerFast(tokenizer_object=backend).save_pretrained(tokenizer_dir)
+        XLMRobertaTokenizer(tokenizer_object=backend).save_pretrained(tokenizer_dir)
         tokenizer = HFTokenizer(
             str(tokenizer_dir), local_files_only=True, context_length=8,
         )

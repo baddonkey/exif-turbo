@@ -239,6 +239,7 @@ def build_deb(
             "libwebpdemux2",
             "libwebpmux3",
             "liblcms2-2",
+            "libopus0",
         ])
 
         debian_dir = staging / "DEBIAN"
@@ -296,7 +297,7 @@ def build_rpm(bundle_dir: Path, version: str) -> Path:
             Requires:       libxcb, mesa-libgbm, pango, alsa-lib, pulseaudio-libs, libtiff
             Requires:       atk, at-spi2-atk, cups-libs
             Requires:       libXcomposite, libXdamage, libXrandr, libxshmfence
-            Requires:       snappy, libwebp, lcms2
+            Requires:       snappy, libwebp, lcms2, opus
 
             %description
             Cross-platform image EXIF metadata search and indexing tool.

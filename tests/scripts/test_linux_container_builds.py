@@ -49,10 +49,10 @@ def test_linux_container_builds_include_opengl_and_compiler() -> None:
     # Assert
     assert {"libgl1", "libegl1", "libopengl0", "build-essential"} <= set(deb_packages)
     assert {"mesa-libGL", "mesa-libEGL", "libglvnd-opengl", "gcc"} <= set(rpm_packages)
-    assert {"libsnappy1v5", "libwebpdemux2", "libwebpmux3", "liblcms2-2"} <= set(
+    assert {"libsnappy1v5", "libwebpdemux2", "libwebpmux3", "liblcms2-2", "libopus0"} <= set(
         deb_packages
     )
-    assert {"snappy", "libwebp", "lcms2"} <= set(rpm_packages)
+    assert {"snappy", "libwebp", "lcms2", "opus"} <= set(rpm_packages)
 
 
 def test_rpm_spec_explicitly_collects_qt_webengine_binary_payload() -> None:

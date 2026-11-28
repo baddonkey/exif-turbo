@@ -33,7 +33,7 @@ def test_build_deb_runtime_dependencies_include_opengl(
     assert {"libgl1", "libegl1", "libopengl0"} <= set(
         depends.removeprefix("Depends: ").split(", ")
     )
-    assert {"libsnappy1v5", "libwebpdemux2", "libwebpmux3", "liblcms2-2"} <= set(
+    assert {"libsnappy1v5", "libwebpdemux2", "libwebpmux3", "liblcms2-2", "libopus0"} <= set(
         depends.removeprefix("Depends: ").split(", ")
     )
 
@@ -68,7 +68,7 @@ def test_build_rpm_runtime_dependencies_include_opengl(
     assert {"mesa-libGL", "mesa-libEGL", "libglvnd-opengl"} <= {
         item.strip() for line in requires for item in line.split(",")
     }
-    assert {"snappy", "libwebp", "lcms2"} <= {
+    assert {"snappy", "libwebp", "lcms2", "opus"} <= {
         item.strip() for line in requires for item in line.split(",")
     }
 

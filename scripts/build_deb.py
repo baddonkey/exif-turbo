@@ -41,7 +41,7 @@ apt-get install -y -q \
     libgbm1 libpango-1.0-0 libasound2t64 libpulse0 \
     libatk1.0-0 libatk-bridge2.0-0 libcups2 \
     libxcomposite1 libxdamage1 libxrandr2 libxshmfence1 libtiff6 \
-    libminizip1t64 libsnappy1v5 libwebpdemux2 libwebpmux3 liblcms2-2
+    libminizip1t64 libsnappy1v5 libwebpdemux2 libwebpmux3 liblcms2-2 libopus0
 python3 -m venv /build-venv
 . /build-venv/bin/activate
 pip install --quiet --index-url https://pypi.org/simple uv=={UV_VERSION}
