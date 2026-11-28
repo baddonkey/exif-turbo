@@ -18,6 +18,12 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
+msgid "After upgrading, run AI Full Scan for every indexed folder to rebuild the AI index from your original images."
+msgstr "Après la mise à niveau, lancez une analyse IA complète pour chaque dossier indexé afin de reconstruire l'index IA à partir des images originales."
+
+msgid "AI index is empty. Run AI Full Scan for every indexed folder."
+msgstr "L'index IA est vide. Lancez une analyse IA complète pour chaque dossier indexé."
+
 #: src/exif_turbo/ui/models/settings_model.py:77
 msgid "PyTorch is not available on macOS Intel for Python 3.13+."
 msgstr "PyTorch n’est pas disponible sur macOS Intel pour Python 3.13+."
@@ -4006,3 +4012,55 @@ msgstr "← Sélectionner un dossier pour parcourir les images"
 #~ "• Quote multi-word phrases\n"
 #~ "• In ExifTool keys (e.g. GPS:GPSLatitude) the colon acts as a separator"
 #~ msgstr ""
+
+#: Hybrid search
+msgid "Hybrid"
+msgstr "Hybride"
+
+#: Hybrid search
+msgid "Search metadata and images…"
+msgstr "Rechercher dans les métadonnées et les images…"
+
+#: Hybrid search
+msgid "metadata AND visual match"
+msgstr "métadonnées ET correspondance visuelle"
+
+#: Hybrid search
+msgid "Relevance"
+msgstr "Pertinence"
+
+#: Hybrid search
+msgid "%1 of %2 (AI results limited)"
+msgstr "%1 sur %2 (résultats IA limités)"
+
+#: Hybrid search
+msgid "Hybrid search view"
+msgstr "Vue de recherche hybride"
+
+#: Hybrid search
+msgid "Save view"
+msgstr "Enregistrer la vue"
+
+#: Hybrid search
+msgid "Restore view"
+msgstr "Restaurer la vue"
+
+#: Hybrid search
+msgid "Run a Hybrid search before saving its view."
+msgstr "Lancez une recherche hybride avant d'enregistrer sa vue."
+
+#: Hybrid search
+msgid "Hybrid search view saved."
+msgstr "Vue de recherche hybride enregistrée."
+
+#: Hybrid search
+msgid "Enable AI search before restoring this Hybrid view."
+msgstr "Activez la recherche IA avant de restaurer cette vue hybride."
+
+#: Hybrid search
+msgid "Hybrid search view restored."
+msgstr "Vue de recherche hybride restaurée."
+
+#: Hybrid search
+msgid "Unknown search sort order."
+msgstr "Ordre de tri inconnu."

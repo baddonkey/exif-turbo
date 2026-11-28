@@ -9,8 +9,11 @@ from PyInstaller.utils.hooks import collect_data_files
 
 sys.path.insert(0, str(Path('scripts').resolve()))
 from stage_runtime_licenses import stage_runtime_licenses  # noqa: E402
+from build_vec1 import spec_inputs  # noqa: E402
+from audit_release_artifact import omit_faiss_metadata  # noqa: E402
 
 _license_dir = stage_runtime_licenses()
+_vec1_paths, _vec1_binaries, _vec1_hidden = spec_inputs()
 
 _version_match = re.search(
     r'^__version__\s*=\s*["\']([^"\']+)["\']',
@@ -57,18 +60,19 @@ _weq_datas, _weq_bins, _weq_hidden = collect_all('PySide6.QtWebEngineQuick')
 
 a_gui = Analysis(
     ['src/exif_turbo/app.py'],
-    pathex=['src'],
-    binaries=_wec_bins + _weq_bins,
+    pathex=['src'] + _vec1_paths,
+    binaries=_wec_bins + _weq_bins + _vec1_binaries,
     datas=_common_datas + _wec_datas + _weq_datas,
-    hiddenimports=_common_hiddenimports + _wec_hidden + _weq_hidden,
+    hiddenimports=_common_hiddenimports + _wec_hidden + _weq_hidden + _vec1_hidden,
     hookspath=['hooks'],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['faiss'],
     noarchive=False,
     optimize=0,
 )
 
+a_gui.datas = omit_faiss_metadata(a_gui.datas)
 # Exclude GCC runtime libs so the system versions are used at runtime.
 # Bundling them causes GLIBCXX version mismatches on distros newer than the
 # build container (e.g. Fedora with GCC 13 vs AlmaLinux 9 with GCC 11).

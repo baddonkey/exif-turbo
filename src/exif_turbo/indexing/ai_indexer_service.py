@@ -1,17 +1,4 @@
-"""Vectorise images using OpenCLIP (ViT-B/32) and add them to AiVectorRepository.
-
-Usage::
-
-    repo = AiVectorRepository(index_path, id_map_path)
-    repo.load()
-    service = AiIndexerService(repo)
-    indexed, errors = service.build_index(
-        image_paths,
-        on_progress=lambda done, total, path: ...,
-        cancel_check=lambda: False,
-    )
-    repo.save()
-"""
+"""Vectorise images using OpenCLIP and store them in the AI index."""
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -28,7 +15,7 @@ import urllib.request
 
 import numpy as np
 
-from ..data.ai_vector_repository import AiVectorRepository
+from ..data.ai_vector_backend import AiVectorBackend
 from ..models.ai_model_profile import AiModelProfile, DEFAULT_AI_MODEL_PROFILE
 from ..utils.preview_cache import preview_cache_name_from_stamp, preview_cache_path, preview_dir
 from ..utils.thumb_crypto import ThumbCrypto
@@ -64,11 +51,19 @@ _open_clip_import_lock = threading.Lock()
 
 @contextmanager
 def _huggingface_offline() -> Iterator[None]:
+    import huggingface_hub.constants as constants
+
     previous_value = os.environ.get("HF_HUB_OFFLINE")
+    previous_offline = constants.HF_HUB_OFFLINE
+    transformers_hub = sys.modules.get("transformers.utils.hub")
+    previous_transformers_offline = (
+        getattr(transformers_hub, "_is_offline_mode", previous_offline)
+    )
     os.environ["HF_HUB_OFFLINE"] = "1"
-    constants = sys.modules.get("huggingface_hub.constants")
-    if constants is not None:
-        constants.HF_HUB_OFFLINE = True
+    constants.HF_HUB_OFFLINE = True
+    if transformers_hub is not None:
+        setattr(transformers_hub, "_is_offline_mode", True)
+    _reset_huggingface_sessions()
     try:
         yield
     finally:
@@ -76,10 +71,19 @@ def _huggingface_offline() -> Iterator[None]:
             os.environ.pop("HF_HUB_OFFLINE", None)
         else:
             os.environ["HF_HUB_OFFLINE"] = previous_value
-        constants = sys.modules.get("huggingface_hub.constants")
-        if constants is not None:
-            effective_value = previous_value or os.environ.get("TRANSFORMERS_OFFLINE", "")
-            constants.HF_HUB_OFFLINE = effective_value.upper() in {"1", "ON", "YES", "TRUE"}
+        constants.HF_HUB_OFFLINE = previous_offline
+        # Transformers and Hub HTTP sessions cache offline state at import/creation.
+        transformers_hub = sys.modules.get("transformers.utils.hub")
+        if transformers_hub is not None:
+            setattr(transformers_hub, "_is_offline_mode", previous_transformers_offline)
+        _reset_huggingface_sessions()
+
+
+def _reset_huggingface_sessions() -> None:
+    """Reset the Hub's shared HTTP client after changing offline mode."""
+    from huggingface_hub.utils import close_session  # noqa: PLC0415
+
+    close_session()
 
 
 @contextmanager
@@ -123,7 +127,7 @@ class AiIndexerService:
 
     def __init__(
         self,
-        vector_repo: AiVectorRepository,
+        vector_repo: AiVectorBackend,
         cache_dir: Path | None = None,
         *,
         profile: AiModelProfile = DEFAULT_AI_MODEL_PROFILE,
@@ -229,7 +233,11 @@ class AiIndexerService:
             # takes the exact same code path as before device support existed.
             if ai_device.is_gpu_enabled():
                 device = ai_device.resolve_device()
-                if device.type != "cpu":
+                # XLM-R transformers text inference has native CUDA stream/graph
+                # crashes on some Windows torch/CUDA builds. Keep text queries
+                # CPU-safe; image tensors and all non-CUDA backends remain GPU
+                # accelerated.
+                if device.type not in ("cpu", "cuda", "rocm"):
                     try:
                         self._model.to(device)  # type: ignore[union-attr]
                         with torch.no_grad():
@@ -241,6 +249,10 @@ class AiIndexerService:
                     except Exception as exc:  # noqa: BLE001
                         ai_device.mark_gpu_failed(exc)
                         self._model.to("cpu")  # type: ignore[union-attr]
+            # Text inference is deliberately CPU-safe on CUDA/ROCm hosts.
+            # The shared cached model may currently be resident on a GPU from
+            # image indexing, so move it back before feeding CPU tokens.
+            self._model.to("cpu")  # type: ignore[union-attr]
             with torch.no_grad():
                 tokens = tokenizer(batch_texts)
                 encoded = self._model.encode_text(tokens).float()  # type: ignore[union-attr]
@@ -325,22 +337,29 @@ class AiIndexerService:
                 else:
                     try:
                         with _huggingface_cache(self._cache_dir), _huggingface_offline():
-                            _cached_tokenizer = open_clip.get_tokenizer(
+                            tokenizer = open_clip.get_tokenizer(
                                 self._profile.model_ref,
                                 **tokenizer_kwargs,
                             )
-                        _check_tokenizer_has_vocab(_cached_tokenizer)
-                    except (FileNotFoundError, OSError, RuntimeError, ValueError):
+                        _check_tokenizer_has_vocab(tokenizer)
+                    except (FileNotFoundError, OSError, RuntimeError, ValueError, AttributeError) as exc:
+                        # Transformers' fast-tokenizer conversion calls endswith on
+                        # a missing vocab_file instead of reporting a cache miss.
+                        if isinstance(exc, AttributeError) and (
+                            exc.name != "endswith" or exc.obj is not None
+                        ):
+                            raise
                         _log.info(
                             "AI tokenizer %s is not fully cached; allowing one online acquisition",
                             self._profile.identifier,
                         )
                         with _huggingface_cache(self._cache_dir):
-                            _cached_tokenizer = open_clip.get_tokenizer(
+                            tokenizer = open_clip.get_tokenizer(
                                 self._profile.model_ref,
                                 **tokenizer_kwargs,
                             )
-                        _check_tokenizer_has_vocab(_cached_tokenizer)
+                        _check_tokenizer_has_vocab(tokenizer)
+                    _cached_tokenizer = tokenizer
                 _cached_tokenizer_profile_identifier = self._profile.identifier
             self._tokenizer = _cached_tokenizer
         return self._tokenizer

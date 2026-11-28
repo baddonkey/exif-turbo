@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from exif_turbo.search_query import SearchQueryParseError, parse_search_query
+from exif_turbo.search_query import (
+    SearchQueryParseError,
+    parse_hybrid_search_query,
+    parse_search_query,
+)
 
 
 def test_parse_search_query_mixed_filter_preserves_ordinary_fts_text() -> None:
@@ -114,3 +118,48 @@ def test_parse_search_query_doubled_quote_is_unescaped() -> None:
 def test_parse_search_query_malformed_structured_expression_raises(query: str) -> None:
     with pytest.raises(SearchQueryParseError):
         parse_search_query(query)
+
+
+def test_parse_hybrid_search_query_discovery_excludes_structured_filters() -> None:
+    parsed = parse_hybrid_search_query('forest tags:="wildlife"')
+
+    assert parsed.metadata_query == 'forest tags:="wildlife"'
+    assert parsed.semantic_text == "forest"
+    assert not parsed.explicit_and
+
+
+def test_parse_hybrid_search_query_explicit_clause_preserves_metadata() -> None:
+    parsed = parse_hybrid_search_query(
+        'Canon AND ai:="a \\"red\\" deer" AND tags:="wildlife"'
+    )
+
+    assert parsed.metadata_query == 'Canon tags:="wildlife"'
+    assert parsed.semantic_text == 'a "red" deer'
+    assert parsed.explicit_and
+
+
+@pytest.mark.parametrize(
+    "query",
+    ['"ai:=deer" forest', 'description:="look for ai:=deer"'],
+)
+def test_parse_hybrid_search_query_quoted_operator_is_not_ai(query: str) -> None:
+    parsed = parse_hybrid_search_query(query)
+
+    assert not parsed.explicit_and
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "ai:=deer",
+        'ai:=""',
+        'ai:="deer" ai:="cat"',
+        'forest OR ai:="deer"',
+        'NOT ai:="deer"',
+        '(ai:="deer")',
+        'ai:="deer"OR cats',
+    ],
+)
+def test_parse_hybrid_search_query_unsupported_ai_expression_raises(query: str) -> None:
+    with pytest.raises(SearchQueryParseError):
+        parse_hybrid_search_query(query)

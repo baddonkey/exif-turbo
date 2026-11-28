@@ -107,6 +107,18 @@ desktop launcher, and creates a `/usr/bin/exif-turbo` symlink.
 pip install -e .
 ```
 
+For an editable checkout, build the verified Vec1 native binary before using AI
+features:
+
+```powershell
+python scripts\stage_vec1_development.py
+```
+
+On Linux or macOS, use `python scripts/stage_vec1_development.py` instead.
+This requires a native C compiler and downloads pinned, checksum-verified source
+files. Non-editable Python installations do not currently include the extension,
+so their AI features are unavailable; metadata search remains available.
+
 ### Command-line options
 
 ```
@@ -146,30 +158,19 @@ exported metadata, saved previews, copied originals, or tagged derivatives.
 Settings files and diagnostic output are not encrypted and may reveal paths or
 other activity details. Clipboard contents are also outside this protection.
 
-The AI index is stored as a single authenticated AES-256-GCM snapshot,
-`ai_index.faiss.enc`, with a separate password-wrapped key in
-`ai_index.faiss.keys/.thumb_key`. Keep the key directory with the snapshot when
-backing up or moving a database. Clearing thumbnails does not delete this key.
-Snapshot encryption and verification process bounded chunks in memory; the
-FAISS index and serialized vector data still require memory. AI saves do not
-stage plaintext vectors or mappings on disk. File names, sizes, and timestamps remain
-visible to someone who can inspect the storage directory.
+Vec1 AI vectors are stored in the database and are re-encrypted with it when
+you change its password. Back up the database and its associated data and key
+files together. File names, sizes, and timestamps may remain visible to someone
+who can inspect the storage directory.
 
-Existing plaintext AI files (`ai_index.faiss`, `ai_id_map.json`, and
-`ai_index_meta.json`) are migrated on the next successful password unlock, even
-when AI search is disabled. The encrypted copy is verified before the plaintext
-files and known legacy temporary files are removed. This can take time and needs
-additional free disk space and memory for a large index. Failed migration leaves
-the originals available for retry. Removing files is not secure erasure: older
-backups, filesystem snapshots, and recoverable disk blocks may still contain
-plaintext data. Earlier app versions cannot read the new encrypted snapshot;
-do not run an older version against a migrated database.
-
-Missing keys, wrong AI passwords, and failed authentication are reported instead
-of silently falling back to plaintext or overwriting the encrypted snapshot
-during **AI Full Rescan**. Restore the snapshot and its matching key directory
-from a trusted backup if necessary. Incomplete or incompatible legacy data is
-preserved inside the encrypted snapshot and may still require **AI Full Rescan**.
+Older versions could migrate plaintext FAISS files (`ai_index.faiss`,
+`ai_id_map.json`, and `ai_index_meta.json`) into an encrypted snapshot,
+`ai_index.faiss.enc`, with a separate key in `ai_index.faiss.keys/.thumb_key`.
+This version no longer uses or maintains those files, and does not rekey them
+when the database password changes. Keep the matching key directory and old
+password with any encrypted legacy snapshot you back up. Plaintext legacy files,
+older backups, filesystem snapshots, and recoverable disk blocks may still
+contain unencrypted data; deleting files is not secure erasure.
 
 While the app is unlocked, decrypted data exists in process memory. Closing the
 app stops workers and releases its password/key references, but Python and native
@@ -380,10 +381,10 @@ While a search is running, a semi-transparent grey overlay dims the entire UI
 and the cursor changes to a busy indicator. The overlay clears automatically
 when results are ready.
 
-### AI semantic search (EXIF/AI toggle)
+### AI semantic search
 
 When **AI Features** are enabled in **Settings**, the search bar shows an
-**EXIF / AI** toggle. Switch to **AI** mode to search by meaning instead of
+**EXIF / AI / Hybrid** toggle. Switch to **AI** mode to search by meaning instead of
 exact metadata terms.
 
 ![Search tab in AI mode](screenshots/09_ai_search_mode.png)
@@ -407,9 +408,41 @@ AI vector indexes are tied to the model that created them. If the application
 reports missing or incompatible AI index metadata after an upgrade, run
 **AI Full Scan** before using AI search.
 
+Vec1 is the only AI backend. If you have an older FAISS AI index, run **AI
+Full Scan** for every indexed folder to rebuild the AI index from the originals;
+see [Rebuilding an older AI index](#rebuilding-an-older-ai-index).
+
+Packaged native Vec1 loading is being added for Windows, Linux, and macOS on
+Apple silicon; those artifacts have not yet been validated. For editable
+checkouts, see [From source](#from-source) for the developer staging command
+being added. AI features may be unavailable in source installs until the
+extension and source-run loading support are ready.
+
 Note for macOS Intel users: AI features are unavailable on macOS Intel (x86_64)
 targets and are shown disabled in **Settings**. This is due to PyTorch support
 for Python 3.13+ on that platform.
+
+### Hybrid search
+
+Choose **Hybrid** to search metadata and image content together. For example,
+`red deer in snow` returns metadata matches or visually similar images. Results
+matching both are combined into one ranked list. Use **Relevance** for the
+default ranking, or select another sort order.
+
+To require both metadata and a visual match, use a single `ai:="..."` clause,
+for example `Canon ai:="red deer in snow"` or
+`tags:="wildlife" ai:="forest"`. Folder, format, date, set, marked-only, and
+structured metadata filters remain restrictions. An empty query shows all
+images in scope. The **Fine**, **Normal**, and **Broad** controls set the same
+visual similarity thresholds as AI search.
+
+Hybrid searches with visual text require an available AI index. If it is
+missing or empty, the search reports an error rather than silently dropping
+the visual condition. At most 2,000 visual candidates are displayed after
+filters; metadata matches are retained in discovery searches. When a limit
+applies, the result count shows both the displayed and total matches. Timeline
+counts include all matching images before that limit and ignore the selected
+date range. Hybrid searches are limited to one million images in scope.
 
 ### Filtering by format
 
@@ -785,6 +818,14 @@ membership until you choose **Add matches** or **Replace members**.
 Reapplying checks the whole active database, independent of Search filters and
 pagination. Long operations show progress and can be canceled; changes already
 completed are not rolled back.
+
+### Saved Hybrid views
+
+After running a Hybrid search, select a set and choose **Save view** to save
+the search text, precision, sort order, and filters. Choose **Restore view** to
+return to that search. This view is separate from the set's saved membership
+filter: restoring it does not change set members, and **Add matches** or
+**Replace members** still use the saved membership filter.
 
 ![Set filter editor](screenshots/11_set_filter_editor.png)
 
@@ -1303,9 +1344,8 @@ sidecar writes remain in place.
 
 **Reset Database** clears indexed images, marks, indexed folders, and thumbnail
 and preview caches. It deliberately does not traverse source folders to delete
-adjacent sidecars. The separate image AI index files are not explicitly deleted
-by reset; use **AI Full Scan** after rebuilding the image index when a clean
-semantic index is required. Re-add and scan folders to synchronize sidecars.
+adjacent sidecars. Re-add and scan folders to synchronize sidecars, and use
+**AI Full Scan** to rebuild the AI index.
 
 ---
 
@@ -1318,6 +1358,24 @@ Click the **Settings** tab to configure application behaviour.
 The custom-tagging switch enables or disables the tagging drawer for this
 database. It does not affect AI image search or AI-Scan. Previously used custom
 labels remain available as suggestions while tagging is enabled.
+
+### Rebuilding an older AI index
+
+Vec1 is the sole AI backend; old FAISS vectors are not migrated. Your originals
+and indexed metadata remain in place. Old FAISS files are left untouched and
+are no longer maintained or rekeyed, including after a password change.
+
+1. Back up the metadata database and its associated data and key files together.
+   Ensure your original images are available.
+2. Enable **AI Features** in **Settings**, then open **Indexed Folders** and
+   select **Expert** mode.
+3. Run **AI Full Scan** for every indexed folder to rebuild its AI vectors from
+   the originals. Until the scans finish, AI search will not have vectors for
+   all your images.
+
+There is no backend switching or rollback. Older app versions cannot read the
+new Vec1 changes. The database does not encrypt original photos or videos, or
+files you export; secure those separately if needed.
 
 ### MCP Interface
 
@@ -1521,10 +1579,9 @@ re-encrypts every page of the database. Existing **thumbnails are preserved**
 protects the thumbnail key) is re-encrypted under the new password; the
 thumbnail cache on disk does not have to be rebuilt.
 
-The AI master key is also re-wrapped; the encrypted vector snapshot is not
-rewritten. A staged wrapper allows the next verified database unlock to recover
-an interrupted password change. After a successful change, the old password no
-longer unlocks the current AI key. Historical backups retain their old passwords.
+The Vec1 AI index is part of the database and is re-encrypted with it. Old
+FAISS files are not updated or rekeyed. Historical backups and encrypted
+legacy snapshots retain their old passwords.
 
 Once the operation finishes successfully the dialog closes and a confirmation
 appears. The new password is required the next time you unlock the database.
@@ -1565,9 +1622,8 @@ button and shows a *"This step cannot be canceled…"* notice until it finishes.
 
 > **This action cannot be undone.** After a reset you will need to re-add your
 > folders and run a full rescan to rebuild the index. Adjacent tagging sidecars
-> are not deleted; rescanning synchronizes their custom tags again. Existing
-> image AI vector files are not
-> explicitly deleted; run **AI Full Scan** when you need to rebuild them.
+> are not deleted; rescanning synchronizes their custom tags again. Run
+> **AI Full Scan** to rebuild AI vectors.
 
 The **Reset Database…** button is disabled while indexing is in progress.
 

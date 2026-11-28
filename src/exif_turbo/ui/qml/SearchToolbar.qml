@@ -11,6 +11,7 @@ Rectangle {
 
     property bool aiEnabled: false
     property bool aiSearchMode: false
+    property bool hybridSearchMode: false
     property string aiSearchPrecision: "normal"
     property color accentColor: Material.accentColor
     property string monoFontFamily: "monospace"
@@ -18,6 +19,7 @@ Rectangle {
 
     signal searchRequested(string query)
     signal aiSearchModeRequested(bool enabled)
+    signal hybridSearchModeRequested()
     signal aiSearchPrecisionRequested(string precision)
 
     function focusQuery(): void {
@@ -34,7 +36,7 @@ Rectangle {
 
         Rectangle {
             visible: searchToolbar.aiEnabled
-            implicitWidth: 82
+            implicitWidth: 138
             implicitHeight: 30
             radius: 4
             color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.08)
@@ -51,8 +53,8 @@ Rectangle {
                     flat: true
                     text: qsTr("EXIF")
                     font.pixelSize: 11
-                    font.bold: !searchToolbar.aiSearchMode
-                    highlighted: !searchToolbar.aiSearchMode
+                    font.bold: !searchToolbar.aiSearchMode && !searchToolbar.hybridSearchMode
+                    highlighted: !searchToolbar.aiSearchMode && !searchToolbar.hybridSearchMode
                     onClicked: searchToolbar.aiSearchModeRequested(false)
                     topPadding: 0; bottomPadding: 0
                     leftPadding: 4; rightPadding: 4
@@ -76,11 +78,31 @@ Rectangle {
                     topPadding: 0; bottomPadding: 0
                     leftPadding: 4; rightPadding: 4
                 }
+
+                Rectangle {
+                    Layout.preferredWidth: 1
+                    Layout.fillHeight: true
+                    color: Qt.rgba(Material.foreground.r, Material.foreground.g, Material.foreground.b, 0.18)
+                }
+
+                Button {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    flat: true
+                    text: qsTr("Hybrid")
+                    objectName: "hybridSearchModeButton"
+                    font.pixelSize: 11
+                    font.bold: searchToolbar.hybridSearchMode
+                    highlighted: searchToolbar.hybridSearchMode
+                    onClicked: searchToolbar.hybridSearchModeRequested()
+                    topPadding: 0; bottomPadding: 0
+                    leftPadding: 4; rightPadding: 4
+                }
             }
         }
 
         Rectangle {
-            visible: searchToolbar.aiSearchMode
+            visible: searchToolbar.aiSearchMode || searchToolbar.hybridSearchMode
             implicitWidth: 148
             implicitHeight: 30
             radius: 4
@@ -146,7 +168,8 @@ Rectangle {
             Label {
                 anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                 visible: searchField.text.length === 0
-                text: searchToolbar.aiSearchMode ? qsTr("Describe what you’re looking for…") : qsTr("Search EXIF metadata…")
+                text: searchToolbar.hybridSearchMode ? qsTr("Search metadata and images…") :
+                      searchToolbar.aiSearchMode ? qsTr("Describe what you’re looking for…") : qsTr("Search EXIF metadata…")
                 font.pixelSize: 13
                 opacity: 0.4
             }
@@ -282,6 +305,9 @@ Rectangle {
 
                             Label { text: "tags:=\"cat, playing\" OR text:=\"green\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
                             Label { text: qsTr("exact tags OR non-tag text"); font.pixelSize: 12 }
+
+                            Label { visible: searchToolbar.hybridSearchMode; text: "Canon ai:=\"deer\""; font.family: searchToolbar.monoFontFamily; font.pixelSize: 12 }
+                            Label { visible: searchToolbar.hybridSearchMode; text: qsTr("metadata AND visual match"); font.pixelSize: 12 }
                         }
 
                         Rectangle {

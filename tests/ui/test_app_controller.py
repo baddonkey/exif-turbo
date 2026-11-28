@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
-from threading import get_ident
+from threading import Event, Thread, get_ident
 from types import SimpleNamespace
 from typing import Generator
 
@@ -25,8 +25,7 @@ from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtTest import QTest
 from pytestqt.qtbot import QtBot
 
-from exif_turbo.config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
-from exif_turbo.data.ai_vector_storage import AiVectorStorage
+from exif_turbo.config import database_data_dir
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.models.image_sidecar import ImageSidecar, SidecarSource
 from exif_turbo.models.image_tag import ImageTag, TagProvenance
@@ -40,6 +39,7 @@ from exif_turbo.ui.providers.preview_image_provider import PreviewImageProvider
 from exif_turbo.ui.providers.raw_image_provider import RawImageProvider
 from exif_turbo.ui.view_models.app_controller import AppController
 from exif_turbo.ui.workers.ai_search_worker import AiSearchWorker
+from exif_turbo.ui.workers.bulk_op_worker import BulkOpWorker
 from exif_turbo.ui.workers.image_set_membership_worker import ImageSetMembershipWorker
 
 # How long to leave the window visible between steps (ms).
@@ -66,6 +66,98 @@ _COLORS = [
     ( 50, 200, 100),
     (180, 120,  30),
 ]
+
+
+def test_hybrid_mode_button_opens_browse_all_and_relevance_sort(
+    qtbot: QtBot, window: tuple[AppController, SearchListModel, QQuickWindow]
+) -> None:
+    controller, model, root = window
+    controller.unlock(_TEST_PASSWORD)
+    qtbot.waitUntil(
+        lambda: not controller.isLocked and not controller.isSearching
+        and controller.totalResults == 5,
+        timeout=10000,
+    )
+    controller.setAiEnabled(True)
+    button = root.findChild(QQuickItem, "hybridSearchModeButton")
+    assert button is not None
+    overlay = root.findChild(QQuickItem, "searchBusyOverlay")
+    assert overlay is not None
+    qtbot.waitUntil(lambda: button.isVisible() and button.width() > 0 and not overlay.isVisible())
+
+    center = button.mapToScene(QPointF(button.width() / 2, button.height() / 2))
+    QTest.mouseMove(root, QPoint(int(center.x()), int(center.y())))
+    qtbot.waitUntil(lambda: bool(button.property("hovered")))
+    QTest.mouseClick(
+        root, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
+        QPoint(int(center.x()), int(center.y())),
+    )
+    qtbot.waitUntil(
+        lambda: controller.isHybridSearchMode and not controller.isSearching
+        and controller.totalResults == 5,
+        timeout=10000,
+    )
+
+    assert model.rowCount() == 5
+    assert controller.hybridSortBy == ""
+    sort_combo = root.findChild(QQuickItem, "sortCombo")
+    assert sort_combo is not None and sort_combo.isVisible()
+
+
+def test_hybrid_view_buttons_save_and_restore_search_state(
+    qtbot: QtBot, window: tuple[AppController, SearchListModel, QQuickWindow]
+) -> None:
+    controller, _, root = window
+    controller.unlock(_TEST_PASSWORD)
+    qtbot.waitUntil(
+        lambda: not controller.isLocked and not controller.isSearching
+        and controller.totalResults == 5,
+        timeout=10000,
+    )
+    controller.setAiEnabled(True)
+    controller.setHybridSearchMode(True)
+    search_field = root.findChild(QQuickItem, "searchField")
+    assert search_field is not None
+    search_field.setProperty("text", 'tags:="wildlife"')
+    controller.hybridSearch('tags:="wildlife"', "broad")
+    qtbot.waitUntil(lambda: not controller.isSearching, timeout=10000)
+    set_id = controller.createImageSet("Hybrid view")
+    tab_bar = root.findChild(QQuickItem, "mainTabBar")
+    sets_page = root.findChild(QQuickItem, "setsPage")
+    assert tab_bar is not None and sets_page is not None
+    tab_bar.setProperty("currentIndex", 2)
+    sets_page.setProperty("selectedSetId", set_id)
+
+    def click(name: str) -> None:
+        button = root.findChild(QQuickItem, name)
+        assert button is not None
+        qtbot.waitUntil(lambda: button.isVisible() and button.isEnabled(), timeout=10000)
+        def hover() -> bool:
+            center = button.mapToScene(QPointF(button.width() / 2, button.height() / 2))
+            QTest.mouseMove(root, QPoint(int(center.x()), int(center.y())))
+            return bool(button.property("hovered"))
+
+        qtbot.waitUntil(hover, timeout=10000)
+        center = button.mapToScene(QPointF(button.width() / 2, button.height() / 2))
+        position = QPoint(int(center.x()), int(center.y()))
+        QTest.mouseClick(root, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, position)
+
+    click("saveHybridSearchViewButton")
+    controller.setHybridSearchMode(False)
+    controller.search("")
+    qtbot.waitUntil(lambda: not controller.isSearching, timeout=10000)
+    click("restoreHybridSearchViewButton")
+    qtbot.waitUntil(
+        lambda: controller.isHybridSearchMode and not controller.isSearching
+        and tab_bar.property("currentIndex") == 0,
+        timeout=10000,
+    )
+
+    search_field = root.findChild(QQuickItem, "searchField")
+    assert search_field is not None
+    assert search_field.property("text") == 'tags:="wildlife"'
+    assert controller.hybridPrecision == "broad"
+    assert root.property("_aiSearchPrecision") == "broad"
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -177,6 +269,60 @@ def test_maintenance_completion_keeps_worker_alive_until_native_join(
     controller.close()
 
 
+@pytest.mark.parametrize("outcome", ["finished", "failed", "canceled"])
+def test_bulk_completion_keeps_worker_alive_until_native_join(
+    qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, outcome: str,
+) -> None:
+    # Arrange
+    controller = AppController(
+        tmp_path / "bulk.db", SearchListModel(cache_dir=tmp_path / "thumbs"),
+        ExifListModel(), FolderListModel(),
+    )
+    joining = Event()
+    release = Event()
+    held_during_join: list[bool] = []
+    workers: list[BulkOpWorker] = []
+
+    class DelayedBulkWorker(BulkOpWorker):
+        def run(self) -> None:
+            if outcome == "finished":
+                self.finished.emit()
+            elif outcome == "failed":
+                self.failed.emit("test failure")
+            else:
+                self.canceled.emit()
+            release.wait(5)
+
+        def wait(self, *args: object) -> bool:
+            held_during_join.append(controller._bulk_worker is self)
+            joining.set()
+            return super().wait()
+
+    def create_worker(*args: object, **kwargs: object) -> DelayedBulkWorker:
+        worker = DelayedBulkWorker(*args, **kwargs)  # type: ignore[arg-type]
+        workers.append(worker)
+        return worker
+
+    monkeypatch.setattr("exif_turbo.ui.view_models.app_controller.BulkOpWorker", create_worker)
+    releaser = Thread(target=lambda: (joining.wait(2), release.set()))
+    releaser.start()
+    try:
+        # Act
+        controller._start_bulk_op("select_all", "Selecting")
+        qtbot.waitUntil(lambda: not controller.isBusy, timeout=5000)
+        releaser.join(timeout=5)
+
+        # Assert
+        assert held_during_join == [True]
+        assert controller._bulk_worker is None
+    finally:
+        release.set()
+        releaser.join(timeout=5)
+        for worker in workers:
+            worker.wait()
+        controller.close()
+
+
 def test_unlock_shows_all_images(
     qtbot: QtBot,
     window: tuple[AppController, SearchListModel, QQuickWindow],
@@ -195,17 +341,16 @@ def test_unlock_shows_all_images(
     assert search_model.rowCount() == 5
 
 
-def test_unlock_existing_database_migrates_ai_artifacts_without_ai_search(
+def test_unlock_existing_database_leaves_obsolete_ai_artifacts_untouched(
     qtbot: QtBot, tmp_path: Path,
 ) -> None:
     # Arrange
     db_path = tmp_path / "existing.db"
     ImageIndexRepository(db_path, key=_TEST_PASSWORD).close()
-    paths = (ai_index_path(db_path), ai_id_map_path(db_path), ai_vector_metadata_path(db_path))
-    paths[0].parent.mkdir(parents=True, exist_ok=True)
-    original = (b"legacy-vectors", b"private-paths", b"legacy-metadata")
-    for path, data in zip(paths, original):
-        path.write_bytes(data)
+    old_index = database_data_dir(db_path) / "ai_index.faiss.enc"
+    old_index.parent.mkdir(parents=True, exist_ok=True)
+    original = b"obsolete-ai-index"
+    old_index.write_bytes(original)
     controller = AppController(db_path, SearchListModel(cache_dir=tmp_path / "thumbs"),
                                ExifListModel(), FolderListModel())
 
@@ -214,8 +359,7 @@ def test_unlock_existing_database_migrates_ai_artifacts_without_ai_search(
 
     # Assert
     assert not controller.isLocked
-    assert not any(path.exists() for path in paths)
-    assert AiVectorStorage(paths[0], _TEST_PASSWORD).load() == original
+    assert old_index.read_bytes() == original
     controller.close()
 
 

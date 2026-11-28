@@ -78,7 +78,7 @@ full suite as one blocking terminal command. Each run is written to
 `logs/test-runs/<stamp>/` (`summary.txt` lists failed tests and crashed or
 timed-out groups).
 
-The full suite loads QtWebEngine and torch/faiss native libraries. Two hard-won
+The full suite loads QtWebEngine, torch, and Vec1 native libraries. Two hard-won
 rules keep runs from hanging or crashing:
 
 1. **Never capture the suite's stdout through a pipe.** QtWebEngine leaves a

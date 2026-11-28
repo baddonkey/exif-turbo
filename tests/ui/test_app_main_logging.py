@@ -46,22 +46,6 @@ def test_qt_message_handler_other_warning_remains_warning(
     assert records[0].levelno == logging.WARNING
 
 
-def test_configure_third_party_logging_hides_faiss_loader_info() -> None:
-    # Arrange
-    logger = logging.getLogger("faiss.loader")
-    original_level = logger.level
-
-    try:
-        # Act
-        logger.setLevel(logging.NOTSET)
-        _configure_third_party_logging()
-
-        # Assert
-        assert logger.level == logging.WARNING
-        assert logger.isEnabledFor(logging.INFO) is False
-    finally:
-        logger.setLevel(original_level)
-
 def test_configure_third_party_logging_hides_pyvips_info() -> None:
     # Arrange
     logger = logging.getLogger("pyvips")

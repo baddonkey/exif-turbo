@@ -8,8 +8,11 @@ from PyInstaller.utils.hooks import collect_data_files
 
 sys.path.insert(0, str(Path('scripts').resolve()))
 from stage_runtime_licenses import stage_runtime_licenses  # noqa: E402
+from build_vec1 import spec_inputs  # noqa: E402
+from audit_release_artifact import omit_faiss_metadata  # noqa: E402
 
 _license_dir = stage_runtime_licenses()
+_vec1_paths, _vec1_datas, _vec1_hidden = spec_inputs()
 
 _version_match = re.search(
     r'^__version__\s*=\s*["\']([^"\']+)["\']',
@@ -23,7 +26,7 @@ _icon_arg = str(_icon_icns) if _icon_icns.exists() else None
 
 a = Analysis(
     ['src/exif_turbo/app.py'],
-    pathex=[],
+    pathex=_vec1_paths,
     binaries=[],
     datas=[
         ('src/exif_turbo/ui/qml', 'exif_turbo/ui/qml'),
@@ -54,16 +57,20 @@ a = Analysis(
         'transformers',
         'sentencepiece',
         'sentencepiece._sentencepiece',
-        'faiss',
         'certifi',
-    ],
+    ] + _vec1_hidden,
     hookspath=['hooks'],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['faiss'],
     noarchive=False,
     optimize=0,
 )
+a.datas = omit_faiss_metadata(a.datas)
+# Analysis reclassifies Mach-O data as binaries and re-signs them. Preserve the
+# already-signed, hashed extension as a sealed resource instead.
+for _source, _destination in _vec1_datas:
+    a.datas.append((str(Path(_destination) / Path(_source).name), _source, 'DATA'))
 pyz = PYZ(a.pure)
 
 exe = EXE(

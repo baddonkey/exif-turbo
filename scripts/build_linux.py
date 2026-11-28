@@ -8,6 +8,7 @@ Produces:
 
 Requirements:
     pip install uv==0.13.0
+    cc                 — C compiler for the pinned Vec1 extension
     dpkg-deb   (apt install dpkg)      — for DEB
     rpmbuild   (apt install rpm)       — for RPM
 
@@ -21,6 +22,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import platform
 import re
 import shutil
@@ -32,10 +34,14 @@ from pathlib import Path
 
 try:
     from audit_release_artifact import audit_release_payload
+    from build_vec1 import STAGE_ENV, staged_vec1, verify_staged_binary
     from release_environment import ensure_release_environment
+    from smoke_release import smoke_release
 except ModuleNotFoundError:
     from scripts.audit_release_artifact import audit_release_payload
+    from scripts.build_vec1 import STAGE_ENV, staged_vec1, verify_staged_binary
     from scripts.release_environment import ensure_release_environment
+    from scripts.smoke_release import smoke_release
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -45,9 +51,9 @@ def fail(msg: str) -> None:
     sys.exit(1)
 
 
-def run(cmd: list[str]) -> None:
+def run(cmd: list[str], *, env: dict[str, str] | None = None) -> None:
     print(f"  $ {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=REPO_ROOT)
+    result = subprocess.run(cmd, cwd=REPO_ROOT, env=env, check=False)
     if result.returncode != 0:
         fail(f"Command failed ({result.returncode}): {' '.join(cmd)}")
 
@@ -198,6 +204,9 @@ def build_deb(
 
         # System libraries required by Qt/WebEngine that are not bundled.
         _deb_depends = ", ".join([
+            "libgl1",
+            "libegl1",
+            "libopengl0",
             "libnss3",
             "libxfixes3",
             "libxkbfile1",
@@ -226,6 +235,11 @@ def build_deb(
             "libxrandr2",
             "libpango-1.0-0",
             "libminizip1t64 | libminizip1",
+            "libsnappy1v5",
+            "libwebpdemux2",
+            "libwebpmux3",
+            "liblcms2-2",
+            "libopus0",
         ])
 
         debian_dir = staging / "DEBIAN"
@@ -277,11 +291,13 @@ def build_rpm(bundle_dir: Path, version: str) -> Path:
             License:        MIT
             AutoReqProv:    no
             Obsoletes:      exif-turbo < %{{version}}
+            Requires:       mesa-libGL, mesa-libEGL, libglvnd-opengl
             Requires:       nss, libXfixes, libxkbfile, libxkbcommon, libxkbcommon-x11
             Requires:       xcb-util, xcb-util-wm, xcb-util-image, xcb-util-keysyms, xcb-util-renderutil, xcb-util-cursor
             Requires:       libxcb, mesa-libgbm, pango, alsa-lib, pulseaudio-libs, libtiff
             Requires:       atk, at-spi2-atk, cups-libs
             Requires:       libXcomposite, libXdamage, libXrandr, libxshmfence
+            Requires:       snappy, libwebp, lcms2, opus
 
             %description
             Cross-platform image EXIF metadata search and indexing tool.
@@ -334,12 +350,14 @@ def main() -> None:
     parser.add_argument(
         "--deb-arch",
         choices=("amd64", "arm64"),
-        help="Override DEB architecture metadata (useful in cross-arch container builds).",
+        help="Override DEB architecture metadata (must match the build host).",
     )
     args = parser.parse_args()
 
     if args.deb_arch and args.rpm_only:
         fail("--deb-arch cannot be used with --rpm-only")
+    if args.deb_arch and args.deb_arch != deb_arch():
+        fail("--deb-arch must match the build host architecture")
 
     ensure_release_environment(Path(__file__))
     pyinstaller = find_tool("pyinstaller", venv_subpath=".venv/bin/pyinstaller")
@@ -355,21 +373,33 @@ def main() -> None:
 
     artifacts: list[Path] = []
 
-    if not args.rpm_only:
-        run([pyinstaller, "--noconfirm", "--clean", "exif-turbo-deb.spec"])
-        print("  PyInstaller DEB build complete.")
-        deb_bundle = REPO_ROOT / "dist" / "exif-turbo-deb"
-        artifacts.append(deb_bundle)
-        deb_out = build_deb(deb_bundle, version, deb_arch_override=args.deb_arch)
-        artifacts.append(deb_out)
+    with staged_vec1(REPO_ROOT / "build") as vec1_stage:
+        env = os.environ.copy()
+        env.pop(STAGE_ENV, None)
+        env[STAGE_ENV] = str(vec1_stage)
+        if not args.rpm_only:
+            run([pyinstaller, "--noconfirm", "--clean", "exif-turbo-deb.spec"], env=env)
+            print("  PyInstaller DEB build complete.")
+            deb_bundle = REPO_ROOT / "dist" / "exif-turbo-deb"
+            verify_staged_binary(
+                vec1_stage, deb_bundle / "_internal" / "exif_turbo" / "assets" / "native" / "vec1.so"
+            )
+            smoke_release(deb_bundle / "exif-turbo")
+            artifacts.append(deb_bundle)
+            deb_out = build_deb(deb_bundle, version, deb_arch_override=args.deb_arch)
+            artifacts.append(deb_out)
 
-    if not args.deb_only:
-        run([pyinstaller, "--noconfirm", "--clean", "exif-turbo-rpm.spec"])
-        print("  PyInstaller RPM build complete.")
-        rpm_bundle = REPO_ROOT / "dist" / "exif-turbo-rpm"
-        artifacts.append(rpm_bundle)
-        rpm_out = build_rpm(rpm_bundle, version)
-        artifacts.append(rpm_out)
+        if not args.deb_only:
+            run([pyinstaller, "--noconfirm", "--clean", "exif-turbo-rpm.spec"], env=env)
+            print("  PyInstaller RPM build complete.")
+            rpm_bundle = REPO_ROOT / "dist" / "exif-turbo-rpm"
+            verify_staged_binary(
+                vec1_stage, rpm_bundle / "_internal" / "exif_turbo" / "assets" / "native" / "vec1.so"
+            )
+            smoke_release(rpm_bundle / "exif-turbo")
+            artifacts.append(rpm_bundle)
+            rpm_out = build_rpm(rpm_bundle, version)
+            artifacts.append(rpm_out)
 
     print()
     print("Done! Artifacts:")

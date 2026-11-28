@@ -11,6 +11,7 @@ from PyInstaller.utils.hooks import collect_data_files
 sys.path.insert(0, str(Path('scripts').resolve()))
 from gen_version_info import write_version_info  # noqa: E402
 from stage_runtime_licenses import stage_runtime_licenses  # noqa: E402
+from audit_release_artifact import omit_faiss_metadata  # noqa: E402
 
 _license_dir = stage_runtime_licenses()
 
@@ -59,22 +60,24 @@ _common_hiddenimports = [
     'transformers',
     'sentencepiece',
     'sentencepiece._sentencepiece',
+    '_vec1_release_hash',
 ]
 
 a_gui = Analysis(
     ['src\\exif_turbo\\app.py'],
-    pathex=['src'],
-    binaries=[],
+    pathex=['src', 'build\\vec1'],
+    binaries=[('build\\vec1\\vec1.dll', 'exif_turbo\\assets\\native')],
     datas=_common_datas,
     hiddenimports=_common_hiddenimports,
     hookspath=['hooks'],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['faiss'],
     noarchive=False,
     optimize=0,
 )
 
+a_gui.datas = omit_faiss_metadata(a_gui.datas)
 pyz_gui = PYZ(a_gui.pure)
 
 exe_gui = EXE(

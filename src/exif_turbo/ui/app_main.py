@@ -58,7 +58,6 @@ def _qt_message_handler(msg_type: QtMsgType, _context: object, message: str) -> 
 
 
 def _configure_third_party_logging() -> None:
-    logging.getLogger("faiss.loader").setLevel(logging.WARNING)
     # libvips logs ~20 INFO lines per thumbnailed image, drowning useful output.
     logging.getLogger("pyvips").setLevel(logging.WARNING)
 
@@ -132,6 +131,12 @@ def parse_args() -> argparse.Namespace:
         version=f"exif-turbo {__version__}",
     )
     parser.add_argument(
+        "--release-smoke-test",
+        type=Path,
+        metavar="REPORT",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
         "--db",
         default=None,
         metavar="NAME",
@@ -186,6 +191,11 @@ def _force_macos_menu_language() -> None:
 
 def main() -> None:
     args = parse_args()
+    if args.release_smoke_test is not None:
+        from ..utils.release_smoke import run_release_smoke_test
+
+        run_release_smoke_test(args.release_smoke_test)
+        return
     logging.basicConfig(level=logging.INFO)
     _configure_third_party_logging()
     qInstallMessageHandler(_qt_message_handler)

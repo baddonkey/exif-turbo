@@ -33,11 +33,11 @@
       UpgradeCode="A7B3C1D5-E9F2-4A6B-8C3D-1E5F7A2B4C8D"
       Scope="perMachine">
 
-    <!-- Remove any older version before installing new files to prevent
-         stale bundled-Python files (e.g. PYZ archive, .pyd extensions)
-         from mixing with new ones and causing version-mismatch crashes. -->
+    <!-- Remove older or same-version builds before installing new files to
+         prevent bundled Python and QML from different builds being mixed. -->
     <MajorUpgrade
         Schedule="afterInstallInitialize"
+        AllowSameVersionUpgrades="yes"
         DowngradeErrorMessage="A newer version of exif-turbo is already installed." />
 
     <!-- Embed all files in a single .cab inside the MSI -->

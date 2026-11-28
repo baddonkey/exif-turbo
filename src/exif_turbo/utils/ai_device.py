@@ -277,6 +277,7 @@ def detect_backend() -> str:
         import torch  # noqa: PLC0415
     except ImportError:
         return "cpu"
+    _disable_cuda_stream_capture_probe(torch)
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
@@ -284,8 +285,6 @@ def detect_backend() -> str:
             category=UserWarning,
         )
         cuda_available = torch.cuda.is_available()
-    if not cuda_available:
-        _disable_cuda_stream_capture_probe(torch)
     if cuda_available:
         # A ROCm-built torch also reports itself via torch.cuda.* (HIP is
         # exposed through the same CUDA-shaped API); disambiguate via
@@ -300,11 +299,11 @@ def detect_backend() -> str:
 
 
 def _disable_cuda_stream_capture_probe(torch) -> None:  # type: ignore[no-untyped-def]
-    """Make ``torch.cuda.is_current_stream_capturing`` safe without a CUDA device.
+    """Make ``torch.cuda.is_current_stream_capturing`` safe for text inference.
 
-    ``transformers`` calls it on every XLM-R forward pass. On a CUDA torch
-    build whose driver/device is unusable it raises an access violation that
-    kills the process; with no usable device nothing can be capturing anyway.
+    ``transformers`` calls it on every XLM-R forward pass. On some Windows
+    CUDA/ROCm torch builds that native probe raises an access violation. Exif
+    Turbo does not use CUDA stream capture, so return ``False`` for this probe.
     """
     version = getattr(torch, "version", None)
     if not getattr(version, "cuda", None) and not getattr(version, "hip", None):

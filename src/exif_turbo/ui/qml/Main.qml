@@ -229,6 +229,7 @@ ApplicationWindow {
     property bool browseFindBarVisible: false
     property bool _previewNavigating: false
     property bool _aiSearchMode: false
+    readonly property bool _hybridSearchMode: controller ? controller.isHybridSearchMode : false
     property string _aiSearchPrecision: "normal"
     readonly property bool _aiEnabled: controller ? controller.aiEnabled : true
     readonly property bool _searchOrBrowseActive:
@@ -1486,17 +1487,36 @@ ApplicationWindow {
                         id: searchToolbar
                         aiEnabled: root._aiEnabled
                         aiSearchMode: root._aiSearchMode
+                        hybridSearchMode: root._hybridSearchMode
                         aiSearchPrecision: root._aiSearchPrecision
                         accentColor: root._accentColor
                         monoFontFamily: root.monoFont
-                        onSearchRequested: (query) => root._aiSearchMode
-                            ? controller.aiSearch(query, root._aiSearchPrecision)
-                            : controller.search(query)
+                        onSearchRequested: (query) => root._hybridSearchMode
+                            ? controller.hybridSearch(query, root._aiSearchPrecision)
+                            : root._aiSearchMode
+                                ? controller.aiSearch(query, root._aiSearchPrecision)
+                                : controller.search(query)
                         onAiSearchModeRequested: (enabled) => {
+                            var wasHybrid = root._hybridSearchMode
+                            controller.setHybridSearchMode(false)
                             root._aiSearchMode = enabled
                             controller.setAiSearchMode(enabled)
+                            if (wasHybrid) {
+                                if (enabled) controller.aiSearch(searchToolbar.queryText, root._aiSearchPrecision)
+                                else controller.search(searchToolbar.queryText)
+                            }
                         }
-                        onAiSearchPrecisionRequested: (precision) => root._aiSearchPrecision = precision
+                        onHybridSearchModeRequested: {
+                            root._aiSearchMode = false
+                            controller.setAiSearchMode(false)
+                            controller.setHybridSearchMode(true)
+                            controller.hybridSearch(searchToolbar.queryText, root._aiSearchPrecision)
+                        }
+                        onAiSearchPrecisionRequested: (precision) => {
+                            root._aiSearchPrecision = precision
+                            if (root._hybridSearchMode)
+                                controller.hybridSearch(searchToolbar.queryText, precision)
+                        }
                     }
 
                     // Panel header
@@ -1512,7 +1532,9 @@ ApplicationWindow {
                             FloatingBadge { text: qsTr("RESULTS") }
 
                             Label {
-                                text: _totalResults > 0 ? _totalResults.toString() : ""
+                                text: root._hybridSearchMode && controller.hybridTotalMatched > _totalResults
+                                      ? qsTr("%1 of %2 (AI results limited)").arg(_totalResults).arg(controller.hybridTotalMatched)
+                                      : _totalResults > 0 ? _totalResults.toString() : ""
                                 font.pixelSize: 11
                                 opacity: 0.55
                                 visible: _totalResults > 0
@@ -1689,7 +1711,7 @@ ApplicationWindow {
 
                                 FontMetrics { id: _sortFM; font: sortCombo.font }
 
-                                readonly property var _opts: [
+                                readonly property var _normalOpts: [
                                     { text: qsTr("Date taken ↓"),  value: "captured_desc" },
                                     { text: qsTr("Date taken ↑"),  value: "captured_asc"  },
                                     { text: qsTr("Name A→Z"),      value: "filename_asc"  },
@@ -1699,12 +1721,15 @@ ApplicationWindow {
                                     { text: qsTr("Largest"),       value: "size_desc"     },
                                     { text: qsTr("Smallest"),      value: "size_asc"      },
                                 ]
+                                readonly property var _opts: root._hybridSearchMode
+                                    ? [{ text: qsTr("Relevance"), value: "" }].concat(_normalOpts)
+                                    : _normalOpts
 
                                 model: _opts
                                 textRole: "text"
                                 valueRole: "value"
                                 currentIndex: {
-                                    var sv = root._sortBy
+                                    var sv = root._hybridSearchMode ? controller.hybridSortBy : root._sortBy
                                     for (var i = 0; i < _opts.length; i++) {
                                         if (_opts[i].value === sv) return i
                                     }
@@ -3923,6 +3948,16 @@ ApplicationWindow {
         appController: controller
         accentColor: root._accentColor
         onTaggingRequested: taggingDrawer.opened ? taggingDrawer.close() : taggingDrawer.openTaggingPanel()
+        onRestoreHybridSearch: (setId) => {
+            mainTabBar.currentIndex = 0
+            Qt.callLater(function() {
+                if (controller.restoreHybridSearchFromImageSet(setId)) {
+                    root._aiSearchMode = false
+                    root._aiSearchPrecision = controller.hybridPrecision
+                    searchToolbar.queryText = controller.hybridQuery
+                }
+            })
+        }
         onOpenImageInSearch: (setId, imageId) => {
             mainTabBar.currentIndex = 0
             Qt.callLater(function() {
@@ -4650,6 +4685,16 @@ ApplicationWindow {
                             opacity: 0.8
                             verticalAlignment: Text.AlignVCenter
                         }
+                    }
+
+                    Label {
+                        visible: root._aiFeatureAvailable && aiEnabledSwitch.checked
+                        text: qsTr("After upgrading, run AI Full Scan for every indexed folder to rebuild the AI index from your original images.")
+                        font.pixelSize: 12
+                        opacity: 0.6
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 28
                     }
 
                     // ── GPU Acceleration (experimental) ────────────────────

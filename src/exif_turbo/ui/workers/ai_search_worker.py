@@ -5,17 +5,17 @@ from typing import List
 
 from PySide6.QtCore import QThread, Signal
 
-from ...config import ai_id_map_path, ai_index_path, ai_vector_metadata_path
 from ...data.ai_search_session import AiSearchSession
-from ...data.ai_vector_repository import AiVectorRepository
+from ...data.ai_vector_backend import AiVectorBackend
 from ...data.image_index_repository import ImageIndexRepository
+from ...i18n import _
 from ...indexing.ai_indexer_service import AiIndexerService
 
 
 class AiSearchWorker(QThread):
     """Run a CLIP vector search off the GUI thread.
 
-    Encodes *query_text* with the CLIP text encoder, queries the FAISS index,
+    Encodes *query_text* with the CLIP text encoder, queries the active AI index,
     then hydrates the resulting paths into full image rows from the SQLite DB
     and emits them through the same ``results_ready`` signal shape as
     :class:`~exif_turbo.ui.workers.search_worker.SearchWorker` so the
@@ -25,7 +25,7 @@ class AiSearchWorker(QThread):
     -------
     results_ready(rows, total, format_counts, serial)
         *rows* is a list of ``(id, path, filename, metadata_json, size, mtime)``
-        tuples ordered by FAISS cosine similarity (highest first).
+        tuples ordered by cosine similarity (highest first).
         *total* equals ``len(rows)``.
         *format_counts* is always ``[]`` (no file-type facets in AI mode).
         *serial* matches the constructor argument.
@@ -69,10 +69,7 @@ class AiSearchWorker(QThread):
         self._date_from = date_from
         self._date_to = date_to
         self._image_set_id = image_set_id
-        self._session = session or AiSearchSession(
-            ai_index_path(db_path), ai_id_map_path(db_path), ai_vector_metadata_path(db_path),
-            repository_factory=AiVectorRepository,
-        )
+        self._session = session or AiSearchSession(db_path)
         self._owns_session = session is None
         # Semantic result paths BEFORE the date filter is applied.  The
         # controller reads this to build the year-histogram so selecting a
@@ -86,7 +83,8 @@ class AiSearchWorker(QThread):
     def run(self) -> None:
         try:
             with self._session.repository(self._key) as vector_repo:
-                self._search(vector_repo)
+                rows = self._search(vector_repo)
+            self.results_ready.emit(rows, len(rows), [], self._serial)
         except Exception as exc:  # noqa: BLE001
             self.failed.emit(str(exc))
         finally:
@@ -94,7 +92,9 @@ class AiSearchWorker(QThread):
                 self._session.close()
             self._key = ""
 
-    def _search(self, vector_repo: AiVectorRepository) -> None:
+    def _search(
+        self, vector_repo: AiVectorBackend
+    ) -> list[tuple[int, str, str, str, int, float]]:
         image_repo = ImageIndexRepository(self._db_path, key=self._key)
         try:
             # Facet scope excludes dates so selecting a year keeps the timeline.
@@ -106,8 +106,7 @@ class AiSearchWorker(QThread):
             )
             if not facet_allowed_paths:
                 self.facet_paths = []
-                self.results_ready.emit([], 0, [], self._serial)
-                return
+                return []
 
             display_allowed_paths = facet_allowed_paths
             if self._date_from is not None or self._date_to is not None:
@@ -122,6 +121,10 @@ class AiSearchWorker(QThread):
 
             query_text = self._query_text.strip()
             if query_text:
+                if not vector_repo.get_vector_count():
+                    raise RuntimeError(_(
+                        "AI index is empty. Run AI Full Scan for every indexed folder."
+                    ))
                 service = AiIndexerService(vector_repo)
                 query_vec = service.encode_text(query_text)
 
@@ -131,14 +134,10 @@ class AiSearchWorker(QThread):
                     top_k=None,
                     threshold=self._threshold,
                 )
-                ranked_facet_paths = [path for path, _score in hits]
-                displayed_hits = vector_repo.search_filtered(
-                    query_vec,
-                    display_allowed_paths,
-                    top_k=self._MAX_RESULTS,
-                    threshold=self._threshold,
-                )
-                ranked_paths = [path for path, _score in displayed_hits]
+                ranked_facet_paths = [path for path, _ in hits]
+                ranked_paths = [
+                    path for path in ranked_facet_paths if path in display_allowed_paths
+                ][:self._MAX_RESULTS]
             else:
                 ranked_facet_paths = sorted(facet_allowed_paths)
                 ranked_paths = [path for path in ranked_facet_paths if path in display_allowed_paths]
@@ -156,4 +155,4 @@ class AiSearchWorker(QThread):
             )
         finally:
             image_repo.close()
-        self.results_ready.emit(rows, len(rows), [], self._serial)
+        return rows

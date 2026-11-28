@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from exif_turbo.config import ai_index_path, database_data_dir
+from exif_turbo.config import database_data_dir
 from exif_turbo.data.image_index_repository import ImageIndexRepository
 from exif_turbo.models.image_sidecar import ImageSidecar, SidecarSource
 from exif_turbo.models.image_tag import ImageTag, TagProvenance
@@ -83,7 +83,7 @@ def test_custom_tag_migration_removes_vocabulary_tags_and_preserves_custom_data(
     legacy_tgm_dir = database_data_dir(repo.db_path) / "tgm"
     legacy_tgm_dir.mkdir(parents=True)
     (legacy_tgm_dir / "tgm-snapshot.json.gz").write_bytes(b"legacy snapshot")
-    image_ai_index = ai_index_path(repo.db_path)
+    image_ai_index = database_data_dir(repo.db_path) / "ai_index.faiss"
     image_ai_index.write_bytes(b"image vectors")
 
     # Act
