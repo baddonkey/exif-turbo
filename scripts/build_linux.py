@@ -204,6 +204,9 @@ def build_deb(
 
         # System libraries required by Qt/WebEngine that are not bundled.
         _deb_depends = ", ".join([
+            "libgl1",
+            "libegl1",
+            "libopengl0",
             "libnss3",
             "libxfixes3",
             "libxkbfile1",
@@ -232,6 +235,10 @@ def build_deb(
             "libxrandr2",
             "libpango-1.0-0",
             "libminizip1t64 | libminizip1",
+            "libsnappy1v5",
+            "libwebpdemux2",
+            "libwebpmux3",
+            "liblcms2-2",
         ])
 
         debian_dir = staging / "DEBIAN"
@@ -283,11 +290,13 @@ def build_rpm(bundle_dir: Path, version: str) -> Path:
             License:        MIT
             AutoReqProv:    no
             Obsoletes:      exif-turbo < %{{version}}
+            Requires:       mesa-libGL, mesa-libEGL, libglvnd-opengl
             Requires:       nss, libXfixes, libxkbfile, libxkbcommon, libxkbcommon-x11
             Requires:       xcb-util, xcb-util-wm, xcb-util-image, xcb-util-keysyms, xcb-util-renderutil, xcb-util-cursor
             Requires:       libxcb, mesa-libgbm, pango, alsa-lib, pulseaudio-libs, libtiff
             Requires:       atk, at-spi2-atk, cups-libs
             Requires:       libXcomposite, libXdamage, libXrandr, libxshmfence
+            Requires:       snappy, libwebp, lcms2
 
             %description
             Cross-platform image EXIF metadata search and indexing tool.

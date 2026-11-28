@@ -98,7 +98,8 @@ model weights or tokenizer assets.
 `certifi` is an explicit runtime dependency so isolated builds include the
 certificate bundle rather than relying on a developer environment's packages.
 Windows also runs it against the administratively extracted MSI payload.
-Failures, missing reports, and 120-second timeouts stop the build.
+Failures, missing reports, and timeouts stop the build. The timeout is 120
+seconds, or 600 seconds on Linux ARM64 to allow for emulated builds.
 
 On Windows, installing a rebuilt MSI with the same product version replaces
 earlier builds instead of installing alongside them. Windows Installer cannot
@@ -122,6 +123,11 @@ and 7-Zip. Linux needs a C compiler, `dpkg-deb`, and `rpmbuild`; macOS needs
 Xcode Command Line Tools. Builds download verified native sources and staging
 materials and need adequate free disk space. ExifTool and media tools are
 bundled only in the MSI; Unix users install external tools separately.
+
+The Linux packages declare system OpenGL and EGL libraries as dependencies.
+On a Windows host, `python scripts\build_deb.py` and
+`python scripts\build_rpm.py` build in Linux Podman containers rather than
+running `build_linux.py` directly on Windows.
 
 The workflow's macOS DMG is ad-hoc signed, not notarized. Developer ID signing,
 Apple notarization, Gatekeeper installation, MSI upgrade/uninstall behavior,

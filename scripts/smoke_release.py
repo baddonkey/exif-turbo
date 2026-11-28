@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 
 def smoke_release(executable: Path) -> None:
+    timeout = 600 if sys.platform == "linux" and platform.machine() == "aarch64" else 120
     with tempfile.TemporaryDirectory(prefix="exif-turbo-release-check-") as work:
         root = Path(work)
         report = root / "result.json"
@@ -20,7 +23,7 @@ def smoke_release(executable: Path) -> None:
             result = subprocess.run(
                 [str(executable.resolve()), "--release-smoke-test", str(report)],
                 cwd=root, env=environment, stdout=output, stderr=subprocess.STDOUT,
-                timeout=120, check=False,
+                timeout=timeout, check=False,
             )
         diagnostics = (root / "output.log").read_text(encoding="utf-8", errors="replace")
         if not report.is_file():

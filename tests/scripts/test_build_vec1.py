@@ -83,7 +83,11 @@ def test_staged_vec1_supported_platform_hashes_final_binary(
         assert binary.read_bytes() == expected
         assert hashlib.sha256(expected).hexdigest() in (stage / "_vec1_release_hash.py").read_text()
         assert len([command for command in commands if command[0] == "cc"]) == 2
-        assert all("-DVEC1SIMD=SCALAR" in command for command in commands[:2])
+        assert all(not any(arg.startswith("-DVEC1SIMD") for arg in command)
+                   for command in commands[:2])
+        if system == "linux":
+            assert all("-lm" in command and "-Wl,-z,defs" in command
+                       for command in commands[:2])
         monkeypatch.setenv(build_vec1.STAGE_ENV, str(stage))
         paths, binaries, hidden = build_vec1.spec_inputs()
         assert paths == [str(stage)]

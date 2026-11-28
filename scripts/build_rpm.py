@@ -28,12 +28,12 @@ CONTAINER_IMAGE = "almalinux:9"
 CONTAINER_SCRIPT = f"""\
 set -e
 dnf install -y -q \
-    python3.11 python3.11-devel python3-pip rpm-build \
+    python3.11 python3.11-devel python3-pip gcc rpm-build mesa-libGL mesa-libEGL libglvnd-opengl \
     nss libXfixes libxkbfile libxkbcommon libxkbcommon-x11 \
     xcb-util xcb-util-wm xcb-util-image xcb-util-keysyms xcb-util-renderutil xcb-util-cursor \
     libxcb mesa-libgbm pango alsa-lib pulseaudio-libs libtiff \
     atk at-spi2-atk cups-libs \
-    libXcomposite libXdamage libXrandr libxshmfence
+    libXcomposite libXdamage libXrandr libxshmfence snappy libwebp lcms2
 python3.11 -m venv /build-venv
 . /build-venv/bin/activate
 pip install --quiet --index-url https://pypi.org/simple uv=={UV_VERSION}

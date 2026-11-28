@@ -33,7 +33,7 @@ CONTAINER_SCRIPT = f"""\
 set -e
 apt-get update -qq
 apt-get install -y -q \
-    python3 python3-pip python3-dev python3-venv dpkg \
+    python3 python3-pip python3-dev python3-venv build-essential dpkg libgl1 libegl1 libopengl0 \
     libnss3 libxfixes3 libxkbfile1 libxkbcommon0 libxkbcommon-x11-0 \
     libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
     libxcb-render-util0 libxcb-render0 libxcb-shape0 libxcb-shm0 \
@@ -41,7 +41,7 @@ apt-get install -y -q \
     libgbm1 libpango-1.0-0 libasound2t64 libpulse0 \
     libatk1.0-0 libatk-bridge2.0-0 libcups2 \
     libxcomposite1 libxdamage1 libxrandr2 libxshmfence1 libtiff6 \
-    libminizip1t64
+    libminizip1t64 libsnappy1v5 libwebpdemux2 libwebpmux3 liblcms2-2
 python3 -m venv /build-venv
 . /build-venv/bin/activate
 pip install --quiet --index-url https://pypi.org/simple uv=={UV_VERSION}

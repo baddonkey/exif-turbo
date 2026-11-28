@@ -67,12 +67,17 @@ def staged_vec1(build_dir: Path, *, sign_identity: str | None = None) -> Generat
             output = root / f"build-{index}" / name
             output.parent.mkdir()
             command = [
-                "cc", "-O2", "-fPIC", "-DVEC1SIMD=SCALAR", "-I", str(include),
+                "cc", "-O2", "-fPIC", "-I", str(include),
                 "-dynamiclib" if system == "darwin" else "-shared",
             ]
             if system == "darwin":
                 command += ["-arch", "arm64", "-Wl,-install_name,@rpath/vec1.dylib"]
-            command += [str(source), "-o", str(output)]
+            else:
+                command += ["-Wl,-z,defs"]
+            command.append(str(source))
+            if system == "linux":
+                command.append("-lm")
+            command += ["-o", str(output)]
             subprocess.run(command, cwd=root, check=True)
             outputs.append(output.read_bytes())
         if outputs[0] != outputs[1]:

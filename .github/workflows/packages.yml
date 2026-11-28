@@ -67,7 +67,8 @@ jobs:
             libegl1 libopengl0 libgl1 libxcb-cursor0 libxkbcommon-x11-0 \
             libxcb-icccm4 libxcb-keysyms1 libxcb-xinerama0 libxcb-shape0 \
             libxcb-render-util0 libxcb-image0 libx11-xcb1 libnss3 libasound2t64 \
-            libxrandr2 libxcomposite1 libxdamage1 libxtst6
+            libxrandr2 libxcomposite1 libxdamage1 libxtst6 \
+            libsnappy1v5 libwebpdemux2 libwebpmux3 liblcms2-2
       - name: Build and audit Windows MSI
         if: runner.os == 'Windows'
         run: uv run --locked --no-default-groups --extra build --python 3.13 --no-managed-python python -u scripts/build_windows.py

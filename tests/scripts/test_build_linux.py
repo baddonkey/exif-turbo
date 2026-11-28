@@ -7,6 +7,72 @@ import pytest
 from scripts import build_linux
 
 
+def test_build_deb_runtime_dependencies_include_opengl(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    monkeypatch.setattr(build_linux, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        build_linux, "create_package_staging",
+        lambda bundle, version, staging: staging.mkdir() or False,
+    )
+    monkeypatch.setattr(build_linux, "audit_release_payload", lambda *args, **kwargs: None)
+    control = ""
+
+    def run(command: list[str], **kwargs: object) -> None:
+        nonlocal control
+        control = (Path(command[-2]) / "DEBIAN" / "control").read_text()
+
+    monkeypatch.setattr(build_linux, "run", run)
+
+    # Act
+    build_linux.build_deb(tmp_path, "1.0")
+
+    # Assert
+    depends = next(line for line in control.splitlines() if line.startswith("Depends: "))
+    assert {"libgl1", "libegl1", "libopengl0"} <= set(
+        depends.removeprefix("Depends: ").split(", ")
+    )
+    assert {"libsnappy1v5", "libwebpdemux2", "libwebpmux3", "liblcms2-2"} <= set(
+        depends.removeprefix("Depends: ").split(", ")
+    )
+
+
+def test_build_rpm_runtime_dependencies_include_opengl(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    (tmp_path / "dist").mkdir()
+    monkeypatch.setattr(build_linux, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        build_linux, "create_package_staging",
+        lambda bundle, version, staging: staging.mkdir() or False,
+    )
+    monkeypatch.setattr(build_linux, "audit_release_payload", lambda *args, **kwargs: None)
+    spec = ""
+
+    def run(command: list[str], **kwargs: object) -> None:
+        nonlocal spec
+        spec_path = Path(command[-1])
+        spec = spec_path.read_text()
+        (spec_path.parent.parent / "RPMS" / "test.rpm").write_bytes(b"rpm")
+
+    monkeypatch.setattr(build_linux, "run", run)
+
+    # Act
+    build_linux.build_rpm(tmp_path, "1.0")
+
+    # Assert
+    requires = [line.removeprefix("Requires:").strip() for line in spec.splitlines()
+                if line.startswith("Requires:")]
+    assert {"mesa-libGL", "mesa-libEGL", "libglvnd-opengl"} <= {
+        item.strip() for line in requires for item in line.split(",")
+    }
+    assert {"snappy", "libwebp", "lcms2"} <= {
+        item.strip() for line in requires for item in line.split(",")
+    }
+
+
 def test_create_package_staging_generated_licenses_installs_standard_doc_tree(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

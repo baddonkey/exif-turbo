@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts import smoke_release as smoke_release_module
 from scripts.smoke_release import smoke_release
 
 
@@ -45,3 +46,26 @@ def test_smoke_release_requires_successful_process_and_report(
     else:
         with pytest.raises(RuntimeError, match="Frozen smoke test"):
             smoke_release(executable)
+
+
+def test_smoke_release_linux_arm64_allows_emulated_startup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arrange
+    monkeypatch.setattr(smoke_release_module.sys, "platform", "linux")
+    monkeypatch.setattr(smoke_release_module.platform, "machine", lambda: "aarch64")
+    observed_timeout: object = None
+
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        nonlocal observed_timeout
+        observed_timeout = kwargs["timeout"]
+        Path(command[-1]).write_text('{"status": "passed"}', encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(subprocess, "run", run)
+
+    # Act
+    smoke_release(tmp_path / "app")
+
+    # Assert
+    assert observed_timeout == 600
