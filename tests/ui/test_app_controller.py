@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
-from threading import get_ident
+from threading import Event, Thread, get_ident
 from types import SimpleNamespace
 from typing import Generator
 
@@ -39,6 +39,7 @@ from exif_turbo.ui.providers.preview_image_provider import PreviewImageProvider
 from exif_turbo.ui.providers.raw_image_provider import RawImageProvider
 from exif_turbo.ui.view_models.app_controller import AppController
 from exif_turbo.ui.workers.ai_search_worker import AiSearchWorker
+from exif_turbo.ui.workers.bulk_op_worker import BulkOpWorker
 from exif_turbo.ui.workers.image_set_membership_worker import ImageSetMembershipWorker
 
 # How long to leave the window visible between steps (ms).
@@ -266,6 +267,60 @@ def test_maintenance_completion_keeps_worker_alive_until_native_join(
     assert held_during_join == [True]
     assert controller._maint_worker is None
     controller.close()
+
+
+@pytest.mark.parametrize("outcome", ["finished", "failed", "canceled"])
+def test_bulk_completion_keeps_worker_alive_until_native_join(
+    qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, outcome: str,
+) -> None:
+    # Arrange
+    controller = AppController(
+        tmp_path / "bulk.db", SearchListModel(cache_dir=tmp_path / "thumbs"),
+        ExifListModel(), FolderListModel(),
+    )
+    joining = Event()
+    release = Event()
+    held_during_join: list[bool] = []
+    workers: list[BulkOpWorker] = []
+
+    class DelayedBulkWorker(BulkOpWorker):
+        def run(self) -> None:
+            if outcome == "finished":
+                self.finished.emit()
+            elif outcome == "failed":
+                self.failed.emit("test failure")
+            else:
+                self.canceled.emit()
+            release.wait(5)
+
+        def wait(self, *args: object) -> bool:
+            held_during_join.append(controller._bulk_worker is self)
+            joining.set()
+            return super().wait()
+
+    def create_worker(*args: object, **kwargs: object) -> DelayedBulkWorker:
+        worker = DelayedBulkWorker(*args, **kwargs)  # type: ignore[arg-type]
+        workers.append(worker)
+        return worker
+
+    monkeypatch.setattr("exif_turbo.ui.view_models.app_controller.BulkOpWorker", create_worker)
+    releaser = Thread(target=lambda: (joining.wait(2), release.set()))
+    releaser.start()
+    try:
+        # Act
+        controller._start_bulk_op("select_all", "Selecting")
+        qtbot.waitUntil(lambda: not controller.isBusy, timeout=5000)
+        releaser.join(timeout=5)
+
+        # Assert
+        assert held_during_join == [True]
+        assert controller._bulk_worker is None
+    finally:
+        release.set()
+        releaser.join(timeout=5)
+        for worker in workers:
+            worker.wait()
+        controller.close()
 
 
 def test_unlock_shows_all_images(

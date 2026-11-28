@@ -1639,13 +1639,19 @@ class AppController(QObject):
         self._bulk_progress_total = total
         self.bulkProgressChanged.emit()
 
+    def _clear_bulk_busy(self) -> None:
+        worker = self._bulk_worker
+        if worker is not None:
+            worker.wait()
+        self._bulk_worker = None
+        self._is_busy = False
+        self.isBusyChanged.emit()
+
     def _on_bulk_finished(self) -> None:
         worker = self._bulk_worker
-        self._is_busy = False
-        self._bulk_worker = None
-        self.isBusyChanged.emit()
         if worker is None:
             return
+        self._clear_bulk_busy()
         if worker._operation == "select_all":
             # RETURNING paths come directly from the UPDATE transaction \u2014
             # no cold-cache SELECT needed.  For a plain select-all the new
@@ -1707,15 +1713,11 @@ class AppController(QObject):
             self._run_search()
 
     def _on_bulk_failed(self, msg: str) -> None:
-        self._is_busy = False
-        self._bulk_worker = None
-        self.isBusyChanged.emit()
+        self._clear_bulk_busy()
         self._set_status(_("Operation failed: {}").format(msg))
 
     def _on_bulk_canceled(self) -> None:
-        self._is_busy = False
-        self._bulk_worker = None
-        self.isBusyChanged.emit()
+        self._clear_bulk_busy()
         self._set_status(_("Operation canceled."))
 
     # ── Maintenance-op worker helpers (remove folder / reset database) ────────
